@@ -7,3 +7,6 @@
 [submodule "thirdparty/GLFW"]
 	path = Lynx/thirdparty/GLFW
 	url=https://github.com/sinisastevanovic/glfw
+[submodule "Lynx/thirdparty/spdlog"]
+	path = Lynx/thirdparty/spdlog
+	url = https://github.com/gabime/spdlog.git
