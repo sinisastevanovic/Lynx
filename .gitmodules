@@ -1,9 +1,9 @@
 [submodule "thirdparty/imgui"]
-	path = thirdparty/imgui
+	path = Lynx/thirdparty/imgui
 	url = https://github.com/sinisastevanovic/imgui.git
 [submodule "thirdparty/glm"]
-	path = thirdparty/glm
+	path = Lynx/thirdparty/glm
 	url = https://github.com/g-truc/glm
 [submodule "thirdparty/GLFW"]
-	path = thirdparty/GLFW
+	path = Lynx/thirdparty/GLFW
 url=https://github.com/sinisastevanovic/glfw
