@@ -1,5 +1,5 @@
 # Lynx
-Lynx is a simple application framework built with [Dear ImGui](https://github.com/ocornut/imgui) and Vulkan.
+Lynx is a WIP Game Engine running on Vulkan.
 Currently supports Windows.
 
 ## Requirements
