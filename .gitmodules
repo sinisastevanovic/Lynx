@@ -10,3 +10,6 @@
 	path = ThirdParty/imgui
 	url = https://github.com/ocornut/imgui.git
 	ignore = dirty
+[submodule "ThirdParty/spdlog"]
+	path = ThirdParty/spdlog
+	url = https://github.com/gabime/spdlog.git

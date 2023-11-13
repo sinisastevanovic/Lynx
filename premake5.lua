@@ -16,6 +16,7 @@ project "Lynx"
 
         "%{IncludeDir.VulkanSDK}",
         "%{IncludeDir.glm}",
+        "%{IncludeDir.spdlog}"
     }
 
     links

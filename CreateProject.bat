@@ -14,17 +14,20 @@ echo    cppdialect "C++17"
 echo    --targetdir "bin/%%{cfg.buildcfg}"
 echo    staticruntime "off"
 echo:
+echo    ENGINE_DIR = "../Lynx"
+echo:
 echo    files { "Source/**.h", "Source/**.cpp" }
 echo:
 echo    includedirs
 echo    {
-echo        "../Lynx/ThirdParty/imgui",
-echo        "../Lynx/ThirdParty/glfw/include",
+echo        "%%{ENGINE_DIR}/ThirdParty/imgui",
+echo        "%%{ENGINE_DIR}/ThirdParty/glfw/include",
 echo:
-echo        "../Lynx/Source",
+echo        "%%{ENGINE_DIR}/Source",
 echo:
 echo        "%%{IncludeDir.VulkanSDK}",
-echo        "%%{IncludeDir.glm}",
+echo        "%%{ENGINE_DIR}/%%{IncludeDir.glm}",
+echo        "%%{ENGINE_DIR}/%%{IncludeDir.spdlog}"
 echo    }
 echo:
 echo    links

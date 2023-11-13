@@ -17,6 +17,7 @@
 #include <iostream>
 
 // Emedded font
+#include "Log.h"
 #include "ImGui/Roboto-Regular.embed"
 
 extern bool g_ApplicationRunning;
@@ -410,6 +411,8 @@ namespace Lynx
 
 	void Application::Init()
 	{
+		Log::Init();
+		
 		// Setup GLFW window
 		glfwSetErrorCallback(glfw_error_callback);
 		if(!glfwInit())
