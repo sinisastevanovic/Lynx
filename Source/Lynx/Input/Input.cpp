@@ -1,6 +1,7 @@
-﻿#include "Input.h"
+﻿#include "lxpch.h"
+#include "Input.h"
 
-#include "Lynx/Application.h"
+#include "Lynx/Core/Application.h"
 
 #include <GLFW/glfw3.h>
 

@@ -27,12 +27,16 @@ namespace Lynx
     {
     public:
         Application(const ApplicationSpecification& applicationSpecification = ApplicationSpecification());
-        ~Application();
+        virtual ~Application();
 
         static Application& Get();
 
         void Run();
         void Close();
+
+        virtual void OnInit() {}
+        virtual void OnShutDown() {}
+        virtual void OnUpdate(float deltaTime) {}
 
         void SetMenubarCallback(const std::function<void()>& menubarCallback) { MenubarCallback_ = menubarCallback; }
         float GetTime();

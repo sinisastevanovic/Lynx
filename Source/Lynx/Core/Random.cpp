@@ -1,4 +1,5 @@
-﻿#include "Random.h"
+﻿#include "lxpch.h"
+#include "Random.h"
 
 namespace Lynx
 {

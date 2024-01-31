@@ -1,4 +1,5 @@
-﻿#include "Application.h"
+﻿#include "lxpch.h"
+#include "Application.h"
 
 /*
  * Adapted from DearImGui Vulkan example
@@ -13,12 +14,15 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
+#include <format>
 
 #include <iostream>
 
 // Emedded font
-#include "Log.h"
-#include "ImGui/Roboto-Regular.embed"
+#include <spdlog/sinks/basic_file_sink.h>
+
+#include "../ImGui/Roboto-Regular.embed"
+#include "Components/Component.h"
 
 extern bool g_ApplicationRunning;
 
@@ -411,13 +415,13 @@ namespace Lynx
 
 	void Application::Init()
 	{
-		Log::Init();
-		
+		Log::Init(Specification_.Name);
+		LX_CORE_INFO("{} started.", Specification_.Name);
 		// Setup GLFW window
 		glfwSetErrorCallback(glfw_error_callback);
 		if(!glfwInit())
 		{
-			std::cerr << "Could not initialize GLFW!\n";
+			LX_CORE_ASSERT(false, "Could not initialize GLFW!");
 			return;
 		}
 
@@ -427,7 +431,7 @@ namespace Lynx
 		// Setup vulkan
 		if(!glfwVulkanSupported())
 		{
-			std::cerr << "Vulkan not supported!\n";
+			LX_CORE_ASSERT(false, "Vulkan not supported!");
 			return;
 		}
 
@@ -522,7 +526,7 @@ namespace Lynx
 
 			err = vkDeviceWaitIdle(g_Device);
 			check_vk_result(err);
-			ImGui_ImplVulkan_DestroyFontUploadObjects();
+			ImGui_ImplVulkan_DestroyFontUploadObjects();*/
 		}
 	}
 
@@ -560,6 +564,7 @@ namespace Lynx
 
 	void Application::Run()
 	{
+		OnInit();
 		Running_ = true;
 
 		ImGui_ImplVulkanH_Window* wd = &g_MainWindowData;
@@ -682,11 +687,14 @@ namespace Lynx
 			if (!mainIsMinimized)
 				FramePresent(wd);
 
+			OnUpdate(TimeStep_);
+			
 			float time = GetTime();
 			FrameTime_ = time - LastFrameTime_;
 			TimeStep_ = glm::min<float>(FrameTime_, 0.0333f);
 			LastFrameTime_ = time;
 		}
+		OnShutDown();
 	}
 
 	void Application::Close()
@@ -771,13 +779,4 @@ namespace Lynx
 	{
 		s_ResourceFreeQueue[s_CurrentFrameIndex].emplace_back(func);
 	}
-
-
-
-
-
-
-
-
-
 }

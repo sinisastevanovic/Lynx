@@ -4,6 +4,7 @@
 
 namespace Lynx
 {
+    
     class Log
     {
     public:
@@ -11,43 +12,19 @@ namespace Lynx
         {
             Core = 0, Client = 1
         };
-        enum class Level : uint8_t
-        {
-            Trace = 0, Info, Warn, Error, Fatal
-        };
         
     public:
 
-        static void Init();
+        static void Init(const std::string& appName);
         static void Shutdown();
+
+        static void AddSink(spdlog::sink_ptr sink);
 
         inline static std::shared_ptr<spdlog::logger>& GetCoreLogger() { return s_CoreLogger; }
         inline static std::shared_ptr<spdlog::logger>& GetClientLogger() { return s_ClientLogger; }
 
-    public:
-        static const char* LevelToString(Level level)
-        {
-            switch (level)
-            {
-            case Level::Trace: return "Trace";
-            case Level::Info: return "Info";
-            case Level::Warn: return "Warning";
-            case Level::Error: return "Error";
-            case Level::Fatal: return "Fatal";
-            }
-            return "";
-        }
-        
-        static Level LevelFromString(std::string_view string)
-        {
-            if (string == "Trace") return Level::Trace;
-            if (string == "Info") return Level::Info;
-            if (string == "Warning") return Level::Warn;
-            if (string == "Error") return Level::Error;
-            if (string == "Fatal") return Level::Fatal;
-
-            return Level::Trace;
-        }
+        template<typename... Args>
+        static void PrintAssertMessage(Log::Type type, std::string_view prefix, Args&&... args);
 
     private:
         static std::shared_ptr<spdlog::logger> s_CoreLogger;
@@ -69,3 +46,20 @@ namespace Lynx
 #define LX_WARN(...)    ::Lynx::Log::GetClientLogger()->warn(__VA_ARGS__)
 #define LX_ERROR(...)   ::Lynx::Log::GetClientLogger()->error(__VA_ARGS__)
 #define LX_FATAL(...)   ::Lynx::Log::GetClientLogger()->critical(__VA_ARGS__)
+
+namespace Lynx
+{
+    template <typename... Args>
+    void Log::PrintAssertMessage(Log::Type type, std::string_view prefix, Args&&... args)
+    {
+        auto logger = (type == Type::Core) ? GetCoreLogger() : GetClientLogger();
+        logger->error("{0}: {1}", prefix, fmt::format(std::forward<Args>(args)...));
+    }
+
+    template<>
+    inline void Log::PrintAssertMessage(Log::Type type, std::string_view prefix)
+    {
+        auto logger = (type == Type::Core) ? GetCoreLogger() : GetClientLogger();
+        logger->error("{0}", prefix);
+    }
+}
