@@ -15,7 +15,7 @@ void MyGame::OnStart()
 
 void MyGame::OnUpdate(float deltaTime)
 {
-    LX_INFO("OnUpdate called.");
+    //LX_INFO("OnUpdate called.");
 }
 
 void MyGame::OnShutdown()

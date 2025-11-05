@@ -1,6 +1,10 @@
 ﻿#include "Engine.h"
+
+// TODO: We only include this because of keycodes. Remove when we have own keycodes.
+#include <GLFW/glfw3.h>
+
 #include "GameModule.h"
-#include <iostream>
+#include "Input.h"
 
 #include "Log.h"
 
@@ -8,8 +12,10 @@ namespace Lynx
 {
     void Engine::Initialize()
     {
-        std::cout << "[Engine] Initializing..." << std::endl;
         Log::Init();
+        LX_CORE_INFO("Initializing...");
+
+        m_Window = Window::Create();
     }
 
     void Engine::Run(IGameModule* gameModule)
@@ -22,22 +28,23 @@ namespace Lynx
         }
 
         // This is a placeholder for the real game loop
-        bool isRunning = true;
-        while (isRunning)
+        while (m_IsRunning)
         {
+            if (m_Window->ShouldClose())
+                m_IsRunning = false;
+            
+            m_Window->OnUpdate();
             // TODO: Poll events, start new frame, update ImGui, etc.
+
+            if (Input::IsKeyPressed(GLFW_KEY_ESCAPE))
+            {
+                LX_CORE_WARN("Escape key pressed, closing application.");
+                m_IsRunning = false;
+            }
 
             if (gameModule)
             {
                 gameModule->OnUpdate(0.016f); // Fake delta time
-            }
-
-            // A real loop would check for a window close event
-            // For this example, we'll just break after a few prints
-            static int frameCount = 0;
-            if (++frameCount > 5)
-            {
-                isRunning = false;
             }
         }
 

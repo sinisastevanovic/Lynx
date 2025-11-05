@@ -6,7 +6,10 @@ file(GLOB_RECURSE ENGINE_SOURCES
 
 add_library(engine SHARED ${ENGINE_SOURCES})
 
-target_compile_definitions(engine PRIVATE LX_BUILD_DLL)
+target_compile_definitions(engine PRIVATE 
+    LX_BUILD_DLL
+    GLFW_STATIC
+)
 
 target_include_directories(engine
     PUBLIC
