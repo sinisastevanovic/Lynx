@@ -1,0 +1,14 @@
+﻿#pragma once
+
+#ifdef _WIN32
+    // Check if we are building the ENGINE DLL itself (exporting)
+    #ifdef LX_BUILD_DLL
+        #define LX_API __declspec(dllexport)
+    // Otherwise, we are a client using the ENGINE DLL (importing)
+    #else
+        #define LX_API __declspec(dllimport)
+    #endif
+#else
+    // For other platforms like Linux/macOS, GCC visibility is handled differently
+    #define LX_API
+#endif

@@ -1,11 +1,12 @@
 # Directories
 .vs/
 .idea/
-Binaries/
-Intermediate/
+build/
 
 # Files
 *.vcxproj
 *.vcxproj.user
 *.vcxproj.filters
 *.sln
+
+Roadmap.md

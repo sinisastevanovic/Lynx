@@ -1,0 +1,19 @@
+{
+    "name": "lynx-engine",
+    "version-string": "0.1.0",
+    "dependencies": [
+        "entt",
+        "glfw3",
+        "glm",
+        "spdlog",
+        "sol2",
+        "joltphysics",
+        "shaderc",
+        "tinygltf",
+        "stb",
+        {
+            "name": "imgui",
+            "features": [ "glfw-binding", "vulkan-binding", "docking-experimental" ]
+        }
+    ]
+}
