@@ -13,7 +13,7 @@ target_link_libraries(editor PRIVATE
     imgui::imgui
 )
 
-add_dependencies(editor game_dll)
+add_dependencies(editor engine game_dll)
 
 add_custom_command(TARGET editor POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different

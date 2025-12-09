@@ -1,4 +1,5 @@
-﻿#include "Input.h"
+﻿#include "lxpch.h"
+#include "Input.h"
 
 #define MAX_KEYS 1024
 
@@ -8,15 +9,28 @@ namespace Lynx
     {
         bool Keys[MAX_KEYS] = { false };
         double MouseX = 0.0f, MouseY = 0.0f;
+        InputState()
+        {
+            memset(Keys, 0, sizeof(Keys));
+        }
     };
 
     static InputState s_State;
     
-    bool Input::IsKeyPressed(int keycode)
+    bool Input::IsKeyPressed(KeyCode keycode)
     {
-        if (keycode >= MAX_KEYS)
+        int kc = static_cast<int>(keycode);
+        if (kc >= MAX_KEYS)
             return false;
-        return s_State.Keys[keycode];
+        return s_State.Keys[kc];
+    }
+
+    bool Input::IsMouseButtonPressed(MouseCode keycode)
+    {
+        int kc = static_cast<int>(keycode);
+        if (kc >= MAX_KEYS)
+            return false;
+        return s_State.Keys[kc];
     }
 
     glm::vec2 Input::GetMousePosition()

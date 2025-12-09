@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "ComponentRegistry.h"
 #include "Window.h"
+#include "Event/Event.h"
 
 namespace Lynx
 {
@@ -14,6 +15,8 @@ namespace Lynx
         void Initialize();
         void Run(IGameModule* gameModule);
         void Shutdown();
+
+        void OnEvent(Event& event);
 
     private:
         std::unique_ptr<Window> m_Window;

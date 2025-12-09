@@ -1,10 +1,15 @@
-﻿#include "Window.h"
+﻿#include "lxpch.h"
+#include "Window.h"
 #include "Log.h"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include "Input.h"
+#include "KeyCodes.h"
+#include "Event/KeyEvent.h"
+#include "Event/MouseEvent.h"
+#include "Event/WindowEvent.h"
 
 #if defined(_WIN32)
     #define GLFW_EXPOSE_NATIVE_WIN32
@@ -13,6 +18,16 @@
 
 namespace Lynx
 {
+    static KeyCode GLFWToEngineKeyCode(int glfwKey)
+    {
+        return static_cast<KeyCode>(glfwKey);
+    }
+
+    static MouseCode GLFWToEngineMouseCode(int glfwMouseButton)
+    {
+        return static_cast<MouseCode>(glfwMouseButton);
+    }
+    
     static bool s_GLFWInitialized = false;
 
     static void GLFWErrorCallback(int error, const char* description)
@@ -58,26 +73,96 @@ namespace Lynx
         LX_ASSERT(m_Window, "Failed to create GLFW window!");
 
         glfwSetWindowUserPointer(m_Window, &m_Data);
+        SetVSync(true);
+
+        glfwSetWindowSizeCallback(m_Window, [](GLFWwindow* window, int width, int height)
+        {
+            WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
+            data.Width = width;
+            data.Height = height;
+
+            WindowResizeEvent event(width, height);
+            data.EventCallback(event);
+        });
+
+        glfwSetWindowCloseCallback(m_Window, [](GLFWwindow* window)
+        {
+            WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
+            WindowCloseEvent event;
+            data.EventCallback(event);
+        });
 
         glfwSetKeyCallback(m_Window, [](GLFWwindow* window, int key, int scancode, int action, int mods)
         {
-            // TODO: Handle GLFW_REPEAT too?
-            if (action == GLFW_PRESS)
+            WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
+            KeyCode keyCode = GLFWToEngineKeyCode(key);
+
+            switch (action)
             {
-                Input::SetKeyState(key, true);
-            }
-            else if (action == GLFW_RELEASE)
-            {
-                Input::SetKeyState(key, false);
+                case GLFW_PRESS:
+                {
+                    Input::SetKeyState(key, true);
+                    KeyPressedEvent event(keyCode, 0);
+                    data.EventCallback(event);
+                    break;
+                }
+                case GLFW_RELEASE:
+                {
+                    Input::SetKeyState(key, false);
+                    KeyReleasedEvent event(keyCode);
+                    data.EventCallback(event);
+                    break;
+                }
+                case GLFW_REPEAT:
+                {
+                    KeyPressedEvent event(keyCode, 1);
+                    data.EventCallback(event);
+                    break;
+                }
             }
         });
 
         glfwSetCursorPosCallback(m_Window, [](GLFWwindow* window, double xpos, double ypos)
         {
+            WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
             Input::SetMousePosition(xpos, ypos);
+            MouseMovedEvent event(xpos, ypos);
+            data.EventCallback(event);
         });
 
-        // TODO: Other callbacks (mouse buttons, window resize, etc)
+        glfwSetScrollCallback(m_Window, [](GLFWwindow* window, double xoffset, double yoffset)
+        {
+            WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
+
+            MouseScrolledEvent event(xoffset, yoffset);
+            data.EventCallback(event);
+        });
+
+        glfwSetMouseButtonCallback(m_Window, [](GLFWwindow* window, int button, int action, int mods)
+        {
+            WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
+            MouseCode keyCode = GLFWToEngineMouseCode(button);
+
+            switch (action)
+            {
+                case GLFW_PRESS:
+                    {
+                        Input::SetKeyState(button, true);
+                        MouseButtonPressedEvent event(keyCode);
+                        data.EventCallback(event);
+                        break;
+                    }
+                    case GLFW_RELEASE:
+                    {
+                        Input::SetKeyState(button, false);
+                        MouseButtonReleasedEvent event(keyCode);
+                        data.EventCallback(event);
+                        break;
+                    }
+                }
+        });
+
+        // TODO: Other callbacks (window resize, etc)
     }
 
     Window::~Window()
@@ -89,6 +174,26 @@ namespace Lynx
     void Window::OnUpdate()
     {
         glfwPollEvents();
+    }
+
+    void Window::SetEventCallback(const EventCallbackFn& callback)
+    {
+        m_Data.EventCallback = callback;
+    }
+
+    void Window::SetVSync(bool enabled)
+    {
+        if (enabled)
+            glfwSwapInterval(1);
+        else
+            glfwSwapInterval(0);
+
+        m_Data.VSync = enabled;
+    }
+
+    bool Window::IsVSync() const
+    {
+        return m_Data.VSync;
     }
 
     bool Window::ShouldClose()

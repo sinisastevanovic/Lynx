@@ -1,4 +1,5 @@
-﻿#include "Engine.h"
+﻿#include "lxpch.h"
+#include "Engine.h"
 
 // TODO: We only include this because of keycodes. Remove when we have own keycodes.
 #include <GLFW/glfw3.h>
@@ -7,6 +8,7 @@
 #include "Input.h"
 
 #include "Log.h"
+#include "Event/KeyEvent.h"
 
 namespace Lynx
 {
@@ -16,6 +18,7 @@ namespace Lynx
         LX_CORE_INFO("Initializing...");
 
         m_Window = Window::Create();
+        m_Window->SetEventCallback([this](Event& event){ this->OnEvent(event); });
     }
 
     void Engine::Run(IGameModule* gameModule)
@@ -34,14 +37,7 @@ namespace Lynx
                 m_IsRunning = false;
             
             m_Window->OnUpdate();
-            // TODO: Poll events, start new frame, update ImGui, etc.
-
-            if (Input::IsKeyPressed(GLFW_KEY_ESCAPE))
-            {
-                LX_CORE_WARN("Escape key pressed, closing application.");
-                m_IsRunning = false;
-            }
-
+            
             if (gameModule)
             {
                 gameModule->OnUpdate(0.016f); // Fake delta time
@@ -58,5 +54,20 @@ namespace Lynx
     {
         LX_CORE_INFO("Shutting down...");
         Log::Shutdown();
+    }
+
+    void Engine::OnEvent(Event& e)
+    {
+        EventDispatcher dispatcher(e);
+        dispatcher.Dispatch<KeyPressedEvent>([this](KeyPressedEvent& event)
+        {
+            if (event.GetKeyCode() == KeyCode::Escape)
+            {
+                LX_CORE_WARN("Escape key pressed via event, closing application.");
+                m_IsRunning = false;
+                return true; 
+            }
+            return false;
+        });
     }
 }
