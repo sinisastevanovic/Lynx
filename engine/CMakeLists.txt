@@ -9,7 +9,15 @@ add_library(engine SHARED ${ENGINE_SOURCES})
 target_compile_definitions(engine PRIVATE 
     LX_BUILD_DLL
     GLFW_STATIC
+    VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
 )
+
+FetchContent_GetProperties(nvrhi)
+if(NOT nvrhi_POPULATED)
+    FetchContent_Populate(nvrhi)
+endif()
+
+set(NVRHI_INTERNAL_VK_HEADERS "${nvrhi_SOURCE_DIR}/thirdparty/Vulkan-Headers/include")
 
 target_include_directories(engine
     PUBLIC
@@ -17,7 +25,8 @@ target_include_directories(engine
 )
 
 target_include_directories(engine
-    PRIVATE
+    BEFORE PRIVATE
+        "${NVRHI_INTERNAL_VK_HEADERS}"
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
@@ -27,7 +36,6 @@ find_package(entt CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
-find_package(Vulkan REQUIRED)
 find_package(unofficial-shaderc CONFIG REQUIRED)
 
 target_link_libraries(engine PUBLIC
@@ -44,8 +52,5 @@ target_link_libraries(engine PUBLIC
 
     spdlog::spdlog
 
-    Vulkan::Vulkan
-
     unofficial::shaderc::shaderc
-
 )

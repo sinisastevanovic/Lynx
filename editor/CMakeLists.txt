@@ -6,11 +6,9 @@ file(GLOB_RECURSE EDITOR_SOURCES
 
 add_executable(editor ${EDITOR_SOURCES})
 
-find_package(imgui CONFIG REQUIRED)
 
 target_link_libraries(editor PRIVATE 
     engine
-    imgui::imgui
 )
 
 add_dependencies(editor engine game_dll)

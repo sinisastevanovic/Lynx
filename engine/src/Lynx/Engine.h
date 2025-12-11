@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "ComponentRegistry.h"
 #include "Window.h"
+#include "Renderer.h"
 #include "Event/Event.h"
 
 namespace Lynx
@@ -20,6 +21,7 @@ namespace Lynx
 
     private:
         std::unique_ptr<Window> m_Window;
+        std::unique_ptr<Renderer> m_Renderer;
         bool m_IsRunning = true;
     };
 }

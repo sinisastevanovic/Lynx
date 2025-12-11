@@ -8,6 +8,7 @@
 #include "Input.h"
 
 #include "Log.h"
+#include "Renderer.h"
 #include "Event/KeyEvent.h"
 
 namespace Lynx
@@ -19,6 +20,9 @@ namespace Lynx
 
         m_Window = Window::Create();
         m_Window->SetEventCallback([this](Event& event){ this->OnEvent(event); });
+
+        m_Renderer = std::make_unique<Renderer>();
+        m_Renderer->Init(m_Window->GetNativeWindow());
     }
 
     void Engine::Run(IGameModule* gameModule)
@@ -37,11 +41,13 @@ namespace Lynx
                 m_IsRunning = false;
             
             m_Window->OnUpdate();
-            
+
+            m_Renderer->BeginFrame();
             if (gameModule)
             {
                 gameModule->OnUpdate(0.016f); // Fake delta time
             }
+            m_Renderer->EndFrame();
         }
 
         if (gameModule)
@@ -53,6 +59,7 @@ namespace Lynx
     void Engine::Shutdown()
     {
         LX_CORE_INFO("Shutting down...");
+        m_Renderer->Shutdown();
         Log::Shutdown();
     }
 
