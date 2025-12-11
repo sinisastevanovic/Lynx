@@ -12,13 +12,11 @@ namespace Lynx
     class Renderer
     {
     public:
-        Renderer();
+        Renderer(GLFWwindow* window);
         ~Renderer();
         
-        void Init(GLFWwindow* window);
         void BeginFrame();
         void EndFrame();
-        void Shutdown();
 
     private:
         void InitVulkan(GLFWwindow* window);

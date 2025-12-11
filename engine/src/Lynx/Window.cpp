@@ -73,7 +73,7 @@ namespace Lynx
         LX_ASSERT(m_Window, "Failed to create GLFW window!");
 
         glfwSetWindowUserPointer(m_Window, &m_Data);
-        SetVSync(true);
+        //SetVSync(true);
 
         glfwSetWindowSizeCallback(m_Window, [](GLFWwindow* window, int width, int height)
         {

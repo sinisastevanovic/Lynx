@@ -12,8 +12,25 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 #include "nvrhi/utils.h"
 
+
 namespace Lynx
 {
+#ifdef _DEBUG
+    const bool enableValidationLayers = true;
+#else
+    const bool enableValidationLayers = false;
+#endif
+    
+    const std::vector<const char*> validationLayers = {
+        "VK_LAYER_KHRONOS_validation"
+    };
+
+    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity, vk::DebugUtilsMessageTypeFlagsEXT messageTypes, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
+    {
+        LX_CORE_ERROR("Vulkan Validation Layer: {0}", pCallbackData->pMessage);
+        return VK_FALSE;
+    }
+    
     struct Renderer::VulkanState
     {
         vk::Instance Instance;
@@ -29,6 +46,7 @@ namespace Lynx
 
         vk::Semaphore ImageAvailableSemaphore;
         vk::Semaphore RenderFinishedSemaphore;
+        vk::DebugUtilsMessengerEXT DebugMessenger;
     };
     
     std::vector<uint32_t> CompileGLSL(const std::string& source, shaderc_shader_kind kind, const char* fileName)
@@ -46,23 +64,42 @@ namespace Lynx
         return {module.cbegin(), module.cend()};
     }
 
-    Renderer::Renderer()
+    Renderer::Renderer(GLFWwindow* window)
     {
         m_VulkanState = std::make_unique<VulkanState>();
-    }
-
-    Renderer::~Renderer()
-    {
-        Shutdown();
-    }
-
-    void Renderer::Init(GLFWwindow* window)
-    {
         InitVulkan(window);
         InitNVRHI();
         InitPipeline();
 
         LX_CORE_INFO("Renderer initialized successfully");
+    }
+
+    Renderer::~Renderer()
+    {
+        LX_CORE_INFO("Renderer shutting down...");
+        
+        if (!m_VulkanState->Device)
+            return;
+
+        m_VulkanState->Device.waitIdle();
+
+        m_Pipeline = nullptr;
+        m_VertexShader = nullptr;
+        m_FragmentShader = nullptr;
+        m_CommandList = nullptr;
+        m_Framebuffers.clear();
+        m_NvrhiDevice = nullptr;
+
+        m_VulkanState->Device.destroySemaphore(m_VulkanState->ImageAvailableSemaphore);
+        m_VulkanState->Device.destroySemaphore(m_VulkanState->RenderFinishedSemaphore);
+        m_VulkanState->Device.destroySwapchainKHR(m_VulkanState->Swapchain);
+        m_VulkanState->Device.destroy();
+        m_VulkanState->Instance.destroySurfaceKHR(m_VulkanState->Surface);
+
+        if (m_VulkanState->DebugMessenger)
+            m_VulkanState->Instance.destroyDebugUtilsMessengerEXT(m_VulkanState->DebugMessenger);
+        
+        m_VulkanState->Instance.destroy();
     }
 
     void Renderer::InitVulkan(GLFWwindow* window)
@@ -72,15 +109,47 @@ namespace Lynx
         
         // TODO: Enable validation extensions
         // 1. Instance
-        uint32_t count;
-        const char** extensions = glfwGetRequiredInstanceExtensions(&count);
-
+        vk::ApplicationInfo appInfo;
+        appInfo.apiVersion = VK_API_VERSION_1_3;
+        
         vk::InstanceCreateInfo instInfo;
-        instInfo.enabledExtensionCount = count;
-        instInfo.ppEnabledExtensionNames = extensions;
+        
+        uint32_t count;
+        const char** glfweExtensions = glfwGetRequiredInstanceExtensions(&count);
+        std::vector<const char*> extensions(glfweExtensions, glfweExtensions + count);
+
+        if (enableValidationLayers)
+        {
+            instInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+            instInfo.ppEnabledLayerNames = validationLayers.data();
+
+            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        }
+        else
+        {
+            instInfo.enabledLayerCount = 0;
+        }
+
+        instInfo.pApplicationInfo = &appInfo;
+        instInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+        instInfo.ppEnabledExtensionNames = extensions.data();
         m_VulkanState->Instance = vk::createInstance(instInfo);
 
         VULKAN_HPP_DEFAULT_DISPATCHER.init(m_VulkanState->Instance);
+
+        // Setup Debug Messenger
+        if (enableValidationLayers)
+        {
+            vk::DebugUtilsMessengerCreateInfoEXT debugInfo;
+            debugInfo.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError | 
+                                        vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning;
+            debugInfo.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | 
+                                    vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation | 
+                                    vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance;
+            debugInfo.pfnUserCallback = debugCallback;
+            
+            m_VulkanState->DebugMessenger = m_VulkanState->Instance.createDebugUtilsMessengerEXT(debugInfo);
+        }
 
         // 2. Surface
         VkSurfaceKHR rawSurface;
@@ -98,18 +167,38 @@ namespace Lynx
         //m_VulkanState->GraphicsQueueFamily = 0; // Simplified: assuming index 0 has graphics
 
         // 5. Logical Device
+        vk::PhysicalDeviceVulkan13Features features13;
+        features13.dynamicRendering = VK_TRUE;
+        features13.synchronization2 = VK_TRUE;
+
+        vk::PhysicalDeviceVulkan12Features features12;
+        features12.timelineSemaphore = VK_TRUE;
+        features12.descriptorIndexing = VK_TRUE;
+        features12.bufferDeviceAddress = VK_TRUE;
+        features12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+        features12.runtimeDescriptorArray = VK_TRUE;
+
+        vk::PhysicalDeviceFeatures features10;
+        features10.geometryShader = VK_TRUE;
+
+        features13.pNext = &features12;
+        
         float priority = 1.0f;
         vk::DeviceQueueCreateInfo queueInfo;
         queueInfo.queueFamilyIndex = m_VulkanState->GraphicsQueueFamily;
         queueInfo.queueCount = 1;
         queueInfo.pQueuePriorities = &priority;
 
-        const char* devExts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+        std::vector<const char*> deviceExtensions = { 
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        };
         vk::DeviceCreateInfo devInfo;
         devInfo.queueCreateInfoCount = 1;
         devInfo.pQueueCreateInfos = &queueInfo;
-        devInfo.enabledExtensionCount = 1;
-        devInfo.ppEnabledExtensionNames = devExts;
+        devInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+        devInfo.ppEnabledExtensionNames = deviceExtensions.data();
+        devInfo.pNext = &features13;
+        devInfo.pEnabledFeatures = &features10;
         m_VulkanState->Device = m_VulkanState->PhysicalDevice.createDevice(devInfo);
 
         VULKAN_HPP_DEFAULT_DISPATCHER.init(m_VulkanState->Device);
@@ -238,9 +327,15 @@ namespace Lynx
         nvrhi::GraphicsState state;
         state.pipeline = m_Pipeline;
         state.framebuffer = m_Framebuffers[m_CurrentImageIndex];
-        state.viewport.addViewport(nvrhi::Viewport(
+
+        nvrhi::Viewport viewport = nvrhi::Viewport(
             (float)m_Framebuffers[m_CurrentImageIndex]->getFramebufferInfo().width,
             (float)m_Framebuffers[m_CurrentImageIndex]->getFramebufferInfo().height
+        );
+        state.viewport.addViewport(viewport);
+        state.viewport.addScissorRect(nvrhi::Rect(
+            0, m_Framebuffers[m_CurrentImageIndex]->getFramebufferInfo().width,
+            0, m_Framebuffers[m_CurrentImageIndex]->getFramebufferInfo().height
         ));
 
         m_CommandList->setGraphicsState(state);
@@ -277,27 +372,5 @@ namespace Lynx
         // Instead, we force a wait for safety.
         //vkDeviceWaitIdle(m_VulkanState->Device);
         m_VulkanState->GraphicsQueue.presentKHR(&presentInfo);
-    }
-
-    void Renderer::Shutdown()
-    {
-        if (!m_VulkanState->Device)
-            return;
-
-        m_VulkanState->Device.waitIdle();
-
-        m_Pipeline = nullptr;
-        m_VertexShader = nullptr;
-        m_FragmentShader = nullptr;
-        m_CommandList = nullptr;
-        m_Framebuffers.clear();
-        m_NvrhiDevice = nullptr;
-
-        m_VulkanState->Device.destroySemaphore(m_VulkanState->ImageAvailableSemaphore);
-        m_VulkanState->Device.destroySemaphore(m_VulkanState->RenderFinishedSemaphore);
-        m_VulkanState->Device.destroySwapchainKHR(m_VulkanState->Swapchain);
-        m_VulkanState->Device.destroy();
-        m_VulkanState->Instance.destroySurfaceKHR(m_VulkanState->Surface);
-        m_VulkanState->Instance.destroy();
     }
 }

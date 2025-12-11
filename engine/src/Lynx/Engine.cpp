@@ -21,8 +21,9 @@ namespace Lynx
         m_Window = Window::Create();
         m_Window->SetEventCallback([this](Event& event){ this->OnEvent(event); });
 
-        m_Renderer = std::make_unique<Renderer>();
-        m_Renderer->Init(m_Window->GetNativeWindow());
+        m_Renderer = std::make_unique<Renderer>(m_Window->GetNativeWindow());
+
+        m_Window->SetVSync(true);
     }
 
     void Engine::Run(IGameModule* gameModule)
@@ -59,7 +60,7 @@ namespace Lynx
     void Engine::Shutdown()
     {
         LX_CORE_INFO("Shutting down...");
-        m_Renderer->Shutdown();
+        m_Renderer.reset();
         Log::Shutdown();
     }
 
