@@ -3,6 +3,8 @@
 #include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
+#include "nvrhi/validation.h"
+
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 #include <shaderc/shaderc.hpp>
@@ -11,6 +13,7 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #include <GLFW/glfw3.h>
 
 #include "nvrhi/utils.h"
+#include "Lynx/Renderer/EditorCamera.h"
 
 
 namespace Lynx
@@ -27,7 +30,14 @@ namespace Lynx
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity, vk::DebugUtilsMessageTypeFlagsEXT messageTypes, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
     {
-        LX_CORE_ERROR("Vulkan Validation Layer: {0}", pCallbackData->pMessage);
+        if (messageSeverity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eError)
+            LX_CORE_ERROR("Vulkan Validation Layer: {0}", pCallbackData->pMessage);
+        else if (messageSeverity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning)
+            LX_CORE_WARN("Vulkan Validation Layer: {0}", pCallbackData->pMessage);
+        else if (messageSeverity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo)
+            LX_CORE_INFO("Vulkan Validation Layer: {0}", pCallbackData->pMessage);
+        else
+            LX_CORE_TRACE("Vulkan Validation Layer: {0}", pCallbackData->pMessage);
         return VK_FALSE;
     }
     
@@ -44,8 +54,10 @@ namespace Lynx
         vk::Extent2D SwapchainExtent;
         std::vector<vk::Image> SwapchainImages;
 
-        vk::Semaphore ImageAvailableSemaphore;
-        vk::Semaphore RenderFinishedSemaphore;
+        std::vector<vk::Semaphore> ImageAvailableSemaphores;
+        std::vector<vk::Semaphore> RenderFinishedSemaphores;
+        std::vector<vk::Fence> InFlightFences;
+        
         vk::DebugUtilsMessengerEXT DebugMessenger;
     };
     
@@ -69,6 +81,7 @@ namespace Lynx
         m_VulkanState = std::make_unique<VulkanState>();
         InitVulkan(window);
         InitNVRHI();
+        InitBuffers();
         InitPipeline();
 
         LX_CORE_INFO("Renderer initialized successfully");
@@ -83,6 +96,11 @@ namespace Lynx
 
         m_VulkanState->Device.waitIdle();
 
+        m_BindingSet = nullptr;
+        m_ConstantBuffer = nullptr;
+        m_CubeIndexBuffer = nullptr;
+        m_CubeVertexBuffer = nullptr;
+        m_DepthBuffer = nullptr;
         m_Pipeline = nullptr;
         m_VertexShader = nullptr;
         m_FragmentShader = nullptr;
@@ -90,8 +108,13 @@ namespace Lynx
         m_Framebuffers.clear();
         m_NvrhiDevice = nullptr;
 
-        m_VulkanState->Device.destroySemaphore(m_VulkanState->ImageAvailableSemaphore);
-        m_VulkanState->Device.destroySemaphore(m_VulkanState->RenderFinishedSemaphore);
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            m_VulkanState->Device.destroySemaphore(m_VulkanState->ImageAvailableSemaphores[i]);
+            m_VulkanState->Device.destroySemaphore(m_VulkanState->RenderFinishedSemaphores[i]);
+            m_VulkanState->Device.destroyFence(m_VulkanState->InFlightFences[i]);
+        }
+        
         m_VulkanState->Device.destroySwapchainKHR(m_VulkanState->Swapchain);
         m_VulkanState->Device.destroy();
         m_VulkanState->Instance.destroySurfaceKHR(m_VulkanState->Surface);
@@ -107,7 +130,6 @@ namespace Lynx
         PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(glfwGetInstanceProcAddress(NULL, "vkGetInstanceProcAddr"));
         VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
         
-        // TODO: Enable validation extensions
         // 1. Instance
         vk::ApplicationInfo appInfo;
         appInfo.apiVersion = VK_API_VERSION_1_3;
@@ -228,9 +250,20 @@ namespace Lynx
         m_VulkanState->SwapchainImages = m_VulkanState->Device.getSwapchainImagesKHR(m_VulkanState->Swapchain);
         
         // 8. Sync Objects
+        m_VulkanState->ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        m_VulkanState->RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        m_VulkanState->InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
         vk::SemaphoreCreateInfo semInfo;
-        m_VulkanState->ImageAvailableSemaphore = m_VulkanState->Device.createSemaphore(semInfo);
-        m_VulkanState->RenderFinishedSemaphore = m_VulkanState->Device.createSemaphore(semInfo);
+        vk::FenceCreateInfo fenceInfo;
+        fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            m_VulkanState->ImageAvailableSemaphores[i] = m_VulkanState->Device.createSemaphore(semInfo);
+            m_VulkanState->RenderFinishedSemaphores[i] = m_VulkanState->Device.createSemaphore(semInfo);
+            m_VulkanState->InFlightFences[i] = m_VulkanState->Device.createFence(fenceInfo);
+        }
     }
 
     void Renderer::InitNVRHI()
@@ -244,74 +277,183 @@ namespace Lynx
         deviceDesc.graphicsQueueIndex = m_VulkanState->GraphicsQueueFamily;
 
         // TODO: Pass validation extensions
-
         m_NvrhiDevice = nvrhi::vulkan::createDevice(deviceDesc);
 
-        // 2. Create NVRHI wrappers for Swapchain Images
+        /*if (enableValidationLayers)
+        {
+            nvrhi::DeviceHandle nvrhiValidationLayer = nvrhi::validation::createValidationLayer(m_NvrhiDevice);
+            m_NvrhiDevice = nvrhiValidationLayer;
+        }*/
+
+        nvrhi::TextureDesc depthDesc;
+        depthDesc.width = m_VulkanState->SwapchainExtent.width;
+        depthDesc.height = m_VulkanState->SwapchainExtent.height;
+        depthDesc.format = nvrhi::Format::D32;
+        depthDesc.isRenderTarget = true;
+        depthDesc.initialState = nvrhi::ResourceStates::DepthWrite;
+        depthDesc.keepInitialState = true;
+        m_DepthBuffer = m_NvrhiDevice->createTexture(depthDesc);
+
         for (auto vkImage : m_VulkanState->SwapchainImages)
         {
             nvrhi::TextureDesc desc;
             desc.width = m_VulkanState->SwapchainExtent.width;
             desc.height = m_VulkanState->SwapchainExtent.height;
-            desc.format = nvrhi::Format::BGRA8_UNORM; // Match Vulkan swapchain format!
+            desc.format = nvrhi::Format::BGRA8_UNORM;
             desc.isRenderTarget = true;
-            desc.initialState = nvrhi::ResourceStates::Present; // Crucial: Vulkan swapchain starts in Present state
+            desc.initialState = nvrhi::ResourceStates::Present;
             desc.keepInitialState = true;
 
-            // Create Handle
             nvrhi::TextureHandle texture = m_NvrhiDevice->createHandleForNativeTexture(nvrhi::ObjectTypes::VK_Image, (VkImage)vkImage, desc);
-            // Create Framebuffer (Render Target) for this texture
             nvrhi::FramebufferDesc fbDesc;
             fbDesc.addColorAttachment(texture);
+            fbDesc.setDepthAttachment(m_DepthBuffer);
             m_Framebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
         }
 
         // 3. Create Command List
         m_CommandList = m_NvrhiDevice->createCommandList();
     }
+    
+    void Renderer::InitBuffers()
+    {
+        struct Vertex
+        {
+            float x, y, z;
+        };
+
+        const Vertex cubeVertices[] = {
+            {-0.5f, -0.5f, -0.5f}, {0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, -0.5f}, {-0.5f, 0.5f, -0.5f},
+            {-0.5f, -0.5f, 0.5f}, {0.5f, -0.5f, 0.5f}, {0.5f, 0.5f, 0.5f}, {-0.5f, 0.5f, 0.5f}
+        };
+
+        const uint32_t cubeIndices[] = {
+            0, 1, 2, 2, 3, 0,
+            1, 5, 6, 6, 2, 1,
+            7, 6, 5, 5, 4, 7,
+            4, 0, 3, 3, 7, 4,
+            3, 2, 6, 6, 7, 3,
+            4, 5, 1, 1, 0, 4
+        };
+
+        nvrhi::BufferDesc vbDesc;
+        vbDesc.byteSize = sizeof(cubeVertices);
+        vbDesc.isVertexBuffer = true;
+        vbDesc.initialState = nvrhi::ResourceStates::CopyDest;
+        vbDesc.keepInitialState = true; 
+        m_CubeVertexBuffer = m_NvrhiDevice->createBuffer(vbDesc);
+
+        nvrhi::BufferDesc ibDesc;
+        ibDesc.byteSize = sizeof(cubeIndices);
+        ibDesc.isIndexBuffer = true;
+        ibDesc.initialState = nvrhi::ResourceStates::CopyDest;
+        ibDesc.keepInitialState = true; 
+        m_CubeIndexBuffer = m_NvrhiDevice->createBuffer(ibDesc);
+        
+        m_CommandList->open();
+        m_CommandList->writeBuffer(m_CubeVertexBuffer, cubeVertices, sizeof(cubeVertices));
+        m_CommandList->writeBuffer(m_CubeIndexBuffer, cubeIndices, sizeof(cubeIndices));
+        m_CommandList->close();
+        m_NvrhiDevice->executeCommandList(m_CommandList);
+
+        nvrhi::BufferDesc cbDesc;
+        cbDesc.byteSize = sizeof(SceneData);
+        cbDesc.isConstantBuffer = true;
+        cbDesc.initialState = nvrhi::ResourceStates::ConstantBuffer;
+        cbDesc.keepInitialState = true;
+        m_ConstantBuffer = m_NvrhiDevice->createBuffer(cbDesc);
+
+        if (!m_ConstantBuffer)
+        {
+            LX_CORE_ERROR("Failed to create Constant Buffer!");
+        }
+    }
 
     void Renderer::InitPipeline()
     {
-        // Hardcoded triangle shader
         const char* vsSrc = R"(
             #version 450
+            layout(location = 0) in vec3 a_Position;
+            layout(set = 0, binding = 0) uniform UBO {
+                mat4 u_ViewProjection;
+            } ubo;
             void main() {
-                const vec2 positions[3] = vec2[3]( vec2(0.0, -0.5), vec2(0.5, 0.5), vec2(-0.5, 0.5) );
-                gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
+                gl_Position = ubo.u_ViewProjection * vec4(a_Position, 1.0);
             }
         )";
 
         const char* fsSrc = R"(
             #version 450
             layout(location = 0) out vec4 outColor;
-            void main() { outColor = vec4(0.2, 0.8, 0.2, 1.0); } // Green
+            void main() { outColor = vec4(0.2, 0.8, 0.2, 1.0); }
         )";
 
-        auto vsSpirv = CompileGLSL(vsSrc, shaderc_glsl_vertex_shader, "triangle.vert");
-        auto fsSpirv = CompileGLSL(fsSrc, shaderc_glsl_fragment_shader, "triangle.frag");
+        auto vsSpirv = CompileGLSL(vsSrc, shaderc_glsl_vertex_shader, "cube.vert");
+        auto fsSpirv = CompileGLSL(fsSrc, shaderc_glsl_fragment_shader, "cube.frag");
 
         m_VertexShader = m_NvrhiDevice->createShader(nvrhi::ShaderDesc(nvrhi::ShaderType::Vertex), vsSpirv.data(), vsSpirv.size() * 4);
         m_FragmentShader = m_NvrhiDevice->createShader(nvrhi::ShaderDesc(nvrhi::ShaderType::Pixel), fsSpirv.data(), fsSpirv.size() * 4);
+        
+        nvrhi::BindingLayoutDesc layoutDesc;
+        layoutDesc.visibility = nvrhi::ShaderType::All;
+        layoutDesc.bindings.push_back(nvrhi::BindingLayoutItem::ConstantBuffer(0));
+        layoutDesc.bindingOffsets.shaderResource = 0;
+        layoutDesc.bindingOffsets.sampler = 0;
+        layoutDesc.bindingOffsets.constantBuffer = 0;
+        layoutDesc.bindingOffsets.unorderedAccess = 0;
+        nvrhi::BindingLayoutHandle layout = m_NvrhiDevice->createBindingLayout(layoutDesc);
 
-        // 2. Create Pipeline
+        if (!layout)
+        {
+            LX_CORE_ERROR("Failed to create Binding Layout!");
+        }
+
+        nvrhi::BindingSetDesc bindingSetDesc;
+        bindingSetDesc.bindings.push_back(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
+        m_BindingSet = m_NvrhiDevice->createBindingSet(bindingSetDesc, layout);
+        
+        if (!m_BindingSet)
+        {
+            LX_CORE_ERROR("Failed to create Binding Set!");
+        }
+        
         nvrhi::GraphicsPipelineDesc pipeDesc;
-        pipeDesc.primType = nvrhi::PrimitiveType::TriangleList;
+        pipeDesc.bindingLayouts = { layout };
         pipeDesc.VS = m_VertexShader;
         pipeDesc.PS = m_FragmentShader;
+        pipeDesc.primType = nvrhi::PrimitiveType::TriangleList;
         pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::None;
-
-        // Use the first framebuffer to create the pipeline layout (compatible with all others)
+        pipeDesc.renderState.depthStencilState.depthTestEnable = true;
+        pipeDesc.renderState.depthStencilState.depthWriteEnable = true;
+        pipeDesc.renderState.depthStencilState.depthFunc = nvrhi::ComparisonFunc::Less;
+                
+        nvrhi::VertexAttributeDesc attributes[] = {
+            nvrhi::VertexAttributeDesc()
+                .setName("POSITION")
+                .setFormat(nvrhi::Format::RGB32_FLOAT)
+                .setBufferIndex(0)
+                .setOffset(0)
+                .setElementStride(sizeof(float) * 3)
+        };
+        pipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(attributes, 1, m_VertexShader);                
         m_Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, m_Framebuffers[0]->getFramebufferInfo());
     }
 
-    void Renderer::BeginFrame()
+    void Renderer::BeginScene(const EditorCamera& camera)
     {
+        // 0. Wait for Fence
+        if (m_VulkanState->Device.waitForFences(1, &m_VulkanState->InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
+        {
+             LX_CORE_ERROR("Failed to wait for fence!");
+        }
+        m_VulkanState->Device.resetFences(1, &m_VulkanState->InFlightFences[m_CurrentFrame]);
+
         // 1. Acquire Image from Vulkan
         // TODO: handle resizing (VK_ERROR_OUT_OF_DATE_KHR)
         auto result = m_VulkanState->Device.acquireNextImageKHR(
             m_VulkanState->Swapchain,
             UINT64_MAX,
-            vk::Semaphore(m_VulkanState->ImageAvailableSemaphore),
+            vk::Semaphore(m_VulkanState->ImageAvailableSemaphores[m_CurrentFrame]),
             nullptr
         );
 
@@ -319,14 +461,22 @@ namespace Lynx
 
         // 2. Start recording
         m_CommandList->open();
+        
+        SceneData sceneData;
+        sceneData.ViewProjectionMatrix = camera.GetViewProjection();
+        m_CommandList->writeBuffer(m_ConstantBuffer, &sceneData, sizeof(SceneData));
 
         // 3. Clear Screen
         nvrhi::utils::ClearColorAttachment(m_CommandList, m_Framebuffers[m_CurrentImageIndex], 0, nvrhi::Color(0.1f, 0.1f, 0.1f, 1.0f));
+        nvrhi::utils::ClearDepthStencilAttachment(m_CommandList, m_Framebuffers[m_CurrentImageIndex], 1.0f, 0);
 
         // 4. Setup Draw State
         nvrhi::GraphicsState state;
         state.pipeline = m_Pipeline;
         state.framebuffer = m_Framebuffers[m_CurrentImageIndex];
+        state.bindings = { m_BindingSet };
+        state.addVertexBuffer(nvrhi::VertexBufferBinding(m_CubeVertexBuffer, 0, 0));
+        state.indexBuffer = nvrhi::IndexBufferBinding(m_CubeIndexBuffer, nvrhi::Format::R32_UINT);
 
         nvrhi::Viewport viewport = nvrhi::Viewport(
             (float)m_Framebuffers[m_CurrentImageIndex]->getFramebufferInfo().width,
@@ -342,35 +492,120 @@ namespace Lynx
 
         // 5. Draw
         nvrhi::DrawArguments args;
-        args.vertexCount = 3;
-        m_CommandList->draw(args);
+        args.vertexCount = 36;
+        m_CommandList->drawIndexed(args);
     }
 
-    void Renderer::EndFrame()
+    void Renderer::EndScene()
     {
         // 1. Close recording
         m_CommandList->close();
 
         // 2. Execute
-        // We do not have complex semaphores setup for NVRHI internal submit yet, 
-        // so we execute immediately.
+        nvrhi::vulkan::IDevice* vkDevice = static_cast<nvrhi::vulkan::IDevice*>(m_NvrhiDevice.Get());
+        
+        // SYNC: Wait for the image to be available before executing
+        //vkDevice->waitForIdle();
+        vkDevice->queueWaitForSemaphore(nvrhi::CommandQueue::Graphics, (VkSemaphore)m_VulkanState->ImageAvailableSemaphores[m_CurrentFrame], 0);
+
+        // SYNC: Signal RenderFinished after executing
+        vkDevice->queueSignalSemaphore(nvrhi::CommandQueue::Graphics, (VkSemaphore)m_VulkanState->RenderFinishedSemaphores[m_CurrentFrame], 0);
+
         m_NvrhiDevice->executeCommandList(m_CommandList);
 
-        m_NvrhiDevice->runGarbageCollection();
+        // Signal Fence for CPU Sync
+        vk::SubmitInfo submitInfo;
+        m_VulkanState->GraphicsQueue.submit(submitInfo, m_VulkanState->InFlightFences[m_CurrentFrame]);
 
-        m_VulkanState->Device.waitIdle();
+        m_NvrhiDevice->runGarbageCollection();
 
         // 3. Present to Screen
         vk::PresentInfoKHR presentInfo;
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = &m_VulkanState->Swapchain;
         presentInfo.pImageIndices = &m_CurrentImageIndex;
+        
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = &m_VulkanState->RenderFinishedSemaphores[m_CurrentFrame];
 
-        // Note: We are cheating slightly on synchronization here to keep it "Simple".
-        // In production, we need to pass a Semaphore to executeCommandList to signal, 
-        // and wait on that semaphore here.
-        // Instead, we force a wait for safety.
-        //vkDeviceWaitIdle(m_VulkanState->Device);
         m_VulkanState->GraphicsQueue.presentKHR(&presentInfo);
+        
+        // Heavy wait for debugging
+        m_VulkanState->Device.waitIdle();
+        
+        m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    }
+    
+    void Renderer::OnResize(uint32_t width, uint32_t height)
+    {
+        if (width == 0 || height == 0) return;
+
+        m_VulkanState->Device.waitIdle();
+
+        m_Framebuffers.clear();
+        m_DepthBuffer = nullptr;
+        
+        // We don't strictly need to clear the vector of vk::Image handles, 
+        // as getSwapchainImagesKHR will overwrite it, but it's cleaner.
+        m_VulkanState->SwapchainImages.clear();
+
+        m_VulkanState->Device.destroySwapchainKHR(m_VulkanState->Swapchain);
+
+        // Recreate Swapchain
+        vk::SurfaceCapabilitiesKHR caps = m_VulkanState->PhysicalDevice.getSurfaceCapabilitiesKHR(m_VulkanState->Surface);
+        m_VulkanState->SwapchainExtent = caps.currentExtent;
+        // If extent is undefined (0xFFFFFFFF), use window size
+        if (m_VulkanState->SwapchainExtent.width == UINT32_MAX)
+        {
+            m_VulkanState->SwapchainExtent.width = width;
+            m_VulkanState->SwapchainExtent.height = height;
+        }
+
+        vk::SwapchainCreateInfoKHR swapInfo;
+        swapInfo.surface = m_VulkanState->Surface;
+        swapInfo.minImageCount = 2;
+        swapInfo.imageFormat = m_VulkanState->SwapchainFormat;
+        swapInfo.imageColorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
+        swapInfo.imageExtent = m_VulkanState->SwapchainExtent;
+        swapInfo.imageArrayLayers = 1;
+        swapInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
+        swapInfo.preTransform = caps.currentTransform;
+        swapInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+        swapInfo.presentMode = vk::PresentModeKHR::eFifo;
+        swapInfo.clipped = VK_TRUE;
+        
+        m_VulkanState->Swapchain = m_VulkanState->Device.createSwapchainKHR(swapInfo);
+        m_VulkanState->SwapchainImages = m_VulkanState->Device.getSwapchainImagesKHR(m_VulkanState->Swapchain);
+
+        // Recreate NVRHI Resources
+        nvrhi::TextureDesc depthDesc;
+        depthDesc.width = m_VulkanState->SwapchainExtent.width;
+        depthDesc.height = m_VulkanState->SwapchainExtent.height;
+        depthDesc.format = nvrhi::Format::D32;
+        depthDesc.isRenderTarget = true;
+        depthDesc.initialState = nvrhi::ResourceStates::DepthWrite;
+        depthDesc.keepInitialState = true;
+        m_DepthBuffer = m_NvrhiDevice->createTexture(depthDesc);
+
+        for (auto vkImage : m_VulkanState->SwapchainImages)
+        {
+            nvrhi::TextureDesc desc;
+            desc.width = m_VulkanState->SwapchainExtent.width;
+            desc.height = m_VulkanState->SwapchainExtent.height;
+            desc.format = nvrhi::Format::BGRA8_UNORM;
+            desc.isRenderTarget = true;
+            desc.initialState = nvrhi::ResourceStates::Present;
+            desc.keepInitialState = true;
+
+            nvrhi::TextureHandle texture = m_NvrhiDevice->createHandleForNativeTexture(nvrhi::ObjectTypes::VK_Image, (VkImage)vkImage, desc);
+            nvrhi::FramebufferDesc fbDesc;
+            fbDesc.addColorAttachment(texture);
+            fbDesc.setDepthAttachment(m_DepthBuffer);
+            m_Framebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
+        }
+        
+        // Reset current image index/frame?
+        // m_CurrentImageIndex = 0; // Acquire will set this.
+        // m_CurrentFrame = 0; // Sync frames are separate from swapchain images. Keep cycling.
     }
 }

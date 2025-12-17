@@ -3,6 +3,7 @@
 #include "Lynx/Core.h"
 #include "Event.h"
 #include "Lynx/KeyCodes.h"
+#include <sstream>
 
 namespace Lynx
 {

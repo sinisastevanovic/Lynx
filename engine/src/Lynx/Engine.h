@@ -1,8 +1,9 @@
 ﻿#pragma once
 #include "ComponentRegistry.h"
 #include "Window.h"
-#include "Renderer.h"
+#include "Renderer/Renderer.h"
 #include "Event/Event.h"
+#include "Lynx/Renderer/EditorCamera.h"
 
 namespace Lynx
 {
@@ -23,6 +24,7 @@ namespace Lynx
         std::unique_ptr<Window> m_Window;
         std::unique_ptr<Renderer> m_Renderer;
         bool m_IsRunning = true;
+        EditorCamera m_EditorCamera;
     };
 }
 

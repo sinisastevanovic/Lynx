@@ -8,8 +8,10 @@
 #include "Input.h"
 
 #include "Log.h"
-#include "Renderer.h"
+#include "Renderer/Renderer.h"
 #include "Event/KeyEvent.h"
+#include "Event/WindowEvent.h"
+
 
 namespace Lynx
 {
@@ -20,6 +22,8 @@ namespace Lynx
 
         m_Window = Window::Create();
         m_Window->SetEventCallback([this](Event& event){ this->OnEvent(event); });
+        
+        m_EditorCamera = EditorCamera(45.0f, (float)m_Window->GetWidth() / (float)m_Window->GetHeight(), 0.1f, 1000.0f);
 
         m_Renderer = std::make_unique<Renderer>(m_Window->GetNativeWindow());
 
@@ -43,12 +47,14 @@ namespace Lynx
             
             m_Window->OnUpdate();
 
-            m_Renderer->BeginFrame();
+            m_EditorCamera.OnUpdate(0.016f); // Fake delta time
+
+            m_Renderer->BeginScene(m_EditorCamera);
             if (gameModule)
             {
                 gameModule->OnUpdate(0.016f); // Fake delta time
             }
-            m_Renderer->EndFrame();
+            m_Renderer->EndScene();
         }
 
         if (gameModule)
@@ -66,6 +72,8 @@ namespace Lynx
 
     void Engine::OnEvent(Event& e)
     {
+        m_EditorCamera.OnEvent(e);
+
         EventDispatcher dispatcher(e);
         dispatcher.Dispatch<KeyPressedEvent>([this](KeyPressedEvent& event)
         {
@@ -75,6 +83,13 @@ namespace Lynx
                 m_IsRunning = false;
                 return true; 
             }
+            return false;
+        });
+
+        dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& event)
+        {
+            m_EditorCamera.SetViewportSize(event.GetWidth(), event.GetHeight());
+            m_Renderer->OnResize(event.GetWidth(), event.GetHeight());
             return false;
         });
     }
