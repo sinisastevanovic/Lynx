@@ -66,5 +66,5 @@ namespace Lynx
     } while(0)
 #else
     #define DEBUGBREAK()
-    #define ENGINE_ASSERT(condition, ...)
+    #define LX_ASSERT(condition, ...)
 #endif

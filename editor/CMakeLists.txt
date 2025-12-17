@@ -12,11 +12,3 @@ target_link_libraries(editor PRIVATE
 )
 
 add_dependencies(editor engine game_dll)
-
-add_custom_command(TARGET editor POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_FILE:engine>
-            $<TARGET_FILE:game_dll>
-            $<TARGET_FILE_DIR:editor>
-    COMMENT "Copying required DLLs to editor directory"
-)

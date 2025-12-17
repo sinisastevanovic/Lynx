@@ -15,3 +15,5 @@
     // For other platforms like Linux/macOS, GCC visibility is handled differently
     #define LX_API
 #endif
+
+#define LX_BIND_EVENT_FN(fn) [this](auto&&... args) -> decltype(auto) { return this->fn(std::forward<decltype(args)>(args)...); }
