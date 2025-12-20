@@ -62,22 +62,19 @@ namespace Lynx
 
     void EditorCamera::OnUpdate(float ts)
     {
-        /*if (Input::IsKeyPressed(KeyCode::LeftAlt))
-        {*/
-            const glm::vec2& mouse = { Input::GetMouseX(), Input::GetMouseY() };
-            glm::vec2 delta = (mouse - m_InitialMousePosition) * 0.003f;
-            m_InitialMousePosition = mouse;
+        const glm::vec2& mouse = { Input::GetMouseX(), Input::GetMouseY() };
+        glm::vec2 delta = (mouse - m_InitialMousePosition) * 0.003f;
+        m_InitialMousePosition = mouse;
 
-            if(Input::IsMouseButtonPressed(MouseCode::ButtonMiddle))
-            {
-                if(Input::IsKeyPressed(KeyCode::LeftShift) || Input::IsKeyPressed(KeyCode::RightShift))
-                    MousePan(delta);
-                else if(Input::IsKeyPressed(KeyCode::LeftControl) || Input::IsKeyPressed(KeyCode::RightControl))
-                    MouseZoom(delta.y);
-                else
-                    MouseRotate(delta);
-            }
-       // }
+        if(Input::IsMouseButtonPressed(MouseCode::ButtonMiddle))
+        {
+            if(Input::IsKeyPressed(KeyCode::LeftShift) || Input::IsKeyPressed(KeyCode::RightShift))
+                MousePan(delta);
+            else if(Input::IsKeyPressed(KeyCode::LeftControl) || Input::IsKeyPressed(KeyCode::RightControl))
+                MouseZoom(delta.y);
+            else
+                MouseRotate(delta);
+        }
 
         UpdateView();
     }

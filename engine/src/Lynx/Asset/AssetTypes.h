@@ -1,0 +1,25 @@
+﻿#pragma once
+
+#include "Lynx/Core.h"
+#include <filesystem>
+
+namespace Lynx
+{
+    enum class AssetType : uint16_t
+    {
+        None = 0,
+        Texture,
+        Mesh,
+        Material,
+        Shader,
+        Scene
+    };
+    
+    namespace AssetUtils
+    {
+        LX_API const char* GetFilterForSupportedAssets();
+        LX_API const char* GetFilterForAssetType(AssetType type);
+        LX_API AssetType GetAssetTypeFromExtension(const std::filesystem::path& path);
+        LX_API bool IsAssetExtensionSupported(const std::filesystem::path& path);
+    }
+}

@@ -1,22 +1,23 @@
 ﻿#include "lxpch.h"
 #include "Engine.h"
-
-// TODO: We only include this because of keycodes. Remove when we have own keycodes.
-#include <GLFW/glfw3.h>
-
 #include "GameModule.h"
 #include "Input.h"
 
 #include "Log.h"
 #include "Renderer/Renderer.h"
+#include "Scene/Scene.h"
+#include "Scene/Components.h"
 #include "Event/KeyEvent.h"
 #include "Event/WindowEvent.h"
 
 
 namespace Lynx
 {
+    Engine* Engine::s_Instance = nullptr;
+    
     void Engine::Initialize()
     {
+        s_Instance = this;
         Log::Init();
         LX_CORE_INFO("Initializing...");
 
@@ -24,10 +25,14 @@ namespace Lynx
         m_Window->SetEventCallback([this](Event& event){ this->OnEvent(event); });
         
         m_EditorCamera = EditorCamera(45.0f, (float)m_Window->GetWidth() / (float)m_Window->GetHeight(), 0.1f, 1000.0f);
-
+        
         m_Renderer = std::make_unique<Renderer>(m_Window->GetNativeWindow());
+        m_Scene = std::make_shared<Scene>();
 
+        m_AssetManager = std::make_unique<AssetManager>(m_Renderer->GetDeviceHandle());
+        
         m_Window->SetVSync(true);
+
     }
 
     void Engine::Run(IGameModule* gameModule)
@@ -39,6 +44,9 @@ namespace Lynx
             gameModule->OnStart();
         }
 
+        auto texture = m_AssetManager->GetTexture("assets/test.jpg");
+        m_Renderer->SetTexture(texture);
+
         // This is a placeholder for the real game loop
         while (m_IsRunning)
         {
@@ -49,11 +57,22 @@ namespace Lynx
 
             m_EditorCamera.OnUpdate(0.016f); // Fake delta time
 
-            m_Renderer->BeginScene(m_EditorCamera);
+            m_Scene->OnUpdate(0.016f);
+
             if (gameModule)
             {
                 gameModule->OnUpdate(0.016f); // Fake delta time
             }
+            
+            m_Renderer->BeginScene(m_EditorCamera);
+
+            auto view = m_Scene->Reg().view<TransformComponent, MeshComponent>();
+            for (auto entity : view)
+            {
+                auto [transform, mesh] = view.get<TransformComponent, MeshComponent>(entity);
+                m_Renderer->SubmitMesh(transform.GetTransform(), mesh.Color);
+            }
+
             m_Renderer->EndScene();
         }
 
@@ -66,6 +85,7 @@ namespace Lynx
     void Engine::Shutdown()
     {
         LX_CORE_INFO("Shutting down...");
+        m_AssetManager.reset();
         m_Renderer.reset();
         Log::Shutdown();
     }

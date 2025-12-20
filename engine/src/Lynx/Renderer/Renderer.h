@@ -3,6 +3,8 @@
 #include <nvrhi/nvrhi.h>
 #include <glm/glm.hpp>
 
+#include "Lynx/Asset/Texture.h"
+
 
 struct GLFWwindow;
 
@@ -26,6 +28,12 @@ namespace Lynx
 
         void BeginScene(const EditorCamera& camera);
         void EndScene();
+        
+        void SubmitMesh(const glm::mat4& transform, const glm::vec4& color);
+
+        nvrhi::DeviceHandle GetDeviceHandle() const { return m_NvrhiDevice; }
+
+        void SetTexture(std::shared_ptr<Texture> texture);
 
     private:
         void InitVulkan(GLFWwindow* window);
@@ -47,6 +55,9 @@ namespace Lynx
         nvrhi::BufferHandle m_ConstantBuffer;
         nvrhi::BindingSetHandle m_BindingSet;
         nvrhi::TextureHandle m_DepthBuffer;
+        nvrhi::SamplerHandle m_Sampler;
+        nvrhi::BindingLayoutHandle m_BindingLayout;
+        nvrhi::TextureHandle m_DefaultTexture;
         
 
         // One NVRHI framebuffer wrapper per swapchain image

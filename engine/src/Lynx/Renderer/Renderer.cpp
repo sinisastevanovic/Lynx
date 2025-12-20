@@ -96,6 +96,12 @@ namespace Lynx
 
         m_VulkanState->Device.waitIdle();
 
+        if (m_NvrhiDevice)
+            m_NvrhiDevice->runGarbageCollection();
+
+        m_Sampler = nullptr;
+        m_BindingLayout = nullptr;
+        m_DefaultTexture = nullptr;
         m_BindingSet = nullptr;
         m_ConstantBuffer = nullptr;
         m_CubeIndexBuffer = nullptr;
@@ -123,6 +129,22 @@ namespace Lynx
             m_VulkanState->Instance.destroyDebugUtilsMessengerEXT(m_VulkanState->DebugMessenger);
         
         m_VulkanState->Instance.destroy();
+    }
+
+    void Renderer::SetTexture(std::shared_ptr<Texture> texture)
+    {
+        nvrhi::TextureHandle handle = m_DefaultTexture;
+        if (texture && texture->GetTextureHandle())
+        {
+            handle = texture->GetTextureHandle();
+        }
+
+        auto bindingSetDesc = nvrhi::BindingSetDesc()
+            .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer))
+            .addItem(nvrhi::BindingSetItem::Texture_SRV(1, handle))
+            .addItem(nvrhi::BindingSetItem::Sampler(2, m_Sampler));
+
+        m_BindingSet = m_NvrhiDevice->createBindingSet(bindingSetDesc, m_BindingLayout);
     }
 
     void Renderer::InitVulkan(GLFWwindow* window)
@@ -313,18 +335,43 @@ namespace Lynx
 
         // 3. Create Command List
         m_CommandList = m_NvrhiDevice->createCommandList();
+
+        // 4. Create Default White Texture
+        nvrhi::TextureDesc defaultTexDesc;
+        defaultTexDesc.width = 1;
+        defaultTexDesc.height = 1;
+        defaultTexDesc.format = nvrhi::Format::RGBA8_UNORM;
+        defaultTexDesc.debugName = "DefaultWhite";
+        defaultTexDesc.initialState = nvrhi::ResourceStates::ShaderResource;
+        defaultTexDesc.keepInitialState = true;
+        m_DefaultTexture = m_NvrhiDevice->createTexture(defaultTexDesc);
+
+        uint32_t whitePixel = 0xFFFFFFFF;
+        m_CommandList->open();
+        m_CommandList->writeTexture(m_DefaultTexture, 0, 0, &whitePixel, 4);
+        m_CommandList->close();
+        m_NvrhiDevice->executeCommandList(m_CommandList);
     }
+    
+    struct Vertex
+    {
+        float x, y, z;
+        float u, v;
+    };
     
     void Renderer::InitBuffers()
     {
-        struct Vertex
-        {
-            float x, y, z;
-        };
-
         const Vertex cubeVertices[] = {
-            {-0.5f, -0.5f, -0.5f}, {0.5f, -0.5f, -0.5f}, {0.5f, 0.5f, -0.5f}, {-0.5f, 0.5f, -0.5f},
-            {-0.5f, -0.5f, 0.5f}, {0.5f, -0.5f, 0.5f}, {0.5f, 0.5f, 0.5f}, {-0.5f, 0.5f, 0.5f}
+            // Front Face
+            {-0.5f, -0.5f,  0.5f,  0.0f, 1.0f},
+            { 0.5f, -0.5f,  0.5f,  1.0f, 1.0f},
+            { 0.5f,  0.5f,  0.5f,  1.0f, 0.0f},
+            {-0.5f,  0.5f,  0.5f,  0.0f, 0.0f},
+            // Back Face
+            {-0.5f, -0.5f, -0.5f,  1.0f, 1.0f},
+            { 0.5f, -0.5f, -0.5f,  0.0f, 1.0f},
+            { 0.5f,  0.5f, -0.5f,  0.0f, 0.0f},
+            {-0.5f,  0.5f, -0.5f,  1.0f, 0.0f}
         };
 
         const uint32_t cubeIndices[] = {
@@ -372,45 +419,102 @@ namespace Lynx
     void Renderer::InitPipeline()
     {
         const char* vsSrc = R"(
+        #version 450
+        layout(location = 0) in vec3 a_Position;
+        layout(location = 1) in vec2 a_TexCoord;
+
+        layout(location = 0) out vec2 v_TexCoord;
+            
+        layout(set = 0, binding = 0) uniform UBO {
+        mat4 u_ViewProjection;
+        } ubo;
+
+        layout(push_constant) uniform PushConsts {
+        mat4 u_Model;
+        } push;
+
+        void main() {
+        v_TexCoord = a_TexCoord;
+        gl_Position = ubo.u_ViewProjection * push.u_Model * vec4(a_Position, 1.0);
+        }
+        )";
+        /*const char* vsSrc = R"(
             #version 450
             layout(location = 0) in vec3 a_Position;
+
+            
             layout(set = 0, binding = 0) uniform UBO {
                 mat4 u_ViewProjection;
             } ubo;
+
+            layout(push_constant) uniform PushConsts {
+                mat4 u_Model;
+            } push;
+
             void main() {
-                gl_Position = ubo.u_ViewProjection * vec4(a_Position, 1.0);
+                gl_Position = ubo.u_ViewProjection * push.u_Model * vec4(a_Position, 1.0);
             }
-        )";
+        )";*/
 
         const char* fsSrc = R"(
+        #version 450
+        layout(location = 0) in vec2 v_TexCoord;
+        layout(location = 0) out vec4 outColor;
+            
+        layout(set = 0, binding = 1) uniform texture2D u_Texture;
+        layout(set = 0, binding = 2) uniform sampler u_Sampler;
+    
+        void main() { 
+        outColor = texture(sampler2D(u_Texture, u_Sampler), v_TexCoord); 
+        }
+        )";
+
+        /*const char* fsSrc = R"(
             #version 450
             layout(location = 0) out vec4 outColor;
-            void main() { outColor = vec4(0.2, 0.8, 0.2, 1.0); }
-        )";
+            
+    
+            void main() { 
+                outColor = outColor = vec4(0.2, 0.8, 0.2, 1.0);
+            }
+        )";*/
 
         auto vsSpirv = CompileGLSL(vsSrc, shaderc_glsl_vertex_shader, "cube.vert");
         auto fsSpirv = CompileGLSL(fsSrc, shaderc_glsl_fragment_shader, "cube.frag");
 
         m_VertexShader = m_NvrhiDevice->createShader(nvrhi::ShaderDesc(nvrhi::ShaderType::Vertex), vsSpirv.data(), vsSpirv.size() * 4);
         m_FragmentShader = m_NvrhiDevice->createShader(nvrhi::ShaderDesc(nvrhi::ShaderType::Pixel), fsSpirv.data(), fsSpirv.size() * 4);
+
+        auto samplerDesc = nvrhi::SamplerDesc()
+            .setAddressU(nvrhi::SamplerAddressMode::Repeat)
+            .setAddressV(nvrhi::SamplerAddressMode::Repeat)
+            .setMinFilter(true)
+            .setMagFilter(true);
+        m_Sampler = m_NvrhiDevice->createSampler(samplerDesc);
         
-        nvrhi::BindingLayoutDesc layoutDesc;
-        layoutDesc.visibility = nvrhi::ShaderType::All;
-        layoutDesc.bindings.push_back(nvrhi::BindingLayoutItem::ConstantBuffer(0));
+        auto layoutDesc = nvrhi::BindingLayoutDesc()
+        .setVisibility(nvrhi::ShaderType::All)
+        .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
+        .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(glm::mat4)))
+        .addItem(nvrhi::BindingLayoutItem::Texture_SRV(1))
+        .addItem(nvrhi::BindingLayoutItem::Sampler(2)); // Moved to Binding 2
+        
         layoutDesc.bindingOffsets.shaderResource = 0;
         layoutDesc.bindingOffsets.sampler = 0;
         layoutDesc.bindingOffsets.constantBuffer = 0;
         layoutDesc.bindingOffsets.unorderedAccess = 0;
-        nvrhi::BindingLayoutHandle layout = m_NvrhiDevice->createBindingLayout(layoutDesc);
+        m_BindingLayout = m_NvrhiDevice->createBindingLayout(layoutDesc);
 
-        if (!layout)
+        if (!m_BindingLayout)
         {
             LX_CORE_ERROR("Failed to create Binding Layout!");
         }
 
         nvrhi::BindingSetDesc bindingSetDesc;
-        bindingSetDesc.bindings.push_back(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
-        m_BindingSet = m_NvrhiDevice->createBindingSet(bindingSetDesc, layout);
+        bindingSetDesc.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
+        bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(1, m_DefaultTexture));
+        bindingSetDesc.addItem(nvrhi::BindingSetItem::Sampler(2, m_Sampler));
+        m_BindingSet = m_NvrhiDevice->createBindingSet(bindingSetDesc, m_BindingLayout);
         
         if (!m_BindingSet)
         {
@@ -418,7 +522,7 @@ namespace Lynx
         }
         
         nvrhi::GraphicsPipelineDesc pipeDesc;
-        pipeDesc.bindingLayouts = { layout };
+        pipeDesc.bindingLayouts = { m_BindingLayout };
         pipeDesc.VS = m_VertexShader;
         pipeDesc.PS = m_FragmentShader;
         pipeDesc.primType = nvrhi::PrimitiveType::TriangleList;
@@ -433,9 +537,15 @@ namespace Lynx
                 .setFormat(nvrhi::Format::RGB32_FLOAT)
                 .setBufferIndex(0)
                 .setOffset(0)
-                .setElementStride(sizeof(float) * 3)
+                .setElementStride(sizeof(Vertex)),
+            nvrhi::VertexAttributeDesc()
+                .setName("TEXCOORD")
+                .setFormat(nvrhi::Format::RG32_FLOAT)
+                .setBufferIndex(0)
+                .setOffset(sizeof(float) * 3)
+                .setElementStride(sizeof(Vertex))
         };
-        pipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(attributes, 1, m_VertexShader);                
+        pipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(attributes, 2, m_VertexShader);                
         m_Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, m_Framebuffers[0]->getFramebufferInfo());
     }
 
@@ -491,6 +601,15 @@ namespace Lynx
         m_CommandList->setGraphicsState(state);
 
         // 5. Draw
+        //nvrhi::DrawArguments args;
+        //args.vertexCount = 36;
+        //m_CommandList->drawIndexed(args);
+    }
+
+    void Renderer::SubmitMesh(const glm::mat4& transform, const glm::vec4& color)
+    {
+        m_CommandList->setPushConstants(&transform, sizeof(glm::mat4));
+        
         nvrhi::DrawArguments args;
         args.vertexCount = 36;
         m_CommandList->drawIndexed(args);
