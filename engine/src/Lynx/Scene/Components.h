@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Lynx/Core.h"
+#include "Lynx/Asset/Asset.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -50,7 +51,8 @@ namespace Lynx
     // Placeholder for now
     struct MeshComponent
     {
-        // In the future: AssetHandle Mesh;
+        AssetHandle Mesh = AssetHandle::Null();
+        
         glm::vec4 Color = { 1.0f, 1.0f, 1.0f, 1.0f };
 
         MeshComponent() = default;

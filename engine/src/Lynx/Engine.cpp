@@ -46,10 +46,10 @@ namespace Lynx
         /*auto texture = m_AssetManager->GetTexture("assets/test.jpg");
         m_Renderer->SetTexture(texture);*/
 
-        auto mesh = m_AssetManager->GetMesh("assets/WaterBottle/glTF/WaterBottle.gltf");
+        /*auto mesh = m_AssetManager->GetMesh("assets/WaterBottle/glTF/WaterBottle.gltf");
         auto tex = m_AssetManager->GetAsset<Texture>(mesh->GetTexture());
         if (tex)
-            m_Renderer->SetTexture(tex);
+            m_Renderer->SetTexture(tex);*/
 
         // This is a placeholder for the real game loop
         while (m_IsRunning)
@@ -74,6 +74,17 @@ namespace Lynx
             for (auto entity : view)
             {
                 auto [transform, meshComp] = view.get<TransformComponent, MeshComponent>(entity);
+
+                auto mesh = m_AssetManager->GetAsset<StaticMesh>(meshComp.Mesh);
+                if (mesh)
+                {
+                    if (mesh->GetTexture())
+                    {
+                        auto tex = m_AssetManager->GetAsset<Texture>(mesh->GetTexture());
+                        m_Renderer->SetTexture(tex);
+                    }
+                }
+                
                 m_Renderer->SubmitMesh(mesh, transform.GetTransform(), meshComp.Color);
             }
 

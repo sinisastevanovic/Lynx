@@ -8,7 +8,7 @@
 
 namespace Lynx
 {
-    class AssetManager
+    class LX_API AssetManager
     {
     public:
         AssetManager(nvrhi::DeviceHandle device);

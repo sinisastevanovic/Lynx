@@ -18,15 +18,20 @@ void MyGame::OnStart()
 
     // Load Texture
     auto& engine = Lynx::Engine::Get();
+    auto& assetManager = engine.GetAssetManager();
+
+    auto mesh = assetManager.GetMesh("assets/WaterBottle/glTF/WaterBottle.gltf");
     
     // Create a Cube Entity
     auto scene = engine.GetActiveScene();
     auto entity = scene->CreateEntity("Cube");
-    entity.AddComponent<Lynx::MeshComponent>();
+    auto& meshComp1 = entity.AddComponent<Lynx::MeshComponent>();
+    meshComp1.Mesh = mesh->GetHandle();
     entity.GetComponent<Lynx::TransformComponent>().Translation.y = 0.5f;
 
     auto entity2 = scene->CreateEntity("Cube2");
-    entity2.AddComponent<Lynx::MeshComponent>();
+    auto& meshComp2 = entity2.AddComponent<Lynx::MeshComponent>();
+    meshComp2.Mesh = mesh->GetHandle();
     entity2.GetComponent<Lynx::TransformComponent>().Translation.x = 0.5f;
     // Position it slightly away so we see it
     // Default transform is 0,0,0.
