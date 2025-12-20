@@ -3,6 +3,7 @@
 #include "Window.h"
 #include "Asset/AssetManager.h"
 #include "Renderer/Renderer.h"
+#include "Physics/PhysicsSystem.h"
 #include "Event/Event.h"
 #include "Lynx/Renderer/EditorCamera.h"
 
@@ -24,6 +25,7 @@ namespace Lynx
 
         inline Window& GetWindow() { return *m_Window; }
         AssetManager& GetAssetManager() { return *m_AssetManager; }
+        PhysicsSystem& GetPhysicsSystem() { return *m_PhysicsSystem; }
         
         std::shared_ptr<Scene> GetActiveScene() const { return m_Scene; }
 
@@ -38,6 +40,7 @@ namespace Lynx
         std::unique_ptr<Window> m_Window;
         std::unique_ptr<Renderer> m_Renderer;
         std::unique_ptr<AssetManager> m_AssetManager;
+        std::unique_ptr<PhysicsSystem> m_PhysicsSystem;
         std::shared_ptr<Scene> m_Scene;
         
         EditorCamera m_EditorCamera;

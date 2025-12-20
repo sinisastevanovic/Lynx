@@ -37,6 +37,7 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(unofficial-shaderc CONFIG REQUIRED)
+find_package(Jolt CONFIG REQUIRED)
 
 target_link_libraries(engine PUBLIC
 
@@ -53,4 +54,6 @@ target_link_libraries(engine PUBLIC
     spdlog::spdlog
 
     unofficial::shaderc::shaderc
+
+    Jolt::Jolt
 )

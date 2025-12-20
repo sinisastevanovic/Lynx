@@ -1,4 +1,8 @@
 ﻿#include "Engine.h"
+
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
 #include "GameModule.h"
 #include "Input.h"
 
@@ -24,6 +28,8 @@ namespace Lynx
         m_Window->SetEventCallback([this](Event& event){ this->OnEvent(event); });
         
         m_EditorCamera = EditorCamera(45.0f, (float)m_Window->GetWidth() / (float)m_Window->GetHeight(), 0.1f, 1000.0f);
+
+        m_PhysicsSystem = std::make_unique<PhysicsSystem>();
         
         m_Renderer = std::make_unique<Renderer>(m_Window->GetNativeWindow());
         m_Scene = std::make_shared<Scene>();
@@ -43,33 +49,29 @@ namespace Lynx
             gameModule->OnStart();
         }
 
-        /*auto texture = m_AssetManager->GetTexture("assets/test.jpg");
-        m_Renderer->SetTexture(texture);*/
-
-        /*auto mesh = m_AssetManager->GetMesh("assets/WaterBottle/glTF/WaterBottle.gltf");
-        auto tex = m_AssetManager->GetAsset<Texture>(mesh->GetTexture());
-        if (tex)
-            m_Renderer->SetTexture(tex);*/
+        float lastFrameTime = 0.0f;
 
         // This is a placeholder for the real game loop
         while (m_IsRunning)
         {
+            float time = (float)glfwGetTime();
+            float deltaTime = time - lastFrameTime;
+            lastFrameTime = time;
+            
             if (m_Window->ShouldClose())
                 m_IsRunning = false;
             
             m_Window->OnUpdate();
 
-            m_EditorCamera.OnUpdate(0.016f); // Fake delta time
-
-            m_Scene->OnUpdate(0.016f);
-
+            m_EditorCamera.OnUpdate(deltaTime);
+            m_PhysicsSystem->Simulate(deltaTime);
+            m_Scene->OnUpdate(deltaTime);
             if (gameModule)
             {
-                gameModule->OnUpdate(0.016f); // Fake delta time
+                gameModule->OnUpdate(deltaTime);
             }
             
             m_Renderer->BeginScene(m_EditorCamera);
-
             auto view = m_Scene->Reg().view<TransformComponent, MeshComponent>();
             for (auto entity : view)
             {
@@ -87,7 +89,6 @@ namespace Lynx
                 
                 m_Renderer->SubmitMesh(mesh, transform.GetTransform(), meshComp.Color);
             }
-
             m_Renderer->EndScene();
         }
 
@@ -102,6 +103,7 @@ namespace Lynx
         LX_CORE_INFO("Shutting down...");
         m_AssetManager.reset();
         m_Renderer.reset();
+        m_PhysicsSystem.reset();
         Log::Shutdown();
     }
 
