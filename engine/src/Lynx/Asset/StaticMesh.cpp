@@ -48,27 +48,38 @@ namespace Lynx
         }
 
         // Get indices
-        const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
-        const tinygltf::BufferView& indexView = model.bufferViews[indexAccessor.bufferView];
-        const unsigned char* indexPtr = &model.buffers[indexView.buffer].data[indexAccessor.byteOffset + indexView.byteOffset];
-
         std::vector<uint32_t> indices;
-        indices.reserve(indexAccessor.count);
+        if (primitive.indices >= 0)
+        {
+            const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+            const tinygltf::BufferView& indexView = model.bufferViews[indexAccessor.bufferView];
+            const unsigned char* indexPtr = &model.buffers[indexView.buffer].data[indexAccessor.byteOffset + indexView.byteOffset];
 
-        if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
-        {
-            const uint16_t* ptr = reinterpret_cast<const uint16_t*>(indexPtr);
-            for (size_t i = 0; i < indexAccessor.count; ++i) indices.push_back(ptr[i]);
+            indices.reserve(indexAccessor.count);
+
+            if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+            {
+                const uint16_t* ptr = reinterpret_cast<const uint16_t*>(indexPtr);
+                for (size_t i = 0; i < indexAccessor.count; ++i) indices.push_back(ptr[i]);
+            }
+            else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
+            {
+                const uint32_t* ptr = reinterpret_cast<const uint32_t*>(indexPtr);
+                for (size_t i = 0; i < indexAccessor.count; ++i) indices.push_back(ptr[i]);
+            }
+            else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+            {
+                const uint8_t* ptr = reinterpret_cast<const uint8_t*>(indexPtr);
+                for (size_t i = 0; i < indexAccessor.count; ++i) indices.push_back(ptr[i]);
+            }
         }
-        else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
+        else
         {
-            const uint32_t* ptr = reinterpret_cast<const uint32_t*>(indexPtr);
-            for (size_t i = 0; i < indexAccessor.count; ++i) indices.push_back(ptr[i]);
-        }
-        else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
-        {
-            const uint8_t* ptr = reinterpret_cast<const uint8_t*>(indexPtr);
-            for (size_t i = 0; i < indexAccessor.count; ++i) indices.push_back(ptr[i]);
+            indices.reserve(posAccessor.count);
+            for (size_t i = 0; i < posAccessor.count; ++i)
+            {
+                indices.push_back((uint32_t)i);
+            }
         }
         
         m_IndexCount = (uint32_t)indices.size();

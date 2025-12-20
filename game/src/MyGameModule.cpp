@@ -21,6 +21,7 @@ void MyGame::OnStart()
     auto& assetManager = engine.GetAssetManager();
 
     auto mesh = assetManager.GetMesh("assets/WaterBottle/glTF/WaterBottle.gltf");
+    auto foxMesh = assetManager.GetMesh("assets/Fox/glTF/Fox.gltf");
     
     // Create a Cube Entity
     auto scene = engine.GetActiveScene();
@@ -31,7 +32,7 @@ void MyGame::OnStart()
 
     auto entity2 = scene->CreateEntity("Cube2");
     auto& meshComp2 = entity2.AddComponent<Lynx::MeshComponent>();
-    meshComp2.Mesh = mesh->GetHandle();
+    meshComp2.Mesh = foxMesh->GetHandle();
     entity2.GetComponent<Lynx::TransformComponent>().Translation.x = 0.5f;
     // Position it slightly away so we see it
     // Default transform is 0,0,0.
