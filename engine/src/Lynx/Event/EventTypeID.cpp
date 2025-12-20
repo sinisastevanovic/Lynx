@@ -1,5 +1,4 @@
-﻿#include "lxpch.h"
-#include "EventTypeID.h"
+﻿#include "EventTypeID.h"
 
 namespace Lynx
 {

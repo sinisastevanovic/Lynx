@@ -23,6 +23,7 @@ void MyGame::OnStart()
     auto scene = engine.GetActiveScene();
     auto entity = scene->CreateEntity("Cube");
     entity.AddComponent<Lynx::MeshComponent>();
+    entity.GetComponent<Lynx::TransformComponent>().Translation.y = 0.5f;
 
     auto entity2 = scene->CreateEntity("Cube2");
     entity2.AddComponent<Lynx::MeshComponent>();

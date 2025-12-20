@@ -1,5 +1,4 @@
-﻿#include "lxpch.h"
-#include "Window.h"
+﻿#include "Window.h"
 #include "Log.h"
 
 #define GLFW_INCLUDE_VULKAN

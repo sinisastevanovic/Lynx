@@ -1,4 +1,3 @@
-#include "lxpch.h"
 #include "Scene.h"
 #include "Components.h"
 #include "Entity.h"

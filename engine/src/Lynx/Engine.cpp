@@ -1,5 +1,4 @@
-﻿#include "lxpch.h"
-#include "Engine.h"
+﻿#include "Engine.h"
 #include "GameModule.h"
 #include "Input.h"
 
@@ -44,8 +43,13 @@ namespace Lynx
             gameModule->OnStart();
         }
 
-        auto texture = m_AssetManager->GetTexture("assets/test.jpg");
-        m_Renderer->SetTexture(texture);
+        /*auto texture = m_AssetManager->GetTexture("assets/test.jpg");
+        m_Renderer->SetTexture(texture);*/
+
+        auto mesh = m_AssetManager->GetMesh("assets/WaterBottle/glTF/WaterBottle.gltf");
+        auto tex = m_AssetManager->GetAsset<Texture>(mesh->GetTexture());
+        if (tex)
+            m_Renderer->SetTexture(tex);
 
         // This is a placeholder for the real game loop
         while (m_IsRunning)
@@ -69,8 +73,8 @@ namespace Lynx
             auto view = m_Scene->Reg().view<TransformComponent, MeshComponent>();
             for (auto entity : view)
             {
-                auto [transform, mesh] = view.get<TransformComponent, MeshComponent>(entity);
-                m_Renderer->SubmitMesh(transform.GetTransform(), mesh.Color);
+                auto [transform, meshComp] = view.get<TransformComponent, MeshComponent>(entity);
+                m_Renderer->SubmitMesh(mesh, transform.GetTransform(), meshComp.Color);
             }
 
             m_Renderer->EndScene();

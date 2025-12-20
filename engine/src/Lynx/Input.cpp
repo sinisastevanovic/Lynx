@@ -1,5 +1,4 @@
-﻿#include "lxpch.h"
-#include "Input.h"
+﻿#include "Input.h"
 
 #define MAX_KEYS 1024
 

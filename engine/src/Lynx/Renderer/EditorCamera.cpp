@@ -1,4 +1,3 @@
-#include "lxpch.h"
 #include "EditorCamera.h"
 
 #include "Lynx/Input.h"
@@ -21,8 +20,9 @@ namespace Lynx
     void EditorCamera::UpdateProjection()
     {
         m_AspectRatio = m_ViewportWidth / m_ViewportHeight;
-        m_Projection = glm::perspectiveRH_ZO(glm::radians(m_FOV), m_AspectRatio, m_NearClip, m_FarClip);
-        m_Projection[1][1] *= -1.0f;
+        //m_Projection = glm::perspectiveRH_ZO(glm::radians(m_FOV), m_AspectRatio, m_NearClip, m_FarClip);
+        m_Projection = glm::perspective(m_FOV, m_AspectRatio, m_NearClip, m_FarClip);
+        //m_Projection[1][1] *= -1.0f; //Flips Y, but apparently we don't need this
     }
 
     void EditorCamera::UpdateView()

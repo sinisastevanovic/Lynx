@@ -1,5 +1,4 @@
-﻿#include "lxpch.h"
-#include "Renderer.h"
+﻿#include "Renderer.h"
 #include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
@@ -104,8 +103,6 @@ namespace Lynx
         m_DefaultTexture = nullptr;
         m_BindingSet = nullptr;
         m_ConstantBuffer = nullptr;
-        m_CubeIndexBuffer = nullptr;
-        m_CubeVertexBuffer = nullptr;
         m_DepthBuffer = nullptr;
         m_Pipeline = nullptr;
         m_VertexShader = nullptr;
@@ -353,56 +350,8 @@ namespace Lynx
         m_NvrhiDevice->executeCommandList(m_CommandList);
     }
     
-    struct Vertex
-    {
-        float x, y, z;
-        float u, v;
-    };
-    
     void Renderer::InitBuffers()
     {
-        const Vertex cubeVertices[] = {
-            // Front Face
-            {-0.5f, -0.5f,  0.5f,  0.0f, 1.0f},
-            { 0.5f, -0.5f,  0.5f,  1.0f, 1.0f},
-            { 0.5f,  0.5f,  0.5f,  1.0f, 0.0f},
-            {-0.5f,  0.5f,  0.5f,  0.0f, 0.0f},
-            // Back Face
-            {-0.5f, -0.5f, -0.5f,  1.0f, 1.0f},
-            { 0.5f, -0.5f, -0.5f,  0.0f, 1.0f},
-            { 0.5f,  0.5f, -0.5f,  0.0f, 0.0f},
-            {-0.5f,  0.5f, -0.5f,  1.0f, 0.0f}
-        };
-
-        const uint32_t cubeIndices[] = {
-            0, 1, 2, 2, 3, 0,
-            1, 5, 6, 6, 2, 1,
-            7, 6, 5, 5, 4, 7,
-            4, 0, 3, 3, 7, 4,
-            3, 2, 6, 6, 7, 3,
-            4, 5, 1, 1, 0, 4
-        };
-
-        nvrhi::BufferDesc vbDesc;
-        vbDesc.byteSize = sizeof(cubeVertices);
-        vbDesc.isVertexBuffer = true;
-        vbDesc.initialState = nvrhi::ResourceStates::CopyDest;
-        vbDesc.keepInitialState = true; 
-        m_CubeVertexBuffer = m_NvrhiDevice->createBuffer(vbDesc);
-
-        nvrhi::BufferDesc ibDesc;
-        ibDesc.byteSize = sizeof(cubeIndices);
-        ibDesc.isIndexBuffer = true;
-        ibDesc.initialState = nvrhi::ResourceStates::CopyDest;
-        ibDesc.keepInitialState = true; 
-        m_CubeIndexBuffer = m_NvrhiDevice->createBuffer(ibDesc);
-        
-        m_CommandList->open();
-        m_CommandList->writeBuffer(m_CubeVertexBuffer, cubeVertices, sizeof(cubeVertices));
-        m_CommandList->writeBuffer(m_CubeIndexBuffer, cubeIndices, sizeof(cubeIndices));
-        m_CommandList->close();
-        m_NvrhiDevice->executeCommandList(m_CommandList);
-
         nvrhi::BufferDesc cbDesc;
         cbDesc.byteSize = sizeof(SceneData);
         cbDesc.isConstantBuffer = true;
@@ -526,7 +475,8 @@ namespace Lynx
         pipeDesc.VS = m_VertexShader;
         pipeDesc.PS = m_FragmentShader;
         pipeDesc.primType = nvrhi::PrimitiveType::TriangleList;
-        pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::None;
+        pipeDesc.renderState.rasterState.frontCounterClockwise = true;
+        pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::Back;
         pipeDesc.renderState.depthStencilState.depthTestEnable = true;
         pipeDesc.renderState.depthStencilState.depthWriteEnable = true;
         pipeDesc.renderState.depthStencilState.depthFunc = nvrhi::ComparisonFunc::Less;
@@ -585,8 +535,6 @@ namespace Lynx
         state.pipeline = m_Pipeline;
         state.framebuffer = m_Framebuffers[m_CurrentImageIndex];
         state.bindings = { m_BindingSet };
-        state.addVertexBuffer(nvrhi::VertexBufferBinding(m_CubeVertexBuffer, 0, 0));
-        state.indexBuffer = nvrhi::IndexBufferBinding(m_CubeIndexBuffer, nvrhi::Format::R32_UINT);
 
         nvrhi::Viewport viewport = nvrhi::Viewport(
             (float)m_Framebuffers[m_CurrentImageIndex]->getFramebufferInfo().width,
@@ -606,12 +554,39 @@ namespace Lynx
         //m_CommandList->drawIndexed(args);
     }
 
-    void Renderer::SubmitMesh(const glm::mat4& transform, const glm::vec4& color)
+    void Renderer::SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, const glm::vec4& color)
     {
+        if (!mesh)
+            return;
+        
+        // 1. Bind Texture
+        // Check if mesh has a texture. If so, bind it. If not, use white texture.
+        // NOTE: This is expensive to do per-draw-call (creating BindingSet).
+        // Optimization for later: Cache BindingSets in the Mesh or a Material.
+
+        // For now, let's reuse SetTexture logic or just call it here.
+        // We need to access the AssetManager to get the texture by UUID,
+        // OR just assume Mesh holds the Texture pointer directly?
+        // You implemented Mesh. Does it hold UUID or shared_ptr?
+        // If UUID, we need AssetManager. If ptr, easy.
+
+        // Let's assume for V1 we just use the currently bound texture (from SetTexture)
+        // OR we implement a simple lookup.
+
+        // 2. Bind Geometry
+        auto state = nvrhi::GraphicsState()
+            .setPipeline(m_Pipeline)
+            .setFramebuffer(m_Framebuffers[m_CurrentImageIndex])
+            .addBindingSet(m_BindingSet)
+            .addVertexBuffer(nvrhi::VertexBufferBinding(mesh->GetVertexBuffer(), 0, 0))
+            .setIndexBuffer(nvrhi::IndexBufferBinding(mesh->GetIndexBuffer(), nvrhi::Format::R32_UINT));
+
+        m_CommandList->setGraphicsState(state);
+        
         m_CommandList->setPushConstants(&transform, sizeof(glm::mat4));
         
         nvrhi::DrawArguments args;
-        args.vertexCount = 36;
+        args.vertexCount = mesh->GetIndexCount();
         m_CommandList->drawIndexed(args);
     }
 

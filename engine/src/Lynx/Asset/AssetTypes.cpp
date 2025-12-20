@@ -1,5 +1,4 @@
-﻿#include "lxpch.h"
-#include "AssetTypes.h"
+﻿#include "AssetTypes.h"
 
 #include <vector>
 #include <string>

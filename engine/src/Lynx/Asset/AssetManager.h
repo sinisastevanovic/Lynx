@@ -1,8 +1,10 @@
 #pragma once
 #include "Asset.h"
 #include "Texture.h"
+#include "StaticMesh.h"
 
 #include <nvrhi/nvrhi.h> // TODO: Remove nvrhi from AssetManger...
+
 
 namespace Lynx
 {
@@ -15,7 +17,7 @@ namespace Lynx
         std::shared_ptr<Texture> GetTexture(const std::string& filepath);
 
         // Checks cache. If exists, returns it. If not, loads from disk, caches it, and returns it.
-        //std::shared_ptr<Mesh> GetMesh(const std::string& filepath);
+        std::shared_ptr<StaticMesh> GetMesh(const std::string& filepath);
 
         // Fast lookup. Returns nullptr if invalid handle.
         std::shared_ptr<Asset> GetAsset(AssetHandle handle);

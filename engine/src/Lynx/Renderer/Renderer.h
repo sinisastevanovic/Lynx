@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 
 #include "Lynx/Asset/Texture.h"
+#include "Lynx/Asset/StaticMesh.h"
 
 
 struct GLFWwindow;
@@ -29,7 +30,7 @@ namespace Lynx
         void BeginScene(const EditorCamera& camera);
         void EndScene();
         
-        void SubmitMesh(const glm::mat4& transform, const glm::vec4& color);
+        void SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, const glm::vec4& color = glm::vec4(1.0f));
 
         nvrhi::DeviceHandle GetDeviceHandle() const { return m_NvrhiDevice; }
 
@@ -50,8 +51,6 @@ namespace Lynx
         nvrhi::ShaderHandle m_VertexShader;
         nvrhi::ShaderHandle m_FragmentShader;
         nvrhi::GraphicsPipelineHandle m_Pipeline;
-        nvrhi::BufferHandle m_CubeVertexBuffer;
-        nvrhi::BufferHandle m_CubeIndexBuffer;
         nvrhi::BufferHandle m_ConstantBuffer;
         nvrhi::BindingSetHandle m_BindingSet;
         nvrhi::TextureHandle m_DepthBuffer;
