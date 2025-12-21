@@ -12,6 +12,8 @@
 #include "Systems/CameraSystem.h"
 #include "Systems/EnemySystem.h"
 #include "Systems/PlayerSystem.h"
+#include "Systems/ProjectileSystem.h"
+#include "Systems/WeaponSystem.h"
 
 void MyGame::RegisterComponents(Lynx::ComponentRegistry* registry)
 {
@@ -60,6 +62,8 @@ void MyGame::OnStart()
         auto& collider = player.AddComponent<Lynx::CapsuleColliderComponent>();
         collider.Radius = 0.5f;
         collider.Height = 2.0f;
+
+        player.AddComponent<WeaponComponent>();
     }
 
     {
@@ -97,7 +101,6 @@ void MyGame::OnStart()
 
     auto spawnerEntity = scene->CreateEntity("Spawner");
     auto& spawner = spawnerEntity.AddComponent<EnemySpawnerComponent>();
-    spawner.SpawnRate = 1.5f;
 }
 
 void MyGame::OnUpdate(float deltaTime)
@@ -107,6 +110,9 @@ void MyGame::OnUpdate(float deltaTime)
     EnemySystem::Update(scene, deltaTime);
     PlayerSystem::Update(scene, deltaTime);
     CameraSystem::Update(scene, deltaTime);
+
+    ProjectileSystem::Update(scene, deltaTime);
+    WeaponSystem::Update(scene, deltaTime);
 }
 
 void MyGame::OnShutdown()
