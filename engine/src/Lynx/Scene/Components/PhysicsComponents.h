@@ -14,6 +14,12 @@ namespace Lynx
         JPH::BodyID BodyId;
         bool RuntimeBodyCreated = false;
 
+        bool LockRotationX = false;
+        bool LockRotationY = false;
+        bool LockRotationZ = false;
+
+        void LockAllRotation() { LockRotationX = true; LockRotationY = true; LockRotationZ = true; }
+
         RigidBodyComponent() = default;
         RigidBodyComponent(const RigidBodyComponent&) = default;
         RigidBodyComponent(RigidBodyType type) : Type(type) {}

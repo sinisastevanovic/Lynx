@@ -52,6 +52,9 @@ namespace Lynx
 
     void Scene::OnUpdate(float deltaTime)
     {
+        
+        
+        
         auto& physicsSystem = Engine::Get().GetPhysicsSystem();
         JPH::BodyInterface& bodyInterface = physicsSystem.GetBodyInterface();
         
@@ -101,6 +104,15 @@ namespace Lynx
                     JPH::Quat rot(transform.Rotation.x, transform.Rotation.y, transform.Rotation.z, transform.Rotation.w);
 
                     JPH::BodyCreationSettings bodySettings(shape, pos, rot, motion, layer);
+
+                    JPH::EAllowedDOFs allowedDOFs = JPH::EAllowedDOFs::All;
+                    if (rb.LockRotationX)
+                        allowedDOFs = allowedDOFs & ~JPH::EAllowedDOFs::RotationX;
+                    if (rb.LockRotationY)
+                        allowedDOFs = allowedDOFs & ~JPH::EAllowedDOFs::RotationY;
+                    if (rb.LockRotationZ)
+                        allowedDOFs = allowedDOFs & ~JPH::EAllowedDOFs::RotationZ;
+                    bodySettings.mAllowedDOFs = allowedDOFs;
 
                     JPH::Body* body = bodyInterface.CreateBody(bodySettings);
 

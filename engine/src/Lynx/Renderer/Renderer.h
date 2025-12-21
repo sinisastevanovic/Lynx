@@ -27,7 +27,7 @@ namespace Lynx
         
         void OnResize(uint32_t width, uint32_t height);
 
-        void BeginScene(const EditorCamera& camera);
+        void BeginScene(glm::mat4 viewProjection);
         void EndScene();
         
         void SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, const glm::vec4& color = glm::vec4(1.0f));

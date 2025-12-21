@@ -12,6 +12,8 @@
 
 #include <string>
 
+#include "Lynx/Renderer/SceneCamera.h"
+
 
 namespace Lynx
 {
@@ -69,5 +71,15 @@ namespace Lynx
 
         MeshComponent() = default;
         MeshComponent(const MeshComponent&) = default;
+    };
+
+    struct CameraComponent
+    {
+        SceneCamera Camera;
+        bool Primary = true;
+        bool FixedAspectRatio = false;
+
+        CameraComponent() = default;
+        CameraComponent(const CameraComponent&) = default;
     };
 }

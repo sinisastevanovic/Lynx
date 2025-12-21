@@ -516,7 +516,7 @@ namespace Lynx
         m_Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, m_Framebuffers[0]->getFramebufferInfo());
     }
 
-    void Renderer::BeginScene(const EditorCamera& camera)
+    void Renderer::BeginScene(glm::mat4 viewProjection)
     {
         // 0. Wait for Fence
         if (m_VulkanState->Device.waitForFences(1, &m_VulkanState->InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
@@ -540,7 +540,7 @@ namespace Lynx
         m_CommandList->open();
         
         SceneData sceneData;
-        sceneData.ViewProjectionMatrix = camera.GetViewProjection();
+        sceneData.ViewProjectionMatrix = viewProjection;
         m_CommandList->writeBuffer(m_ConstantBuffer, &sceneData, sizeof(SceneData));
 
         // 3. Clear Screen

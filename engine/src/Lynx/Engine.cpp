@@ -66,7 +66,36 @@ namespace Lynx
             
             m_Window->OnUpdate();
 
-            m_EditorCamera.OnUpdate(deltaTime);
+            glm::mat4 cameraViewProj;
+            glm::vec3 cameraPos;
+
+            bool foundCamera = false;
+            {
+                auto view = m_Scene->Reg().view<TransformComponent, CameraComponent>();
+                for (auto entity : view)
+                {
+                    auto [transform, camera] = view.get<TransformComponent, CameraComponent>(entity);
+                    if (camera.Primary)
+                    {
+                        // TODO: Maybe not do this every frame?
+                        if (!camera.FixedAspectRatio)
+                            camera.Camera.SetViewportSize(m_Window->GetWidth(), m_Window->GetHeight());
+                        
+                        glm::mat4 viewMatrix = glm::inverse(transform.GetTransform());
+                        cameraViewProj = camera.Camera.GetProjection() * viewMatrix;
+
+                        foundCamera = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!foundCamera)
+            {
+                m_EditorCamera.OnUpdate(deltaTime);
+                cameraViewProj = m_EditorCamera.GetViewProjection();
+            }
+
             m_PhysicsSystem->Simulate(deltaTime);
             m_Scene->OnUpdate(deltaTime);
             if (gameModule)
@@ -74,7 +103,7 @@ namespace Lynx
                 gameModule->OnUpdate(deltaTime);
             }
             
-            m_Renderer->BeginScene(m_EditorCamera);
+            m_Renderer->BeginScene(cameraViewProj);
             auto view = m_Scene->Reg().view<TransformComponent, MeshComponent>();
             for (auto entity : view)
             {
