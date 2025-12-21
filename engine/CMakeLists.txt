@@ -10,6 +10,24 @@ target_compile_definitions(engine PRIVATE
     LX_BUILD_DLL
     GLFW_STATIC
     VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
+    "IMGUI_API=__declspec(dllexport)"
+)
+
+target_include_directories(engine PRIVATE
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends
+)
+
+target_sources(engine PRIVATE
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+)
+
+target_sources(engine PRIVATE
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
 )
 
 FetchContent_GetProperties(nvrhi)

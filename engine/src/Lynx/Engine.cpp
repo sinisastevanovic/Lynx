@@ -14,6 +14,8 @@
 #include "Event/WindowEvent.h"
 #include "Scene/Components/PhysicsComponents.h"
 
+#include <imgui.h>
+#include <backends/imgui_impl_glfw.h>
 
 namespace Lynx
 {
@@ -33,6 +35,19 @@ namespace Lynx
         m_PhysicsSystem = std::make_unique<PhysicsSystem>();
         
         m_Renderer = std::make_unique<Renderer>(m_Window->GetNativeWindow());
+
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO(); (void)io;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+
+        ImGui::StyleColorsDark();
+
+        ImGui_ImplGlfw_InitForVulkan(m_Window->GetNativeWindow(), true);
+        m_Renderer->InitImGui();
+        
         m_Scene = std::make_shared<Scene>();
 
         m_AssetManager = std::make_unique<AssetManager>(m_Renderer->GetDeviceHandle());
@@ -66,8 +81,18 @@ namespace Lynx
             
             m_Window->OnUpdate();
 
+            ImGui_ImplGlfw_NewFrame();
+            ImGui::NewFrame();
+
+            if (m_ImGuiCallback)
+                m_ImGuiCallback();
+
+            ImGui::Render();
+
             glm::mat4 cameraViewProj;
             glm::vec3 cameraPos;
+
+            auto viewportSize = m_Renderer->GetViewportSize();
 
             bool foundCamera = false;
             {
@@ -79,7 +104,7 @@ namespace Lynx
                     {
                         // TODO: Maybe not do this every frame?
                         if (!camera.FixedAspectRatio)
-                            camera.Camera.SetViewportSize(m_Window->GetWidth(), m_Window->GetHeight());
+                            camera.Camera.SetViewportSize(viewportSize.first, viewportSize.second);
                         
                         glm::mat4 viewMatrix = glm::inverse(transform.GetTransform());
                         cameraViewProj = camera.Camera.GetProjection() * viewMatrix;
@@ -92,6 +117,7 @@ namespace Lynx
 
             if (!foundCamera)
             {
+                m_EditorCamera.SetViewportSize((float)viewportSize.first, (float)viewportSize.second);
                 m_EditorCamera.OnUpdate(deltaTime);
                 cameraViewProj = m_EditorCamera.GetViewProjection();
             }
@@ -143,7 +169,7 @@ namespace Lynx
                     m_Renderer->SubmitMesh(cubeMesh, colliderTransform, glm::vec4(0.0f, 1.0f, 0.0f, 0.5f));
                 }
             }
-            
+
             m_Renderer->EndScene();
         }
 
@@ -157,6 +183,8 @@ namespace Lynx
     {
         LX_CORE_INFO("Shutting down...");
         m_AssetManager.reset();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
         m_Renderer.reset();
         m_PhysicsSystem.reset();
         Log::Shutdown();
@@ -180,8 +208,9 @@ namespace Lynx
 
         dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& event)
         {
-            m_EditorCamera.SetViewportSize(event.GetWidth(), event.GetHeight());
             m_Renderer->OnResize(event.GetWidth(), event.GetHeight());
+            /*auto viewportSize = m_Renderer->GetViewportSize();
+            m_EditorCamera.SetViewportSize(viewportSize.first, viewportSize.second);*/
             return false;
         });
     }

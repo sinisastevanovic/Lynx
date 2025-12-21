@@ -85,6 +85,16 @@ namespace Lynx
         dispatcher.Dispatch<MouseScrolledEvent>(LX_BIND_EVENT_FN(EditorCamera::OnMouseScroll));
     }
 
+    void EditorCamera::SetViewportSize(float width, float height)
+    {
+        if (!glm::epsilonEqual(m_ViewportWidth, width, 0.001f) || !glm::epsilonEqual(m_ViewportHeight, height, 0.001f))
+        {
+            m_ViewportWidth = width;
+            m_ViewportHeight = height;
+            UpdateProjection();
+        }
+    }
+
     bool EditorCamera::OnMouseScroll(MouseScrolledEvent& e)
     {
         float delta = e.GetYOffset() * 0.1f;

@@ -3,6 +3,8 @@
 #include <Lynx/GameModule.h>
 #include <iostream>
 
+#include <imgui.h>
+
 
 #if defined(_WIN32)
     #include <windows.h>
@@ -64,6 +66,24 @@ int main(int argc, char** argv)
         }
     }
 
+    engine.SetImGuiRenderCallback([]()
+    {
+        ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+        ImGui::Begin("Viewport");
+        ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+        if (viewportSize.x > 0 && viewportSize.y > 0)
+            Lynx::Engine::Get().GetRenderer().EnsureEditorViewport((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
+        
+        auto texture = Lynx::Engine::Get().GetRenderer().GetViewportTexture();
+        if (texture)
+        {
+            ImGui::Image((ImTextureID)texture.Get(), viewportSize);
+        }
+        ImGui::End();
+        
+        ImGui::ShowDemoWindow();
+    });
+    
     engine.Run(gameModule);
 
     if (gameModule && destroyFunc)

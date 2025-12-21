@@ -6,12 +6,21 @@ file(GLOB_RECURSE EDITOR_SOURCES
 
 add_executable(editor ${EDITOR_SOURCES})
 
+target_compile_definitions(editor PRIVATE
+    "IMGUI_API=__declspec(dllimport)"
+)
+
 set_target_properties(editor PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
 target_link_libraries(editor PRIVATE 
     engine
+)
+
+target_include_directories(editor PRIVATE
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends
 )
 
 add_dependencies(editor engine game_dll)

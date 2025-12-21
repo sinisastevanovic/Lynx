@@ -26,7 +26,14 @@ FetchContent_Declare(
     GIT_TAG 06d4fdc82e2d911e510210c3b9ec0c68830ccda4
 )
 
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG v1.92.5-docking
+)
+
 FetchContent_MakeAvailable(nvrhi)
+FetchContent_MakeAvailable(imgui)
 
 # This enables vcpkg's manifest mode. It will automatically download
 # and build the libraries listed in vcpkg.json.

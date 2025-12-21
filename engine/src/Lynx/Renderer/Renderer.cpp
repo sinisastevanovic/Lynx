@@ -1,4 +1,5 @@
 ﻿#include "Renderer.h"
+#include "ShaderUtils.h"
 #include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
@@ -12,7 +13,10 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #include <GLFW/glfw3.h>
 
 #include "nvrhi/utils.h"
-#include "Lynx/Renderer/EditorCamera.h"
+
+#include "Lynx/ImGui/imgui_nvrhi.h"
+#include <imgui.h>
+#include <backends/imgui_impl_glfw.h>
 
 
 namespace Lynx
@@ -66,21 +70,6 @@ namespace Lynx
         glm::vec4 Color;
     };
     
-    std::vector<uint32_t> CompileGLSL(const std::string& source, shaderc_shader_kind kind, const char* fileName)
-    {
-        shaderc::Compiler compiler;
-        shaderc::CompileOptions options;
-
-        options.SetOptimizationLevel(shaderc_optimization_level_performance);
-        shaderc::SpvCompilationResult module = compiler.CompileGlslToSpv(source, kind, fileName, options);
-        if (module.GetCompilationStatus() != shaderc_compilation_status_success)
-        {
-            LX_CORE_ERROR("Shader Error: {0}", module.GetErrorMessage());
-        }
-
-        return {module.cbegin(), module.cend()};
-    }
-
     Renderer::Renderer(GLFWwindow* window)
     {
         m_VulkanState = std::make_unique<VulkanState>();
@@ -109,13 +98,22 @@ namespace Lynx
         m_DefaultTexture = nullptr;
         m_BindingSet = nullptr;
         m_ConstantBuffer = nullptr;
-        m_DepthBuffer = nullptr;
+        m_SwapchainDepth = nullptr;
         m_Pipeline = nullptr;
         m_VertexShader = nullptr;
         m_FragmentShader = nullptr;
         m_CommandList = nullptr;
-        m_Framebuffers.clear();
+        m_SwapchainFramebuffers.clear();
+        m_CurrentFramebuffer = nullptr;
+        if (m_EditorTarget)
+        {
+            m_EditorTarget->Depth = nullptr;
+            m_EditorTarget->Color = nullptr;
+            m_EditorTarget->Framebuffer = nullptr;
+            m_EditorTarget.reset();
+        }
         m_NvrhiDevice = nullptr;
+        m_ImGuiBackend.reset();
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
@@ -148,6 +146,20 @@ namespace Lynx
             .addItem(nvrhi::BindingSetItem::Sampler(2, m_Sampler));
 
         m_BindingSet = m_NvrhiDevice->createBindingSet(bindingSetDesc, m_BindingLayout);
+    }
+
+    bool Renderer::InitImGui()
+    {
+        m_ImGuiBackend = std::make_unique<ImGui_NVRHI>();
+        return m_ImGuiBackend->init(m_NvrhiDevice);
+    }
+
+    void Renderer::RenderImGui()
+    {
+        if (m_ImGuiBackend)
+        {
+            m_ImGuiBackend->render(m_SwapchainFramebuffers[m_CurrentImageIndex]);
+        }
     }
 
     void Renderer::InitVulkan(GLFWwindow* window)
@@ -317,7 +329,7 @@ namespace Lynx
         depthDesc.isRenderTarget = true;
         depthDesc.initialState = nvrhi::ResourceStates::DepthWrite;
         depthDesc.keepInitialState = true;
-        m_DepthBuffer = m_NvrhiDevice->createTexture(depthDesc);
+        m_SwapchainDepth = m_NvrhiDevice->createTexture(depthDesc);
 
         for (auto vkImage : m_VulkanState->SwapchainImages)
         {
@@ -332,8 +344,8 @@ namespace Lynx
             nvrhi::TextureHandle texture = m_NvrhiDevice->createHandleForNativeTexture(nvrhi::ObjectTypes::VK_Image, (VkImage)vkImage, desc);
             nvrhi::FramebufferDesc fbDesc;
             fbDesc.addColorAttachment(texture);
-            fbDesc.setDepthAttachment(m_DepthBuffer);
-            m_Framebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
+            fbDesc.setDepthAttachment(m_SwapchainDepth);
+            m_SwapchainFramebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
         }
 
         // 3. Create Command List
@@ -369,6 +381,37 @@ namespace Lynx
         {
             LX_CORE_ERROR("Failed to create Constant Buffer!");
         }
+    }
+
+    void Renderer::CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height)
+    {
+        target.Width = width;
+        target.Height = height;
+
+        auto colorDesc = nvrhi::TextureDesc()
+            .setWidth(width)
+            .setHeight(height)
+            .setFormat(nvrhi::Format::BGRA8_UNORM)
+            .setIsRenderTarget(true)
+            .setDebugName("OffscreenColor")
+            .setInitialState(nvrhi::ResourceStates::ShaderResource)
+            .setKeepInitialState(true);
+        target.Color = m_NvrhiDevice->createTexture(colorDesc);
+
+        auto depthDesc = nvrhi::TextureDesc()
+            .setWidth(width)
+            .setHeight(height)
+            .setFormat(nvrhi::Format::D32)
+            .setIsRenderTarget(true)
+            .setDebugName("OffscreenDepth")
+            .setInitialState(nvrhi::ResourceStates::DepthWrite)
+            .setKeepInitialState(true);
+        target.Depth = m_NvrhiDevice->createTexture(depthDesc);
+
+        auto fbDesc = nvrhi::FramebufferDesc()
+            .addColorAttachment(target.Color)
+            .setDepthAttachment(target.Depth);
+        target.Framebuffer = m_NvrhiDevice->createFramebuffer(fbDesc);
     }
 
     void Renderer::InitPipeline()
@@ -439,8 +482,8 @@ namespace Lynx
             }
         )";*/
 
-        auto vsSpirv = CompileGLSL(vsSrc, shaderc_glsl_vertex_shader, "cube.vert");
-        auto fsSpirv = CompileGLSL(fsSrc, shaderc_glsl_fragment_shader, "cube.frag");
+        auto vsSpirv = ShaderUtils::CompileGLSL(vsSrc, shaderc_glsl_vertex_shader, "cube.vert");
+        auto fsSpirv = ShaderUtils::CompileGLSL(fsSrc, shaderc_glsl_fragment_shader, "cube.frag");
 
         m_VertexShader = m_NvrhiDevice->createShader(nvrhi::ShaderDesc(nvrhi::ShaderType::Vertex), vsSpirv.data(), vsSpirv.size() * 4);
         m_FragmentShader = m_NvrhiDevice->createShader(nvrhi::ShaderDesc(nvrhi::ShaderType::Pixel), fsSpirv.data(), fsSpirv.size() * 4);
@@ -513,7 +556,7 @@ namespace Lynx
                 .setElementStride(sizeof(Vertex))
         };
         pipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(attributes, 2, m_VertexShader);                
-        m_Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, m_Framebuffers[0]->getFramebufferInfo());
+        m_Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, m_SwapchainFramebuffers[0]->getFramebufferInfo());
     }
 
     void Renderer::BeginScene(glm::mat4 viewProjection)
@@ -543,24 +586,34 @@ namespace Lynx
         sceneData.ViewProjectionMatrix = viewProjection;
         m_CommandList->writeBuffer(m_ConstantBuffer, &sceneData, sizeof(SceneData));
 
+        if (m_EditorTarget)
+        {
+            m_CurrentFramebuffer = m_EditorTarget->Framebuffer;
+        }
+        else
+        {
+            m_CurrentFramebuffer = m_SwapchainFramebuffers[m_CurrentImageIndex];
+        }
+
         // 3. Clear Screen
-        nvrhi::utils::ClearColorAttachment(m_CommandList, m_Framebuffers[m_CurrentImageIndex], 0, nvrhi::Color(0.1f, 0.1f, 0.1f, 1.0f));
-        nvrhi::utils::ClearDepthStencilAttachment(m_CommandList, m_Framebuffers[m_CurrentImageIndex], 1.0f, 0);
+        nvrhi::utils::ClearColorAttachment(m_CommandList, m_CurrentFramebuffer, 0, nvrhi::Color(0.1f, 0.1f, 0.1f, 1.0f));
+        nvrhi::utils::ClearDepthStencilAttachment(m_CommandList, m_CurrentFramebuffer, 1.0f, 0);
 
         // 4. Setup Draw State
         nvrhi::GraphicsState state;
         state.pipeline = m_Pipeline;
-        state.framebuffer = m_Framebuffers[m_CurrentImageIndex];
+        state.framebuffer = m_CurrentFramebuffer;
         state.bindings = { m_BindingSet };
 
+        const auto& fbInfo = m_CurrentFramebuffer->getFramebufferInfo();
         nvrhi::Viewport viewport = nvrhi::Viewport(
-            (float)m_Framebuffers[m_CurrentImageIndex]->getFramebufferInfo().width,
-            (float)m_Framebuffers[m_CurrentImageIndex]->getFramebufferInfo().height
+            (float)fbInfo.width,
+            (float)fbInfo.height
         );
         state.viewport.addViewport(viewport);
         state.viewport.addScissorRect(nvrhi::Rect(
-            0, m_Framebuffers[m_CurrentImageIndex]->getFramebufferInfo().width,
-            0, m_Framebuffers[m_CurrentImageIndex]->getFramebufferInfo().height
+            0, fbInfo.width,
+            0, fbInfo.height
         ));
 
         m_CommandList->setGraphicsState(state);
@@ -593,7 +646,7 @@ namespace Lynx
         // 2. Bind Geometry
         auto state = nvrhi::GraphicsState()
             .setPipeline(m_Pipeline)
-            .setFramebuffer(m_Framebuffers[m_CurrentImageIndex])
+            .setFramebuffer(m_CurrentFramebuffer)
             .addBindingSet(m_BindingSet)
             .addVertexBuffer(nvrhi::VertexBufferBinding(mesh->GetVertexBuffer(), 0, 0))
             .setIndexBuffer(nvrhi::IndexBufferBinding(mesh->GetIndexBuffer(), nvrhi::Format::R32_UINT));
@@ -627,6 +680,18 @@ namespace Lynx
 
         m_NvrhiDevice->executeCommandList(m_CommandList);
 
+        if (m_EditorTarget)
+        {
+            m_CommandList->open();
+            m_CommandList->setTextureState(m_EditorTarget->Color, nvrhi::AllSubresources, nvrhi::ResourceStates::ShaderResource);
+            m_CommandList->commitBarriers();
+            nvrhi::utils::ClearColorAttachment(m_CommandList, m_SwapchainFramebuffers[m_CurrentImageIndex], 0, nvrhi::Color(0,0,0,1));
+            m_CommandList->close();
+            m_NvrhiDevice->executeCommandList(m_CommandList);
+        }
+        
+        RenderImGui();
+
         // Signal Fence for CPU Sync
         vk::SubmitInfo submitInfo;
         m_VulkanState->GraphicsQueue.submit(submitInfo, m_VulkanState->InFlightFences[m_CurrentFrame]);
@@ -656,8 +721,9 @@ namespace Lynx
 
         m_VulkanState->Device.waitIdle();
 
-        m_Framebuffers.clear();
-        m_DepthBuffer = nullptr;
+        m_SwapchainFramebuffers.clear();
+        m_SwapchainDepth = nullptr;
+        m_CurrentFramebuffer = nullptr;
         
         // We don't strictly need to clear the vector of vk::Image handles, 
         // as getSwapchainImagesKHR will overwrite it, but it's cleaner.
@@ -699,7 +765,7 @@ namespace Lynx
         depthDesc.isRenderTarget = true;
         depthDesc.initialState = nvrhi::ResourceStates::DepthWrite;
         depthDesc.keepInitialState = true;
-        m_DepthBuffer = m_NvrhiDevice->createTexture(depthDesc);
+        m_SwapchainDepth = m_NvrhiDevice->createTexture(depthDesc);
 
         for (auto vkImage : m_VulkanState->SwapchainImages)
         {
@@ -714,12 +780,45 @@ namespace Lynx
             nvrhi::TextureHandle texture = m_NvrhiDevice->createHandleForNativeTexture(nvrhi::ObjectTypes::VK_Image, (VkImage)vkImage, desc);
             nvrhi::FramebufferDesc fbDesc;
             fbDesc.addColorAttachment(texture);
-            fbDesc.setDepthAttachment(m_DepthBuffer);
-            m_Framebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
+            fbDesc.setDepthAttachment(m_SwapchainDepth);
+            m_SwapchainFramebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
         }
         
         // Reset current image index/frame?
         // m_CurrentImageIndex = 0; // Acquire will set this.
         // m_CurrentFrame = 0; // Sync frames are separate from swapchain images. Keep cycling.
+    }
+
+    void Renderer::EnsureEditorViewport(uint32_t width, uint32_t height)
+    {
+        if (width == 0 || height == 0)
+            return;
+
+        if (!m_EditorTarget)
+        {
+            m_EditorTarget = std::make_unique<RenderTarget>();
+            CreateRenderTarget(*m_EditorTarget, width, height);
+        }
+        else if (m_EditorTarget->Width != width || m_EditorTarget->Height != height)
+        {
+            m_VulkanState->Device.waitIdle();
+            m_EditorTarget->Framebuffer = nullptr;
+            m_EditorTarget->Color = nullptr;
+            m_EditorTarget->Depth = nullptr;
+            CreateRenderTarget(*m_EditorTarget, width, height);
+        }
+    }
+
+    nvrhi::TextureHandle Renderer::GetViewportTexture() const
+    {
+        return m_EditorTarget ? m_EditorTarget->Color : nullptr;
+    }
+
+    std::pair<uint32_t, uint32_t> Renderer::GetViewportSize() const
+    {
+        if (m_EditorTarget)
+            return { m_EditorTarget->Width, m_EditorTarget->Height };
+
+        return { m_VulkanState->SwapchainExtent.width, m_VulkanState->SwapchainExtent.height };
     }
 }

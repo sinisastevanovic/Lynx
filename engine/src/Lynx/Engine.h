@@ -26,8 +26,11 @@ namespace Lynx
         inline Window& GetWindow() { return *m_Window; }
         AssetManager& GetAssetManager() { return *m_AssetManager; }
         PhysicsSystem& GetPhysicsSystem() { return *m_PhysicsSystem; }
+        Renderer& GetRenderer() { return *m_Renderer; }
         
         std::shared_ptr<Scene> GetActiveScene() const { return m_Scene; }
+
+        void SetImGuiRenderCallback(std::function<void()> callback) { m_ImGuiCallback = callback; }
 
         ComponentRegistry ComponentRegistry;
 
@@ -46,6 +49,8 @@ namespace Lynx
         EditorCamera m_EditorCamera;
         
         bool m_IsRunning = true;
+
+        std::function<void()> m_ImGuiCallback;
     };
 }
 
