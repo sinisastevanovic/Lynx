@@ -81,7 +81,27 @@ namespace Lynx
                 indices.push_back((uint32_t)i);
             }
         }
-        
+
+        if (!model.textures.empty())
+        {
+            int imageIndex = model.textures[0].source;
+            std::string texturePath = std::filesystem::path(filepath).parent_path().string() + "/" + model.images[imageIndex].uri;
+            auto tex = Engine::Get().GetAssetManager().GetTexture(texturePath);
+            SetTexture(tex->GetHandle());
+        }
+
+        UploadBuffers(device, vertices, indices);  
+    }
+
+    StaticMesh::StaticMesh(nvrhi::DeviceHandle device, std::vector<Vertex> vertices, std::vector<uint32_t> indices)
+    {
+        auto tex = Engine::Get().GetAssetManager().GetDefaultTexture();
+        SetTexture(tex->GetHandle());
+        UploadBuffers(device, vertices, indices);   
+    }
+
+    void StaticMesh::UploadBuffers(nvrhi::DeviceHandle device, const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)
+    {
         m_IndexCount = (uint32_t)indices.size();
         
         auto vbDesc = nvrhi::BufferDesc()
@@ -97,14 +117,6 @@ namespace Lynx
             .setDebugName("MeshIndexBuffer")
             .enableAutomaticStateTracking(nvrhi::ResourceStates::CopyDest);
         m_IndexBuffer = device->createBuffer(ibDesc);
-
-        if (!model.textures.empty())
-        {
-            int imageIndex = model.textures[0].source;
-            std::string texturePath = std::filesystem::path(filepath).parent_path().string() + "/" + model.images[imageIndex].uri;
-            auto tex = Engine::Get().GetAssetManager().GetTexture(texturePath);
-            SetTexture(tex->GetHandle());
-        }
 
         // TODO: We use a temporary command list here to immediately upload the buffers,
         // in the future, we should maybe batch these things? 

@@ -59,6 +59,12 @@ namespace Lynx
         
         vk::DebugUtilsMessengerEXT DebugMessenger;
     };
+
+    struct PushData
+    {
+        glm::mat4 Model;
+        glm::vec4 Color;
+    };
     
     std::vector<uint32_t> CompileGLSL(const std::string& source, shaderc_shader_kind kind, const char* fileName)
     {
@@ -375,16 +381,20 @@ namespace Lynx
         layout(location = 0) out vec2 v_TexCoord;
             
         layout(set = 0, binding = 0) uniform UBO {
-        mat4 u_ViewProjection;
+            mat4 u_ViewProjection;
         } ubo;
 
         layout(push_constant) uniform PushConsts {
-        mat4 u_Model;
+            mat4 u_Model;
+            vec4 u_Color;
         } push;
 
+        layout(location = 1) out vec4 v_Color;
+
         void main() {
-        v_TexCoord = a_TexCoord;
-        gl_Position = ubo.u_ViewProjection * push.u_Model * vec4(a_Position, 1.0);
+            v_TexCoord = a_TexCoord;
+            v_Color = push.u_Color;
+            gl_Position = ubo.u_ViewProjection * push.u_Model * vec4(a_Position, 1.0);
         }
         )";
         /*const char* vsSrc = R"(
@@ -408,13 +418,14 @@ namespace Lynx
         const char* fsSrc = R"(
         #version 450
         layout(location = 0) in vec2 v_TexCoord;
+        layout(location = 1) in vec4 v_Color;
         layout(location = 0) out vec4 outColor;
             
         layout(set = 0, binding = 1) uniform texture2D u_Texture;
         layout(set = 0, binding = 2) uniform sampler u_Sampler;
     
         void main() { 
-        outColor = texture(sampler2D(u_Texture, u_Sampler), v_TexCoord); 
+            outColor = texture(sampler2D(u_Texture, u_Sampler), v_TexCoord) * v_Color; 
         }
         )";
 
@@ -444,7 +455,7 @@ namespace Lynx
         auto layoutDesc = nvrhi::BindingLayoutDesc()
         .setVisibility(nvrhi::ShaderType::All)
         .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
-        .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(glm::mat4)))
+        .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(PushData)))
         .addItem(nvrhi::BindingLayoutItem::Texture_SRV(1))
         .addItem(nvrhi::BindingLayoutItem::Sampler(2)); // Moved to Binding 2
         
@@ -480,6 +491,12 @@ namespace Lynx
         pipeDesc.renderState.depthStencilState.depthTestEnable = true;
         pipeDesc.renderState.depthStencilState.depthWriteEnable = true;
         pipeDesc.renderState.depthStencilState.depthFunc = nvrhi::ComparisonFunc::Less;
+        pipeDesc.renderState.blendState.targets[0]
+            .setBlendEnable(true)
+            .setSrcBlend(nvrhi::BlendFactor::SrcAlpha)
+            .setDestBlend(nvrhi::BlendFactor::InvSrcAlpha)
+            .setSrcBlendAlpha(nvrhi::BlendFactor::One)
+            .setDestBlendAlpha(nvrhi::BlendFactor::InvSrcAlpha);
                 
         nvrhi::VertexAttributeDesc attributes[] = {
             nvrhi::VertexAttributeDesc()
@@ -582,8 +599,11 @@ namespace Lynx
             .setIndexBuffer(nvrhi::IndexBufferBinding(mesh->GetIndexBuffer(), nvrhi::Format::R32_UINT));
 
         m_CommandList->setGraphicsState(state);
-        
-        m_CommandList->setPushConstants(&transform, sizeof(glm::mat4));
+
+        PushData push;
+        push.Model = transform;
+        push.Color = color;
+        m_CommandList->setPushConstants(&push, sizeof(PushData));
         
         nvrhi::DrawArguments args;
         args.vertexCount = mesh->GetIndexCount();

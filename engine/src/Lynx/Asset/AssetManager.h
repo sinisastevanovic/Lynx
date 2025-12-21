@@ -15,9 +15,15 @@ namespace Lynx
 
         // Checks cache. If exists, returns it. If not, loads from disk, caches it, and returns it.
         std::shared_ptr<Texture> GetTexture(const std::string& filepath);
+        std::shared_ptr<Texture> GetDefaultTexture();
+        std::shared_ptr<Texture> GetWhiteTexture();
+        std::shared_ptr<Texture> GetErrorTexture();
 
         // Checks cache. If exists, returns it. If not, loads from disk, caches it, and returns it.
         std::shared_ptr<StaticMesh> GetMesh(const std::string& filepath);
+
+        // TODO: Temporary function until we can actually create meshes somehow
+        std::shared_ptr<StaticMesh> GetDefaultCube();
 
         // Fast lookup. Returns nullptr if invalid handle.
         std::shared_ptr<Asset> GetAsset(AssetHandle handle);

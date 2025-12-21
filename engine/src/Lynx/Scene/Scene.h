@@ -16,7 +16,7 @@ namespace Lynx
         Entity CreateEntity(const std::string& name = std::string());
         void DestroyEntity(entt::entity entity);
 
-        void OnUpdate(float ts);
+        void OnUpdate(float deltaTime);
         
         // Temporary access to registry
         entt::registry& Reg() { return m_Registry; }

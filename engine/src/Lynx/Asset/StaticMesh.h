@@ -16,6 +16,7 @@ namespace Lynx
     {
     public:
         StaticMesh(nvrhi::DeviceHandle device, const std::string& filepath);
+        StaticMesh(nvrhi::DeviceHandle device, std::vector<Vertex> vertices, std::vector<uint32_t> indices);
         virtual ~StaticMesh() = default;
 
         static AssetType GetStaticType() { return AssetType::Mesh; }
@@ -29,6 +30,9 @@ namespace Lynx
         AssetHandle GetTexture() const { return m_TextureAssetHandle; }
         void SetTexture(AssetHandle textureHandle) { m_TextureAssetHandle = textureHandle; }
 
+    private:
+        void UploadBuffers(nvrhi::DeviceHandle device, const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
+        
     private:
         nvrhi::BufferHandle m_VertexBuffer;
         nvrhi::BufferHandle m_IndexBuffer;

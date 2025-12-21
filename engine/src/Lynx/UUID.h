@@ -23,6 +23,7 @@ namespace Lynx
         bool operator==(const UUID& other) const { return m_UUID == other.m_UUID; }
         bool operator!=(const UUID& other) const { return !(*this == other); }
         bool operator<(const UUID& other) const { return m_UUID < other.m_UUID; }
+        explicit operator bool() const { return m_UUID != 0; }
         operator uint64_t() const { return m_UUID; }
     private:
         uint64_t m_UUID;

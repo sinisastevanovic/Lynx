@@ -59,4 +59,32 @@ namespace Lynx
         stbi_image_free(data);
         LX_CORE_TRACE("Texture loaded successfully: {0} ({1}x{2})", filepath, width, height);
     }
+
+    Texture::Texture(nvrhi::DeviceHandle device, std::vector<uint8_t> data, uint32_t width, uint32_t height, const std::string& debugName)
+        : m_Width(width), m_Height(height)
+    {
+        auto desc = nvrhi::TextureDesc()
+            .setDimension(nvrhi::TextureDimension::Texture2D)
+            .setWidth(width)
+            .setHeight(height)
+            .setFormat(nvrhi::Format::RGBA8_UNORM)
+            .setDebugName(debugName)
+            .enableAutomaticStateTracking(nvrhi::ResourceStates::ShaderResource);
+
+        m_TextureHandle = device->createTexture(desc);
+        if (!m_TextureHandle)
+        {
+            LX_CORE_ERROR("Failed to create NVRHI texture from data");
+            return;
+        }
+
+        size_t rowPitch = width * 4;
+        size_t depthPitch = 0;
+
+        auto cmd = device->createCommandList();
+        cmd->open();
+        cmd->writeTexture(m_TextureHandle, 0, 0, data.data(), rowPitch, depthPitch);
+        cmd->close();
+        device->executeCommandList(cmd);
+    }
 }

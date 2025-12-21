@@ -9,9 +9,10 @@
 #include "Log.h"
 #include "Renderer/Renderer.h"
 #include "Scene/Scene.h"
-#include "Scene/Components.h"
+#include "Scene/Components/Components.h"
 #include "Event/KeyEvent.h"
 #include "Event/WindowEvent.h"
+#include "Scene/Components/PhysicsComponents.h"
 
 
 namespace Lynx
@@ -51,6 +52,8 @@ namespace Lynx
 
         float lastFrameTime = 0.0f;
 
+        auto cubeMesh = m_AssetManager->GetDefaultCube();
+
         // This is a placeholder for the real game loop
         while (m_IsRunning)
         {
@@ -85,10 +88,33 @@ namespace Lynx
                         auto tex = m_AssetManager->GetAsset<Texture>(mesh->GetTexture());
                         m_Renderer->SetTexture(tex);
                     }
+                    else
+                    {
+                        m_Renderer->SetTexture(nullptr);
+                    }
                 }
                 
                 m_Renderer->SubmitMesh(mesh, transform.GetTransform(), meshComp.Color);
             }
+
+            if (true) // Render collider meshes
+            {
+                auto colliderView = m_Scene->Reg().view<TransformComponent, BoxColliderComponent>();
+                m_Renderer->SetTexture(nullptr);
+
+                for (auto entity : colliderView)
+                {
+                    auto [transform, collider] = colliderView.get<TransformComponent, BoxColliderComponent>(entity);
+                    // We calculate a transform that matches the collider's bounds
+                    // BoxCollider::HalfSize * 2 = Full Scale
+                    glm::mat4 colliderTransform = glm::translate(glm::mat4(1.0f), transform.Translation)
+                        * glm::toMat4(transform.Rotation)
+                        * glm::scale(glm::mat4(1.0f), collider.HalfSize * 2.0f);
+
+                    m_Renderer->SubmitMesh(cubeMesh, colliderTransform, glm::vec4(0.0f, 1.0f, 0.0f, 0.5f));
+                }
+            }
+            
             m_Renderer->EndScene();
         }
 

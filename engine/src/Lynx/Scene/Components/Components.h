@@ -2,19 +2,22 @@
 
 #include "Lynx/Core.h"
 #include "Lynx/Asset/Asset.h"
+#include "Lynx/UUID.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 
 #include <string>
 
+
 namespace Lynx
 {
     struct IDComponent
     {
-        uint64_t ID;
+        UUID ID;
         IDComponent() = default;
         IDComponent(const IDComponent&) = default;
     };
@@ -31,7 +34,7 @@ namespace Lynx
     struct TransformComponent
     {
         glm::vec3 Translation = { 0.0f, 0.0f, 0.0f };
-        glm::vec3 Rotation = { 0.0f, 0.0f, 0.0f }; // Euler angles in radians
+        glm::quat Rotation = { 1.0f, 0.0f, 0.0f, 0.0f };
         glm::vec3 Scale = { 1.0f, 1.0f, 1.0f };
 
         TransformComponent() = default;
@@ -40,15 +43,24 @@ namespace Lynx
 
         glm::mat4 GetTransform() const
         {
-            glm::mat4 rotation = glm::toMat4(glm::quat(Rotation));
+            glm::mat4 rotation = glm::toMat4(Rotation);
 
             return glm::translate(glm::mat4(1.0f), Translation)
                 * rotation
                 * glm::scale(glm::mat4(1.0f), Scale);
         }
+
+        glm::vec3 GetRotationEuler() const
+        {
+            return glm::eulerAngles(Rotation);
+        }
+
+        void SetRotationEuler(const glm::vec3& rotation)
+        {
+            Rotation = glm::quat(rotation);
+        }
     };
 
-    // Placeholder for now
     struct MeshComponent
     {
         AssetHandle Mesh = AssetHandle::Null();

@@ -9,6 +9,7 @@ namespace Lynx
     {
     public:
         Texture(nvrhi::DeviceHandle device, const std::string& filepath);
+        Texture(nvrhi::DeviceHandle device, std::vector<uint8_t> data, uint32_t width, uint32_t height, const std::string& debugName = "");
         virtual ~Texture() = default;
 
         static AssetType GetStaticType() { return AssetType::Texture; }
