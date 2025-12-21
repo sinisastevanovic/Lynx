@@ -26,4 +26,21 @@ namespace Lynx
         BoxColliderComponent() = default;
         BoxColliderComponent(const BoxColliderComponent&) = default;
     };
+
+    struct SphereColliderComponent
+    {
+        float Radius = 0.5f;
+
+        SphereColliderComponent() = default;
+        SphereColliderComponent(const SphereColliderComponent&) = default;
+    };
+
+    struct CapsuleColliderComponent
+    {
+        float Radius = 0.5f;
+        float Height = 1.0f;
+
+        CapsuleColliderComponent() = default;
+        CapsuleColliderComponent(const CapsuleColliderComponent&) = default;
+    };
 }

@@ -5,12 +5,30 @@
 #include "Lynx/Engine.h"
 
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
+#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 
 namespace Lynx
 {
+    static void OnRigidBodyComponentDestroyed(entt::registry& registry, entt::entity entity)
+    {
+        auto& rb = registry.get<RigidBodyComponent>(entity);
+        if (rb.RuntimeBodyCreated)
+        {
+            auto& physicsSystem = Engine::Get().GetPhysicsSystem();
+            auto& bodyInterface = physicsSystem.GetBodyInterface();
+
+            bodyInterface.RemoveBody(rb.BodyId);
+            bodyInterface.DestroyBody(rb.BodyId);
+
+            LX_CORE_TRACE("Physics body destroyed for entity {0}", (uint32_t)entity);
+        }
+    }
+    
     Scene::Scene()
     {
+        m_Registry.on_destroy<RigidBodyComponent>().connect<&OnRigidBodyComponentDestroyed>();
     }
 
     Scene::~Scene()
@@ -41,16 +59,40 @@ namespace Lynx
         {
             // TODO: This should happen in OnRuntimeStart, we don't have that yet, so we do it here.
             // Now even in editor physics get simulated on start of the app..
-            auto view = m_Registry.view<TransformComponent, RigidBodyComponent, BoxColliderComponent>();
+            auto view = m_Registry.view<TransformComponent, RigidBodyComponent>();
             for (auto entity : view)
             {
-                auto [transform, rb, collider] = view.get<TransformComponent, RigidBodyComponent, BoxColliderComponent>(entity);
+                auto [transform, rb] = view.get<TransformComponent, RigidBodyComponent>(entity);
 
-                
                 if (!rb.RuntimeBodyCreated)
                 {
-                    JPH::BoxShapeSettings shapeSettings(JPH::Vec3(collider.HalfSize.x, collider.HalfSize.y, collider.HalfSize.z));
+                    JPH::ShapeRefC shape;
 
+                    if (m_Registry.all_of<BoxColliderComponent>(entity))
+                    {
+                        auto& collider = m_Registry.get<BoxColliderComponent>(entity);
+                        shape = new JPH::BoxShape(JPH::Vec3(collider.HalfSize.x, collider.HalfSize.y, collider.HalfSize.z));
+                    }
+                    else if (m_Registry.all_of<CapsuleColliderComponent>(entity))
+                    {
+                        auto& collider = m_Registry.get<CapsuleColliderComponent>(entity);
+                        float halfHeight = (collider.Height - (collider.Radius * 2.0f)) * 0.5f;
+                        if (halfHeight <= 0.0f)
+                            halfHeight = 0.01f;
+
+                        shape = new JPH::CapsuleShape(halfHeight, collider.Radius);
+                    }
+                    else if (m_Registry.all_of<SphereColliderComponent>(entity))
+                    {
+                        auto& collider = m_Registry.get<SphereColliderComponent>(entity);
+                        shape = new JPH::SphereShape(collider.Radius);
+                    }
+                    else
+                    {
+                        LX_CORE_WARN("Entity '{0}' has Rigidbody but no Collider! Defaulting to small box.", (uint32_t)entity);
+                        shape = new JPH::BoxShape(JPH::Vec3(0.5f, 0.5f, 0.5f));
+                    }
+                    
                     // TODO: Add kinematic!
                     JPH::ObjectLayer layer = (rb.Type == RigidBodyType::Static) ? Layers::STATIC : Layers::MOVABLE;
                     JPH::EMotionType motion = (rb.Type == RigidBodyType::Static) ? JPH::EMotionType::Static : JPH::EMotionType::Dynamic;
@@ -58,7 +100,7 @@ namespace Lynx
                     JPH::Vec3 pos(transform.Translation.x, transform.Translation.y, transform.Translation.z);
                     JPH::Quat rot(transform.Rotation.x, transform.Rotation.y, transform.Rotation.z, transform.Rotation.w);
 
-                    JPH::BodyCreationSettings bodySettings(shapeSettings.Create().Get(), pos, rot, motion, layer);
+                    JPH::BodyCreationSettings bodySettings(shape, pos, rot, motion, layer);
 
                     JPH::Body* body = bodyInterface.CreateBody(bodySettings);
 
@@ -78,11 +120,14 @@ namespace Lynx
                 auto [transform, rb] = view.get<TransformComponent, RigidBodyComponent>(entity);
                 if (rb.RuntimeBodyCreated && rb.Type == RigidBodyType::Dynamic)
                 {
-                    JPH::Vec3 pos = bodyInterface.GetPosition(rb.BodyId);
-                    JPH::Quat rot = bodyInterface.GetRotation(rb.BodyId);
+                    if (bodyInterface.IsAdded(rb.BodyId) && bodyInterface.IsActive(rb.BodyId))
+                    {
+                        JPH::Vec3 pos = bodyInterface.GetPosition(rb.BodyId);
+                        JPH::Quat rot = bodyInterface.GetRotation(rb.BodyId);
 
-                    transform.Translation = { pos.GetX(), pos.GetY(), pos.GetZ() };
-                    transform.Rotation = glm::quat(rot.GetW(), rot.GetX(), rot.GetY(), rot.GetZ());
+                        transform.Translation = { pos.GetX(), pos.GetY(), pos.GetZ() };
+                        transform.Rotation = glm::quat(rot.GetW(), rot.GetX(), rot.GetY(), rot.GetZ());
+                    }
                 }
             }
         }
