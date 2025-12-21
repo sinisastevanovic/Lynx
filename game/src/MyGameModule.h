@@ -2,11 +2,6 @@
 #include <Lynx.h>
 #include <Lynx/GameModule.h>
 
-struct PlayerComponent
-{
-    float MoveSpeed = 5.0f;
-};
-
 class MyGame : public Lynx::IGameModule
 {
 public:
