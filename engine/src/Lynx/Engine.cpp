@@ -68,9 +68,12 @@ namespace Lynx
             gameModule->OnStart();
         }
 
-        float lastFrameTime = 0.0f;
+        float lastFrameTime = (float)glfwGetTime();
 
         auto cubeMesh = m_AssetManager->GetDefaultCube();
+
+        if (m_Scene && m_SceneState == SceneState::Play)
+            m_Scene->OnRuntimeStart();
 
         // This is a placeholder for the real game loop
         while (m_IsRunning)
@@ -159,10 +162,10 @@ namespace Lynx
                     }
                 }
                 
-                m_Renderer->SubmitMesh(mesh, transform.GetTransform(), meshComp.Color);
+                m_Renderer->SubmitMesh(mesh, transform.GetTransform(), meshComp.Color, (int)entity);
             }
 
-            if (true && m_SceneState == SceneState::Edit) // Render collider meshes
+            if (false && m_SceneState == SceneState::Edit) // Render collider meshes
             {
                 auto colliderView = m_Scene->Reg().view<TransformComponent, BoxColliderComponent>();
                 m_Renderer->SetTexture(nullptr);
@@ -176,12 +179,15 @@ namespace Lynx
                         * glm::toMat4(transform.Rotation)
                         * glm::scale(glm::mat4(1.0f), collider.HalfSize * 2.0f);
 
-                    m_Renderer->SubmitMesh(cubeMesh, colliderTransform, glm::vec4(0.0f, 1.0f, 0.0f, 0.5f));
+                    m_Renderer->SubmitMesh(cubeMesh, colliderTransform, glm::vec4(0.0f, 1.0f, 0.0f, 0.5f), (int)entity);
                 }
             }
 
             m_Renderer->EndScene();
         }
+
+        if (m_Scene && m_SceneState == SceneState::Play)
+            m_Scene->OnRuntimeStop();
 
         if (gameModule)
         {
@@ -198,6 +204,15 @@ namespace Lynx
         m_Renderer.reset();
         m_PhysicsSystem.reset();
         Log::Shutdown();
+    }
+
+    void Engine::SetSceneState(SceneState state)
+    {
+        m_SceneState = state;
+        if (m_SceneState == SceneState::Play)
+            m_Scene->OnRuntimeStart();
+        else if (m_SceneState == SceneState::Edit)
+            m_Scene->OnRuntimeStop();
     }
 
     void Engine::OnEvent(Event& e)

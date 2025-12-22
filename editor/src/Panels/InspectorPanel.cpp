@@ -2,13 +2,15 @@
 #include <imgui.h>
 
 #include "Lynx/Scene/Components/Components.h"
+#include "../EditorLayer.h"
 
 namespace Lynx
 {
-    void InspectorPanel::OnImGuiRender(std::shared_ptr<Scene> context, entt::entity selectedEntity, ComponentRegistry& registry)
+    void InspectorPanel::OnImGuiRender(std::shared_ptr<Scene> context, ComponentRegistry& registry)
     {
         ImGui::Begin("Inspector");
 
+        entt::entity selectedEntity = m_Owner->GetSelectedEntity();
         if (context && selectedEntity != entt::null)
         {
             const auto& registeredComponents = registry.GetRegisteredComponents();

@@ -3,12 +3,16 @@
 
 namespace Lynx
 {
+    class EditorLayer;
     class InspectorPanel
     {
     public:
-        InspectorPanel() = default;
+        InspectorPanel(EditorLayer* owner) : m_Owner(owner) {}
 
-        void OnImGuiRender(std::shared_ptr<Scene> context, entt::entity selectedEntity, ComponentRegistry& registry);
+        void OnImGuiRender(std::shared_ptr<Scene> context, ComponentRegistry& registry);
+
+    private:
+        EditorLayer* m_Owner;
     };
 
 }

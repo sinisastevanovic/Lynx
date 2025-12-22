@@ -39,7 +39,7 @@ namespace Lynx
         void SetActiveScene(std::shared_ptr<Scene> scene) { m_Scene = scene; }
 
         SceneState GetSceneState() const { return m_SceneState; }
-        void SetSceneState(SceneState state) { m_SceneState = state; }
+        void SetSceneState(SceneState state);
 
         void SetImGuiRenderCallback(std::function<void()> callback) { m_ImGuiCallback = callback; }
 

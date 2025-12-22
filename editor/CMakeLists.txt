@@ -14,11 +14,8 @@ set_target_properties(editor PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
-find_package(imguizmo CONFIG REQUIRED)
-
 target_link_libraries(editor PRIVATE 
     engine
-    imguizmo::imguizmo
 )
 
 target_include_directories(editor PRIVATE

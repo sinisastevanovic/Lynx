@@ -5,7 +5,7 @@
 #include "Lynx/Engine.h"
 #include "../EditorLayer.h"
 
-#include <ImGuizmo.h>
+#include "Lynx/ImGui/ImGuizmo.h"
 #include <glm/gtc/type_ptr.hpp>
 
 #include "Lynx/Scene/Components/Components.h"
@@ -30,7 +30,7 @@ namespace Lynx
             if (ImGui::IsKeyPressed(ImGuiKey_R)) m_CurrentGizmoOperation = ImGuizmo::SCALE;
         }
 
-        SceneState state = Engine::Get().GetSceneState();
+        /*SceneState state = Engine::Get().GetSceneState();
         const char* label = (state == SceneState::Edit) ? "Play" : "Stop";
         if (ImGui::Button(label))
         {
@@ -38,7 +38,7 @@ namespace Lynx
                 m_Owner->OnScenePlay();
             else
                 m_Owner->OnSceneStop();
-        }
+        }*/
         
         ImVec2 viewportSize = ImGui::GetContentRegionAvail();
         if (viewportSize.x > 0 && viewportSize.y > 0)
@@ -51,8 +51,9 @@ namespace Lynx
         }
 
         auto selectedEntity = m_Owner->GetSelectedEntity();
-        if (selectedEntity != entt::null && m_CurrentGizmoOperation != -1)
+        if (selectedEntity != entt::null && m_CurrentGizmoOperation != -1 && Engine().Get().GetSceneState() != SceneState::Play)
         {
+            ImGuizmo::BeginFrame();
             ImGuizmo::SetOrthographic(false);
             ImGuizmo::SetDrawlist();
 
@@ -86,6 +87,42 @@ namespace Lynx
                 tc.Translation = glm::vec3(matrixTranslation[0], matrixTranslation[1], matrixTranslation[2]);
                 tc.SetRotationEuler(glm::radians(glm::vec3(matrixRotation[0], matrixRotation[1], matrixRotation[2])));
                 tc.Scale = glm::vec3(matrixScale[0], matrixScale[1], matrixScale[2]);
+            }
+        }
+
+        auto viewportMinRegion = ImGui::GetWindowContentRegionMin();
+        auto viewportMaxRegion = ImGui::GetWindowContentRegionMax();
+        auto viewportOffset = ImGui::GetWindowPos();
+
+        glm::vec2 bounds[2];
+        bounds[0] = { viewportMinRegion.x + viewportOffset.x, viewportMinRegion.y + viewportOffset.y };
+        bounds[1] = { viewportMaxRegion.x + viewportOffset.x, viewportMaxRegion.y + viewportOffset.y };
+
+        if (ImGui::IsWindowHovered() && !ImGuizmo::IsUsing())
+        {
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                auto mousePos = ImGui::GetMousePos();
+                mousePos.x -= bounds[0].x;
+                mousePos.y -= bounds[0].y;
+
+                glm::vec2 viewportSize2 = { bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y };
+
+                int mouseX = (int)mousePos.x;
+                int mouseY = (int)mousePos.y;
+
+                if (mouseX >= 0 && mouseY >= 0 && mouseX < (int)viewportSize2.x && mouseY < (int)viewportSize2.y)
+                {
+                    int selectedID = renderer.ReadIdFromBuffer(mouseX, mouseY);
+                    if (selectedID >= 0)
+                    {
+                        m_Owner->SetSelectedEntity((entt::entity)selectedID);
+                    }
+                    else
+                    {
+                        m_Owner->SetSelectedEntity(entt::null);
+                    }
+                }
             }
         }
         

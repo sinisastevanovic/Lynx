@@ -68,6 +68,8 @@ namespace Lynx
     {
         glm::mat4 Model;
         glm::vec4 Color;
+        int EntityID;
+        float Padding[3];
     };
     
     Renderer::Renderer(GLFWwindow* window)
@@ -93,6 +95,8 @@ namespace Lynx
         if (m_NvrhiDevice)
             m_NvrhiDevice->runGarbageCollection();
 
+        m_StageBuffer = nullptr;
+
         m_Sampler = nullptr;
         m_BindingLayout = nullptr;
         m_DefaultTexture = nullptr;
@@ -109,6 +113,7 @@ namespace Lynx
         {
             m_EditorTarget->Depth = nullptr;
             m_EditorTarget->Color = nullptr;
+            m_EditorTarget->IdBuffer = nullptr;
             m_EditorTarget->Framebuffer = nullptr;
             m_EditorTarget.reset();
         }
@@ -160,6 +165,71 @@ namespace Lynx
         {
             m_ImGuiBackend->render(m_SwapchainFramebuffers[m_CurrentImageIndex]);
         }
+    }
+
+    int Renderer::ReadIdFromBuffer(uint32_t x, uint32_t y)
+    {
+        if (!m_EditorTarget || !m_EditorTarget->IdBuffer)
+            return -1;
+
+        if (!m_StageBuffer)
+        {
+            nvrhi::TextureDesc desc = nvrhi::TextureDesc()
+            .setWidth(1)
+            .setHeight(1)
+            .setFormat(nvrhi::Format::R32_SINT)
+            .setDimension(nvrhi::TextureDimension::Texture2D)
+            .setKeepInitialState(true)
+            .setDebugName("ID_Stage");
+            m_StageBuffer = m_NvrhiDevice->createStagingTexture(desc, nvrhi::CpuAccessMode::Read);
+        }
+
+        m_CommandList->open();
+
+        m_CommandList->open();
+
+        // Define the source region (the pixel under mouse)
+        nvrhi::TextureSlice srcSlice;
+        srcSlice.x = x;
+        srcSlice.y = y;
+        srcSlice.z = 0;
+        srcSlice.width = 1;
+        srcSlice.height = 1;
+        srcSlice.depth = 1;
+        srcSlice.mipLevel = 0;
+        srcSlice.arraySlice = 0;
+
+        // Define dest region (0,0 in staging buffer)
+        nvrhi::TextureSlice dstSlice;
+        dstSlice.x = 0;
+        dstSlice.y = 0;
+        dstSlice.z = 0;
+        dstSlice.width = 1;
+        dstSlice.height = 1;
+        dstSlice.depth = 1;
+        dstSlice.mipLevel = 0;
+        dstSlice.arraySlice = 0;
+
+        m_CommandList->copyTexture(m_StageBuffer, dstSlice, m_EditorTarget->IdBuffer, srcSlice);
+        m_CommandList->close();
+        m_NvrhiDevice->executeCommandList(m_CommandList);
+
+        // 3. Sync (Wait for copy to finish)
+        // TODO: In a real engine, you might want to delay reading by 1-2 frames to avoid stalling.
+        // But for an editor tool, a stall is acceptable.
+        m_NvrhiDevice->waitForIdle();
+
+        size_t rowPitch;
+        void* data = m_NvrhiDevice->mapStagingTexture(m_StageBuffer, dstSlice, nvrhi::CpuAccessMode::Read, &rowPitch);
+        
+        int entityID = -1;
+        if (data)
+        {
+            entityID = *(int*)data;
+            m_NvrhiDevice->unmapStagingTexture(m_StageBuffer);
+        }
+
+        return entityID;
     }
 
     void Renderer::InitVulkan(GLFWwindow* window)
@@ -408,8 +478,20 @@ namespace Lynx
             .setKeepInitialState(true);
         target.Depth = m_NvrhiDevice->createTexture(depthDesc);
 
+        auto idDesc = nvrhi::TextureDesc()
+            .setWidth(width)
+            .setHeight(height)
+            .setFormat(nvrhi::Format::R32_SINT)
+            .setIsRenderTarget(true)
+            .setDebugName("OffscreenId")
+            .setInitialState(nvrhi::ResourceStates::RenderTarget)
+            .setKeepInitialState(true)
+            .setClearValue(nvrhi::Color(-1.0f, 0.0f, 0.0f, 0.0f));
+        target.IdBuffer = m_NvrhiDevice->createTexture(idDesc);
+
         auto fbDesc = nvrhi::FramebufferDesc()
             .addColorAttachment(target.Color)
+            .addColorAttachment(target.IdBuffer)
             .setDepthAttachment(target.Depth);
         target.Framebuffer = m_NvrhiDevice->createFramebuffer(fbDesc);
     }
@@ -422,6 +504,8 @@ namespace Lynx
         layout(location = 1) in vec2 a_TexCoord;
 
         layout(location = 0) out vec2 v_TexCoord;
+        layout(location = 1) out vec4 v_Color;
+        layout(location = 2) out flat int v_EntityID;
             
         layout(set = 0, binding = 0) uniform UBO {
             mat4 u_ViewProjection;
@@ -430,13 +514,14 @@ namespace Lynx
         layout(push_constant) uniform PushConsts {
             mat4 u_Model;
             vec4 u_Color;
+            int u_EntityID;
         } push;
 
-        layout(location = 1) out vec4 v_Color;
 
         void main() {
             v_TexCoord = a_TexCoord;
             v_Color = push.u_Color;
+            v_EntityID = push.u_EntityID;
             gl_Position = ubo.u_ViewProjection * push.u_Model * vec4(a_Position, 1.0);
         }
         )";
@@ -462,13 +547,16 @@ namespace Lynx
         #version 450
         layout(location = 0) in vec2 v_TexCoord;
         layout(location = 1) in vec4 v_Color;
+        layout(location = 2) in flat int v_EntityID;
         layout(location = 0) out vec4 outColor;
+        layout(location = 1) out int outEntityID;
             
         layout(set = 0, binding = 1) uniform texture2D u_Texture;
         layout(set = 0, binding = 2) uniform sampler u_Sampler;
     
         void main() { 
             outColor = texture(sampler2D(u_Texture, u_Sampler), v_TexCoord) * v_Color; 
+            outEntityID = v_EntityID;
         }
         )";
 
@@ -540,6 +628,11 @@ namespace Lynx
             .setDestBlend(nvrhi::BlendFactor::InvSrcAlpha)
             .setSrcBlendAlpha(nvrhi::BlendFactor::One)
             .setDestBlendAlpha(nvrhi::BlendFactor::InvSrcAlpha);
+
+        // TODO: Only in editor!
+        pipeDesc.renderState.blendState.targets[1]
+            .setBlendEnable(false)
+            .setColorWriteMask(nvrhi::ColorMask::All);
                 
         nvrhi::VertexAttributeDesc attributes[] = {
             nvrhi::VertexAttributeDesc()
@@ -555,8 +648,16 @@ namespace Lynx
                 .setOffset(sizeof(float) * 3)
                 .setElementStride(sizeof(Vertex))
         };
-        pipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(attributes, 2, m_VertexShader);                
-        m_Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, m_SwapchainFramebuffers[0]->getFramebufferInfo());
+        pipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(attributes, 2, m_VertexShader);
+
+        // TODO: Only in editor
+        auto fbInfo = nvrhi::FramebufferInfo()
+        .addColorFormat(nvrhi::Format::BGRA8_UNORM)
+        .addColorFormat(nvrhi::Format::R32_SINT)
+        .setDepthFormat(nvrhi::Format::D32);
+        
+        m_Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, fbInfo);
+        //m_Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, m_SwapchainFramebuffers[0]->getFramebufferInfo());
     }
 
     void Renderer::BeginScene(glm::mat4 viewProjection)
@@ -589,6 +690,8 @@ namespace Lynx
         if (m_EditorTarget)
         {
             m_CurrentFramebuffer = m_EditorTarget->Framebuffer;
+            m_CommandList->clearTextureUInt(m_EditorTarget->IdBuffer, nvrhi::AllSubresources, (uint32_t)-1);
+            //nvrhi::utils::ClearColorAttachment(m_CommandList, m_CurrentFramebuffer, 1, nvrhi::Color(-1.0f, 0.0f, 0.0f, 0.0f));
         }
         else
         {
@@ -624,7 +727,7 @@ namespace Lynx
         //m_CommandList->drawIndexed(args);
     }
 
-    void Renderer::SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, const glm::vec4& color)
+    void Renderer::SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, const glm::vec4& color, int entityID)
     {
         if (!mesh)
             return;
@@ -656,6 +759,7 @@ namespace Lynx
         PushData push;
         push.Model = transform;
         push.Color = color;
+        push.EntityID = entityID;
         m_CommandList->setPushConstants(&push, sizeof(PushData));
         
         nvrhi::DrawArguments args;

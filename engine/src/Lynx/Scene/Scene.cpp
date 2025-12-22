@@ -144,6 +144,61 @@ namespace Lynx
         for (auto entity : view)
         {
             auto [transform, rb] = view.get<TransformComponent, RigidBodyComponent>(entity);
+            if (!rb.RuntimeBodyCreated)
+            {
+                JPH::ShapeRefC shape;
+
+                if (m_Registry.all_of<BoxColliderComponent>(entity))
+                {
+                    auto& collider = m_Registry.get<BoxColliderComponent>(entity);
+                    shape = new JPH::BoxShape(JPH::Vec3(collider.HalfSize.x, collider.HalfSize.y, collider.HalfSize.z));
+                }
+                else if (m_Registry.all_of<CapsuleColliderComponent>(entity))
+                {
+                    auto& collider = m_Registry.get<CapsuleColliderComponent>(entity);
+                    float halfHeight = (collider.Height - (collider.Radius * 2.0f)) * 0.5f;
+                    if (halfHeight <= 0.0f)
+                        halfHeight = 0.01f;
+
+                    shape = new JPH::CapsuleShape(halfHeight, collider.Radius);
+                }
+                else if (m_Registry.all_of<SphereColliderComponent>(entity))
+                {
+                    auto& collider = m_Registry.get<SphereColliderComponent>(entity);
+                    shape = new JPH::SphereShape(collider.Radius);
+                }
+                else
+                {
+                    LX_CORE_WARN("Entity '{0}' has Rigidbody but no Collider! Defaulting to small box.", (uint32_t)entity);
+                    shape = new JPH::BoxShape(JPH::Vec3(0.5f, 0.5f, 0.5f));
+                }
+                
+                // TODO: Add kinematic!
+                JPH::ObjectLayer layer = (rb.Type == RigidBodyType::Static) ? Layers::STATIC : Layers::MOVABLE;
+                JPH::EMotionType motion = (rb.Type == RigidBodyType::Static) ? JPH::EMotionType::Static : JPH::EMotionType::Dynamic;
+
+                JPH::Vec3 pos(transform.Translation.x, transform.Translation.y, transform.Translation.z);
+                JPH::Quat rot(transform.Rotation.x, transform.Rotation.y, transform.Rotation.z, transform.Rotation.w);
+
+                JPH::BodyCreationSettings bodySettings(shape, pos, rot, motion, layer);
+
+                JPH::EAllowedDOFs allowedDOFs = JPH::EAllowedDOFs::All;
+                if (rb.LockRotationX)
+                    allowedDOFs = allowedDOFs & ~JPH::EAllowedDOFs::RotationX;
+                if (rb.LockRotationY)
+                    allowedDOFs = allowedDOFs & ~JPH::EAllowedDOFs::RotationY;
+                if (rb.LockRotationZ)
+                    allowedDOFs = allowedDOFs & ~JPH::EAllowedDOFs::RotationZ;
+                bodySettings.mAllowedDOFs = allowedDOFs;
+
+                JPH::Body* body = bodyInterface.CreateBody(bodySettings);
+
+                bodyInterface.AddBody(body->GetID(), JPH::EActivation::Activate);
+
+                rb.BodyId = body->GetID();
+                rb.RuntimeBodyCreated = true;
+            }
+            
             if (rb.RuntimeBodyCreated && rb.Type == RigidBodyType::Dynamic)
             {
                 if (bodyInterface.IsAdded(rb.BodyId) && bodyInterface.IsActive(rb.BodyId))

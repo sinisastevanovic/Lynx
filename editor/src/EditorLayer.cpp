@@ -8,7 +8,7 @@
 namespace Lynx
 {
     EditorLayer::EditorLayer(Engine* engine)
-        : m_Engine(engine)
+        : m_Engine(engine), m_SceneHierarchyPanel(this), m_InspectorPanel(this)
     {
         m_EditorScene = engine->GetActiveScene();
     }
@@ -62,14 +62,15 @@ namespace Lynx
 
     void EditorLayer::OnImGuiRender()
     {
+        DrawToolBar();
         m_Viewport.OnImGuiRender();
         m_SceneHierarchyPanel.OnImGuiRender();
-        m_SelectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
-        m_InspectorPanel.OnImGuiRender(m_Engine->GetActiveScene(), m_SelectedEntity, m_Engine->ComponentRegistry);
+        m_InspectorPanel.OnImGuiRender(m_Engine->GetActiveScene(),m_Engine->ComponentRegistry);
     }
 
     void EditorLayer::OnScenePlay()
     {
+        m_SelectedEntity = entt::null;
         SceneSerializer serializer(m_EditorScene);
         std::string data = serializer.SerializeToString();
 
@@ -78,16 +79,18 @@ namespace Lynx
         runtimeSerializer.DeserializeFromString(data);
 
         m_Engine->SetActiveScene(m_RuntimeScene);
-        m_RuntimeScene->OnRuntimeStart();
+
+        m_SceneHierarchyPanel.SetContext(m_RuntimeScene);
 
         m_Engine->SetSceneState(SceneState::Play);
     }
 
     void EditorLayer::OnSceneStop()
     {
+        m_SelectedEntity = entt::null;
         m_Engine->SetSceneState(SceneState::Edit);
-        m_RuntimeScene->OnRuntimeStop();
         m_Engine->SetActiveScene(m_EditorScene);
+        m_SceneHierarchyPanel.SetContext(m_EditorScene);
         m_RuntimeScene = nullptr;
     }
 

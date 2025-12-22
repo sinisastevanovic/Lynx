@@ -5,25 +5,23 @@
 
 namespace Lynx
 {
+    class EditorLayer;
     class SceneHierarchyPanel
     {
     public:
-        SceneHierarchyPanel() = default;
+        SceneHierarchyPanel(EditorLayer* owner);
         SceneHierarchyPanel(const std::shared_ptr<Scene>& context);
 
         void SetContext(const std::shared_ptr<Scene>& context);
 
         void OnImGuiRender();
 
-        entt::entity GetSelectedEntity() const { return m_SelectedEntity; }
-        void SetSelectedEntity(entt::entity entity) { m_SelectedEntity = entity; }
+    private:
+        void DrawEntityNode(entt::entity entity, bool isSelected);
 
     private:
-        void DrawEntityNode(entt::entity entity);
-
-    private:
+        EditorLayer* m_Owner;
         std::shared_ptr<Scene> m_Context;
-        entt::entity m_SelectedEntity = entt::null;
     };
 }
 

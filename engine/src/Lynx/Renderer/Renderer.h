@@ -25,6 +25,7 @@ namespace Lynx
         {
             nvrhi::TextureHandle Color;
             nvrhi::TextureHandle Depth;
+            nvrhi::TextureHandle IdBuffer;
             nvrhi::FramebufferHandle Framebuffer;
             uint32_t Width = 0;
             uint32_t Height = 0;
@@ -42,7 +43,7 @@ namespace Lynx
         void BeginScene(glm::mat4 viewProjection);
         void EndScene();
         
-        void SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, const glm::vec4& color = glm::vec4(1.0f));
+        void SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, const glm::vec4& color = glm::vec4(1.0f), int entityID = -1);
 
         nvrhi::DeviceHandle GetDeviceHandle() const { return m_NvrhiDevice; }
 
@@ -50,6 +51,8 @@ namespace Lynx
 
         bool InitImGui();
         void RenderImGui();
+
+        int ReadIdFromBuffer(uint32_t x, uint32_t y);
 
     private:
         void InitVulkan(GLFWwindow* window);
@@ -75,6 +78,7 @@ namespace Lynx
         nvrhi::SamplerHandle m_Sampler;
         nvrhi::BindingLayoutHandle m_BindingLayout;
         nvrhi::TextureHandle m_DefaultTexture;
+        nvrhi::StagingTextureHandle m_StageBuffer;
 
         // One NVRHI framebuffer wrapper per swapchain image
         std::vector<nvrhi::FramebufferHandle> m_SwapchainFramebuffers;
