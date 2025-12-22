@@ -190,6 +190,17 @@ namespace Lynx
         return m_Assets.contains(handle);
     }
 
+    std::string AssetManager::GetAssetPath(AssetHandle handle)
+    {
+        for (auto& [path, cacheHandle] : m_AssetPaths)
+        {
+            if (cacheHandle == handle)
+                return path;
+        }
+
+        return "";
+    }
+
     void AssetManager::AddAssetToCache(const std::string& filepath, std::shared_ptr<Asset> asset)
     {
     }

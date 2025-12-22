@@ -37,6 +37,9 @@ namespace Lynx
         }
 
         bool IsAssetLoaded(AssetHandle handle) const;
+
+        // TODO: Temporary for serialization, until we have persistent asset handles
+        std::string GetAssetPath(AssetHandle handle);
   
     private:
         // Helper to register an asset once loaded

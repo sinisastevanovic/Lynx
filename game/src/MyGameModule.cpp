@@ -15,10 +15,29 @@
 #include "Systems/ProjectileSystem.h"
 #include "Systems/WeaponSystem.h"
 
+#include <imgui.h>
+#include <nlohmann/json.hpp>
+
 void MyGame::RegisterComponents(Lynx::ComponentRegistry* registry)
 {
     LX_INFO("Registering custom types...");
-    registry->RegisterComponent<PlayerComponent>("Player Component");
+    registry->RegisterComponent<PlayerComponent>("Player Component",
+    [](entt::registry& reg, entt::entity entity)
+    {
+        auto& player = reg.get<PlayerComponent>(entity);
+        ImGui::DragFloat("Move Speed", &player.MoveSpeed, 0.1f);
+    },
+    [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+    {
+        auto& playerComponent = reg.get<PlayerComponent>(entity);
+        json["MoveSpeed"] = playerComponent.MoveSpeed;
+    },
+    [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+    {
+        auto& playerComponent = reg.get_or_emplace<PlayerComponent>(entity);
+        auto moveSpeed = json["MoveSpeed"];
+        playerComponent.MoveSpeed = moveSpeed;
+    });
 }
 
 void MyGame::OnStart()

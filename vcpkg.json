@@ -10,7 +10,8 @@
         "joltphysics",
         "shaderc",
         "tinygltf",
-        "stb"
-        
+        "stb",
+        "nlohmann-json",
+        "imguizmo"
     ]
 }

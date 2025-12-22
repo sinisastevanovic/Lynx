@@ -56,6 +56,7 @@ find_package(glm CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(unofficial-shaderc CONFIG REQUIRED)
 find_package(Jolt CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
 target_link_libraries(engine PUBLIC
 
@@ -74,4 +75,6 @@ target_link_libraries(engine PUBLIC
     unofficial::shaderc::shaderc
 
     Jolt::Jolt
+
+    nlohmann_json::nlohmann_json
 )

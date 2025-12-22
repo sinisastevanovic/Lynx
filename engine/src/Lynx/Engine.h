@@ -14,6 +14,12 @@ namespace Lynx
     class Renderer;
     class Scene;
 
+    enum class SceneState
+    {
+        Edit = 0,
+        Play = 1
+    };
+
     class LX_API Engine
     {
     public:
@@ -27,8 +33,13 @@ namespace Lynx
         AssetManager& GetAssetManager() { return *m_AssetManager; }
         PhysicsSystem& GetPhysicsSystem() { return *m_PhysicsSystem; }
         Renderer& GetRenderer() { return *m_Renderer; }
+        EditorCamera& GetEditorCamera() { return m_EditorCamera; }
         
         std::shared_ptr<Scene> GetActiveScene() const { return m_Scene; }
+        void SetActiveScene(std::shared_ptr<Scene> scene) { m_Scene = scene; }
+
+        SceneState GetSceneState() const { return m_SceneState; }
+        void SetSceneState(SceneState state) { m_SceneState = state; }
 
         void SetImGuiRenderCallback(std::function<void()> callback) { m_ImGuiCallback = callback; }
 
@@ -36,6 +47,7 @@ namespace Lynx
 
     private:
         void OnEvent(Event& e);
+        void RegisterComponents();
 
     private:
         static Engine* s_Instance;
@@ -51,6 +63,8 @@ namespace Lynx
         bool m_IsRunning = true;
 
         std::function<void()> m_ImGuiCallback;
+
+        SceneState m_SceneState = SceneState::Play;
     };
 }
 

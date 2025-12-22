@@ -5,6 +5,9 @@
 
 #include <imgui.h>
 
+#include "EditorLayer.h"
+#include "Panels/SceneHierarchyPanel.h"
+
 
 #if defined(_WIN32)
     #include <windows.h>
@@ -18,6 +21,7 @@ int main(int argc, char** argv)
 
     Lynx::Engine engine;
     engine.Initialize();
+    engine.SetSceneState(Lynx::SceneState::Edit);
 
     Lynx::IGameModule* gameModule = nullptr;
     Lynx::DestroyGameFunc destroyFunc = nullptr;
@@ -66,25 +70,24 @@ int main(int argc, char** argv)
         }
     }
 
-    engine.SetImGuiRenderCallback([]()
+    Lynx::EditorLayer editorLayer(&engine);
+    editorLayer.OnAttach();
+
+    Lynx::SceneHierarchyPanel sceneHierarchyPanel(engine.GetActiveScene());
+    engine.SetImGuiRenderCallback([&editorLayer]()
     {
+        editorLayer.DrawMenuBar();
         ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
-        ImGui::Begin("Viewport");
-        ImVec2 viewportSize = ImGui::GetContentRegionAvail();
-        if (viewportSize.x > 0 && viewportSize.y > 0)
-            Lynx::Engine::Get().GetRenderer().EnsureEditorViewport((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
-        
-        auto texture = Lynx::Engine::Get().GetRenderer().GetViewportTexture();
-        if (texture)
-        {
-            ImGui::Image((ImTextureID)texture.Get(), viewportSize);
-        }
-        ImGui::End();
         
         ImGui::ShowDemoWindow();
+
+        //editorLayer.DrawToolBar();
+        editorLayer.OnImGuiRender();
     });
     
     engine.Run(gameModule);
+
+    editorLayer.OnDetach();
 
     if (gameModule && destroyFunc)
     {
