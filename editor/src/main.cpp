@@ -20,7 +20,7 @@ int main(int argc, char** argv)
     std::cout << "--- Starting Editor ---" << std::endl;
 
     Lynx::Engine engine;
-    engine.Initialize();
+    engine.Initialize(true);
     engine.SetSceneState(Lynx::SceneState::Edit);
 
     Lynx::IGameModule* gameModule = nullptr;

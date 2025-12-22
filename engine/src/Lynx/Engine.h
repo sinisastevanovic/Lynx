@@ -25,7 +25,7 @@ namespace Lynx
     public:
         static Engine& Get() { return *s_Instance; }
         
-        void Initialize();
+        void Initialize(bool editorMode = false);
         void Run(IGameModule* gameModule);
         void Shutdown();
 

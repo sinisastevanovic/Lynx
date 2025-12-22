@@ -22,7 +22,7 @@ namespace Lynx
 {
     Engine* Engine::s_Instance = nullptr;
     
-    void Engine::Initialize()
+    void Engine::Initialize(bool editorMode)
     {
         s_Instance = this;
         Log::Init();
@@ -37,7 +37,7 @@ namespace Lynx
 
         m_PhysicsSystem = std::make_unique<PhysicsSystem>();
         
-        m_Renderer = std::make_unique<Renderer>(m_Window->GetNativeWindow());
+        m_Renderer = std::make_unique<Renderer>(m_Window->GetNativeWindow(), editorMode);
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();

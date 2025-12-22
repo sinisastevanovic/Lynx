@@ -31,7 +31,7 @@ namespace Lynx
             uint32_t Height = 0;
         };
         
-        Renderer(GLFWwindow* window);
+        Renderer(GLFWwindow* window, bool initIdTarget = false);
         ~Renderer();
         
         void OnResize(uint32_t width, uint32_t height);
@@ -57,7 +57,7 @@ namespace Lynx
     private:
         void InitVulkan(GLFWwindow* window);
         void InitNVRHI();
-        void InitPipeline();
+        void InitPipeline(bool initIdTarget);
         void InitBuffers();
 
         void CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height);

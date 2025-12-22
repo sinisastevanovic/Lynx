@@ -116,6 +116,7 @@ namespace Lynx
             if (serializer.Deserialize(filepath))
             {
                 m_Engine->SetActiveScene(m_EditorScene);
+                m_SelectedEntity = entt::null;
                 m_SceneHierarchyPanel.SetContext(m_Engine->GetActiveScene());
             }
         }

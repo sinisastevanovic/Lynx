@@ -72,13 +72,13 @@ namespace Lynx
         float Padding[3];
     };
     
-    Renderer::Renderer(GLFWwindow* window)
+    Renderer::Renderer(GLFWwindow* window, bool initIdTarget)
     {
         m_VulkanState = std::make_unique<VulkanState>();
         InitVulkan(window);
         InitNVRHI();
         InitBuffers();
-        InitPipeline();
+        InitPipeline(initIdTarget);
 
         LX_CORE_INFO("Renderer initialized successfully");
     }
@@ -496,80 +496,99 @@ namespace Lynx
         target.Framebuffer = m_NvrhiDevice->createFramebuffer(fbDesc);
     }
 
-    void Renderer::InitPipeline()
+    void Renderer::InitPipeline(bool initIdTarget)
     {
-        const char* vsSrc = R"(
-        #version 450
-        layout(location = 0) in vec3 a_Position;
-        layout(location = 1) in vec2 a_TexCoord;
-
-        layout(location = 0) out vec2 v_TexCoord;
-        layout(location = 1) out vec4 v_Color;
-        layout(location = 2) out flat int v_EntityID;
-            
-        layout(set = 0, binding = 0) uniform UBO {
-            mat4 u_ViewProjection;
-        } ubo;
-
-        layout(push_constant) uniform PushConsts {
-            mat4 u_Model;
-            vec4 u_Color;
-            int u_EntityID;
-        } push;
-
-
-        void main() {
-            v_TexCoord = a_TexCoord;
-            v_Color = push.u_Color;
-            v_EntityID = push.u_EntityID;
-            gl_Position = ubo.u_ViewProjection * push.u_Model * vec4(a_Position, 1.0);
-        }
-        )";
-        /*const char* vsSrc = R"(
+        const char* vsSrc;
+        const char* fsSrc;
+        if (initIdTarget)
+        {
+            vsSrc = R"(
             #version 450
             layout(location = 0) in vec3 a_Position;
+            layout(location = 1) in vec2 a_TexCoord;
 
-            
+            layout(location = 0) out vec2 v_TexCoord;
+            layout(location = 1) out vec4 v_Color;
+            layout(location = 2) out flat int v_EntityID;
+                
             layout(set = 0, binding = 0) uniform UBO {
                 mat4 u_ViewProjection;
             } ubo;
 
             layout(push_constant) uniform PushConsts {
                 mat4 u_Model;
+                vec4 u_Color;
+                int u_EntityID;
             } push;
 
+
             void main() {
+                v_TexCoord = a_TexCoord;
+                v_Color = push.u_Color;
+                v_EntityID = push.u_EntityID;
                 gl_Position = ubo.u_ViewProjection * push.u_Model * vec4(a_Position, 1.0);
             }
-        )";*/
+            )";
 
-        const char* fsSrc = R"(
-        #version 450
-        layout(location = 0) in vec2 v_TexCoord;
-        layout(location = 1) in vec4 v_Color;
-        layout(location = 2) in flat int v_EntityID;
-        layout(location = 0) out vec4 outColor;
-        layout(location = 1) out int outEntityID;
-            
-        layout(set = 0, binding = 1) uniform texture2D u_Texture;
-        layout(set = 0, binding = 2) uniform sampler u_Sampler;
-    
-        void main() { 
-            outColor = texture(sampler2D(u_Texture, u_Sampler), v_TexCoord) * v_Color; 
-            outEntityID = v_EntityID;
-        }
-        )";
-
-        /*const char* fsSrc = R"(
+            fsSrc = R"(
             #version 450
+            layout(location = 0) in vec2 v_TexCoord;
+            layout(location = 1) in vec4 v_Color;
+            layout(location = 2) in flat int v_EntityID;
             layout(location = 0) out vec4 outColor;
-            
-    
+            layout(location = 1) out int outEntityID;
+                
+            layout(set = 0, binding = 1) uniform texture2D u_Texture;
+            layout(set = 0, binding = 2) uniform sampler u_Sampler;
+        
             void main() { 
-                outColor = outColor = vec4(0.2, 0.8, 0.2, 1.0);
+                outColor = texture(sampler2D(u_Texture, u_Sampler), v_TexCoord) * v_Color; 
+                outEntityID = v_EntityID;
             }
-        )";*/
+            )";
+        }
+        else
+        {
+            vsSrc = R"(
+            #version 450
+            layout(location = 0) in vec3 a_Position;
+            layout(location = 1) in vec2 a_TexCoord;
 
+            layout(location = 0) out vec2 v_TexCoord;
+            layout(location = 1) out vec4 v_Color;
+                
+            layout(set = 0, binding = 0) uniform UBO {
+                mat4 u_ViewProjection;
+            } ubo;
+
+            layout(push_constant) uniform PushConsts {
+                mat4 u_Model;
+                vec4 u_Color;
+            } push;
+
+
+            void main() {
+                v_TexCoord = a_TexCoord;
+                v_Color = push.u_Color;
+                gl_Position = ubo.u_ViewProjection * push.u_Model * vec4(a_Position, 1.0);
+            }
+            )";
+
+            fsSrc = R"(
+            #version 450
+            layout(location = 0) in vec2 v_TexCoord;
+            layout(location = 1) in vec4 v_Color;
+            layout(location = 0) out vec4 outColor;
+                
+            layout(set = 0, binding = 1) uniform texture2D u_Texture;
+            layout(set = 0, binding = 2) uniform sampler u_Sampler;
+        
+            void main() { 
+                outColor = texture(sampler2D(u_Texture, u_Sampler), v_TexCoord) * v_Color; 
+            }
+            )";
+        }
+        
         auto vsSpirv = ShaderUtils::CompileGLSL(vsSrc, shaderc_glsl_vertex_shader, "cube.vert");
         auto fsSpirv = ShaderUtils::CompileGLSL(fsSrc, shaderc_glsl_fragment_shader, "cube.frag");
 
@@ -629,10 +648,12 @@ namespace Lynx
             .setSrcBlendAlpha(nvrhi::BlendFactor::One)
             .setDestBlendAlpha(nvrhi::BlendFactor::InvSrcAlpha);
 
-        // TODO: Only in editor!
-        pipeDesc.renderState.blendState.targets[1]
+        if (initIdTarget)
+        {
+            pipeDesc.renderState.blendState.targets[1]
             .setBlendEnable(false)
             .setColorWriteMask(nvrhi::ColorMask::All);
+        }
                 
         nvrhi::VertexAttributeDesc attributes[] = {
             nvrhi::VertexAttributeDesc()
@@ -651,13 +672,19 @@ namespace Lynx
         pipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(attributes, 2, m_VertexShader);
 
         // TODO: Only in editor
-        auto fbInfo = nvrhi::FramebufferInfo()
-        .addColorFormat(nvrhi::Format::BGRA8_UNORM)
-        .addColorFormat(nvrhi::Format::R32_SINT)
-        .setDepthFormat(nvrhi::Format::D32);
+        if (initIdTarget)
+        {
+            auto fbInfo = nvrhi::FramebufferInfo()
+                .addColorFormat(nvrhi::Format::BGRA8_UNORM)
+                .addColorFormat(nvrhi::Format::R32_SINT)
+                .setDepthFormat(nvrhi::Format::D32);
         
-        m_Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, fbInfo);
-        //m_Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, m_SwapchainFramebuffers[0]->getFramebufferInfo());
+            m_Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, fbInfo);
+        }
+        else
+        {
+            m_Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, m_SwapchainFramebuffers[0]->getFramebufferInfo());
+        }
     }
 
     void Renderer::BeginScene(glm::mat4 viewProjection)

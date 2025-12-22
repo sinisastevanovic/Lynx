@@ -22,7 +22,7 @@ namespace Lynx
         auto& renderer = Lynx::Engine::Get().GetRenderer();
         ImGui::Begin("Viewport");
 
-        if (ImGui::IsWindowFocused())
+        if (ImGui::IsWindowFocused() && Engine().Get().GetSceneState() != SceneState::Play)
         {
             if (ImGui::IsKeyPressed(ImGuiKey_Q)) m_CurrentGizmoOperation = -1;
             if (ImGui::IsKeyPressed(ImGuiKey_W)) m_CurrentGizmoOperation = ImGuizmo::TRANSLATE;
