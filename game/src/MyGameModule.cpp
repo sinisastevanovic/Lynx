@@ -49,10 +49,10 @@ void MyGame::OnStart()
     auto& assetManager = engine.GetAssetManager();
     auto scene = engine.GetActiveScene();
 
-    auto mesh = assetManager.GetMesh("assets/WaterBottle/glTF/WaterBottle.gltf");
-    //auto floorMesh = assetManager.GetMesh("assets/Cube/Cube.gltf");
+    auto mesh = assetManager.GetAssetHandle("assets/Models/Bottle/WaterBottle.gltf");
+    //auto floorMesh = assetManager.GetAssetHandle("assets/Models/Cube/Cube.gltf");
     auto floorMesh = assetManager.GetDefaultCube();
-    auto playerMesh = assetManager.GetMesh("assets/Fox/glTF/Fox.gltf");
+    auto playerMesh = assetManager.GetAssetHandle("assets/Models/Fox/Fox.gltf");
 
     {
         auto camera = scene->CreateEntity("Camera");
@@ -70,7 +70,7 @@ void MyGame::OnStart()
         transform.Scale = { 0.01f, 0.01f, 0.01f };
 
         auto& meshComp = player.AddComponent<Lynx::MeshComponent>();
-        meshComp.Mesh = playerMesh->GetHandle();
+        meshComp.Mesh = playerMesh;
 
         player.AddComponent<PlayerComponent>();
 
@@ -109,7 +109,7 @@ void MyGame::OnStart()
         transform.Scale = { 2.0f, 2.0f, 2.0f };
 
         auto& meshComp = bottle.AddComponent<Lynx::MeshComponent>();
-        meshComp.Mesh = mesh->GetHandle();
+        meshComp.Mesh = mesh;
 
         auto& rb = bottle.AddComponent<Lynx::RigidBodyComponent>();
         rb.Type = Lynx::RigidBodyType::Dynamic;

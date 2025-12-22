@@ -1,4 +1,6 @@
 #pragma once
+#include "AssetRegistry.h"
+#include "AssetMetadata.h"
 #include "Asset.h"
 #include "Texture.h"
 #include "StaticMesh.h"
@@ -11,48 +13,60 @@ namespace Lynx
     class LX_API AssetManager
     {
     public:
-        AssetManager(nvrhi::DeviceHandle device);
+        AssetManager(nvrhi::DeviceHandle device, AssetRegistry* registy);
 
-        // Checks cache. If exists, returns it. If not, loads from disk, caches it, and returns it.
-        std::shared_ptr<Texture> GetTexture(const std::string& filepath);
+        // Returns the asset if loaded. If not loaded, uses Registry to find path, loads it, caches it, returns it.
+        std::shared_ptr<Asset> GetAsset(AssetHandle handle);
+
+        // Returns the asset if loaded. If not loaded, uses Registry to find path, loads it, caches it, returns it.
+        template<typename T>
+        std::shared_ptr<T> GetAsset(AssetHandle handle)
+        {
+            auto asset = GetAsset(handle);
+            if (asset)
+                return std::static_pointer_cast<T>(asset);
+
+            return GetErrorAsset<T>();
+        }
+
+        std::shared_ptr<Asset> GetAsset(const std::filesystem::path& path);
+
+        template<typename T>
+        std::shared_ptr<T> GetAsset(const std::filesystem::path& path)
+        {
+            auto asset = GetAsset(path);
+            if (asset)
+                return std::static_pointer_cast<T>(asset);
+
+            return GetErrorAsset<T>();
+        }
+
+        AssetHandle GetAssetHandle(const std::filesystem::path& path) const;
+
+        bool IsAssetLoaded(AssetHandle handle) const;
+        std::filesystem::path GetAssetPath(AssetHandle handle) const;
+
         std::shared_ptr<Texture> GetDefaultTexture();
         std::shared_ptr<Texture> GetWhiteTexture();
         std::shared_ptr<Texture> GetErrorTexture();
-
-        // Checks cache. If exists, returns it. If not, loads from disk, caches it, and returns it.
-        std::shared_ptr<StaticMesh> GetMesh(const std::string& filepath);
-
-        // TODO: Temporary function until we can actually create meshes somehow
         std::shared_ptr<StaticMesh> GetDefaultCube();
-
-        // Fast lookup. Returns nullptr if invalid handle.
-        std::shared_ptr<Asset> GetAsset(AssetHandle handle);
-
-        // Helper to check if a specific handle is valid and of a specific type
-        template<typename T>
-        std::shared_ptr<T> GetAsset(AssetHandle handle) {
-            auto asset = GetAsset(handle);
-            // Ideally check asset->GetType() here for safety
-            return std::static_pointer_cast<T>(asset);
-        }
-
-        bool IsAssetLoaded(AssetHandle handle) const;
-
-        // TODO: Temporary for serialization, until we have persistent asset handles
-        std::string GetAssetPath(AssetHandle handle);
   
     private:
-        // Helper to register an asset once loaded
-        void AddAssetToCache(const std::string& filepath, std::shared_ptr<Asset> asset);
+        std::shared_ptr<Asset> LoadAsset(const AssetMetadata& metadata);
+
+        template<typename T>
+        std::shared_ptr<T> GetErrorAsset() { return nullptr; }
   
     private:
         nvrhi::DeviceHandle m_Device;
+        AssetRegistry* m_AssetRegistry = nullptr;
         
-        // The Primary Storage (Owner)
-        std::unordered_map<AssetHandle, std::shared_ptr<Asset>> m_Assets;
-
-        // The Lookup Cache (Path -> UUID)
-        // This ensures we don't load "wood.png" twice, even if we ask for it 100 times.
-        std::unordered_map<std::string, AssetHandle> m_AssetPaths;
+        std::unordered_map<AssetHandle, std::shared_ptr<Asset>> m_LoadedAssets;
     };
+
+    template<>
+    inline std::shared_ptr<Texture> AssetManager::GetErrorAsset<Texture>()
+    {
+        return GetErrorTexture();
+    }
 }

@@ -29,6 +29,8 @@ namespace Lynx
         uint64_t m_UUID;
     
     };
+
+    typedef UUID AssetHandle;
 }
 
 namespace std
@@ -66,6 +68,6 @@ struct fmt::formatter<Lynx::UUID>
     template<typename FormatContext>
     auto format(const Lynx::UUID& uuid, FormatContext& ctx) const
     {
-        return fmt::format_to(ctx.out(), "{}", uuid.ToString());
+        return fmt::format_to(ctx.out(), "{}", (uint64_t)uuid);
     }
 };

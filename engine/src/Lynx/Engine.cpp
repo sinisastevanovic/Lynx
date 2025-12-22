@@ -53,7 +53,9 @@ namespace Lynx
         
         m_Scene = std::make_shared<Scene>();
 
-        m_AssetManager = std::make_unique<AssetManager>(m_Renderer->GetDeviceHandle());
+        m_AssetRegistry = std::make_unique<AssetRegistry>();
+        m_AssetRegistry->LoadRegistry("assets", "engine/resources");
+        m_AssetManager = std::make_unique<AssetManager>(m_Renderer->GetDeviceHandle(), m_AssetRegistry.get());
         
         m_Window->SetVSync(true);
 
@@ -416,21 +418,13 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& meshComp = reg.get<MeshComponent>(entity);
-                std::string assetPath = Engine::Get().GetAssetManager().GetAssetPath(meshComp.Mesh);
-                json["Mesh"] = assetPath;
+                json["Mesh"] = (uint64_t)meshComp.Mesh;
                 json["Color"] = { meshComp.Color.r, meshComp.Color.g, meshComp.Color.b, meshComp.Color.a };
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
                 auto& meshComp = reg.get_or_emplace<MeshComponent>(entity);
-                std::string assetPath = json["Mesh"];
-                if (assetPath == "")
-                    meshComp.Mesh = AssetHandle::Null();
-                else if (assetPath == "DEFAULT_CUBE")
-                    meshComp.Mesh = Engine::Get().GetAssetManager().GetDefaultCube()->GetHandle();
-                else
-                    meshComp.Mesh = Engine::Get().GetAssetManager().GetMesh(assetPath)->GetHandle();
-
+                meshComp.Mesh = AssetHandle(json["Mesh"]);
                 const auto& color = json["Color"];
                 meshComp.Color = glm::vec4(color[0], color[1], color[2], color[3]);
             });

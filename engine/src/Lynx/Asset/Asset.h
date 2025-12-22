@@ -4,8 +4,6 @@
 
 namespace Lynx
 {
-    typedef UUID AssetHandle;
-    
     class LX_API Asset
     {
     public:
@@ -14,7 +12,10 @@ namespace Lynx
         AssetHandle GetHandle() const { return m_Handle; }
 
     protected:
+        void SetHandle(AssetHandle handle) { m_Handle = handle; }
         AssetHandle m_Handle;
+
+        friend class AssetManager;
     };
 }
 

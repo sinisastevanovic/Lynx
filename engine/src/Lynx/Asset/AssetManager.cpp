@@ -4,36 +4,94 @@
 
 namespace Lynx
 {
-    AssetManager::AssetManager(nvrhi::DeviceHandle device)
-        : m_Device(device)
+    AssetManager::AssetManager(nvrhi::DeviceHandle device, AssetRegistry* registy)
+        : m_Device(device), m_AssetRegistry(registy)
     {
         // TODO: Temporary code! Remove this!
-        GetDefaultTexture();
+        /*GetDefaultTexture();
         GetWhiteTexture();
-        GetErrorTexture();
+        GetErrorTexture();*/
         //GetDefaultCube();
     }
 
-    std::shared_ptr<Texture> AssetManager::GetTexture(const std::string& filepath)
+    std::shared_ptr<Asset> AssetManager::GetAsset(AssetHandle handle)
     {
-        if (m_AssetPaths.contains(filepath))
-            return GetAsset<Texture>(m_AssetPaths[filepath]);
+        if (m_LoadedAssets.contains(handle))
+            return m_LoadedAssets[handle];
 
-        std::shared_ptr<Texture> newTexture = std::make_shared<Texture>(m_Device, filepath);
-        if (!newTexture->GetHandle().IsValid())
+        if (!m_AssetRegistry->Contains(handle))
         {
-            return GetErrorTexture();
+            LX_CORE_ERROR("AssetManager: Trying to get asset that does not exist ({0})!", handle);
+            return nullptr; // Asset does not exist!
         }
-        m_Assets[newTexture->GetHandle()] = newTexture;
-        m_AssetPaths[filepath] = newTexture->GetHandle();
 
-        LX_CORE_INFO("Loaded Texture: {0} (UUID: {1})", filepath, newTexture->GetHandle());
-        return newTexture;
+        const AssetMetadata& metadata = m_AssetRegistry->Get(handle);
+
+        std::shared_ptr<Asset> asset = LoadAsset(metadata);
+        if (asset)
+        {
+            m_LoadedAssets[handle] = asset;
+        }
+
+        return asset;
+    }
+
+    std::shared_ptr<Asset> AssetManager::LoadAsset(const AssetMetadata& metadata)
+    {
+        // TODO: We would replace this with some kind of loaders/importers?
+        std::shared_ptr<Asset> newAsset = nullptr;
+        switch (metadata.Type)
+        {
+            case AssetType::Texture:
+                newAsset = std::make_shared<Texture>(m_Device, metadata.FilePath.string());
+                break;
+            case AssetType::StaticMesh:
+                newAsset = std::make_shared<StaticMesh>(m_Device, metadata.FilePath.string());
+                break;
+            case AssetType::None:
+            case AssetType::SkeletalMesh:
+            case AssetType::Material:
+            case AssetType::Shader:
+            case AssetType::Scene:
+            default: LX_CORE_ERROR("AssetType not supported yet ({0})!", static_cast<int>(metadata.Type)); return nullptr;
+        }
+
+        if (newAsset)
+            newAsset->SetHandle(metadata.Handle);
+
+        return newAsset;
+    }
+
+    std::shared_ptr<Asset> AssetManager::GetAsset(const std::filesystem::path& path)
+    {
+        AssetHandle handle = m_AssetRegistry->ImportAsset(path);
+        return GetAsset(handle);
+    }
+
+    AssetHandle AssetManager::GetAssetHandle(const std::filesystem::path& path) const
+    {
+        if (m_AssetRegistry->Contains(path))
+            return m_AssetRegistry->Get(path).Handle;
+        return AssetHandle::Null();
+    }
+
+    bool AssetManager::IsAssetLoaded(AssetHandle handle) const
+    {
+        return m_LoadedAssets.contains(handle);
+    }
+
+    std::filesystem::path AssetManager::GetAssetPath(AssetHandle handle) const
+    {
+        if (m_AssetRegistry->Contains(handle))
+            return m_AssetRegistry->Get(handle).FilePath;
+        return {};
     }
 
     std::shared_ptr<Texture> AssetManager::GetDefaultTexture()
     {
-        if (m_AssetPaths.contains("DEFAULT_TEXTURE"))
+        auto asset = GetAsset("engine/resources/T_DefaultChecker.png");
+        return std::static_pointer_cast<Texture>(asset);
+        /*if (m_AssetPaths.contains("DEFAULT_TEXTURE"))
             return GetAsset<Texture>(m_AssetPaths["DEFAULT_TEXTURE"]);
 
         const int w = 64;
@@ -59,12 +117,14 @@ namespace Lynx
         m_Assets[tex->GetHandle()] = tex;
         m_AssetPaths["DEFAULT_TEXTURE"] = tex->GetHandle();
 
-        return tex;
+        return tex;*/
     }
 
     std::shared_ptr<Texture> AssetManager::GetWhiteTexture()
     {
-        if (m_AssetPaths.contains("WHITE_TEXTURE"))
+        auto asset = GetAsset("engine/resources/T_White.png");
+        return std::static_pointer_cast<Texture>(asset);
+        /*if (m_AssetPaths.contains("WHITE_TEXTURE"))
             return GetAsset<Texture>(m_AssetPaths["WHITE_TEXTURE"]);
 
         const int w = 1;
@@ -75,12 +135,14 @@ namespace Lynx
         m_Assets[tex->GetHandle()] = tex;
         m_AssetPaths["WHITE_TEXTURE"] = tex->GetHandle();
 
-        return tex;
+        return tex;*/
     }
 
     std::shared_ptr<Texture> AssetManager::GetErrorTexture()
     {
-        if (m_AssetPaths.contains("ERROR_TEXTURE"))
+        auto asset = GetAsset("engine/resources/T_Error.png");
+        return std::static_pointer_cast<Texture>(asset);
+        /*if (m_AssetPaths.contains("ERROR_TEXTURE"))
             return GetAsset<Texture>(m_AssetPaths["ERROR_TEXTURE"]);
 
         const int w = 64;
@@ -106,25 +168,15 @@ namespace Lynx
         m_Assets[tex->GetHandle()] = tex;
         m_AssetPaths["ERROR_TEXTURE"] = tex->GetHandle();
 
-        return tex;
+        return tex;*/
     }
 
-    std::shared_ptr<StaticMesh> AssetManager::GetMesh(const std::string& filepath)
-    {
-        if (m_AssetPaths.contains(filepath))
-            return GetAsset<StaticMesh>(m_AssetPaths[filepath]);
-
-        std::shared_ptr<StaticMesh> newMesh = std::make_shared<StaticMesh>(m_Device, filepath);
-        m_Assets[newMesh->GetHandle()] = newMesh;
-        m_AssetPaths[filepath] = newMesh->GetHandle();
-
-        LX_CORE_INFO("Loaded Mesh: {0} (UUID: {1})", filepath, newMesh->GetHandle());
-        return newMesh;
-    }
 
     std::shared_ptr<StaticMesh> AssetManager::GetDefaultCube()
     {
-        if (m_AssetPaths.contains("DEFAULT_CUBE"))
+        auto asset = GetAsset("engine/resources/SM_DefaultCube.gltf");
+        return std::static_pointer_cast<StaticMesh>(asset);
+        /*if (m_AssetPaths.contains("DEFAULT_CUBE"))
             return GetAsset<StaticMesh>(m_AssetPaths["DEFAULT_CUBE"]);
 
         std::vector<Vertex> vertices = {
@@ -173,35 +225,6 @@ namespace Lynx
         m_Assets[mesh->GetHandle()] = mesh;
         m_AssetPaths["DEFAULT_CUBE"] = mesh->GetHandle();
 
-        return mesh;
-    }
-
-    std::shared_ptr<Asset> AssetManager::GetAsset(AssetHandle handle)
-    {
-        if (m_Assets.contains(handle))
-        {
-            return m_Assets[handle];
-        }
-        return nullptr;
-    }
-
-    bool AssetManager::IsAssetLoaded(AssetHandle handle) const
-    {
-        return m_Assets.contains(handle);
-    }
-
-    std::string AssetManager::GetAssetPath(AssetHandle handle)
-    {
-        for (auto& [path, cacheHandle] : m_AssetPaths)
-        {
-            if (cacheHandle == handle)
-                return path;
-        }
-
-        return "";
-    }
-
-    void AssetManager::AddAssetToCache(const std::string& filepath, std::shared_ptr<Asset> asset)
-    {
+        return mesh;*/
     }
 }

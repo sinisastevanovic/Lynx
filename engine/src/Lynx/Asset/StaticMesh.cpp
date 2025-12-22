@@ -86,7 +86,7 @@ namespace Lynx
         {
             int imageIndex = model.textures[0].source;
             std::string texturePath = std::filesystem::path(filepath).parent_path().string() + "/" + model.images[imageIndex].uri;
-            auto tex = Engine::Get().GetAssetManager().GetTexture(texturePath);
+            auto tex = Engine::Get().GetAssetManager().GetAsset<Texture>(texturePath);
             SetTexture(tex->GetHandle());
         }
 

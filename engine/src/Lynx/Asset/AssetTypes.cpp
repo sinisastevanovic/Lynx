@@ -20,7 +20,8 @@ namespace Lynx::AssetUtils
         { AssetType::Texture, {"Texture File",  { "*.png", "*.jpg", "*.jpeg", "*.tga" } } },
         { AssetType::Material, { "Material File", { "*.lxmat" } } },
         { AssetType::Shader, { "Shader File", { "*.glsl" } } },
-        { AssetType::Mesh, { "3D Model",      { "*.fbx", "*.obj", "*.gltf" } } }
+        //{ AssetType::Mesh, { "3D Model",      { "*.fbx", "*.obj", "*.gltf" } } }
+        { AssetType::StaticMesh, { "3D Model",      { "*.gltf" } } }
     };
 
     

@@ -9,7 +9,8 @@ namespace Lynx
     {
         None = 0,
         Texture,
-        Mesh,
+        StaticMesh,
+        SkeletalMesh,
         Material,
         Shader,
         Scene

@@ -31,6 +31,7 @@ namespace Lynx
 
         inline Window& GetWindow() { return *m_Window; }
         AssetManager& GetAssetManager() { return *m_AssetManager; }
+        AssetRegistry& GetAssetRegistry() { return *m_AssetRegistry; }
         PhysicsSystem& GetPhysicsSystem() { return *m_PhysicsSystem; }
         Renderer& GetRenderer() { return *m_Renderer; }
         EditorCamera& GetEditorCamera() { return m_EditorCamera; }
@@ -55,6 +56,7 @@ namespace Lynx
         std::unique_ptr<Window> m_Window;
         std::unique_ptr<Renderer> m_Renderer;
         std::unique_ptr<AssetManager> m_AssetManager;
+        std::unique_ptr<AssetRegistry> m_AssetRegistry;
         std::unique_ptr<PhysicsSystem> m_PhysicsSystem;
         std::shared_ptr<Scene> m_Scene;
         

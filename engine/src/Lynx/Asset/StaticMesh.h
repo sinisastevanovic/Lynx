@@ -19,7 +19,7 @@ namespace Lynx
         StaticMesh(nvrhi::DeviceHandle device, std::vector<Vertex> vertices, std::vector<uint32_t> indices);
         virtual ~StaticMesh() = default;
 
-        static AssetType GetStaticType() { return AssetType::Mesh; }
+        static AssetType GetStaticType() { return AssetType::StaticMesh; }
         virtual AssetType GetType() const override { return GetStaticType(); }
 
         nvrhi::BufferHandle GetVertexBuffer() const { return m_VertexBuffer; }
