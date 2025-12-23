@@ -9,6 +9,8 @@
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 
+#include "Components/NativeScriptComponent.h"
+
 namespace Lynx
 {
     static void OnRigidBodyComponentDestroyed(entt::registry& registry, entt::entity entity)
@@ -21,14 +23,23 @@ namespace Lynx
 
             bodyInterface.RemoveBody(rb.BodyId);
             bodyInterface.DestroyBody(rb.BodyId);
+        }
+    }
 
-            LX_CORE_TRACE("Physics body destroyed for entity {0}", (uint32_t)entity);
+    static void OnNativeScriptComponentDestroyed(entt::registry& registry, entt::entity entity)
+    {
+        auto& nsc = registry.get<NativeScriptComponent>(entity);
+        if (nsc.Instance)
+        {
+            nsc.Instance->OnDestroy();
+            nsc.DestroyScript(&nsc);
         }
     }
     
     Scene::Scene()
     {
         m_Registry.on_destroy<RigidBodyComponent>().connect<&OnRigidBodyComponentDestroyed>();
+        m_Registry.on_destroy<NativeScriptComponent>().connect<&OnNativeScriptComponentDestroyed>();
     }
 
     Scene::~Scene()
@@ -114,10 +125,33 @@ namespace Lynx
                 rb.RuntimeBodyCreated = true;
             }
         }
+
+        auto nscView = m_Registry.view<NativeScriptComponent>();
+        for (auto entity : nscView)
+        {
+            auto& nsc = m_Registry.get<NativeScriptComponent>(entity);
+            if (!nsc.Instance && nsc.InstantiateScript)
+            {
+                nsc.Instance = nsc.InstantiateScript();
+                nsc.Instance->m_Entity = Entity{ entity, this };
+                nsc.Instance->OnCreate();
+            }
+        }
     }
 
     void Scene::OnRuntimeStop()
     {
+        auto nscView = m_Registry.view<NativeScriptComponent>();
+        for (auto entity : nscView)
+        {
+            auto& nsc = m_Registry.get<NativeScriptComponent>(entity);
+            if (nsc.Instance)
+            {
+                nsc.Instance->OnDestroy();
+                nsc.DestroyScript(&nsc);
+            }
+        }
+        
         auto& physicsSystem = Engine::Get().GetPhysicsSystem();
         JPH::BodyInterface& bodyInterface = physicsSystem.GetBodyInterface();
 
@@ -136,6 +170,16 @@ namespace Lynx
 
     void Scene::OnUpdateRuntime(float deltaTime)
     {
+        auto nscView = m_Registry.view<NativeScriptComponent>();
+        for (auto entity : nscView)
+        {
+            auto& nsc = m_Registry.get<NativeScriptComponent>(entity);
+            if (nsc.Instance)
+            {
+                nsc.Instance->OnUpdate(deltaTime);
+            }
+        }
+        
         auto& physicsSystem = Engine::Get().GetPhysicsSystem();
         JPH::BodyInterface& bodyInterface = physicsSystem.GetBodyInterface();
 

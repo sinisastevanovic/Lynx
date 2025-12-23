@@ -18,6 +18,15 @@
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 
+#include "Components/TestNativeScript.h"
+#include "Lynx/ScriptRegistry.h"
+#include "Lynx/Scene/Components/NativeScriptComponent.h"
+
+void MyGame::RegisterScripts()
+{
+    Lynx::ScriptRegistry::RegisterScript<TestNativeScript>("TestNativeScript");
+}
+
 void MyGame::RegisterComponents(Lynx::ComponentRegistry* registry)
 {
     LX_INFO("Registering custom types...");
@@ -83,6 +92,18 @@ void MyGame::OnStart()
         collider.Height = 2.0f;
 
         player.AddComponent<WeaponComponent>();
+    }
+
+    {
+        auto player = scene->CreateEntity("Test");
+        auto& transform = player.GetComponent<Lynx::TransformComponent>();
+        transform.Translation = { 0.0f, 2.0f, 0.0f };
+        transform.Scale = { 0.01f, 0.01f, 0.01f };
+
+        auto& meshComp = player.AddComponent<Lynx::MeshComponent>();
+        meshComp.Mesh = playerMesh;
+
+        player.AddComponent<Lynx::NativeScriptComponent>().Bind<TestNativeScript>();
     }
 
     {

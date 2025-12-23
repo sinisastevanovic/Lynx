@@ -59,18 +59,6 @@ int main(int argc, char** argv)
     }
 #endif
 
-    if (gameModule)
-    {
-        LX_CORE_INFO("Game DLL loaded successfully.");
-        gameModule->RegisterComponents(&engine.ComponentRegistry);
-
-        LX_CORE_TRACE("Querying registerd types:");
-        for (const auto& [name, info] : engine.ComponentRegistry.GetRegisteredComponents())
-        {
-            LX_CORE_TRACE("  - Found component: {}", name);
-        }
-    }
-
     {
         Lynx::EditorLayer editorLayer(&engine);
         editorLayer.OnAttach();

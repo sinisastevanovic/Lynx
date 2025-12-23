@@ -48,6 +48,7 @@ namespace Lynx
 
     private:
         void OnEvent(Event& e);
+        void RegisterScripts();
         void RegisterComponents();
 
     private:

@@ -18,7 +18,9 @@
 #include <backends/imgui_impl_glfw.h>
 #include <nlohmann/json.hpp>
 
+#include "ScriptRegistry.h"
 #include "ImGui/EditorUIHelpers.h"
+#include "Scene/Components/NativeScriptComponent.h"
 
 namespace Lynx
 {
@@ -30,6 +32,7 @@ namespace Lynx
         Log::Init();
         LX_CORE_INFO("Initializing...");
 
+        RegisterScripts();
         RegisterComponents();
 
         m_Window = Window::Create();
@@ -69,6 +72,8 @@ namespace Lynx
 
         if (gameModule)
         {
+            gameModule->RegisterScripts();
+            gameModule->RegisterComponents(&ComponentRegistry);
             gameModule->OnStart();
         }
 
@@ -244,6 +249,11 @@ namespace Lynx
             m_EditorCamera.SetViewportSize(viewportSize.first, viewportSize.second);*/
             return false;
         });
+    }
+
+    void Engine::RegisterScripts()
+    {
+        
     }
 
     void Engine::RegisterComponents()
@@ -547,6 +557,43 @@ namespace Lynx
                 auto& ccComp = reg.get_or_emplace<CapsuleColliderComponent>(entity);
                 ccComp.Radius = json["Radius"];
                 ccComp.Height = json["Height"];
+            });
+
+        ComponentRegistry.RegisterComponent<NativeScriptComponent>("NativeScript",
+            [](entt::registry& reg, entt::entity entity)
+            {
+                auto& nscComp = reg.get<NativeScriptComponent>(entity);
+
+                std::string current = nscComp.ScriptName.empty() ? "None" : nscComp.ScriptName;
+                if (ImGui::BeginCombo("Script Class", current.c_str()))
+                {
+                    for (const auto& [name, bindFunc] : ScriptRegistry::GetRegisteredScripts())
+                    {
+                        bool isSelected = current == name;
+                        if (ImGui::Selectable(name.c_str(), isSelected))
+                        {
+                            nscComp.ScriptName = name;
+                            ScriptRegistry::Bind(name, nscComp);
+                        }
+                        if (isSelected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+            },
+            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+            {
+                auto& nscComp = reg.get<NativeScriptComponent>(entity);
+                json["ScriptName"] = nscComp.ScriptName;
+            },
+            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+            {
+                auto& nscComp = reg.get<NativeScriptComponent>(entity);
+                if (json.contains("ScriptName"))
+                {
+                    std::string scriptName = json["ScriptName"];
+                    ScriptRegistry::Bind(scriptName, nscComp);
+                }
             });
     }
 }

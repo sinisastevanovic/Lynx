@@ -8,7 +8,8 @@ namespace Lynx
     {
     public:
         virtual ~IGameModule() = default;
-    
+
+        virtual void RegisterScripts() = 0;
         virtual void RegisterComponents(ComponentRegistry* registry) = 0;
         virtual void OnStart() = 0;
         virtual void OnUpdate(float deltaTime) = 0;

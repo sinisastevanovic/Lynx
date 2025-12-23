@@ -5,6 +5,7 @@
 class MyGame : public Lynx::IGameModule
 {
 public:
+    virtual void RegisterScripts() override;
     virtual void RegisterComponents(Lynx::ComponentRegistry* registry) override;
     virtual void OnStart() override;
     virtual void OnUpdate(float deltaTime) override;
