@@ -13,15 +13,16 @@ namespace Lynx::AssetUtils
     {
         const char* Description;
         std::vector<const char*> Extensions;
+        const char* DragDropPayload;
     };
 
     static const std::unordered_map<AssetType, AssetFilter> s_AssetFilters = {
-        { AssetType::Scene, { "Lynx Scene", { "*.lxscene" } } },
-        { AssetType::Texture, {"Texture File",  { "*.png", "*.jpg", "*.jpeg", "*.tga" } } },
-        { AssetType::Material, { "Material File", { "*.lxmat" } } },
-        { AssetType::Shader, { "Shader File", { "*.glsl" } } },
+        { AssetType::Scene, { "Lynx Scene", { "*.lxscene" }, "ASSET_SCENE" } },
+        { AssetType::Texture, {"Texture File",  { "*.png", "*.jpg", "*.jpeg", "*.tga" },"ASSET_TEXTURE" } },
+        { AssetType::Material, { "Material File", { "*.lxmat" },"ASSET_MATERIAL" } },
+        { AssetType::Shader, { "Shader File", { "*.glsl" },"ASSET_SHADER" } },
         //{ AssetType::Mesh, { "3D Model",      { "*.fbx", "*.obj", "*.gltf" } } }
-        { AssetType::StaticMesh, { "3D Model",      { "*.gltf" } } }
+        { AssetType::StaticMesh, { "3D Model",      { "*.gltf" },"ASSET_STATICMESH" } }
     };
 
     
@@ -127,5 +128,11 @@ namespace Lynx::AssetUtils
             return false;
 
         return s_SupportedExtensions.contains(extension);
+    }
+
+    const char* GetDragDropPayload(AssetType type)
+    {
+        const auto& filter = s_AssetFilters.at(type);
+        return filter.DragDropPayload;
     }
 }

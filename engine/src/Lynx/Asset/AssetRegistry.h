@@ -20,6 +20,8 @@ namespace Lynx
 
         AssetHandle ImportAsset(const std::filesystem::path& assetPath);
 
+        const std::unordered_map<AssetHandle, AssetMetadata>& GetMetadata() const { return m_AssetMetadata; }
+
         const std::vector<AssetHandle>& GetChangedAssets() const { return m_ProcessedChangedAssets; }
 
         void Update();

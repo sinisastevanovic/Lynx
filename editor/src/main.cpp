@@ -71,24 +71,24 @@ int main(int argc, char** argv)
         }
     }
 
-    Lynx::EditorLayer editorLayer(&engine);
-    editorLayer.OnAttach();
-
-    Lynx::SceneHierarchyPanel sceneHierarchyPanel(engine.GetActiveScene());
-    engine.SetImGuiRenderCallback([&editorLayer]()
     {
-        editorLayer.DrawMenuBar();
-        ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+        Lynx::EditorLayer editorLayer(&engine);
+        editorLayer.OnAttach();
+
+        engine.SetImGuiRenderCallback([&editorLayer]()
+        {
+            editorLayer.DrawMenuBar();
+            ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+            
+            ImGui::ShowDemoWindow();
+
+            editorLayer.OnImGuiRender();
+        });
         
-        ImGui::ShowDemoWindow();
+        engine.Run(gameModule);
 
-        //editorLayer.DrawToolBar();
-        editorLayer.OnImGuiRender();
-    });
-    
-    engine.Run(gameModule);
-
-    editorLayer.OnDetach();
+        editorLayer.OnDetach();
+    }
 
     if (gameModule && destroyFunc)
     {

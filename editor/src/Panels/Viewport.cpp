@@ -8,6 +8,7 @@
 #include "Lynx/ImGui/ImGuizmo.h"
 #include <glm/gtc/type_ptr.hpp>
 
+#include "Lynx/Scene/Entity.h"
 #include "Lynx/Scene/Components/Components.h"
 
 namespace Lynx
@@ -124,6 +125,20 @@ namespace Lynx
                     }
                 }
             }
+        }
+
+        if (Engine::Get().GetSceneState() != SceneState::Play && ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(AssetUtils::GetDragDropPayload(AssetType::StaticMesh)))
+            {
+                uint64_t data = *(const uint64_t*)payload->Data;
+
+                Scene* currScene = Engine::Get().GetActiveScene().get();
+                auto newEntity = currScene->CreateEntity();
+                auto& meshComp = newEntity.AddComponent<MeshComponent>();
+                meshComp.Mesh = AssetHandle(data);
+            }
+            ImGui::EndDragDropTarget();
         }
         
         ImGui::End();

@@ -1,6 +1,7 @@
 #pragma once
 #include <Lynx.h>
 
+#include "Panels/AssetBrowserPanel.h"
 #include "Panels/InspectorPanel.h"
 #include "Panels/SceneHierarchyPanel.h"
 #include "Panels/Viewport.h"
@@ -31,6 +32,7 @@ namespace Lynx
         Viewport m_Viewport;
         SceneHierarchyPanel m_SceneHierarchyPanel;
         InspectorPanel m_InspectorPanel;
+        AssetBrowserPanel m_AssetBrowserPanel;
 
         std::shared_ptr<Scene> m_EditorScene;
         std::shared_ptr<Scene> m_RuntimeScene;

@@ -22,5 +22,6 @@ namespace Lynx
         LX_API const char* GetFilterForAssetType(AssetType type);
         LX_API AssetType GetAssetTypeFromExtension(const std::filesystem::path& path);
         LX_API bool IsAssetExtensionSupported(const std::filesystem::path& path);
+        LX_API const char* GetDragDropPayload(AssetType type);
     }
 }

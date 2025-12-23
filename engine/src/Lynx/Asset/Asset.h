@@ -4,6 +4,12 @@
 
 namespace Lynx
 {
+    /*struct AssetDragDropPayload
+    {
+        AssetHandle Handle;
+        std::string Name;
+    };*/
+    
     class LX_API Asset
     {
     public:

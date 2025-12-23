@@ -18,6 +18,8 @@
 #include <backends/imgui_impl_glfw.h>
 #include <nlohmann/json.hpp>
 
+#include "ImGui/EditorUIHelpers.h"
+
 namespace Lynx
 {
     Engine* Engine::s_Instance = nullptr;
@@ -413,9 +415,24 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& meshComp = reg.get<MeshComponent>(entity);
-
-                // TODO: Add asset handle
+                /*std::string meshName = Engine::Get().GetAssetManager().GetAssetName(meshComp.Mesh);
+                char buffer[256];
+                memset(buffer, 0, sizeof(buffer));
+                strcpy_s(buffer, sizeof(buffer), meshName.c_str());
+                ImGui::InputText("Static Mesh", buffer, sizeof(buffer), ImGuiInputTextFlags_ReadOnly);
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(AssetUtils::GetDragDropPayload(AssetType::StaticMesh)))
+                    {
+                        uint64_t data = *(const uint64_t*)payload->Data;
+                        meshComp.Mesh = AssetHandle(data);
+                    }
+                    ImGui::EndDragDropTarget();
+                }*/
+                EditorUIHelpers::DrawAssetSelection("Static Mesh", meshComp.Mesh, AssetType::StaticMesh);
                 ImGui::ColorEdit4("Color", &meshComp.Color[0]);
+
+                
             },
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {

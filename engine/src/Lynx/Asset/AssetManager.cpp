@@ -69,12 +69,19 @@ namespace Lynx
 
     std::shared_ptr<Asset> AssetManager::GetAsset(const std::filesystem::path& path)
     {
+        if (!std::filesystem::exists(path))
+        {
+            LX_CORE_ERROR("AssetManager: Trying to get asset that doesn't exist! ({0})", path.string());
+            return nullptr;
+        }
         AssetHandle handle = m_AssetRegistry->ImportAsset(path);
         return GetAsset(handle);
     }
 
     AssetHandle AssetManager::GetAssetHandle(const std::filesystem::path& path) const
     {
+        if (!std::filesystem::exists(path))
+            return AssetHandle::Null();
         if (m_AssetRegistry->Contains(path))
             return m_AssetRegistry->Get(path).Handle;
         return AssetHandle::Null();
@@ -90,6 +97,15 @@ namespace Lynx
         if (m_AssetRegistry->Contains(handle))
             return m_AssetRegistry->Get(handle).FilePath;
         return {};
+    }
+
+    std::string AssetManager::GetAssetName(AssetHandle handle) const
+    {
+        if (m_AssetRegistry->Contains(handle))
+        {
+            return m_AssetRegistry->Get(handle).FilePath.filename().string();
+        }
+        return "Invalid!";
     }
 
     std::shared_ptr<Texture> AssetManager::GetDefaultTexture()

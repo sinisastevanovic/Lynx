@@ -45,6 +45,7 @@ namespace Lynx
 
         bool IsAssetLoaded(AssetHandle handle) const;
         std::filesystem::path GetAssetPath(AssetHandle handle) const;
+        std::string GetAssetName(AssetHandle handle) const;
 
         std::shared_ptr<Texture> GetDefaultTexture();
         std::shared_ptr<Texture> GetWhiteTexture();
