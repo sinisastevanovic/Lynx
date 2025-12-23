@@ -5,6 +5,18 @@
 
 namespace Lynx
 {
+    struct FileEvent
+    {
+        FileAction Action;
+        std::filesystem::path Path;
+        std::filesystem::path NewPath;
+
+        bool operator==(const FileEvent& other) const
+        {
+            return Action == other.Action && Path == other.Path && NewPath == other.NewPath;
+        }
+    };
+    
     class LX_API AssetRegistry
     {
     public:
@@ -32,6 +44,9 @@ namespace Lynx
         void WriteMetadata(const AssetMetadata& metadata);
         AssetMetadata ReadMetadata(const std::filesystem::path& metadataPath);
 
+        void OnAssetRemoved(const std::filesystem::path& assetPath);
+        void OnAssetRenamed(const std::filesystem::path& oldPath, const std::filesystem::path& newPath);
+
     private:
         std::unordered_map<AssetHandle, AssetMetadata> m_AssetMetadata;
         std::map<std::filesystem::path, AssetHandle> m_PathToHandle;
@@ -40,7 +55,7 @@ namespace Lynx
 
         // FileWatcher
         std::unique_ptr<FileWatcher> m_FileWatcher;
-        std::vector<std::filesystem::path> m_ChangedFiles;
+        std::vector<FileEvent> m_FileEvents;
         std::vector<AssetHandle> m_ProcessedChangedAssets;
         std::mutex m_Mutex;
     };

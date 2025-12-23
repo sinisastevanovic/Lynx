@@ -3,10 +3,18 @@
 
 namespace Lynx
 {
+    enum class FileAction
+    {
+        Added,
+        Removed,
+        Modified,
+        Renamed
+    };
+    
     class LX_API FileWatcher
     {
     public:
-        using FileEventCallback = std::function<void(const std::filesystem::path&)>;
+        using FileEventCallback = std::function<void(FileAction action, const std::filesystem::path& path, const std::filesystem::path& newPath)>;
 
         FileWatcher(const std::filesystem::path& path, FileEventCallback callback);
         ~FileWatcher();

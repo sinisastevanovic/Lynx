@@ -53,6 +53,8 @@ SOFTWARE.
 #include "Lynx/ImGui/ImGuiShaders.h"
 #include <nvrhi/nvrhi.h>
 
+#include <algorithm>
+
 #if DONUT_WITH_STATIC_SHADERS
 #if DONUT_WITH_DX11
 #include "compiled_shaders/imgui_vertex.dxbc.h"
@@ -394,10 +396,15 @@ bool ImGui_NVRHI::render(nvrhi::IFramebuffer* framebuffer)
                 drawState.bindings = { getBindingSet((nvrhi::ITexture*)pCmd->TexRef.GetTexID()) };
                 assert(drawState.bindings[0]);
 
-                drawState.viewport.scissorRects[0] = nvrhi::Rect(int(pCmd->ClipRect.x),
-                                                                 int(pCmd->ClipRect.z),
-                                                                 int(pCmd->ClipRect.y),
-                                                                 int(pCmd->ClipRect.w));
+                int minX = std::max((int)pCmd->ClipRect.x, 0);
+                int maxX = std::max((int)pCmd->ClipRect.z, minX);
+                int minY = std::max((int)pCmd->ClipRect.y, 0);
+                int maxY = std::max((int)pCmd->ClipRect.w, minY);
+
+                drawState.viewport.scissorRects[0] = nvrhi::Rect(minX,
+                                                                 maxX,
+                                                                 minY,
+                                                                 maxY);
 
                 nvrhi::DrawArguments drawArguments;
                 drawArguments.vertexCount = pCmd->ElemCount;

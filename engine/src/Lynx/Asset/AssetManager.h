@@ -61,6 +61,7 @@ namespace Lynx
         std::shared_ptr<T> GetErrorAsset() { return nullptr; }
 
         void ReloadAsset(AssetHandle handle);
+        void UnloadAsset(AssetHandle handle);
   
     private:
         nvrhi::DeviceHandle m_Device;

@@ -23,6 +23,15 @@ namespace Lynx
 
         // TODO: Setting to disable this!
         std::unordered_map<AssetHandle, std::shared_ptr<Texture>> m_ThumbnailCache;
+
+        float m_ThumbnailSize = 128.0f;
+
+        std::filesystem::path m_RenamingPath;
+        char m_RenameBuffer[256] = "";
+        bool m_IsRenaming = false;
+        
+        std::filesystem::path m_DeletePath;
+        bool m_IsDeleting = false;
     };
 }
 

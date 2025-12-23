@@ -38,8 +38,10 @@ namespace Lynx
             return;
         }
 
-        char buffer[2048];
+        char buffer[4096];
         DWORD bytesReturned;
+
+        std::filesystem::path oldRenamePath;
 
         while (m_Running)
         {
@@ -66,16 +68,30 @@ namespace Lynx
                     // Extract filename
                     std::wstring fileName(pNotify->FileName, pNotify->FileNameLength / sizeof(WCHAR));
                     std::filesystem::path fullPath = m_Path / fileName;
-                    if (pNotify->Action == FILE_ACTION_MODIFIED ||
-                        pNotify->Action == FILE_ACTION_ADDED ||
-                        pNotify->Action == FILE_ACTION_RENAMED_NEW_NAME)
+
+                    switch (pNotify->Action)
                     {
-                        // Fire callback!
-                        // Note: This runs on the background thread.
-                        // Be careful accessing Main Thread stuff (like OpenGL/Vulkan) directly here!
-                        // Usually you want to push this event to a queue.
-                        m_Callback(fullPath);
+                        case FILE_ACTION_ADDED:
+                            m_Callback(FileAction::Added, fullPath, "");
+                            break;
+                        case FILE_ACTION_REMOVED:
+                            m_Callback(FileAction::Removed, fullPath, "");
+                            break;
+                        case FILE_ACTION_MODIFIED:
+                            m_Callback(FileAction::Modified, fullPath, "");
+                            break;
+                        case FILE_ACTION_RENAMED_OLD_NAME:
+                            oldRenamePath = fullPath;
+                            break;
+                        case FILE_ACTION_RENAMED_NEW_NAME:
+                            if (!oldRenamePath.empty())
+                            {
+                                m_Callback(FileAction::Renamed, oldRenamePath, fullPath);
+                                oldRenamePath.clear();
+                            }
+                            break;
                     }
+                    
                     offset += pNotify->NextEntryOffset;
                 }
                 while (pNotify->NextEntryOffset != 0);

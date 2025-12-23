@@ -67,6 +67,18 @@ namespace Lynx
         }
     }
 
+    void AssetManager::UnloadAsset(AssetHandle handle)
+    {
+        // TODO: Are there possible bugs with this?
+        // I mean if another object holds a shared_ptr to an Asset and we unload it here, it still has a reference.
+        // But the AssetManager doesn't know about that. So if we request this asset again, the AssetManager creates a new one instead...
+        if (m_LoadedAssets.contains(handle))
+        {
+            LX_CORE_INFO("AssetManager: Unloading asset {0}", handle);
+            m_LoadedAssets.erase(handle);
+        }
+    }
+
     std::shared_ptr<Asset> AssetManager::GetAsset(const std::filesystem::path& path)
     {
         if (!std::filesystem::exists(path))
@@ -140,9 +152,16 @@ namespace Lynx
         const auto& changedHandles = m_AssetRegistry->GetChangedAssets();
         for (AssetHandle handle : changedHandles)
         {
-            if (IsAssetLoaded(handle))
+            // If not in asset registry anymore, it was removed.
+            if (!m_AssetRegistry->Contains(handle))
             {
-                LX_CORE_INFO("Hot Reloading Asset: {0}", (uint64_t)handle);
+                if (IsAssetLoaded(handle))
+                {
+                    UnloadAsset(handle);
+                }
+            }
+            else if (IsAssetLoaded(handle))
+            {
                 ReloadAsset(handle);
             }
         }

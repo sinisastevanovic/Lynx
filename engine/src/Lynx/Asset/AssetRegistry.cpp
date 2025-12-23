@@ -1,5 +1,6 @@
 #include "AssetRegistry.h"
 
+#include <set>
 #include <nlohmann/json.hpp>
 
 
@@ -20,38 +21,150 @@ namespace Lynx
         LX_CORE_INFO("AssetRegistry: Scanning Project Assets at {0}", projectAssetDir.string());
         ScanDirectory(projectAssetDir);
 
-        m_FileWatcher = std::make_unique<FileWatcher>(projectAssetDir, [this](const std::filesystem::path& path)
+        // TODO: We only need this in editor, right? 
+        m_FileWatcher = std::make_unique<FileWatcher>(projectAssetDir, [this](FileAction action, const std::filesystem::path& path,
+            const std::filesystem::path& newPath)
         {
             std::lock_guard<std::mutex> lock(m_Mutex);
-            if (is_directory(path))
-                return;
-            m_ChangedFiles.push_back(path);
+            m_FileEvents.push_back({action, path, newPath});
         });
     }
     
     void AssetRegistry::Update()
     {
-        std::vector<std::filesystem::path> pathsToProcess;
+        std::vector<FileEvent> eventsToProcess;
         {
             std::lock_guard<std::mutex> lock(m_Mutex);
-            pathsToProcess = std::move(m_ChangedFiles);
+            eventsToProcess = std::move(m_FileEvents);
         }
 
         m_ProcessedChangedAssets.clear();
 
-        for (const auto& path : pathsToProcess)
+        std::vector<FileEvent> filteredEvents;
+        std::set<std::filesystem::path> addedFiles;
+        std::set<std::filesystem::path> modifiedFiles;
+        std::set<std::filesystem::path> renamedFiles;
+        for (const auto& event : eventsToProcess)
         {
-            if (path.extension() == ".lxmeta")
+            if (is_directory(event.Path))
+                continue;
+            // Ignore temp files
+            if (event.Path.extension() == ".tmp" || event.Path.extension() == ".bak")
+                continue;
+            if (event.Action == FileAction::Renamed && (event.NewPath.extension() == "tmp" || event.NewPath.extension() == ".bak"))
+                continue;
+            
+            if (event.Path.extension() == ".lxmeta")
                 continue;
 
-            if (Contains(path))
+            switch (event.Action)
             {
-                AssetHandle handle = m_PathToHandle[path];
-                m_ProcessedChangedAssets.push_back(handle);
+                case FileAction::Added:
+                {
+                    //LX_CORE_INFO("FileAction: File added ({0})", event.Path.string());
+                    filteredEvents.push_back(event);
+                    addedFiles.insert(event.Path);
+                    break;
+                }
+                case FileAction::Removed:
+                {
+                    // If we get a removed event, but the file exists right now, it was likely an atomic save (remove+rename)
+                    // Just handle as a modification for now.
+                    if (std::filesystem::exists(event.Path))
+                    {
+                        if (modifiedFiles.contains(event.Path))
+                            continue;
+                        filteredEvents.push_back({FileAction::Modified, event.Path});
+                        modifiedFiles.insert(event.Path);
+                    }
+                    else
+                    {
+                        filteredEvents.push_back(event);
+                    }
+                    break;
+                }
+                case FileAction::Modified:
+                {
+                    if (addedFiles.contains(event.Path))
+                        continue;
+
+                    if (modifiedFiles.contains(event.Path))
+                        continue;
+
+                    if (Contains(event.Path))
+                    {
+                        filteredEvents.push_back(event);
+                        modifiedFiles.insert(event.Path);
+                    }
+                    else
+                    {
+                        filteredEvents.push_back({ FileAction::Added, event.Path });
+                        addedFiles.insert(event.Path);
+                    }
+                    
+                    break;
+                }
+                case FileAction::Renamed:
+                {
+                    bool oldWasTmp = (event.Path.extension() == ".tmp");
+                    if (oldWasTmp)
+                    {
+                        if (Contains(event.Path))
+                        {
+                            if (modifiedFiles.contains(event.Path))
+                                continue;
+                            filteredEvents.push_back({ FileAction::Modified, event.Path });
+                            modifiedFiles.insert(event.Path);
+                        }
+                        else
+                        {
+                            if (addedFiles.contains(event.Path))
+                                continue;
+                            filteredEvents.push_back({ FileAction::Added, event.Path });
+                            addedFiles.insert(event.Path);
+                        }
+                    }
+                    else
+                    {
+                        if (renamedFiles.contains(event.Path))
+                            continue;
+                        filteredEvents.push_back(event);
+                        renamedFiles.insert(event.Path);
+                    }
+                    break;
+                }
             }
-            else
+        }
+
+        // TODO: Maybe add these to a queue and process later? 
+        for (const auto& event : filteredEvents)
+        {
+            switch (event.Action)
             {
-                ImportAsset(path);
+                case FileAction::Added:
+                {
+                    LX_CORE_TRACE("FileAction: File added ({0})", event.Path.string());
+                    ImportAsset(event.Path);
+                    break;
+                }
+                case FileAction::Removed:
+                {
+                    LX_CORE_TRACE("FileAction: File removed ({0})", event.Path.string());
+                    OnAssetRemoved(event.Path);
+                    break;
+                }
+                case FileAction::Modified:
+                {
+                    LX_CORE_TRACE("FileAction: File modified ({0})", event.Path.string());
+                    m_ProcessedChangedAssets.push_back(m_PathToHandle[event.Path]);
+                    break;
+                }
+                case FileAction::Renamed:
+                {
+                    LX_CORE_TRACE("FileAction: File renamed (old: {0}   new: {1})", event.Path.string(), event.NewPath.string());
+                    OnAssetRenamed(event.Path, event.NewPath);
+                    break;
+                }
             }
         }
     }
@@ -129,6 +242,52 @@ namespace Lynx
             metadata.Type = static_cast<AssetType>(j["Type"]);
 
         return metadata;
+    }
+
+    void AssetRegistry::OnAssetRemoved(const std::filesystem::path& assetPath)
+    {
+        if (Contains(assetPath))
+        {
+            AssetHandle handle = m_PathToHandle[assetPath];
+            m_AssetMetadata.erase(handle);
+            m_PathToHandle.erase(assetPath);
+
+            std::filesystem::path metaPath = assetPath.string() + ".lxmeta";
+            if (std::filesystem::exists(metaPath))
+            {
+                std::filesystem::remove(metaPath);
+            }
+            
+            m_ProcessedChangedAssets.push_back(handle);
+        }
+    }
+
+    void AssetRegistry::OnAssetRenamed(const std::filesystem::path& oldPath, const std::filesystem::path& newPath)
+    {
+        if (!Contains(oldPath))
+            return;
+
+        AssetHandle handle = m_PathToHandle[oldPath];
+        AssetMetadata& metadata = m_AssetMetadata[handle];
+
+        m_PathToHandle.erase(oldPath);
+        metadata.FilePath = newPath;
+        m_PathToHandle[newPath] = handle;
+
+        std::filesystem::path oldMetaPath = oldPath.string() + ".lxmeta";
+        std::filesystem::path newMetaPath = newPath.string() + ".lxmeta";
+
+        if (std::filesystem::exists(oldMetaPath) && !std::filesystem::exists(newMetaPath))
+        {
+            try
+            {
+                std::filesystem::rename(oldMetaPath, newMetaPath);
+            }
+            catch (const std::exception& e)
+            {
+                LX_CORE_ERROR("AssetRegistry: Failed to rename meta file: {0}", e.what());
+            }
+        }
     }
 
     const AssetMetadata& AssetRegistry::Get(AssetHandle handle) const
