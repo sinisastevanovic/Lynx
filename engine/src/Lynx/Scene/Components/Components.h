@@ -2,7 +2,6 @@
 
 #include "Lynx/Core.h"
 #include "Lynx/Asset/Asset.h"
-#include "Lynx/UUID.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -17,13 +16,7 @@
 
 namespace Lynx
 {
-    struct IDComponent
-    {
-        UUID ID;
-        IDComponent() = default;
-        IDComponent(const UUID& id) : ID(id) {}
-        IDComponent(const IDComponent&) = default;
-    };
+    
 
     struct TagComponent
     {
@@ -51,6 +44,17 @@ namespace Lynx
             return glm::translate(glm::mat4(1.0f), Translation)
                 * rotation
                 * glm::scale(glm::mat4(1.0f), Scale);
+        }
+
+        glm::vec3 GetRotationDegrees() const
+        {
+            return glm::degrees(GetRotationEuler());
+        }
+
+        void SetRotionDegrees(const glm::vec3& rotDegrees)
+        {
+            glm::vec3 rotRadians = glm::radians(rotDegrees);
+            Rotation = glm::quat(rotRadians);
         }
 
         glm::vec3 GetRotationEuler() const

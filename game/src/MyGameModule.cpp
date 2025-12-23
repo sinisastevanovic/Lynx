@@ -20,6 +20,7 @@
 
 #include "Components/TestNativeScript.h"
 #include "Lynx/ScriptRegistry.h"
+#include "Lynx/Scene/Components/LuaScriptComponent.h"
 #include "Lynx/Scene/Components/NativeScriptComponent.h"
 
 void MyGame::RegisterScripts()
@@ -103,7 +104,8 @@ void MyGame::OnStart()
         auto& meshComp = player.AddComponent<Lynx::MeshComponent>();
         meshComp.Mesh = playerMesh;
 
-        player.AddComponent<Lynx::NativeScriptComponent>().Bind<TestNativeScript>();
+        //player.AddComponent<Lynx::NativeScriptComponent>().Bind<TestNativeScript>();
+        player.AddComponent<Lynx::LuaScriptComponent>().ScriptPath = "assets/Scripts/test.lua";
     }
 
     {

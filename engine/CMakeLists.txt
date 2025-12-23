@@ -13,9 +13,12 @@ target_compile_definitions(engine PRIVATE
     "IMGUI_API=__declspec(dllexport)"
 )
 
+find_package(Lua REQUIRED)
+
 target_include_directories(engine PRIVATE
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
+    ${LUA_INCLUDE_DIR}
 )
 
 target_sources(engine PRIVATE
@@ -77,4 +80,6 @@ target_link_libraries(engine PUBLIC
     Jolt::Jolt
 
     nlohmann_json::nlohmann_json
+
+    ${LUA_LIBRARIES}
 )

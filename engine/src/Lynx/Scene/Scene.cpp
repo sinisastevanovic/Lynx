@@ -9,7 +9,9 @@
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 
+#include "Components/LuaScriptComponent.h"
 #include "Components/NativeScriptComponent.h"
+#include "Lynx/Scripting/ScriptEngine.h"
 
 namespace Lynx
 {
@@ -63,6 +65,8 @@ namespace Lynx
 
     void Scene::OnRuntimeStart()
     {
+        Engine::Get().GetScriptEngine()->OnRuntimeStart(this);
+    
         auto& physicsSystem = Engine::Get().GetPhysicsSystem();
         JPH::BodyInterface& bodyInterface = physicsSystem.GetBodyInterface();
 
@@ -137,10 +141,19 @@ namespace Lynx
                 nsc.Instance->OnCreate();
             }
         }
+
+        auto luaView = m_Registry.view<LuaScriptComponent>();
+        for (auto entity : luaView)
+        {
+            Entity e = { entity, this };
+            Engine::Get().GetScriptEngine()->OnCreateEntity(e);
+        }
     }
 
     void Scene::OnRuntimeStop()
     {
+        Engine::Get().GetScriptEngine()->OnRuntimeStop();
+
         auto nscView = m_Registry.view<NativeScriptComponent>();
         for (auto entity : nscView)
         {
@@ -170,6 +183,13 @@ namespace Lynx
 
     void Scene::OnUpdateRuntime(float deltaTime)
     {
+        auto luaView = m_Registry.view<LuaScriptComponent>();
+        for (auto entity : luaView)
+        {
+            Entity e = { entity, this };
+            Engine::Get().GetScriptEngine()->OnUpdateEntity(e, deltaTime);
+        }
+        
         auto nscView = m_Registry.view<NativeScriptComponent>();
         for (auto entity : nscView)
         {

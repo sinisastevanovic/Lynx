@@ -22,6 +22,7 @@
 #include "ImGui/EditorUIHelpers.h"
 #include "Scene/Components/NativeScriptComponent.h"
 
+
 namespace Lynx
 {
     Engine* Engine::s_Instance = nullptr;
@@ -55,12 +56,14 @@ namespace Lynx
 
         ImGui_ImplGlfw_InitForVulkan(m_Window->GetNativeWindow(), true);
         m_Renderer->InitImGui();
-        
-        m_Scene = std::make_shared<Scene>();
+
+        m_ScriptEngine = std::make_unique<ScriptEngine>();
 
         m_AssetRegistry = std::make_unique<AssetRegistry>();
         m_AssetRegistry->LoadRegistry("assets", "engine/resources");
         m_AssetManager = std::make_unique<AssetManager>(m_Renderer->GetDeviceHandle(), m_AssetRegistry.get());
+        
+        m_Scene = std::make_shared<Scene>();
         
         m_Window->SetVSync(true);
 
@@ -209,6 +212,12 @@ namespace Lynx
     void Engine::Shutdown()
     {
         LX_CORE_INFO("Shutting down...");
+        if (m_SceneState == SceneState::Play && m_Scene)
+            m_Scene->OnRuntimeStop();
+
+        m_Scene.reset();
+        
+        m_ScriptEngine.reset();
         m_AssetManager.reset();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();

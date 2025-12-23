@@ -6,6 +6,7 @@
         "glfw3",
         "glm",
         "spdlog",
+        "lua",
         "sol2",
         "joltphysics",
         "shaderc",

@@ -21,6 +21,8 @@ namespace Lynx
 
     void EditorLayer::OnDetach()
     {
+        m_EditorScene.reset();
+        m_RuntimeScene.reset();
     }
 
     void EditorLayer::DrawMenuBar()

@@ -6,6 +6,7 @@
 #include "Physics/PhysicsSystem.h"
 #include "Event/Event.h"
 #include "Lynx/Renderer/EditorCamera.h"
+#include "Scripting/ScriptEngine.h"
 
 namespace Lynx
 {
@@ -13,6 +14,7 @@ namespace Lynx
     class EditorCamera;
     class Renderer;
     class Scene;
+    class ScriptEngine;
 
     enum class SceneState
     {
@@ -34,6 +36,7 @@ namespace Lynx
         AssetRegistry& GetAssetRegistry() { return *m_AssetRegistry; }
         PhysicsSystem& GetPhysicsSystem() { return *m_PhysicsSystem; }
         Renderer& GetRenderer() { return *m_Renderer; }
+        ScriptEngine* GetScriptEngine() { return m_ScriptEngine.get(); }
         EditorCamera& GetEditorCamera() { return m_EditorCamera; }
         
         std::shared_ptr<Scene> GetActiveScene() const { return m_Scene; }
@@ -59,6 +62,7 @@ namespace Lynx
         std::unique_ptr<AssetManager> m_AssetManager;
         std::unique_ptr<AssetRegistry> m_AssetRegistry;
         std::unique_ptr<PhysicsSystem> m_PhysicsSystem;
+        std::unique_ptr<ScriptEngine> m_ScriptEngine;
         std::shared_ptr<Scene> m_Scene;
         
         EditorCamera m_EditorCamera;

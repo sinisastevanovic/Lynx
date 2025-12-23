@@ -3,6 +3,7 @@
 #include "Scene.h"
 #include "entt/entt.hpp"
 #include "Lynx/Log.h"
+#include "Lynx/Scene/Components/IDComponent.h"
 
 namespace Lynx
 {
@@ -51,6 +52,11 @@ namespace Lynx
                 return;
             }
             m_Scene->m_Registry.remove<T>(m_EntityHandle);
+        }
+
+        UUID GetUUID()
+        {
+            return GetComponent<IDComponent>().ID;
         }
 
         operator bool() const { return m_EntityHandle != entt::null; }
