@@ -43,6 +43,41 @@ namespace Lynx
             LX_CORE_TRACE("Vulkan Validation Layer: {0}", pCallbackData->pMessage);
         return VK_FALSE;
     }
+
+    namespace Helpers
+    {
+        static nvrhi::Format TextureFormatToNvrhi(TextureFormat format, bool sRGB)
+        {
+            switch (format)
+            {
+                case TextureFormat::RGBA8:
+                    return sRGB ? nvrhi::Format::SRGBA8_UNORM : nvrhi::Format::RGBA8_UNORM;
+                case TextureFormat::RG16F:
+                    return nvrhi::Format::RG16_FLOAT;
+                case TextureFormat::RG32F:
+                    return nvrhi::Format::RG32_FLOAT;
+                case TextureFormat::R32I:
+                    return sRGB ? nvrhi::Format::R32_SINT : nvrhi::Format::R32_UINT;
+                case TextureFormat::Depth32:
+                    return nvrhi::Format::D32;
+                case TextureFormat::Depth24Stencil8:
+                    return nvrhi::Format::D24S8;
+            }
+
+            return nvrhi::Format::UNKNOWN;
+        }
+
+        static nvrhi::SamplerAddressMode WrapModeToNvrhi(TextureWrap wrap)
+        {
+            switch (wrap)
+            {
+                case TextureWrap::Repeat: return nvrhi::SamplerAddressMode::Repeat;
+                case TextureWrap::Clamp: return nvrhi::SamplerAddressMode::Clamp;
+                case TextureWrap::Mirror: return nvrhi::SamplerAddressMode::Mirror;
+            }
+            return nvrhi::SamplerAddressMode::Repeat;
+        }
+    }
     
     struct Renderer::VulkanState
     {
@@ -97,10 +132,11 @@ namespace Lynx
 
         m_StageBuffer = nullptr;
 
-        m_Sampler = nullptr;
+        m_SamplerCache.clear();
         m_BindingLayout = nullptr;
         m_DefaultTexture = nullptr;
         m_BindingSet = nullptr;
+        m_FrameBindingSets.clear();
         m_ConstantBuffer = nullptr;
         m_SwapchainDepth = nullptr;
         m_Pipeline = nullptr;
@@ -137,20 +173,83 @@ namespace Lynx
         m_VulkanState->Instance.destroy();
     }
 
+    nvrhi::SamplerHandle Renderer::GetSampler(const SamplerSettings& settings)
+    {
+        auto it = m_SamplerCache.find(settings);
+        if (it != m_SamplerCache.end())
+            return it->second;
+
+        // Create a new Sampler
+        auto desc = nvrhi::SamplerDesc();
+
+        nvrhi::SamplerAddressMode addressMode = Helpers::WrapModeToNvrhi(settings.WrapMode);
+        desc.setAddressU(addressMode).setAddressV(addressMode).setAddressW(addressMode);
+
+        if (settings.FilterMode == TextureFilter::Linear)
+            desc.setMinFilter(false).setMagFilter(false).setMipFilter(false);
+        else
+            desc.setMinFilter(true).setMagFilter(true).setMipFilter(false); // TODO: mipFilter
+
+        nvrhi::SamplerHandle handle = m_NvrhiDevice->createSampler(desc);
+        m_SamplerCache[settings] = handle;
+        return handle;
+    }
+
+    nvrhi::TextureHandle Renderer::CreateTexture(const TextureSpecification& specification, unsigned char* data)
+    {
+        auto desc = nvrhi::TextureDesc()
+            .setDimension(nvrhi::TextureDimension::Texture2D)
+            .setWidth(specification.Width)
+            .setHeight(specification.Height)
+            .setFormat(Helpers::TextureFormatToNvrhi(specification.Format, specification.IsSRGB))
+            .setDebugName(specification.DebugName)
+            .enableAutomaticStateTracking(nvrhi::ResourceStates::ShaderResource);
+            //.setMipLevels(specification.GenerateMips ? (uint32_t)(floor(log2(std::max(specification.Width, specification.Height))) + 1) : 1);
+            //.setMipLevels(1);
+
+        auto result = m_NvrhiDevice->createTexture(desc);
+        if (!result)
+        {
+            LX_CORE_ERROR("Failed to create NVRHI texture from data");
+            return nullptr;
+        }
+
+        if (data)
+        {
+            uint32_t bytesPerPixel = 4; // TODO: Get this from format
+
+            size_t rowPitch = specification.Width * bytesPerPixel;
+            size_t depthPitch = 0;
+
+            // TODO: Batch this!
+            // TODO: Generate mips!
+            auto cmdList = m_NvrhiDevice->createCommandList();
+            cmdList->open();
+            cmdList->writeTexture(result, 0, 0, data, rowPitch, depthPitch);
+            cmdList->close();
+            m_NvrhiDevice->executeCommandList(cmdList);
+        }
+        
+        return result;
+    }
+
     void Renderer::SetTexture(std::shared_ptr<Texture> texture)
     {
         nvrhi::TextureHandle handle = m_DefaultTexture;
+        SamplerSettings samplerSettings;
         if (texture && texture->GetTextureHandle())
         {
             handle = texture->GetTextureHandle();
+            samplerSettings = texture->GetSamplerSettings();
         }
 
         auto bindingSetDesc = nvrhi::BindingSetDesc()
             .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer))
             .addItem(nvrhi::BindingSetItem::Texture_SRV(1, handle))
-            .addItem(nvrhi::BindingSetItem::Sampler(2, m_Sampler));
+            .addItem(nvrhi::BindingSetItem::Sampler(2, GetSampler(samplerSettings)));
 
         m_BindingSet = m_NvrhiDevice->createBindingSet(bindingSetDesc, m_BindingLayout);
+        m_FrameBindingSets.push_back(m_BindingSet);
     }
 
     bool Renderer::InitImGui()
@@ -594,13 +693,6 @@ namespace Lynx
 
         m_VertexShader = m_NvrhiDevice->createShader(nvrhi::ShaderDesc(nvrhi::ShaderType::Vertex), vsSpirv.data(), vsSpirv.size() * 4);
         m_FragmentShader = m_NvrhiDevice->createShader(nvrhi::ShaderDesc(nvrhi::ShaderType::Pixel), fsSpirv.data(), fsSpirv.size() * 4);
-
-        auto samplerDesc = nvrhi::SamplerDesc()
-            .setAddressU(nvrhi::SamplerAddressMode::Repeat)
-            .setAddressV(nvrhi::SamplerAddressMode::Repeat)
-            .setMinFilter(true)
-            .setMagFilter(true);
-        m_Sampler = m_NvrhiDevice->createSampler(samplerDesc);
         
         auto layoutDesc = nvrhi::BindingLayoutDesc()
         .setVisibility(nvrhi::ShaderType::All)
@@ -620,10 +712,14 @@ namespace Lynx
             LX_CORE_ERROR("Failed to create Binding Layout!");
         }
 
+        SamplerSettings defaultSamplerSettings;
+        defaultSamplerSettings.FilterMode = TextureFilter::Linear;
+        defaultSamplerSettings.WrapMode = TextureWrap::Repeat;
+
         nvrhi::BindingSetDesc bindingSetDesc;
         bindingSetDesc.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
         bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(1, m_DefaultTexture));
-        bindingSetDesc.addItem(nvrhi::BindingSetItem::Sampler(2, m_Sampler));
+        bindingSetDesc.addItem(nvrhi::BindingSetItem::Sampler(2, GetSampler(defaultSamplerSettings)));
         m_BindingSet = m_NvrhiDevice->createBindingSet(bindingSetDesc, m_BindingLayout);
         
         if (!m_BindingSet)
@@ -707,6 +803,7 @@ namespace Lynx
 
         m_CurrentImageIndex = result.value;
 
+        m_FrameBindingSets.clear();
         // 2. Start recording
         m_CommandList->open();
         
@@ -845,7 +942,35 @@ namespace Lynx
         
         m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
-    
+
+    std::pair<nvrhi::BufferHandle, nvrhi::BufferHandle> Renderer::CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices)
+    {
+        auto vbDesc = nvrhi::BufferDesc()
+           .setByteSize(vertices.size() * sizeof(Vertex))
+           .setIsVertexBuffer(true)
+           .setDebugName("MeshVertexBuffer")
+           .enableAutomaticStateTracking(nvrhi::ResourceStates::CopyDest);
+        nvrhi::BufferHandle vb = m_NvrhiDevice->createBuffer(vbDesc);
+
+        auto ibDesc = nvrhi::BufferDesc()
+            .setByteSize(indices.size() * sizeof(uint32_t))
+            .setIsIndexBuffer(true)
+            .setDebugName("MeshIndexBuffer")
+            .enableAutomaticStateTracking(nvrhi::ResourceStates::CopyDest);
+        nvrhi::BufferHandle ib = m_NvrhiDevice->createBuffer(ibDesc);
+
+        // TODO: We use a temporary command list here to immediately upload the buffers,
+        // in the future, we should maybe batch these things? 
+        nvrhi::CommandListHandle commandList = m_NvrhiDevice->createCommandList();
+        commandList->open();
+        commandList->writeBuffer(vb, vertices.data(), vbDesc.byteSize);
+        commandList->writeBuffer(ib, indices.data(), ibDesc.byteSize);
+        commandList->close();
+        m_NvrhiDevice->executeCommandList(commandList);
+
+        return { vb, ib };
+    }
+
     void Renderer::OnResize(uint32_t width, uint32_t height)
     {
         if (width == 0 || height == 0) return;

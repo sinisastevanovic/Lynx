@@ -1,4 +1,5 @@
 #include "PlatformUtils.h"
+#define NOMINMAX
 #include <windows.h>
 #include <commdlg.h>
 #include <GLFW/glfw3.h>

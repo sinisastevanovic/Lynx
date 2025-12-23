@@ -16,7 +16,7 @@
 
 #include "Lynx/Log.h"
 
-#ifdef LX_PLATFORM_WINDOWS
+//#ifdef LX_PLATFORM_WINDOWS
     #define NOMINMAX
     #include <Windows.h>
-#endif
+//#endif

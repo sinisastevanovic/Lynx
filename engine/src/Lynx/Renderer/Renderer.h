@@ -5,6 +5,7 @@
 
 #include "Lynx/Asset/Texture.h"
 #include "Lynx/Asset/StaticMesh.h"
+#include "Lynx/Asset/TextureSpecification.h"
 
 struct GLFWwindow;
 
@@ -42,11 +43,14 @@ namespace Lynx
 
         void BeginScene(glm::mat4 viewProjection);
         void EndScene();
-        
+
+        std::pair<nvrhi::BufferHandle, nvrhi::BufferHandle> CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices);
         void SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, const glm::vec4& color = glm::vec4(1.0f), int entityID = -1);
 
         nvrhi::DeviceHandle GetDeviceHandle() const { return m_NvrhiDevice; }
 
+        nvrhi::SamplerHandle GetSampler(const SamplerSettings& settings);
+        nvrhi::TextureHandle CreateTexture(const TextureSpecification& specification, unsigned char* data);
         void SetTexture(std::shared_ptr<Texture> texture);
 
         bool InitImGui();
@@ -75,7 +79,6 @@ namespace Lynx
         nvrhi::GraphicsPipelineHandle m_Pipeline;
         nvrhi::BufferHandle m_ConstantBuffer;
         nvrhi::BindingSetHandle m_BindingSet;
-        nvrhi::SamplerHandle m_Sampler;
         nvrhi::BindingLayoutHandle m_BindingLayout;
         nvrhi::TextureHandle m_DefaultTexture;
         nvrhi::StagingTextureHandle m_StageBuffer;
@@ -92,6 +95,9 @@ namespace Lynx
 
         static const int MAX_FRAMES_IN_FLIGHT = 2;
         uint32_t m_CurrentFrame = 0;
+
+        std::unordered_map<SamplerSettings, nvrhi::SamplerHandle> m_SamplerCache;
+        std::vector<nvrhi::BindingSetHandle> m_FrameBindingSets;
     };
 }
 

@@ -2,6 +2,8 @@
 
 #include <nlohmann/json.hpp>
 
+
+
 namespace Lynx
 {
     void AssetRegistry::LoadRegistry(const std::filesystem::path& projectAssetDir, const std::filesystem::path& engineResourceDir)
@@ -17,6 +19,41 @@ namespace Lynx
         
         LX_CORE_INFO("AssetRegistry: Scanning Project Assets at {0}", projectAssetDir.string());
         ScanDirectory(projectAssetDir);
+
+        m_FileWatcher = std::make_unique<FileWatcher>(projectAssetDir, [this](const std::filesystem::path& path)
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            if (is_directory(path))
+                return;
+            m_ChangedFiles.push_back(path);
+        });
+    }
+    
+    void AssetRegistry::Update()
+    {
+        std::vector<std::filesystem::path> pathsToProcess;
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            pathsToProcess = std::move(m_ChangedFiles);
+        }
+
+        m_ProcessedChangedAssets.clear();
+
+        for (const auto& path : pathsToProcess)
+        {
+            if (path.extension() == ".lxmeta")
+                continue;
+
+            if (Contains(path))
+            {
+                AssetHandle handle = m_PathToHandle[path];
+                m_ProcessedChangedAssets.push_back(handle);
+            }
+            else
+            {
+                ImportAsset(path);
+            }
+        }
     }
 
     void AssetRegistry::ScanDirectory(const std::filesystem::path& directory)
@@ -120,11 +157,13 @@ namespace Lynx
 
     AssetHandle AssetRegistry::ImportAsset(const std::filesystem::path& assetPath)
     {
-        ProcessFile(assetPath);
-        return m_PathToHandle[assetPath];
+        if (AssetUtils::IsAssetExtensionSupported(assetPath))
+        {
+            ProcessFile(assetPath);
+            return m_PathToHandle[assetPath];
+        }
+        return AssetHandle::Null();
     }
 
-    
-
-    
+ 
 }

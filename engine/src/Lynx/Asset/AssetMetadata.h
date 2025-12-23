@@ -9,7 +9,7 @@ namespace  Lynx
         AssetHandle Handle = AssetHandle::Null();
         AssetType Type = AssetType::None;
         std::filesystem::path FilePath;
-        bool IsLoaded = false;
+        bool IsLoaded = false; // TODO: Use this or remove
 
         operator bool() const { return Handle != AssetHandle::Null(); }
     };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AssetMetadata.h"
+#include "Lynx/Utils/FileWatcher.h"
 
 namespace Lynx
 {
@@ -19,6 +20,10 @@ namespace Lynx
 
         AssetHandle ImportAsset(const std::filesystem::path& assetPath);
 
+        const std::vector<AssetHandle>& GetChangedAssets() const { return m_ProcessedChangedAssets; }
+
+        void Update();
+        
     private:
         void ScanDirectory(const std::filesystem::path& directory);
         void ProcessFile(const std::filesystem::path& path);
@@ -30,6 +35,12 @@ namespace Lynx
         std::map<std::filesystem::path, AssetHandle> m_PathToHandle;
 
         AssetMetadata m_NullMetadata;
+
+        // FileWatcher
+        std::unique_ptr<FileWatcher> m_FileWatcher;
+        std::vector<std::filesystem::path> m_ChangedFiles;
+        std::vector<AssetHandle> m_ProcessedChangedAssets;
+        std::mutex m_Mutex;
     };
 }
 

@@ -89,6 +89,8 @@ namespace Lynx
             
             m_Window->OnUpdate();
 
+            m_AssetManager->Update();
+
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
 

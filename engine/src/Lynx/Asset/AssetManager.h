@@ -50,12 +50,16 @@ namespace Lynx
         std::shared_ptr<Texture> GetWhiteTexture();
         std::shared_ptr<Texture> GetErrorTexture();
         std::shared_ptr<StaticMesh> GetDefaultCube();
+
+        void Update();
   
     private:
         std::shared_ptr<Asset> LoadAsset(const AssetMetadata& metadata);
 
         template<typename T>
         std::shared_ptr<T> GetErrorAsset() { return nullptr; }
+
+        void ReloadAsset(AssetHandle handle);
   
     private:
         nvrhi::DeviceHandle m_Device;

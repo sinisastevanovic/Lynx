@@ -9,13 +9,40 @@
 
 namespace Lynx
 {
-    StaticMesh::StaticMesh(nvrhi::DeviceHandle device, const std::string& filepath)
+    StaticMesh::StaticMesh(const std::string& filepath)
+        : m_FilePath(filepath)
+    {
+        LoadAndUpload();
+    }
+
+    StaticMesh::StaticMesh(std::vector<Vertex> vertices, std::vector<uint32_t> indices)
+    {
+        auto tex = Engine::Get().GetAssetManager().GetDefaultTexture();
+        SetTexture(tex->GetHandle());
+        auto [vb, ib] = Engine::Get().GetRenderer().CreateMeshBuffers(vertices, indices);
+        m_VertexBuffer = vb;
+        m_IndexBuffer = ib;
+        m_IndexCount = (uint32_t)indices.size();
+    }
+
+    bool StaticMesh::Reload()
+    {
+        if (m_FilePath.empty())
+            return false;
+
+        SetTexture(AssetHandle::Null());
+        LoadAndUpload();
+
+        return true;
+    }
+
+    void StaticMesh::LoadAndUpload()
     {
         tinygltf::Model model;
         tinygltf::TinyGLTF loader;
         std::string err, warn;
 
-        bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, filepath);
+        bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, m_FilePath);
         if (!ret)
         {
             LX_CORE_ERROR("Failed to load glTF: {0}", err);
@@ -85,47 +112,14 @@ namespace Lynx
         if (!model.textures.empty())
         {
             int imageIndex = model.textures[0].source;
-            std::string texturePath = std::filesystem::path(filepath).parent_path().string() + "/" + model.images[imageIndex].uri;
-            auto tex = Engine::Get().GetAssetManager().GetAsset<Texture>(texturePath);
-            SetTexture(tex->GetHandle());
+            std::string texturePath = std::filesystem::path(m_FilePath).parent_path().string() + "/" + model.images[imageIndex].uri;
+            SetTexture(Engine::Get().GetAssetManager().GetAssetHandle(texturePath));
         }
 
-        UploadBuffers(device, vertices, indices);  
-    }
-
-    StaticMesh::StaticMesh(nvrhi::DeviceHandle device, std::vector<Vertex> vertices, std::vector<uint32_t> indices)
-    {
-        auto tex = Engine::Get().GetAssetManager().GetDefaultTexture();
-        SetTexture(tex->GetHandle());
-        UploadBuffers(device, vertices, indices);   
-    }
-
-    void StaticMesh::UploadBuffers(nvrhi::DeviceHandle device, const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices)
-    {
+        auto [vb, ib] = Engine::Get().GetRenderer().CreateMeshBuffers(vertices, indices);
+        m_VertexBuffer = vb;
+        m_IndexBuffer = ib;
         m_IndexCount = (uint32_t)indices.size();
-        
-        auto vbDesc = nvrhi::BufferDesc()
-            .setByteSize(vertices.size() * sizeof(Vertex))
-            .setIsVertexBuffer(true)
-            .setDebugName("MeshVertexBuffer")
-            .enableAutomaticStateTracking(nvrhi::ResourceStates::CopyDest);
-        m_VertexBuffer = device->createBuffer(vbDesc);
-
-        auto ibDesc = nvrhi::BufferDesc()
-            .setByteSize(indices.size() * sizeof(uint32_t))
-            .setIsIndexBuffer(true)
-            .setDebugName("MeshIndexBuffer")
-            .enableAutomaticStateTracking(nvrhi::ResourceStates::CopyDest);
-        m_IndexBuffer = device->createBuffer(ibDesc);
-
-        // TODO: We use a temporary command list here to immediately upload the buffers,
-        // in the future, we should maybe batch these things? 
-        nvrhi::CommandListHandle commandList = device->createCommandList();
-        commandList->open();
-        commandList->writeBuffer(m_VertexBuffer, vertices.data(), vbDesc.byteSize);
-        commandList->writeBuffer(m_IndexBuffer, indices.data(), ibDesc.byteSize);
-        commandList->close();
-        device->executeCommandList(commandList);
     }
 }
 
