@@ -7,12 +7,27 @@
 
 namespace Lynx
 {
-    // TODO: Weird class, input state should be more sophisticated and passing GLFW keycodes sucks.
+    struct AxisBinding
+    {
+        KeyCode Positive = KeyCode::Unknown;
+        KeyCode Negative = KeyCode::Unknown;
+    };
+    
     class LX_API Input
     {
     public:
+        // Runtime input
+        static void BindAction(const std::string& name, KeyCode key);
+        static void BindAxis(const std::string& name, KeyCode posKey, KeyCode negKey);
+
+        static bool GetButton(const std::string& name);
+        static float GetAxis(const std::string& name);
+
+        static std::string GetActionFromKey(KeyCode key);
+
+    protected:
+        // System input
         static bool IsKeyPressed(KeyCode keycode);
-        static bool IsMouseButtonPressed(MouseCode button);
         static glm::vec2 GetMousePosition();
         static float GetMouseX();
         static float GetMouseY();
@@ -21,5 +36,14 @@ namespace Lynx
         friend class Window;
         static void SetKeyState(int keycode, bool pressed);
         static void SetMousePosition(double x, double y);
+
+        static std::unordered_map<std::string, std::vector<KeyCode>> s_ActionMappings;
+        static std::unordered_map<std::string, std::vector<AxisBinding>> s_AxisBindings;
+
+        friend class Engine;
+        friend class EditorLayer;
+        friend class EditorCamera;
+        friend class Window;
+        friend class Viewport;
     };
 }

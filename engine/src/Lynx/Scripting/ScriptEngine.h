@@ -26,6 +26,8 @@ namespace Lynx
         void ReloadScript(AssetHandle handle);
 
         void LoadScript(Entity entity);
+
+        void OnActionEvent(const std::string& action, bool pressed);
     private:
 
         struct ScriptEngineData;

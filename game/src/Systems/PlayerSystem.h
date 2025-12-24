@@ -22,10 +22,12 @@ public:
 
             glm::vec3 velocity = { 0.0f, 0.0f, 0.0f };
 
-            if (Lynx::Input::IsKeyPressed(Lynx::KeyCode::W)) velocity.z -= 1.0f;
+            velocity.z += Lynx::Input::GetAxis("MoveUpDown");
+            velocity.x += Lynx::Input::GetAxis("MoveLeftRight");
+            /*if (Lynx::Input::IsKeyPressed(Lynx::KeyCode::W)) velocity.z -= 1.0f;
             if (Lynx::Input::IsKeyPressed(Lynx::KeyCode::S)) velocity.z += 1.0f;
             if (Lynx::Input::IsKeyPressed(Lynx::KeyCode::A)) velocity.x -= 1.0f;
-            if (Lynx::Input::IsKeyPressed(Lynx::KeyCode::D)) velocity.x += 1.0f;
+            if (Lynx::Input::IsKeyPressed(Lynx::KeyCode::D)) velocity.x += 1.0f;*/
 
             if (glm::length(velocity) > 0.0f)
             {

@@ -5,6 +5,7 @@ namespace Lynx
     enum class KeyCode
     {
         // From glfw3.h
+    		Unknown				= 0,
 			Space               = 32,
 			Apostrophe          = 39, /* ' */
 			Comma               = 44, /* , */
@@ -134,24 +135,20 @@ namespace Lynx
 			RightControl        = 345,
 			RightAlt            = 346,
 			RightSuper          = 347,
-			Menu                = 348
+			Menu                = 348,
+
+			MouseButton0        = 1000,
+			MouseButton1        = 1001,
+			MouseButton2        = 1002,
+			MouseButton3        = 1003,
+			MouseButton4        = 1004,
+			MouseButton5        = 1005,
+			MouseButton6        = 1006,
+			MouseButton7        = 1007,
+
+			MouseButtonLast     = MouseButton7,
+			MouseButtonLeft     = MouseButton0,
+			MouseButtonRight    = MouseButton1,
+			MouseButtonMiddle   = MouseButton2
     };
-
-	enum class MouseCode
-	{
-		// From glfw3.h
-		Button0                = 0,
-		Button1                = 1,
-		Button2                = 2,
-		Button3                = 3,
-		Button4                = 4,
-		Button5                = 5,
-		Button6                = 6,
-		Button7                = 7,
-
-		ButtonLast             = Button7,
-		ButtonLeft             = Button0,
-		ButtonRight            = Button1,
-		ButtonMiddle           = Button2
-	};
 }

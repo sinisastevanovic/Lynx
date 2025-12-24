@@ -23,7 +23,12 @@ namespace Lynx
         auto& renderer = Lynx::Engine::Get().GetRenderer();
         ImGui::Begin("Viewport");
 
-        if (ImGui::IsWindowFocused() && Engine().Get().GetSceneState() != SceneState::Play)
+        bool isFocused = ImGui::IsWindowFocused();
+        bool isHovered = ImGui::IsWindowHovered();
+
+        Engine::Get().SetBlockEvents(!isFocused);
+
+        if (isFocused && Engine().Get().GetSceneState() != SceneState::Play)
         {
             if (ImGui::IsKeyPressed(ImGuiKey_Q)) m_CurrentGizmoOperation = -1;
             if (ImGui::IsKeyPressed(ImGuiKey_W)) m_CurrentGizmoOperation = ImGuizmo::TRANSLATE;
@@ -31,16 +36,6 @@ namespace Lynx
             if (ImGui::IsKeyPressed(ImGuiKey_R)) m_CurrentGizmoOperation = ImGuizmo::SCALE;
         }
 
-        /*SceneState state = Engine::Get().GetSceneState();
-        const char* label = (state == SceneState::Edit) ? "Play" : "Stop";
-        if (ImGui::Button(label))
-        {
-            if (state == SceneState::Edit)
-                m_Owner->OnScenePlay();
-            else
-                m_Owner->OnSceneStop();
-        }*/
-        
         ImVec2 viewportSize = ImGui::GetContentRegionAvail();
         if (viewportSize.x > 0 && viewportSize.y > 0)
             renderer.EnsureEditorViewport((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);

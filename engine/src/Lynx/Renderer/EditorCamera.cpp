@@ -8,6 +8,8 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 
+#include "Lynx/Engine.h"
+
 namespace Lynx
 {
     EditorCamera::EditorCamera(float fov, float aspectRatio, float nearClip, float farClip)
@@ -62,18 +64,21 @@ namespace Lynx
 
     void EditorCamera::OnUpdate(float ts)
     {
-        const glm::vec2& mouse = { Input::GetMouseX(), Input::GetMouseY() };
-        glm::vec2 delta = (mouse - m_InitialMousePosition) * 0.003f;
-        m_InitialMousePosition = mouse;
-
-        if(Input::IsMouseButtonPressed(MouseCode::ButtonMiddle))
+        if (!Engine::Get().AreEventsBlocked())
         {
-            if(Input::IsKeyPressed(KeyCode::LeftShift) || Input::IsKeyPressed(KeyCode::RightShift))
-                MousePan(delta);
-            else if(Input::IsKeyPressed(KeyCode::LeftControl) || Input::IsKeyPressed(KeyCode::RightControl))
-                MouseZoom(delta.y);
-            else
-                MouseRotate(delta);
+            const glm::vec2& mouse = { Input::GetMouseX(), Input::GetMouseY() };
+            glm::vec2 delta = (mouse - m_InitialMousePosition) * 0.003f;
+            m_InitialMousePosition = mouse;
+
+            if(Input::IsKeyPressed(KeyCode::MouseButtonMiddle))
+            {
+                if(Input::IsKeyPressed(KeyCode::LeftShift) || Input::IsKeyPressed(KeyCode::RightShift))
+                    MousePan(delta);
+                else if(Input::IsKeyPressed(KeyCode::LeftControl) || Input::IsKeyPressed(KeyCode::RightControl))
+                    MouseZoom(delta.y);
+                else
+                    MouseRotate(delta);
+            }
         }
 
         UpdateView();

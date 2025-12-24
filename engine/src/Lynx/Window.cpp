@@ -22,9 +22,9 @@ namespace Lynx
         return static_cast<KeyCode>(glfwKey);
     }
 
-    static MouseCode GLFWToEngineMouseCode(int glfwMouseButton)
+    static KeyCode GLFWToEngineMouseCode(int glfwMouseButton)
     {
-        return static_cast<MouseCode>(glfwMouseButton);
+        return static_cast<KeyCode>(glfwMouseButton + 1000);
     }
     
     static bool s_GLFWInitialized = false;
@@ -140,21 +140,21 @@ namespace Lynx
         glfwSetMouseButtonCallback(m_Window, [](GLFWwindow* window, int button, int action, int mods)
         {
             WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
-            MouseCode keyCode = GLFWToEngineMouseCode(button);
+            KeyCode keyCode = GLFWToEngineMouseCode(button);
 
             switch (action)
             {
                 case GLFW_PRESS:
                     {
-                        Input::SetKeyState(button, true);
-                        MouseButtonPressedEvent event(keyCode);
+                        Input::SetKeyState((int)keyCode, true);
+                        KeyPressedEvent event(keyCode, 0);
                         data.EventCallback(event);
                         break;
                     }
                     case GLFW_RELEASE:
                     {
-                        Input::SetKeyState(button, false);
-                        MouseButtonReleasedEvent event(keyCode);
+                        Input::SetKeyState((int)keyCode, false);
+                        KeyReleasedEvent event(keyCode);
                         data.EventCallback(event);
                         break;
                     }

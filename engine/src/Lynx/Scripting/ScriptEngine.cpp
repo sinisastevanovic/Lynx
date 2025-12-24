@@ -7,6 +7,7 @@
 
 #include "ScriptEngineData.h"
 #include "Lynx/Engine.h"
+#include "Lynx/Input.h"
 #include "Lynx/Asset/Script.h"
 
 namespace Lynx
@@ -77,6 +78,11 @@ namespace Lynx
         m_Data->Lua.new_usertype<MeshComponent>("MeshComponent",
             "Color", &MeshComponent::Color,
             "MeshHandle", &MeshComponent::Mesh
+        );
+
+        m_Data->Lua.new_usertype<Input>("Input",
+            "GetButton", &Input::GetButton,
+            "GetAxis", &Input::GetAxis
         );
 
         LX_CORE_INFO("ScriptEngine Initialized");
@@ -308,6 +314,28 @@ namespace Lynx
         {
             sol::error err = scriptResult;
             LX_CORE_ERROR("Failed to execute script '{0}': {1}", scriptPath.string(), err.what());
+        }
+    }
+
+    void ScriptEngine::OnActionEvent(const std::string& action, bool pressed)
+    {
+        auto view = m_Data->SceneContext->Reg().view<LuaScriptComponent>();
+        for (auto entity : view)
+        {
+            auto& lsc = m_Data->SceneContext->Reg().get<LuaScriptComponent>(entity);
+            if (lsc.Self.valid())
+            {
+                sol::protected_function onInput = lsc.Self["OnInput"];
+                if (onInput.valid())
+                {
+                    auto result = onInput(lsc.Self, action, pressed);
+                    if (!result.valid())
+                    {
+                        sol::error err = result;
+                        LX_CORE_ERROR("Lua Runtime Error: {0}", err.what());
+                    }
+                }
+            }
         }
     }
 }

@@ -16,6 +16,9 @@ return {
         
         local pos = transform.Translation
         pos.x = pos.x + deltaTime * self.Speed
+        local moveY = Input.GetAxis("MoveUpDown")
+        pos.z = pos.z + deltaTime * moveY * self.Speed
+        
         transform.Translation = pos
 
 

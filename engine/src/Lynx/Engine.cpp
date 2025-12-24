@@ -19,6 +19,7 @@
 #include <nlohmann/json.hpp>
 
 #include "ScriptRegistry.h"
+#include "Event/ActionEvent.h"
 #include "ImGui/EditorUIHelpers.h"
 #include "Scene/Components/LuaScriptComponent.h"
 #include "Scene/Components/NativeScriptComponent.h"
@@ -246,11 +247,45 @@ namespace Lynx
         EventDispatcher dispatcher(e);
         dispatcher.Dispatch<KeyPressedEvent>([this](KeyPressedEvent& event)
         {
+            if (m_SceneState == SceneState::Play)
+            {
+                ImGuiIO& io = ImGui::GetIO();
+                if (io.WantCaptureKeyboard || m_BlockEvents)
+                    return false;
+
+                std::string action = Input::GetActionFromKey(event.GetKeyCode());
+                if (!action.empty())
+                {
+                    ActionPressedEvent e(action);
+                    this->OnEvent(e);
+                    m_ScriptEngine->OnActionEvent(action, true);
+                }
+            }
+            
             if (event.GetKeyCode() == KeyCode::Escape)
             {
                 LX_CORE_WARN("Escape key pressed via event, closing application.");
                 m_IsRunning = false;
                 return true; 
+            }
+            return false;
+        });
+
+        dispatcher.Dispatch<KeyReleasedEvent>([this](KeyReleasedEvent& event)
+        {
+            if (m_SceneState == SceneState::Play)
+            {
+                ImGuiIO& io = ImGui::GetIO();
+                if (io.WantCaptureKeyboard || m_BlockEvents)
+                    return false;
+                
+                std::string action = Input::GetActionFromKey(event.GetKeyCode());
+                if (!action.empty())
+                {
+                    ActionReleasedEvent e(action);
+                    this->OnEvent(e);
+                    m_ScriptEngine->OnActionEvent(action, false);
+                }
             }
             return false;
         });

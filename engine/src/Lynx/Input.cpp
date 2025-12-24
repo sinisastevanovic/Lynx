@@ -1,6 +1,8 @@
 ﻿#include "Input.h"
 
-#define MAX_KEYS 1024
+#include "Engine.h"
+
+#define MAX_KEYS 1024 // TODO: Rethink this when we add gamepad support, because mouse buttons start at 1000
 
 namespace Lynx
 {
@@ -14,17 +16,68 @@ namespace Lynx
         }
     };
 
+    std::unordered_map<std::string, std::vector<KeyCode>> Input::s_ActionMappings;
+    std::unordered_map<std::string, std::vector<AxisBinding>> Input::s_AxisBindings;
+
     static InputState s_State;
-    
-    bool Input::IsKeyPressed(KeyCode keycode)
+
+    void Input::BindAction(const std::string& name, KeyCode key)
     {
-        int kc = static_cast<int>(keycode);
-        if (kc >= MAX_KEYS)
-            return false;
-        return s_State.Keys[kc];
+        s_ActionMappings[name].push_back(key);
     }
 
-    bool Input::IsMouseButtonPressed(MouseCode keycode)
+    void Input::BindAxis(const std::string& name, KeyCode posKey, KeyCode negKey)
+    {
+        s_AxisBindings[name].push_back({posKey, negKey});
+    }
+
+    bool Input::GetButton(const std::string& name)
+    {
+        if (Engine::Get().AreEventsBlocked())
+            return false;
+        
+        if (s_ActionMappings.find(name) != s_ActionMappings.end())
+        {
+            for (auto key : s_ActionMappings[name])
+                if (IsKeyPressed(key))
+                    return true;
+        }
+        return false;
+    }
+
+    float Input::GetAxis(const std::string& name)
+    {
+        if (Engine::Get().AreEventsBlocked())
+            return 0.0f;
+        
+        float value = 0.0f;
+        if (s_AxisBindings.find(name) != s_AxisBindings.end())
+        {
+            for (auto& binding : s_AxisBindings[name])
+            {
+                if (IsKeyPressed(binding.Positive))
+                    value += 1.0f;
+                if (IsKeyPressed(binding.Negative))
+                    value -= 1.0f;
+            }
+        }
+        return glm::clamp(value, -1.0f, 1.0f);
+    }
+
+    std::string Input::GetActionFromKey(KeyCode key)
+    {
+        for (auto& [name, keys] : s_ActionMappings)
+        {
+            for (auto k : keys)
+            {
+                if (k == key)
+                    return name;
+            }
+        }
+        return std::string();
+    }
+
+    bool Input::IsKeyPressed(KeyCode keycode)
     {
         int kc = static_cast<int>(keycode);
         if (kc >= MAX_KEYS)

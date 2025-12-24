@@ -47,6 +47,9 @@ namespace Lynx
 
         void SetImGuiRenderCallback(std::function<void()> callback) { m_ImGuiCallback = callback; }
 
+        void SetBlockEvents(bool block) { m_BlockEvents = block; }
+        bool AreEventsBlocked() const { return m_BlockEvents; }
+
         ComponentRegistry ComponentRegistry;
 
     private:
@@ -72,6 +75,8 @@ namespace Lynx
         std::function<void()> m_ImGuiCallback;
 
         SceneState m_SceneState = SceneState::Play;
+
+        bool m_BlockEvents = false;
     };
 }
 

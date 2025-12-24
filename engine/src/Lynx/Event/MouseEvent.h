@@ -50,48 +50,4 @@ namespace Lynx
     private:
         float m_XOffset, m_YOffset;
     };
-
-    class LX_API MouseButtonEvent : public Event
-    {
-    public:
-        MouseCode GetMouseButton() const { return m_Button; }
-
-    protected:
-        MouseButtonEvent(const MouseCode Button)
-            : m_Button(Button) {}
-
-        MouseCode m_Button;
-    };
-
-    class LX_API MouseButtonPressedEvent : public MouseButtonEvent
-    {
-    public:
-        MouseButtonPressedEvent(const MouseCode button)
-            : MouseButtonEvent(button) {}
-
-        std::string ToString() const override
-        {
-            std::stringstream ss;
-            ss << "MouseButtonPressedEvent: " << static_cast<uint16_t>(m_Button);
-            return ss.str();
-        }
-
-        EVENT_CLASS_TYPE(MouseButtonPressedEvent)
-    };
-
-    class LX_API MouseButtonReleasedEvent : public MouseButtonEvent
-    {
-    public:
-        MouseButtonReleasedEvent(const MouseCode button)
-            : MouseButtonEvent(button) {}
-
-        std::string ToString() const override
-        {
-            std::stringstream ss;
-            ss << "MouseButtonReleasedEvent: " << static_cast<uint16_t>(m_Button);
-            return ss.str();
-        }
-
-        EVENT_CLASS_TYPE(MouseButtonReleasedEvent)
-    };
 }

@@ -143,6 +143,9 @@ void MyGame::OnStart()
 
     auto spawnerEntity = scene->CreateEntity("Spawner");
     auto& spawner = spawnerEntity.AddComponent<EnemySpawnerComponent>();
+
+    Lynx::Input::BindAxis("MoveLeftRight", Lynx::KeyCode::D, Lynx::KeyCode::A);
+    Lynx::Input::BindAxis("MoveUpDown", Lynx::KeyCode::S, Lynx::KeyCode::W);
 }
 
 void MyGame::OnUpdate(float deltaTime)
