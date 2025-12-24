@@ -105,7 +105,7 @@ void MyGame::OnStart()
         meshComp.Mesh = playerMesh;
 
         //player.AddComponent<Lynx::NativeScriptComponent>().Bind<TestNativeScript>();
-        player.AddComponent<Lynx::LuaScriptComponent>().ScriptPath = "assets/Scripts/test.lua";
+        player.AddComponent<Lynx::LuaScriptComponent>().ScriptHandle = assetManager.GetAssetHandle("assets/Scripts/test.lua");
     }
 
     {

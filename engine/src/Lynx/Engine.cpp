@@ -20,6 +20,7 @@
 
 #include "ScriptRegistry.h"
 #include "ImGui/EditorUIHelpers.h"
+#include "Scene/Components/LuaScriptComponent.h"
 #include "Scene/Components/NativeScriptComponent.h"
 
 
@@ -603,6 +604,23 @@ namespace Lynx
                     std::string scriptName = json["ScriptName"];
                     ScriptRegistry::Bind(scriptName, nscComp);
                 }
+            });
+
+        ComponentRegistry.RegisterComponent<LuaScriptComponent>("LuaScript",
+            [](entt::registry& reg, entt::entity entity)
+            {
+                auto& lscComp = reg.get<LuaScriptComponent>(entity);
+                EditorUIHelpers::DrawAssetSelection("Script", lscComp.ScriptHandle, AssetType::Script);
+            },
+            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+            {
+                auto& lscComp = reg.get<LuaScriptComponent>(entity);
+                json["Script"] = (uint64_t)lscComp.ScriptHandle;
+            },
+            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+            {
+                auto& lscComp = reg.get<LuaScriptComponent>(entity);
+                lscComp.ScriptHandle = AssetHandle(json["Script"]);
             });
     }
 }

@@ -19,6 +19,9 @@ namespace Lynx
 
         void OnUpdateEntity(Entity entity, float deltaTime);
         void OnCreateEntity(Entity entity);
+        void OnDestroyEntity(Entity entity);
+
+        void ReloadScript(AssetHandle handle);
 
     private:
         void LoadScript(const std::string& scriptPath);

@@ -37,11 +37,25 @@ namespace Lynx
             nsc.DestroyScript(&nsc);
         }
     }
+
+    static void OnLuaScriptComponentDestroyed(entt::registry& registry, entt::entity entity)
+    {
+        if (Engine::Get().GetSceneState() == SceneState::Play)
+        {
+            Scene* scene = Engine::Get().GetActiveScene().get();
+            if (scene)
+            {
+                Entity e{entity, scene};
+                Engine::Get().GetScriptEngine()->OnDestroyEntity(e);
+            }
+        }
+    }
     
     Scene::Scene()
     {
         m_Registry.on_destroy<RigidBodyComponent>().connect<&OnRigidBodyComponentDestroyed>();
         m_Registry.on_destroy<NativeScriptComponent>().connect<&OnNativeScriptComponentDestroyed>();
+        m_Registry.on_destroy<LuaScriptComponent>().connect<&OnLuaScriptComponentDestroyed>();
     }
 
     Scene::~Scene()
@@ -153,6 +167,13 @@ namespace Lynx
     void Scene::OnRuntimeStop()
     {
         Engine::Get().GetScriptEngine()->OnRuntimeStop();
+
+        auto luaView = m_Registry.view<LuaScriptComponent>();
+        for (auto entity : luaView)
+        {
+            Entity e = { entity, this };
+            Engine::Get().GetScriptEngine()->OnDestroyEntity(e);
+        }
 
         auto nscView = m_Registry.view<NativeScriptComponent>();
         for (auto entity : nscView)

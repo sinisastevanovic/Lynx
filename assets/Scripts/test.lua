@@ -10,12 +10,15 @@ return {
         
         local pos = transform.Translation
         pos.x = pos.x + deltaTime * 0.5
-        print("New Pos" .. pos.x)
         transform.Translation = pos
 
 
         local rot = transform.Rotation
         rot.y = rot.y + deltaTime * 1.0
         transform.Rotation = rot
+    end,
+
+    OnDestroy = function(self)
+        print("Lua script destroyed!")
     end
 }

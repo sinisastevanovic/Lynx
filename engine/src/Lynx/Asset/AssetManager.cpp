@@ -1,6 +1,7 @@
 #include "AssetManager.h"
 
 #include "Asset.h"
+#include "Script.h"
 
 namespace Lynx
 {
@@ -42,6 +43,9 @@ namespace Lynx
                 break;
             case AssetType::StaticMesh:
                 newAsset = std::make_shared<StaticMesh>(metadata.FilePath.string());
+                break;
+            case AssetType::Script:
+                newAsset = std::make_shared<Script>(metadata.FilePath.string());
                 break;
             case AssetType::None:
             case AssetType::SkeletalMesh:

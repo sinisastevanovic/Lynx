@@ -13,7 +13,8 @@ namespace Lynx
         SkeletalMesh,
         Material,
         Shader,
-        Scene
+        Scene,
+        Script
     };
     
     namespace AssetUtils

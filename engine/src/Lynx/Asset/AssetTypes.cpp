@@ -22,7 +22,8 @@ namespace Lynx::AssetUtils
         { AssetType::Material, { "Material File", { "*.lxmat" },"ASSET_MATERIAL" } },
         { AssetType::Shader, { "Shader File", { "*.glsl" },"ASSET_SHADER" } },
         //{ AssetType::Mesh, { "3D Model",      { "*.fbx", "*.obj", "*.gltf" } } }
-        { AssetType::StaticMesh, { "3D Model",      { "*.gltf" },"ASSET_STATICMESH" } }
+        { AssetType::StaticMesh, { "3D Model",      { "*.gltf" },"ASSET_STATICMESH" } },
+        { AssetType::Script , { "Lua Script", { "*.lua" }, "ASSET_SCRIPT" } }
     };
 
     
