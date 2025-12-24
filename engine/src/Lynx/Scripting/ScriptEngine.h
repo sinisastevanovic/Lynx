@@ -14,6 +14,8 @@ namespace Lynx
         void Init();
         void Shutdown();
 
+        void OnEditorStart(Scene* scene, bool recreateScripts = false);
+        void OnEditorEnd();
         void OnRuntimeStart(Scene* scene);
         void OnRuntimeStop();
 
@@ -23,8 +25,8 @@ namespace Lynx
 
         void ReloadScript(AssetHandle handle);
 
+        void LoadScript(Entity entity);
     private:
-        void LoadScript(const std::string& scriptPath);
 
         struct ScriptEngineData;
         ScriptEngineData* m_Data = nullptr;

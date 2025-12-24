@@ -27,6 +27,7 @@ namespace Lynx
 
     void EditorLayer::DrawMenuBar()
     {
+        // TODO: Disable these in runtime.
         if (ImGui::BeginMainMenuBar())
         {
             if (ImGui::BeginMenu("File"))
@@ -73,15 +74,16 @@ namespace Lynx
 
     void EditorLayer::OnScenePlay()
     {
+        m_Engine->GetScriptEngine()->OnEditorEnd();
+        
         m_SelectedEntity = entt::null;
         SceneSerializer serializer(m_EditorScene);
         std::string data = serializer.SerializeToString();
 
         m_RuntimeScene = std::make_shared<Scene>();
+        m_Engine->SetActiveScene(m_RuntimeScene);
         SceneSerializer runtimeSerializer(m_RuntimeScene);
         runtimeSerializer.DeserializeFromString(data);
-
-        m_Engine->SetActiveScene(m_RuntimeScene);
 
         m_SceneHierarchyPanel.SetContext(m_RuntimeScene);
 
@@ -95,6 +97,8 @@ namespace Lynx
         m_Engine->SetActiveScene(m_EditorScene);
         m_SceneHierarchyPanel.SetContext(m_EditorScene);
         m_RuntimeScene = nullptr;
+
+        m_Engine->GetScriptEngine()->OnEditorStart(m_Engine->GetActiveScene().get());
     }
 
     void EditorLayer::SaveSceneAs()
@@ -114,13 +118,15 @@ namespace Lynx
         {
             m_EditorScene = std::make_shared<Scene>();
             m_EditorScene->OnRuntimeStop();
+            m_Engine->SetActiveScene(m_EditorScene);
+            m_Engine->GetScriptEngine()->OnEditorStart(m_Engine->GetActiveScene().get());
 
             SceneSerializer serializer(m_EditorScene);
             if (serializer.Deserialize(filepath))
             {
-                m_Engine->SetActiveScene(m_EditorScene);
                 m_SelectedEntity = entt::null;
                 m_SceneHierarchyPanel.SetContext(m_Engine->GetActiveScene());
+
             }
         }
     }

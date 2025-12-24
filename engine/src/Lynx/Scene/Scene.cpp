@@ -166,14 +166,14 @@ namespace Lynx
 
     void Scene::OnRuntimeStop()
     {
-        Engine::Get().GetScriptEngine()->OnRuntimeStop();
-
         auto luaView = m_Registry.view<LuaScriptComponent>();
         for (auto entity : luaView)
         {
             Entity e = { entity, this };
             Engine::Get().GetScriptEngine()->OnDestroyEntity(e);
         }
+
+        Engine::Get().GetScriptEngine()->OnRuntimeStop();
 
         auto nscView = m_Registry.view<NativeScriptComponent>();
         for (auto entity : nscView)

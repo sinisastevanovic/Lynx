@@ -1,4 +1,10 @@
 return {
+    Properties = {
+        Speed = { Default = 5.0, Type = "Float" },
+        Name = { Default = "Hero", Type = "String" },
+        Test = { Default = Vec3(0, 5, 0), Type = "Vec3" }
+    },
+
     OnCreate = function(self)
         print("Lua script created!")
         local transform = self.CurrentEntity.Transform
@@ -9,7 +15,7 @@ return {
         local transform = self.CurrentEntity.Transform
         
         local pos = transform.Translation
-        pos.x = pos.x + deltaTime * 0.5
+        pos.x = pos.x + deltaTime * self.Speed
         transform.Translation = pos
 
 

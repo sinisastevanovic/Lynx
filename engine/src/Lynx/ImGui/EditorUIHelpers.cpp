@@ -79,4 +79,94 @@ namespace Lynx
         ImGui::PopID();
         return changed;
     }
+
+    void EditorUIHelpers::DrawLuaScriptSection(LuaScriptComponent* lsc)
+    {
+        if (!lsc)
+            return;
+
+        if (lsc->Self.valid())
+        {
+            std::optional<sol::table> propsOpt = lsc->Self["Properties"];
+            if (propsOpt)
+            {
+                sol::table propsDef = propsOpt.value();
+                if (ImGui::CollapsingHeader("Properties", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    for (auto& [key, value] : propsDef)
+                    {
+                        if (!key.is<std::string>())
+                            continue;
+
+                        std::string name = key.as<std::string>();
+                        sol::table def = value.as<sol::table>();
+                        std::string type = def["Type"];
+
+                        ImGui::PushID(name.c_str());
+
+                        if (type == "Float")
+                        {
+                            float val = lsc->Self[name].get_or(def["Default"].get<float>());
+                            if (ImGui::DragFloat(name.c_str(), &val))
+                            {
+                                lsc->Self[name] = val;
+                            }
+                        }
+                        else if (type == "Int")
+                        {
+                            int val = lsc->Self[name].get_or(def["Default"].get<int>());
+                            if (ImGui::DragInt(name.c_str(), &val))
+                            {
+                                lsc->Self[name] = val;
+                            }
+                        }
+                        else if (type == "Bool")
+                        {
+                            bool val = lsc->Self[name].get_or(def["Default"].get<bool>());
+                            if (ImGui::Checkbox(name.c_str(), &val))
+                            {
+                                lsc->Self[name] = val;
+                            }
+                        }
+                        else if (type == "String")
+                        {
+                            std::string val = lsc->Self[name].get_or(def["Default"].get<std::string>());
+                            char buf[256];
+                            strcpy_s(buf, val.c_str());
+                            if (ImGui::InputText(name.c_str(), buf, sizeof(buf)))
+                            {
+                                lsc->Self[name] = std::string(buf);
+                            }
+                        }
+                        else if (type == "Vec2")
+                        {
+                            glm::vec2 val = lsc->Self[name].get_or(def["Default"].get<glm::vec2>());
+                            if (ImGui::DragFloat2(name.c_str(), &val.x))
+                            {
+                                lsc->Self[name] = val;
+                            }
+                        }
+                        else if (type == "Vec3")
+                        {
+                            glm::vec3 val = lsc->Self[name].get_or(def["Default"].get<glm::vec3>());
+                            if (ImGui::DragFloat3(name.c_str(), &val.x))
+                            {
+                                lsc->Self[name] = val;
+                            }
+                        }
+                        else if (type == "Color")
+                        {
+                            glm::vec4 val = lsc->Self[name].get_or(def["Default"].get<glm::vec4>());
+                            if (ImGui::ColorEdit4(name.c_str(), &val.r))
+                            {
+                                lsc->Self[name] = val;
+                            }
+                        }
+
+                        ImGui::PopID();
+                    }
+                }
+            }
+        }
+    }
 }
