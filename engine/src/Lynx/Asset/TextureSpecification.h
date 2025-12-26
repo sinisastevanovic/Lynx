@@ -1,5 +1,8 @@
 #pragma once
 #include <string>
+#include <nlohmann/json.hpp>
+
+#include "AssetSpecification.h"
 
 namespace Lynx
 {
@@ -39,19 +42,35 @@ namespace Lynx
         }
     };
 
-    struct TextureSpecification
+    struct TextureSpecification : public AssetSpecification
     {
         uint32_t Width = 1;
         uint32_t Height = 1;
-
         TextureFormat Format = TextureFormat::RGBA8;
-        
         SamplerSettings SamplerSettings;
-        
         bool GenerateMips = false;
-        bool IsSRGB = true;
-
+        bool IsSRGB = false;
         std::string DebugName = "Texture";
+
+        TextureSpecification() = default;
+
+        virtual void Serialize(nlohmann::json& json) const override
+        {
+            json["TextureFormat"] = Format;
+            json["WrapMode"] = SamplerSettings.WrapMode;
+            json["FilterMode"] = SamplerSettings.FilterMode;
+            json["IsSRGB"] = IsSRGB;
+            json["GenerateMips"] = GenerateMips;
+        }
+
+        virtual void Deserialize(const nlohmann::json& json) override
+        {
+            Format = (TextureFormat)json["TextureFormat"];
+            SamplerSettings.WrapMode = (TextureWrap)json["WrapMode"];
+            SamplerSettings.FilterMode = (TextureFilter)json["FilterMode"];
+            IsSRGB = json["IsSRGB"];
+            GenerateMips = json["GenerateMips"];
+        }
     };
 }
 

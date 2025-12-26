@@ -3,6 +3,8 @@
 #include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
+#include "Lynx/Engine.h"
+#include "Lynx/Asset/Shader.h"
 #include "nvrhi/validation.h"
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
@@ -108,15 +110,16 @@ namespace Lynx
     };
     
     Renderer::Renderer(GLFWwindow* window, bool initIdTarget)
+        : m_ShouldCreateIDTarget(initIdTarget)
     {
         m_VulkanState = std::make_unique<VulkanState>();
         InitVulkan(window);
         InitNVRHI();
         InitBuffers();
-        InitPipeline(initIdTarget);
-
-        LX_CORE_INFO("Renderer initialized successfully");
+        
+        LX_CORE_INFO("Renderer created (Vulkan/NVRHI ready. Pipeline pending.");
     }
+
 
     Renderer::~Renderer()
     {
@@ -135,13 +138,16 @@ namespace Lynx
         m_SamplerCache.clear();
         m_BindingLayout = nullptr;
         m_DefaultTexture = nullptr;
+        m_DefaultNormalTexture = nullptr;
+        m_DefaultBlackTexture = nullptr;
+        m_DefaultMetallicRoughnessTexture = nullptr;
         m_BindingSet = nullptr;
         m_FrameBindingSets.clear();
         m_ConstantBuffer = nullptr;
         m_SwapchainDepth = nullptr;
         m_Pipeline = nullptr;
         m_VertexShader = nullptr;
-        m_FragmentShader = nullptr;
+        m_PixelShader = nullptr;
         m_CommandList = nullptr;
         m_SwapchainFramebuffers.clear();
         m_CurrentFramebuffer = nullptr;
@@ -171,6 +177,27 @@ namespace Lynx
             m_VulkanState->Instance.destroyDebugUtilsMessengerEXT(m_VulkanState->DebugMessenger);
         
         m_VulkanState->Instance.destroy();
+    }
+        
+    void Renderer::Init()
+    {
+        InitPipeline();
+        LX_CORE_INFO("Renderer initialized successfully (Pipeline loaded).");
+    }
+
+    void Renderer::ReloadShaders()
+    {
+        m_VulkanState->Device.waitIdle();
+
+        m_Pipeline = nullptr;
+        m_BindingLayout = nullptr;
+        m_BindingSet = nullptr;
+        m_VertexShader = nullptr;
+        m_PixelShader = nullptr;
+
+        InitPipeline();
+
+        LX_CORE_INFO("Shaders Reloaded and Pipeline Recreated!");
     }
 
     nvrhi::SamplerHandle Renderer::GetSampler(const SamplerSettings& settings)
@@ -408,6 +435,7 @@ namespace Lynx
 
         vk::PhysicalDeviceFeatures features10;
         features10.geometryShader = VK_TRUE;
+        features10.independentBlend = VK_TRUE;
 
         features13.pNext = &features12;
         
@@ -530,9 +558,42 @@ namespace Lynx
         defaultTexDesc.keepInitialState = true;
         m_DefaultTexture = m_NvrhiDevice->createTexture(defaultTexDesc);
 
+        nvrhi::TextureDesc defaultNormalTexDesc;
+        defaultNormalTexDesc.width = 1;
+        defaultNormalTexDesc.height = 1;
+        defaultNormalTexDesc.format = nvrhi::Format::RGBA8_UNORM;
+        defaultNormalTexDesc.debugName = "DefaultNormal";
+        defaultNormalTexDesc.initialState = nvrhi::ResourceStates::ShaderResource;
+        defaultNormalTexDesc.keepInitialState = true;
+        m_DefaultNormalTexture = m_NvrhiDevice->createTexture(defaultNormalTexDesc);
+
+        nvrhi::TextureDesc defaultMrTexDesc;
+        defaultMrTexDesc.width = 1;
+        defaultMrTexDesc.height = 1;
+        defaultMrTexDesc.format = nvrhi::Format::RGBA8_UNORM;
+        defaultMrTexDesc.debugName = "DefaultMetallicRoughness";
+        defaultMrTexDesc.initialState = nvrhi::ResourceStates::ShaderResource;
+        defaultMrTexDesc.keepInitialState = true;
+        m_DefaultMetallicRoughnessTexture = m_NvrhiDevice->createTexture(defaultMrTexDesc);
+        
+        nvrhi::TextureDesc defaultBlackTexDesc;
+        defaultBlackTexDesc.width = 1;
+        defaultBlackTexDesc.height = 1;
+        defaultBlackTexDesc.format = nvrhi::Format::RGBA8_UNORM;
+        defaultBlackTexDesc.debugName = "DefaultBlack";
+        defaultBlackTexDesc.initialState = nvrhi::ResourceStates::ShaderResource;
+        defaultBlackTexDesc.keepInitialState = true;
+        m_DefaultBlackTexture = m_NvrhiDevice->createTexture(defaultBlackTexDesc);
+
         uint32_t whitePixel = 0xFFFFFFFF;
+        uint32_t normalPixel = 0xFFFF8080;
+        uint32_t mrPixel = 0xFF8080FF;
+        uint32_t blackPixel = 0xFF000000;
         m_CommandList->open();
         m_CommandList->writeTexture(m_DefaultTexture, 0, 0, &whitePixel, 4);
+        m_CommandList->writeTexture(m_DefaultNormalTexture, 0, 0, &normalPixel, 4);
+        m_CommandList->writeTexture(m_DefaultBlackTexture, 0, 0, &blackPixel, 4);
+        m_CommandList->writeTexture(m_DefaultMetallicRoughnessTexture, 0, 0, &mrPixel, 4);
         m_CommandList->close();
         m_NvrhiDevice->executeCommandList(m_CommandList);
     }
@@ -595,111 +656,32 @@ namespace Lynx
         target.Framebuffer = m_NvrhiDevice->createFramebuffer(fbDesc);
     }
 
-    void Renderer::InitPipeline(bool initIdTarget)
+    void Renderer::InitPipeline()
     {
-        const char* vsSrc;
-        const char* fsSrc;
-        if (initIdTarget)
+        std::shared_ptr<Shader> shaderAsset;
+        if (m_ShouldCreateIDTarget)
         {
-            vsSrc = R"(
-            #version 450
-            layout(location = 0) in vec3 a_Position;
-            layout(location = 1) in vec2 a_TexCoord;
-
-            layout(location = 0) out vec2 v_TexCoord;
-            layout(location = 1) out vec4 v_Color;
-            layout(location = 2) out flat int v_EntityID;
-                
-            layout(set = 0, binding = 0) uniform UBO {
-                mat4 u_ViewProjection;
-            } ubo;
-
-            layout(push_constant) uniform PushConsts {
-                mat4 u_Model;
-                vec4 u_Color;
-                int u_EntityID;
-            } push;
-
-
-            void main() {
-                v_TexCoord = a_TexCoord;
-                v_Color = push.u_Color;
-                v_EntityID = push.u_EntityID;
-                gl_Position = ubo.u_ViewProjection * push.u_Model * vec4(a_Position, 1.0);
-            }
-            )";
-
-            fsSrc = R"(
-            #version 450
-            layout(location = 0) in vec2 v_TexCoord;
-            layout(location = 1) in vec4 v_Color;
-            layout(location = 2) in flat int v_EntityID;
-            layout(location = 0) out vec4 outColor;
-            layout(location = 1) out int outEntityID;
-                
-            layout(set = 0, binding = 1) uniform texture2D u_Texture;
-            layout(set = 0, binding = 2) uniform sampler u_Sampler;
-        
-            void main() { 
-                outColor = texture(sampler2D(u_Texture, u_Sampler), v_TexCoord) * v_Color; 
-                outEntityID = v_EntityID;
-            }
-            )";
+            shaderAsset = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/StandardEditor.glsl");
         }
         else
         {
-            vsSrc = R"(
-            #version 450
-            layout(location = 0) in vec3 a_Position;
-            layout(location = 1) in vec2 a_TexCoord;
-
-            layout(location = 0) out vec2 v_TexCoord;
-            layout(location = 1) out vec4 v_Color;
-                
-            layout(set = 0, binding = 0) uniform UBO {
-                mat4 u_ViewProjection;
-            } ubo;
-
-            layout(push_constant) uniform PushConsts {
-                mat4 u_Model;
-                vec4 u_Color;
-            } push;
-
-
-            void main() {
-                v_TexCoord = a_TexCoord;
-                v_Color = push.u_Color;
-                gl_Position = ubo.u_ViewProjection * push.u_Model * vec4(a_Position, 1.0);
-            }
-            )";
-
-            fsSrc = R"(
-            #version 450
-            layout(location = 0) in vec2 v_TexCoord;
-            layout(location = 1) in vec4 v_Color;
-            layout(location = 0) out vec4 outColor;
-                
-            layout(set = 0, binding = 1) uniform texture2D u_Texture;
-            layout(set = 0, binding = 2) uniform sampler u_Sampler;
-        
-            void main() { 
-                outColor = texture(sampler2D(u_Texture, u_Sampler), v_TexCoord) * v_Color; 
-            }
-            )";
+            shaderAsset = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/Standard.glsl");
         }
-        
-        auto vsSpirv = ShaderUtils::CompileGLSL(vsSrc, shaderc_glsl_vertex_shader, "cube.vert");
-        auto fsSpirv = ShaderUtils::CompileGLSL(fsSrc, shaderc_glsl_fragment_shader, "cube.frag");
 
-        m_VertexShader = m_NvrhiDevice->createShader(nvrhi::ShaderDesc(nvrhi::ShaderType::Vertex), vsSpirv.data(), vsSpirv.size() * 4);
-        m_FragmentShader = m_NvrhiDevice->createShader(nvrhi::ShaderDesc(nvrhi::ShaderType::Pixel), fsSpirv.data(), fsSpirv.size() * 4);
+        LX_ASSERT(shaderAsset, "Failed to load standard shader!");
+
+        m_VertexShader = shaderAsset->GetVertexShader();
+        m_PixelShader = shaderAsset->GetPixelShader();
         
         auto layoutDesc = nvrhi::BindingLayoutDesc()
         .setVisibility(nvrhi::ShaderType::All)
         .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
         .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(PushData)))
-        .addItem(nvrhi::BindingLayoutItem::Texture_SRV(1))
-        .addItem(nvrhi::BindingLayoutItem::Sampler(2)); // Moved to Binding 2
+        .addItem(nvrhi::BindingLayoutItem::Texture_SRV(1)) // Albedo
+        .addItem(nvrhi::BindingLayoutItem::Texture_SRV(2)) // Normal
+        .addItem(nvrhi::BindingLayoutItem::Texture_SRV(3)) // MetallicRoughness
+        .addItem(nvrhi::BindingLayoutItem::Texture_SRV(4)) // Emissive
+        .addItem(nvrhi::BindingLayoutItem::Sampler(5));
         
         layoutDesc.bindingOffsets.shaderResource = 0;
         layoutDesc.bindingOffsets.sampler = 0;
@@ -719,7 +701,10 @@ namespace Lynx
         nvrhi::BindingSetDesc bindingSetDesc;
         bindingSetDesc.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer));
         bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(1, m_DefaultTexture));
-        bindingSetDesc.addItem(nvrhi::BindingSetItem::Sampler(2, GetSampler(defaultSamplerSettings)));
+        bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(2, m_DefaultNormalTexture));
+        bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(3, m_DefaultMetallicRoughnessTexture));
+        bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(4, m_DefaultBlackTexture));
+        bindingSetDesc.addItem(nvrhi::BindingSetItem::Sampler(5, GetSampler(defaultSamplerSettings)));
         m_BindingSet = m_NvrhiDevice->createBindingSet(bindingSetDesc, m_BindingLayout);
         
         if (!m_BindingSet)
@@ -730,7 +715,7 @@ namespace Lynx
         nvrhi::GraphicsPipelineDesc pipeDesc;
         pipeDesc.bindingLayouts = { m_BindingLayout };
         pipeDesc.VS = m_VertexShader;
-        pipeDesc.PS = m_FragmentShader;
+        pipeDesc.PS = m_PixelShader;
         pipeDesc.primType = nvrhi::PrimitiveType::TriangleList;
         pipeDesc.renderState.rasterState.frontCounterClockwise = true;
         pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::Back;
@@ -744,7 +729,7 @@ namespace Lynx
             .setSrcBlendAlpha(nvrhi::BlendFactor::One)
             .setDestBlendAlpha(nvrhi::BlendFactor::InvSrcAlpha);
 
-        if (initIdTarget)
+        if (m_ShouldCreateIDTarget)
         {
             pipeDesc.renderState.blendState.targets[1]
             .setBlendEnable(false)
@@ -756,19 +741,31 @@ namespace Lynx
                 .setName("POSITION")
                 .setFormat(nvrhi::Format::RGB32_FLOAT)
                 .setBufferIndex(0)
-                .setOffset(0)
+                .setOffset(offsetof(Vertex, Position))
+                .setElementStride(sizeof(Vertex)),
+            nvrhi::VertexAttributeDesc()
+                .setName("NORMAL")
+                .setFormat(nvrhi::Format::RGB32_FLOAT)
+                .setBufferIndex(0)
+                .setOffset(offsetof(Vertex, Normal))
+                .setElementStride(sizeof(Vertex)),
+            nvrhi::VertexAttributeDesc()
+                .setName("TANGENT")
+                .setFormat(nvrhi::Format::RGBA32_FLOAT)
+                .setBufferIndex(0)
+                .setOffset(offsetof(Vertex, Tangent))
                 .setElementStride(sizeof(Vertex)),
             nvrhi::VertexAttributeDesc()
                 .setName("TEXCOORD")
                 .setFormat(nvrhi::Format::RG32_FLOAT)
                 .setBufferIndex(0)
-                .setOffset(sizeof(float) * 3)
+                .setOffset(offsetof(Vertex, TexCoord))
                 .setElementStride(sizeof(Vertex))
         };
-        pipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(attributes, 2, m_VertexShader);
+        pipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(attributes, 4, m_VertexShader);
 
         // TODO: Only in editor
-        if (initIdTarget)
+        if (m_ShouldCreateIDTarget)
         {
             auto fbInfo = nvrhi::FramebufferInfo()
                 .addColorFormat(nvrhi::Format::BGRA8_UNORM)
@@ -783,7 +780,7 @@ namespace Lynx
         }
     }
 
-    void Renderer::BeginScene(glm::mat4 viewProjection)
+    void Renderer::BeginScene(const glm::mat4& viewProjection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity)
     {
         // 0. Wait for Fence
         if (m_VulkanState->Device.waitForFences(1, &m_VulkanState->InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
@@ -809,6 +806,9 @@ namespace Lynx
         
         SceneData sceneData;
         sceneData.ViewProjectionMatrix = viewProjection;
+        sceneData.CameraPosition = glm::vec4(cameraPosition, 1.0f);
+        sceneData.LightDirection = glm::vec4(lightDir, lightIntensity);
+        sceneData.LightColor = glm::vec4(lightColor, 1.0f);
         m_CommandList->writeBuffer(m_ConstantBuffer, &sceneData, sizeof(SceneData));
 
         if (m_EditorTarget)
@@ -855,6 +855,97 @@ namespace Lynx
     {
         if (!mesh)
             return;
+
+        auto getTex = [&](AssetHandle handle, nvrhi::TextureHandle defaultTex)
+        {
+            if (handle.IsValid())
+            {
+                auto t = Engine::Get().GetAssetManager().GetAsset<Texture>(handle);
+                if (t)
+                    return t->GetTextureHandle();
+            }
+            return defaultTex;
+        };
+
+        for (const auto& submesh : mesh->GetSubmeshes())
+        {
+            if (!submesh.Material)
+                continue;
+            
+            // Create Binding Set for this draw call
+            nvrhi::TextureHandle albedo = m_DefaultTexture;
+            nvrhi::TextureHandle normal = m_DefaultNormalTexture;
+            nvrhi::TextureHandle mr = m_DefaultTexture;
+            nvrhi::TextureHandle emiss = m_DefaultBlackTexture;
+
+            SamplerSettings defaultSamplerSettings;
+            defaultSamplerSettings.FilterMode = TextureFilter::Linear;
+            defaultSamplerSettings.WrapMode = TextureWrap::Repeat;
+
+            if (submesh.Material->AlbedoTexture.IsValid())
+            {
+                auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(submesh.Material->AlbedoTexture);
+                if (texture)
+                {
+                    albedo = texture->GetTextureHandle();
+                    // TODO: If we want per-texture samplers, we need more sampler slots or combined image samplers
+                    defaultSamplerSettings = texture->GetSamplerSettings();
+                }
+            }
+
+            if (submesh.Material->NormalMap.IsValid())
+            {
+                auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(submesh.Material->NormalMap);
+                if (texture)
+                    normal = texture->GetTextureHandle();
+            }
+
+            if (submesh.Material->MetallicRoughnessTexture.IsValid())
+            {
+                auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(submesh.Material->MetallicRoughnessTexture);
+                if (texture)
+                    mr = texture->GetTextureHandle();
+            }
+
+            if (submesh.Material->EmissiveTexture.IsValid())
+            {
+                auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(submesh.Material->EmissiveTexture);
+                if (texture)
+                    emiss = texture->GetTextureHandle();
+            }
+
+            // TODO OPTIMIZATION NOTE: Creating a BindingSet every frame/draw is SLOW.
+            // In a real engine, this should be cached in the Material object.
+            // But for now, we do it here.
+            auto bindingSetDesc = nvrhi::BindingSetDesc()
+                .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer))
+                .addItem(nvrhi::BindingSetItem::Texture_SRV(1, albedo))
+                .addItem(nvrhi::BindingSetItem::Texture_SRV(2, normal))
+                .addItem(nvrhi::BindingSetItem::Texture_SRV(3, mr))
+                .addItem(nvrhi::BindingSetItem::Texture_SRV(4, emiss))
+                .addItem(nvrhi::BindingSetItem::Sampler(5, GetSampler(defaultSamplerSettings)));
+            auto bindingSet = m_NvrhiDevice->createBindingSet(bindingSetDesc, m_BindingLayout);
+
+            // 2. Bind Geometry
+            auto state = nvrhi::GraphicsState()
+                .setPipeline(m_Pipeline)
+                .setFramebuffer(m_CurrentFramebuffer)
+                .addBindingSet(bindingSet)
+                .addVertexBuffer(nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0))
+                .setIndexBuffer(nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT));
+
+            m_CommandList->setGraphicsState(state);
+
+            PushData push;
+            push.Model = transform;
+            push.Color = color;
+            push.EntityID = entityID;
+            m_CommandList->setPushConstants(&push, sizeof(PushData));
+        
+            nvrhi::DrawArguments args;
+            args.vertexCount = submesh.IndexCount;
+            m_CommandList->drawIndexed(args);
+        }
         
         // 1. Bind Texture
         // Check if mesh has a texture. If so, bind it. If not, use white texture.
@@ -869,26 +960,6 @@ namespace Lynx
 
         // Let's assume for V1 we just use the currently bound texture (from SetTexture)
         // OR we implement a simple lookup.
-
-        // 2. Bind Geometry
-        auto state = nvrhi::GraphicsState()
-            .setPipeline(m_Pipeline)
-            .setFramebuffer(m_CurrentFramebuffer)
-            .addBindingSet(m_BindingSet)
-            .addVertexBuffer(nvrhi::VertexBufferBinding(mesh->GetVertexBuffer(), 0, 0))
-            .setIndexBuffer(nvrhi::IndexBufferBinding(mesh->GetIndexBuffer(), nvrhi::Format::R32_UINT));
-
-        m_CommandList->setGraphicsState(state);
-
-        PushData push;
-        push.Model = transform;
-        push.Color = color;
-        push.EntityID = entityID;
-        m_CommandList->setPushConstants(&push, sizeof(PushData));
-        
-        nvrhi::DrawArguments args;
-        args.vertexCount = mesh->GetIndexCount();
-        m_CommandList->drawIndexed(args);
     }
 
     void Renderer::EndScene()

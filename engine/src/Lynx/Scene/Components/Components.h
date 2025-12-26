@@ -16,8 +16,6 @@
 
 namespace Lynx
 {
-    
-
     struct TagComponent
     {
         std::string Tag;
@@ -86,5 +84,16 @@ namespace Lynx
 
         CameraComponent() = default;
         CameraComponent(const CameraComponent&) = default;
+    };
+
+    struct DirectionalLightComponent
+    {
+        glm::vec3 Color = { 1.0f, 1.0f, 1.0f };
+        float Intensity = 1.0f;
+
+        bool CastShadows = true;
+
+        DirectionalLightComponent() = default;
+        DirectionalLightComponent(const DirectionalLightComponent&) = default;
     };
 }

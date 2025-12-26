@@ -7,8 +7,8 @@
 
 namespace Lynx
 {
-    Texture::Texture(const std::string& filepath)
-        : m_FilePath(filepath)
+    Texture::Texture(const std::string& filepath, TextureSpecification spec)
+        : m_FilePath(filepath), m_Specification(spec)
     {
         if (!std::filesystem::exists(filepath))
         {

@@ -5,15 +5,13 @@
 #include "Texture.h"
 #include "StaticMesh.h"
 
-#include <nvrhi/nvrhi.h> // TODO: Remove nvrhi from AssetManger...
-
 
 namespace Lynx
 {
     class LX_API AssetManager
     {
     public:
-        AssetManager(nvrhi::DeviceHandle device, AssetRegistry* registy);
+        AssetManager(AssetRegistry* registy);
 
         // Returns the asset if loaded. If not loaded, uses Registry to find path, loads it, caches it, returns it.
         std::shared_ptr<Asset> GetAsset(AssetHandle handle);
@@ -64,7 +62,6 @@ namespace Lynx
         void UnloadAsset(AssetHandle handle);
   
     private:
-        nvrhi::DeviceHandle m_Device;
         AssetRegistry* m_AssetRegistry = nullptr;
         
         std::unordered_map<AssetHandle, std::shared_ptr<Asset>> m_LoadedAssets;

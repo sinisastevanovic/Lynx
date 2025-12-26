@@ -10,7 +10,7 @@ namespace Lynx
     class LX_API Texture : public Asset
     {
     public:
-        Texture(const std::string& filepath);
+        Texture(const std::string& filepath, TextureSpecification spec);
         Texture(std::vector<uint8_t> data, uint32_t width, uint32_t height, const std::string& debugName = "");
         virtual ~Texture() = default;
 

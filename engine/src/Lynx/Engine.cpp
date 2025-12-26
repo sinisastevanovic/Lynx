@@ -40,12 +40,17 @@ namespace Lynx
 
         m_Window = Window::Create();
         m_Window->SetEventCallback([this](Event& event){ this->OnEvent(event); });
+
+        m_AssetRegistry = std::make_unique<AssetRegistry>();
+        m_AssetRegistry->LoadRegistry("assets", "engine/resources");
+        m_AssetManager = std::make_unique<AssetManager>(m_AssetRegistry.get());
         
         m_EditorCamera = EditorCamera(45.0f, (float)m_Window->GetWidth() / (float)m_Window->GetHeight(), 0.1f, 1000.0f);
 
         m_PhysicsSystem = std::make_unique<PhysicsSystem>();
         
         m_Renderer = std::make_unique<Renderer>(m_Window->GetNativeWindow(), editorMode);
+        m_Renderer->Init();
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -60,10 +65,6 @@ namespace Lynx
         m_Renderer->InitImGui();
 
         m_ScriptEngine = std::make_unique<ScriptEngine>();
-
-        m_AssetRegistry = std::make_unique<AssetRegistry>();
-        m_AssetRegistry->LoadRegistry("assets", "engine/resources");
-        m_AssetManager = std::make_unique<AssetManager>(m_Renderer->GetDeviceHandle(), m_AssetRegistry.get());
         
         m_Scene = std::make_shared<Scene>();
         
@@ -82,7 +83,6 @@ namespace Lynx
             gameModule->OnStart();
         }
 
-        float lastFrameTime = (float)glfwGetTime();
 
         auto cubeMesh = m_AssetManager->GetDefaultCube();
 
@@ -92,6 +92,7 @@ namespace Lynx
         if (m_Scene && m_SceneState == SceneState::Edit)
             m_ScriptEngine->OnEditorStart(m_Scene.get(), true);
 
+        float lastFrameTime = (float)glfwGetTime();
         // This is a placeholder for the real game loop
         while (m_IsRunning)
         {
@@ -134,6 +135,8 @@ namespace Lynx
                         glm::mat4 viewMatrix = glm::inverse(transform.GetTransform());
                         cameraViewProj = camera.Camera.GetProjection() * viewMatrix;
 
+                        cameraPos = transform.Translation;
+
                         foundCamera = true;
                         break;
                     }
@@ -145,11 +148,14 @@ namespace Lynx
                 m_EditorCamera.SetViewportSize((float)viewportSize.first, (float)viewportSize.second);
                 m_EditorCamera.OnUpdate(deltaTime);
                 cameraViewProj = m_EditorCamera.GetViewProjection();
+                cameraPos = m_EditorCamera.GetPosition();
             }
 
+            // TODO: We should load all the textures and meshes before we run the scene!!!
             if (m_SceneState == SceneState::Play)
             {
                 m_PhysicsSystem->Simulate(deltaTime);
+                LX_CORE_INFO("Simulate!!!!!!!!!!!!!!");
                 m_Scene->OnUpdateRuntime(deltaTime);
                 if (gameModule)
                 {
@@ -160,27 +166,27 @@ namespace Lynx
             {
                 m_Scene->OnUpdateEditor(deltaTime);
             }
+
+            glm::vec3 lightDir = { -0.5f, -0.7f, 1.0f };
+            glm::vec3 lightColor = { 1.0f, 1.0f, 1.0f };
+            float lightIntensity = 1.0f;
+
+            auto sunView = m_Scene->Reg().view<TransformComponent, DirectionalLightComponent>();
+            for (auto entity : sunView)
+            {
+                auto [transform, light] = sunView.get<TransformComponent, DirectionalLightComponent>(entity);
+                lightDir = glm::rotate(transform.Rotation, glm::vec3(0.0f, 0.0f, -1.0f));
+                lightColor = light.Color;
+                lightIntensity = light.Intensity;
+                break;
+            }
             
-            m_Renderer->BeginScene(cameraViewProj);
+            m_Renderer->BeginScene(cameraViewProj, cameraPos, lightDir, lightColor, lightIntensity);
             auto view = m_Scene->Reg().view<TransformComponent, MeshComponent>();
             for (auto entity : view)
             {
                 auto [transform, meshComp] = view.get<TransformComponent, MeshComponent>(entity);
-
                 auto mesh = m_AssetManager->GetAsset<StaticMesh>(meshComp.Mesh);
-                if (mesh)
-                {
-                    if (mesh->GetTexture())
-                    {
-                        auto tex = m_AssetManager->GetAsset<Texture>(mesh->GetTexture());
-                        m_Renderer->SetTexture(tex);
-                    }
-                    else
-                    {
-                        m_Renderer->SetTexture(nullptr);
-                    }
-                }
-                
                 m_Renderer->SubmitMesh(mesh, transform.GetTransform(), meshComp.Color, (int)entity);
             }
 
@@ -223,9 +229,9 @@ namespace Lynx
         m_Scene.reset();
         
         m_ScriptEngine.reset();
-        m_AssetManager.reset();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
+        m_AssetManager.reset();
         m_Renderer.reset();
         m_PhysicsSystem.reset();
         Log::Shutdown();
@@ -751,6 +757,30 @@ namespace Lynx
                         }
                     }
                 }
+            });
+
+        ComponentRegistry.RegisterComponent<DirectionalLightComponent>("DirectionalLight",
+            [](entt::registry& reg, entt::entity entity)
+            {
+                auto& light = reg.get<DirectionalLightComponent>(entity);
+                ImGui::ColorEdit3("Color", &light.Color.x);
+                ImGui::DragFloat("Intensity", &light.Intensity, 0.1f, 0.0f, 100.0f);
+                ImGui::Checkbox("Cast Shadows", &light.CastShadows);
+            },
+            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+            {
+                auto& light = reg.get<DirectionalLightComponent>(entity);
+                json["Color"] = { light.Color.r, light.Color.g, light.Color.b };
+                json["Intensity"] = light.Intensity;
+                json["CastShadows"] = light.CastShadows;
+            },
+            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+            {
+                auto& light = reg.get<DirectionalLightComponent>(entity);
+                const auto& color = json["Color"];
+                light.Color = glm::vec3(color[0], color[1], color[2]);
+                light.Intensity = json["Intensity"];
+                light.CastShadows = json["CastShadows"];
             });
     }
 }

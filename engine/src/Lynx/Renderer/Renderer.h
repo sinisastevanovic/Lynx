@@ -19,7 +19,10 @@ namespace Lynx
         struct SceneData
         {
             glm::mat4 ViewProjectionMatrix;
-            float padding[48]; // Padding to 256 bytes (64 used, 192 remaining -> 48 floats)
+            glm::vec4 CameraPosition;
+
+            glm::vec4 LightDirection; // w is intensity
+            glm::vec4 LightColor; // w is padding/unused
         };
 
         struct RenderTarget
@@ -32,8 +35,11 @@ namespace Lynx
             uint32_t Height = 0;
         };
         
-        Renderer(GLFWwindow* window, bool initIdTarget = false);
+        Renderer(GLFWwindow* window, bool initIDTarget = false);
         ~Renderer();
+
+        void Init();
+        void ReloadShaders();
         
         void OnResize(uint32_t width, uint32_t height);
         
@@ -41,7 +47,7 @@ namespace Lynx
         nvrhi::TextureHandle GetViewportTexture() const;
         std::pair<uint32_t, uint32_t> GetViewportSize() const;
 
-        void BeginScene(glm::mat4 viewProjection);
+        void BeginScene(const glm::mat4& viewProjection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity);
         void EndScene();
 
         std::pair<nvrhi::BufferHandle, nvrhi::BufferHandle> CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices);
@@ -58,10 +64,11 @@ namespace Lynx
 
         int ReadIdFromBuffer(uint32_t x, uint32_t y);
 
+
     private:
         void InitVulkan(GLFWwindow* window);
         void InitNVRHI();
-        void InitPipeline(bool initIdTarget);
+        void InitPipeline();
         void InitBuffers();
 
         void CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height);
@@ -75,12 +82,15 @@ namespace Lynx
         nvrhi::CommandListHandle m_CommandList;
 
         nvrhi::ShaderHandle m_VertexShader;
-        nvrhi::ShaderHandle m_FragmentShader;
+        nvrhi::ShaderHandle m_PixelShader;
         nvrhi::GraphicsPipelineHandle m_Pipeline;
         nvrhi::BufferHandle m_ConstantBuffer;
         nvrhi::BindingSetHandle m_BindingSet;
         nvrhi::BindingLayoutHandle m_BindingLayout;
         nvrhi::TextureHandle m_DefaultTexture;
+        nvrhi::TextureHandle m_DefaultNormalTexture;
+        nvrhi::TextureHandle m_DefaultBlackTexture;
+        nvrhi::TextureHandle m_DefaultMetallicRoughnessTexture;
         nvrhi::StagingTextureHandle m_StageBuffer;
 
         // One NVRHI framebuffer wrapper per swapchain image
@@ -98,6 +108,8 @@ namespace Lynx
 
         std::unordered_map<SamplerSettings, nvrhi::SamplerHandle> m_SamplerCache;
         std::vector<nvrhi::BindingSetHandle> m_FrameBindingSets;
+
+        bool m_ShouldCreateIDTarget = false;
     };
 }
 

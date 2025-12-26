@@ -3,6 +3,8 @@
 #include <set>
 #include <nlohmann/json.hpp>
 
+#include "MeshSpecification.h"
+#include "TextureSpecification.h"
 
 
 namespace Lynx
@@ -11,23 +13,31 @@ namespace Lynx
     {
         m_AssetMetadata.clear();
         m_PathToHandle.clear();
+        m_FileWatchers.clear();
+
+        auto createWatcher = [this](const std::filesystem::path& dir)
+        {
+            if (!std::filesystem::exists(dir))
+                return;
+
+            m_FileWatchers.push_back(std::make_unique<FileWatcher>(dir, [this](FileAction action, const std::filesystem::path& path,
+                const std::filesystem::path& newPath)
+            {
+                std::lock_guard<std::mutex> lock(m_Mutex);
+                m_FileEvents.push_back({action, path, newPath});
+            }));
+        };
 
         if (std::filesystem::exists(engineResourceDir))
         {
             LX_CORE_INFO("AssetRegistry: Scanning Engine Resources at {0}", engineResourceDir.string());
             ScanDirectory(engineResourceDir);
+            createWatcher(engineResourceDir);
         }
         
         LX_CORE_INFO("AssetRegistry: Scanning Project Assets at {0}", projectAssetDir.string());
         ScanDirectory(projectAssetDir);
-
-        // TODO: We only need this in editor, right? 
-        m_FileWatcher = std::make_unique<FileWatcher>(projectAssetDir, [this](FileAction action, const std::filesystem::path& path,
-            const std::filesystem::path& newPath)
-        {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            m_FileEvents.push_back({action, path, newPath});
-        });
+        createWatcher(projectAssetDir);
     }
     
     void AssetRegistry::Update()
@@ -211,6 +221,10 @@ namespace Lynx
             metadata.Handle = AssetHandle();
             metadata.FilePath = path;
             metadata.Type = AssetUtils::GetAssetTypeFromExtension(path);
+            if (metadata.Type == AssetType::Texture)
+            {
+                metadata.Specification = std::make_shared<TextureSpecification>();
+            }
             WriteMetadata(metadata);
         }
 
@@ -223,6 +237,13 @@ namespace Lynx
         nlohmann::json j;
         j["UUID"] = static_cast<uint64_t>(metadata.Handle);
         j["Type"] = metadata.Type;
+
+        if (metadata.Specification)
+        {
+            nlohmann::json settings;
+            metadata.Specification->Serialize(settings);
+            j["Settings"] = settings;
+        }
 
         std::string metaPath = metadata.FilePath.string() + ".lxmeta";
         std::ofstream of(metaPath);
@@ -240,6 +261,22 @@ namespace Lynx
             metadata.Handle = AssetHandle(j["UUID"]);
         if (j.contains("Type"))
             metadata.Type = static_cast<AssetType>(j["Type"]);
+
+        if (j.contains("Settings"))
+        {
+            if (metadata.Type == AssetType::Texture)
+            {
+                auto spec = std::make_shared<TextureSpecification>();
+                spec->Deserialize(j["Settings"]);
+                metadata.Specification = spec;
+            }
+            else if (metadata.Type == AssetType::Material)
+            {
+                auto spec = std::make_shared<StaticMeshSpecification>();
+                spec->Deserialize(j["Settings"]);
+                metadata.Specification = spec;
+            }
+        }
 
         return metadata;
     }

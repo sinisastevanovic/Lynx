@@ -1,12 +1,16 @@
 #include "AssetManager.h"
 
+#include <tiny_gltf.h>
+
 #include "Asset.h"
+#include "Material.h"
 #include "Script.h"
+#include "Shader.h"
 
 namespace Lynx
 {
-    AssetManager::AssetManager(nvrhi::DeviceHandle device, AssetRegistry* registy)
-        : m_Device(device), m_AssetRegistry(registy)
+    AssetManager::AssetManager(AssetRegistry* registy)
+        : m_AssetRegistry(registy)
     {
     }
 
@@ -39,18 +43,30 @@ namespace Lynx
         switch (metadata.Type)
         {
             case AssetType::Texture:
-                newAsset = std::make_shared<Texture>(metadata.FilePath.string());
+            {
+                std::shared_ptr<TextureSpecification> texSpec;
+                if (metadata.Specification)
+                    texSpec = std::static_pointer_cast<TextureSpecification>(metadata.Specification);
+                else
+                    texSpec = std::make_shared<TextureSpecification>();
+                    
+                newAsset = std::make_shared<Texture>(metadata.FilePath.string(), *texSpec);
                 break;
+            }
             case AssetType::StaticMesh:
                 newAsset = std::make_shared<StaticMesh>(metadata.FilePath.string());
                 break;
             case AssetType::Script:
                 newAsset = std::make_shared<Script>(metadata.FilePath.string());
                 break;
+            case AssetType::Material:
+                newAsset = std::make_shared<Material>(metadata.FilePath.string());
+                break;
+            case AssetType::Shader:
+                newAsset = std::make_shared<Shader>(metadata.FilePath.string());
+                break;
             case AssetType::None:
             case AssetType::SkeletalMesh:
-            case AssetType::Material:
-            case AssetType::Shader:
             case AssetType::Scene:
             default: LX_CORE_ERROR("AssetType not supported yet ({0})!", static_cast<int>(metadata.Type)); return nullptr;
         }

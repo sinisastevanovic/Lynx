@@ -5,13 +5,25 @@
 #include <glm/glm.hpp>
 
 #include "MeshSpecification.h"
+#include "Material.h"
 
 namespace Lynx
 {
     struct Vertex
     {
         glm::vec3 Position;
+        glm::vec3 Normal;
+        glm::vec4 Tangent;
         glm::vec2 TexCoord;
+    };
+
+    struct Submesh
+    {
+        nvrhi::BufferHandle VertexBuffer;
+        nvrhi::BufferHandle IndexBuffer;
+        uint32_t IndexCount;
+        std::shared_ptr<Material> Material;
+        std::string Name;
     };
     
     class LX_API StaticMesh : public Asset
@@ -26,13 +38,7 @@ namespace Lynx
 
         const StaticMeshSpecification& GetSpecification() const { return m_Specification; }
 
-        nvrhi::BufferHandle GetVertexBuffer() const { return m_VertexBuffer; }
-        nvrhi::BufferHandle GetIndexBuffer() const { return m_IndexBuffer; }
-        uint32_t GetIndexCount() const { return m_IndexCount; }
-
-        // TODO: Temp!
-        AssetHandle GetTexture() const { return m_TextureAssetHandle; }
-        void SetTexture(AssetHandle textureHandle) { m_TextureAssetHandle = textureHandle; }
+        const std::vector<Submesh>& GetSubmeshes() const { return m_Submeshes; }
 
         virtual bool Reload() override;
 
@@ -40,11 +46,9 @@ namespace Lynx
         void LoadAndUpload();
         
     private:
+        std::vector<Submesh> m_Submeshes;
         StaticMeshSpecification m_Specification;
-        nvrhi::BufferHandle m_VertexBuffer;
-        nvrhi::BufferHandle m_IndexBuffer;
-        uint32_t m_IndexCount = 0;
-        AssetHandle m_TextureAssetHandle = AssetHandle::Null();
+        
         std::string m_FilePath;
     };
 }

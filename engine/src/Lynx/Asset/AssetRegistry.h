@@ -54,7 +54,7 @@ namespace Lynx
         AssetMetadata m_NullMetadata;
 
         // FileWatcher
-        std::unique_ptr<FileWatcher> m_FileWatcher;
+        std::vector<std::unique_ptr<FileWatcher>> m_FileWatchers;
         std::vector<FileEvent> m_FileEvents;
         std::vector<AssetHandle> m_ProcessedChangedAssets;
         std::mutex m_Mutex;
