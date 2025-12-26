@@ -15,6 +15,7 @@ namespace Lynx
         glm::vec3 Normal;
         glm::vec4 Tangent;
         glm::vec2 TexCoord;
+        glm::vec4 Color;
     };
 
     struct Submesh

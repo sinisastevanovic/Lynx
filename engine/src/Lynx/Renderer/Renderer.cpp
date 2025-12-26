@@ -760,9 +760,15 @@ namespace Lynx
                 .setFormat(nvrhi::Format::RG32_FLOAT)
                 .setBufferIndex(0)
                 .setOffset(offsetof(Vertex, TexCoord))
+                .setElementStride(sizeof(Vertex)),
+            nvrhi::VertexAttributeDesc()
+                .setName("COLOR")
+                .setFormat(nvrhi::Format::RGBA32_FLOAT)
+                .setBufferIndex(0)
+                .setOffset(offsetof(Vertex, Color))
                 .setElementStride(sizeof(Vertex))
         };
-        pipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(attributes, 4, m_VertexShader);
+        pipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(attributes, 5, m_VertexShader);
 
         // TODO: Only in editor
         if (m_ShouldCreateIDTarget)

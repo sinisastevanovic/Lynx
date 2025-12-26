@@ -4,12 +4,14 @@ layout(location = 0) in vec3 a_Position;
 layout(location = 1) in vec3 a_Normal;
 layout(location = 2) in vec4 a_Tangent; // Changed to vec4
 layout(location = 3) in vec2 a_TexCoord;
+layout(location = 4) in vec4 a_Color;
 
 layout(location = 0) out vec2 v_TexCoord;
 layout(location = 1) out vec3 v_WorldPos;
 layout(location = 2) out vec3 v_Normal;
 layout(location = 3) out vec4 v_Tangent; // Changed to vec4
-layout(location = 4) out vec4 v_Color;
+layout(location = 4) out vec4 v_MeshColor;
+layout(location = 5) out vec4 v_VertexColor;
 
 layout(set = 0, binding = 0) uniform UBO {
     mat4 u_ViewProjection;
@@ -25,7 +27,8 @@ layout(push_constant) uniform PushConsts {
 
 void main() {
     v_TexCoord = a_TexCoord;
-    v_Color = push.u_Color;
+    v_MeshColor = push.u_Color;
+    v_VertexColor = a_Color;
 
     vec4 worldPos = push.u_Model * vec4(a_Position, 1.0);
     v_WorldPos = worldPos.xyz;
@@ -48,7 +51,8 @@ layout(location = 0) in vec2 v_TexCoord;
 layout(location = 1) in vec3 v_WorldPos;
 layout(location = 2) in vec3 v_Normal;
 layout(location = 3) in vec4 v_Tangent; // Changed to vec4
-layout(location = 4) in vec4 v_Color;
+layout(location = 4) in vec4 v_MeshColor;
+layout(location = 5) in vec4 v_VertexColor;
 
 layout(location = 0) out vec4 outColor;
 
@@ -122,7 +126,7 @@ void main() {
     // ... (Rest of PBR logic same as before) ...
     // 2. Fetch Texture Data
     vec4 albedoSample = texture(sampler2D(u_AlbedoMap, u_Sampler), v_TexCoord);
-    vec3 albedo = pow(albedoSample.rgb, vec3(2.2)) * v_Color.rgb;
+    vec3 albedo = pow(albedoSample.rgb, vec3(2.2)) * v_MeshColor.rgb;
 
     vec4 mrSample = texture(sampler2D(u_MetallicRoughnessMap, u_Sampler), v_TexCoord);
     float metallic = mrSample.b;
