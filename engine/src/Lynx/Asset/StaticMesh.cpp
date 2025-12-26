@@ -328,6 +328,20 @@ namespace Lynx
                         model.images[imageIndex].uri;
                     submeshMaterial->EmissiveTexture = Engine::Get().GetAssetManager().GetAssetHandle(texturePath);
                 }
+
+                if (gltfMaterial.alphaMode == "MASK")
+                {
+                    submeshMaterial->Mode = AlphaMode::Mask;
+                    submeshMaterial->AlphaCutoff = (float)gltfMaterial.alphaCutoff;
+                }
+                else if (gltfMaterial.alphaMode == "BLEND")
+                {
+                    submeshMaterial->Mode = AlphaMode::Translucent;
+                }
+                else
+                {
+                    submeshMaterial->Mode = AlphaMode::Opaque;
+                }
             }
             else
             {

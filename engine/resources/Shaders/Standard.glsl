@@ -23,6 +23,7 @@ layout(set = 0, binding = 0) uniform UBO {
 layout(push_constant) uniform PushConsts {
     mat4 u_Model;
     vec4 u_Color;
+    float u_AlphaCutoff;
 } push;
 
 void main() {
@@ -62,6 +63,12 @@ layout(set = 0, binding = 0) uniform UBO {
     vec4 u_LightDirection;
     vec4 u_LightColor;
 } ubo;
+
+layout(push_constant) uniform PushConsts {
+    mat4 u_Model;
+    vec4 u_Color;
+    float u_AlphaCutoff;
+} push;
 
 layout(set = 0, binding = 1) uniform texture2D u_AlbedoMap;
 layout(set = 0, binding = 2) uniform texture2D u_NormalMap;
@@ -126,6 +133,11 @@ void main() {
     // ... (Rest of PBR logic same as before) ...
     // 2. Fetch Texture Data
     vec4 albedoSample = texture(sampler2D(u_AlbedoMap, u_Sampler), v_TexCoord);
+    if (push.u_AlphaCutoff >= 0.0)
+    {
+        if (albedoSample.a < push.u_AlphaCutoff)
+            discard;
+    }
     vec3 albedo = pow(albedoSample.rgb, vec3(2.2)) * v_MeshColor.rgb;
 
     vec4 mrSample = texture(sampler2D(u_MetallicRoughnessMap, u_Sampler), v_TexCoord);

@@ -105,8 +105,9 @@ namespace Lynx
     {
         glm::mat4 Model;
         glm::vec4 Color;
+        float AlphaCutoff;
         int EntityID;
-        float Padding[3];
+        float Padding[2];
     };
     
     Renderer::Renderer(GLFWwindow* window, bool initIdTarget)
@@ -946,6 +947,7 @@ namespace Lynx
             push.Model = transform;
             push.Color = color;
             push.EntityID = entityID;
+            push.AlphaCutoff = submesh.Material->Mode == AlphaMode::Mask ? submesh.Material->AlphaCutoff : -1.0f;
             m_CommandList->setPushConstants(&push, sizeof(PushData));
         
             nvrhi::DrawArguments args;
