@@ -82,8 +82,6 @@ namespace Lynx
             gameModule->RegisterComponents(&ComponentRegistry);
             gameModule->OnStart();
         }
-
-
         auto cubeMesh = m_AssetManager->GetDefaultCube();
 
         if (m_Scene && m_SceneState == SceneState::Play)
@@ -91,6 +89,32 @@ namespace Lynx
 
         if (m_Scene && m_SceneState == SceneState::Edit)
             m_ScriptEngine->OnEditorStart(m_Scene.get(), true);
+
+        // Load all textures and meshes
+        // TODO: This is temporary code, replace with real scene loading logic
+        auto view = m_Scene->Reg().view<MeshComponent>();
+        for (auto entity : view)
+        {
+            auto& mesh = view.get<MeshComponent>(entity);
+            if (mesh.Mesh)
+            {
+                auto meshasset = m_AssetManager->GetAsset<StaticMesh>(mesh.Mesh);
+                if (meshasset)
+                {
+                    for (const auto& subMesh : meshasset->GetSubmeshes())
+                    {
+                        if (subMesh.Material->AlbedoTexture)
+                            m_AssetManager->GetAsset<Texture>(subMesh.Material->AlbedoTexture);
+                        if (subMesh.Material->NormalMap)
+                            m_AssetManager->GetAsset<Texture>(subMesh.Material->NormalMap);
+                        if (subMesh.Material->MetallicRoughnessTexture)
+                            m_AssetManager->GetAsset<Texture>(subMesh.Material->MetallicRoughnessTexture);
+                        if (subMesh.Material->EmissiveTexture)
+                            m_AssetManager->GetAsset<Texture>(subMesh.Material->EmissiveTexture);
+                    }
+                }
+            }
+        }
 
         float lastFrameTime = (float)glfwGetTime();
         // This is a placeholder for the real game loop
@@ -155,7 +179,6 @@ namespace Lynx
             if (m_SceneState == SceneState::Play)
             {
                 m_PhysicsSystem->Simulate(deltaTime);
-                LX_CORE_INFO("Simulate!!!!!!!!!!!!!!");
                 m_Scene->OnUpdateRuntime(deltaTime);
                 if (gameModule)
                 {
