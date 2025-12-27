@@ -605,20 +605,6 @@ namespace Lynx
         m_CommandList->writeTexture(m_DefaultMetallicRoughnessTexture, 0, 0, &mrPixel, 4);
         m_CommandList->close();
         m_NvrhiDevice->executeCommandList(m_CommandList);
-
-        // --- SHADOWS ---
-        nvrhi::TextureDesc shadowDesc = nvrhi::TextureDesc()
-            .setWidth(m_ShadowMapSize)
-            .setHeight(m_ShadowMapSize)
-            .setFormat(nvrhi::Format::D32)
-            .setIsRenderTarget(true)
-            .setDebugName("ShadowMap")
-            .setInitialState(nvrhi::ResourceStates::DepthWrite)
-            .setKeepInitialState(true);
-        m_ShadowMap = m_NvrhiDevice->createTexture(shadowDesc);
-
-        auto shadowFBDesc = nvrhi::FramebufferDesc().setDepthAttachment(m_ShadowMap);
-        m_ShadowFramebuffer = m_NvrhiDevice->createFramebuffer(shadowFBDesc);
     }
     
     void Renderer::InitBuffers()
@@ -634,59 +620,10 @@ namespace Lynx
         {
             LX_CORE_ERROR("Failed to create Constant Buffer!");
         }
-
-        nvrhi::BufferDesc shadowCBDesc;
-        shadowCBDesc.byteSize = 256;
-        shadowCBDesc.isConstantBuffer = true;
-        shadowCBDesc.initialState = nvrhi::ResourceStates::ConstantBuffer;
-        shadowCBDesc.keepInitialState = true;
-        shadowCBDesc.debugName = "ShadowUBO";
-        m_ShadowConstantBuffer = m_NvrhiDevice->createBuffer(shadowCBDesc);
-
-        // TODO: Remove?
-        glm::mat4 identity(1.0f);
-        m_CommandList->open();
-        m_CommandList->writeBuffer(m_ShadowConstantBuffer, &identity, sizeof(glm::mat4));
-        m_CommandList->close();
-        m_NvrhiDevice->executeCommandList(m_CommandList);
-    }
-
-    void Renderer::ShadowPass()
-    {
-        //m_CommandList->writeBuffer(m_ShadowConstantBuffer, &m_LightViewProj, sizeof(glm::mat4));
-        m_CommandList->clearDepthStencilTexture(m_ShadowMap, nvrhi::AllSubresources, true, 1.0f, false, 0);
-        auto state = nvrhi::GraphicsState()
-        .setPipeline(m_ShadowPipeline)
-        .setFramebuffer(m_ShadowFramebuffer)
-        .addBindingSet(m_ShadowBindingSet);
-        state.viewport.addViewport(nvrhi::Viewport(m_ShadowMapSize, m_ShadowMapSize));
-        state.viewport.addScissorRect(nvrhi::Rect(0, m_ShadowMapSize, 0, m_ShadowMapSize));
-        m_CommandList->setGraphicsState(state);
-
-        for (const auto& cmd : m_OpaqueQueue)
-        {
-            const auto& submesh = cmd.Mesh->GetSubmeshes()[cmd.SubmeshIndex];
-
-            auto vbBinding = nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0);
-            auto ibBinding = nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT);
-            state.vertexBuffers = { vbBinding };
-            state.indexBuffer = ibBinding;
-            m_CommandList->setGraphicsState(state);
-
-            m_CommandList->setPushConstants(&cmd.Transform, sizeof(glm::mat4));
-
-            nvrhi::DrawArguments args;
-            args.vertexCount = submesh.IndexCount;
-            m_CommandList->drawIndexed(args);
-        }
-
-        // TODO: Draw masked objects with alpha cutoff
     }
 
     void Renderer::Flush()
     {
-        ShadowPass();
-        
         const auto& fbInfo = m_CurrentFramebuffer->getFramebufferInfo();
         nvrhi::Viewport viewport(fbInfo.width, fbInfo.height);
         nvrhi::Rect scissor(0, fbInfo.width, 0, fbInfo.height);
@@ -857,8 +794,7 @@ namespace Lynx
             .addItem(nvrhi::BindingSetItem::Texture_SRV(2, normal))
             .addItem(nvrhi::BindingSetItem::Texture_SRV(3, mr))
             .addItem(nvrhi::BindingSetItem::Texture_SRV(4, emiss))
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(5, m_ShadowMap))
-            .addItem(nvrhi::BindingSetItem::Sampler(6, GetSampler(samplerSettings)));
+            .addItem(nvrhi::BindingSetItem::Sampler(5, GetSampler(samplerSettings)));
     }
 
     void Renderer::InitPipeline()
@@ -886,8 +822,7 @@ namespace Lynx
         .addItem(nvrhi::BindingLayoutItem::Texture_SRV(2)) // Normal
         .addItem(nvrhi::BindingLayoutItem::Texture_SRV(3)) // MetallicRoughness
         .addItem(nvrhi::BindingLayoutItem::Texture_SRV(4)) // Emissive
-        .addItem(nvrhi::BindingLayoutItem::Texture_SRV(5)) // Shadow Map
-        .addItem(nvrhi::BindingLayoutItem::Sampler(6));
+        .addItem(nvrhi::BindingLayoutItem::Sampler(5));
         
         layoutDesc.bindingOffsets.shaderResource = 0;
         layoutDesc.bindingOffsets.sampler = 0;
@@ -910,7 +845,7 @@ namespace Lynx
         bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(2, m_DefaultNormalTexture));
         bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(3, m_DefaultMetallicRoughnessTexture));
         bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(4, m_DefaultBlackTexture));
-        bindingSetDesc.addItem(nvrhi::BindingSetItem::Sampler(6, GetSampler(defaultSamplerSettings)));
+        bindingSetDesc.addItem(nvrhi::BindingSetItem::Sampler(5, GetSampler(defaultSamplerSettings)));
         m_BindingSet = m_NvrhiDevice->createBindingSet(bindingSetDesc, m_BindingLayout);
         
         if (!m_BindingSet)
@@ -1009,44 +944,6 @@ namespace Lynx
         {
             m_PipelineTransparent = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, m_SwapchainFramebuffers[0]->getFramebufferInfo());
         }
-
-        // --- Shadow Pipeline ---
-        auto shadowShaderAsset = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/ShadowMap.glsl");
-        auto shadowLayoutDesc = nvrhi::BindingLayoutDesc()
-            .setVisibility(nvrhi::ShaderType::All)
-            .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
-            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(glm::mat4)));
-        shadowLayoutDesc.bindingOffsets.shaderResource = 0;
-        shadowLayoutDesc.bindingOffsets.sampler = 0;
-        shadowLayoutDesc.bindingOffsets.constantBuffer = 0;
-        shadowLayoutDesc.bindingOffsets.unorderedAccess = 0;
-        m_ShadowBindingLayout = m_NvrhiDevice->createBindingLayout(shadowLayoutDesc);
-
-        auto shadowBindingSetDesc = nvrhi::BindingSetDesc()
-            .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ShadowConstantBuffer));
-        m_ShadowBindingSet = m_NvrhiDevice->createBindingSet(shadowBindingSetDesc, m_ShadowBindingLayout);
-
-        auto shadowPipeDesc = nvrhi::GraphicsPipelineDesc()
-        .addBindingLayout(m_ShadowBindingLayout)
-        .setVertexShader(shadowShaderAsset->GetVertexShader())
-        .setFragmentShader(shadowShaderAsset->GetPixelShader())
-        .setPrimType(nvrhi::PrimitiveType::TriangleList);
-        shadowPipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::Front;
-        shadowPipeDesc.renderState.rasterState.depthBias = 1;
-        shadowPipeDesc.renderState.rasterState.slopeScaledDepthBias = 1.0f;
-        shadowPipeDesc.renderState.depthStencilState.depthTestEnable = true;
-        shadowPipeDesc.renderState.depthStencilState.depthWriteEnable = true;
-
-        nvrhi::VertexAttributeDesc shadowAttribs[] = {
-            nvrhi::VertexAttributeDesc()
-                .setName("POSITION")
-                .setFormat(nvrhi::Format::RGB32_FLOAT)
-                .setBufferIndex(0)
-                .setOffset(offsetof(Vertex, Position))
-                .setElementStride(sizeof(Vertex))
-        };
-        shadowPipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(shadowAttribs, 1, shadowShaderAsset->GetVertexShader());
-        m_ShadowPipeline = m_NvrhiDevice->createGraphicsPipeline(shadowPipeDesc, m_ShadowFramebuffer->getFramebufferInfo());
     }
 
     void Renderer::BeginScene(const glm::mat4& viewProjection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity)
@@ -1074,30 +971,13 @@ namespace Lynx
         m_CommandList->open();
         
         m_CameraPosition = cameraPosition;
-        m_LightDir = lightDir;
-        glm::vec3 center = glm::vec3(0, 0, 0);
-        glm::mat4 lightView = glm::lookAt(center - glm::vec3(lightDir) * 50.0f, center, glm::vec3(0, 1, 0));
-        glm::mat4 lightProj = glm::orthoRH_ZO(-100.0f, 100.0f, -100.0f, 100.0f, 1.0f, 100.0f);
-        lightProj[1][1] *= -1;
-        /*lightProj[1][1] *= -1; // Flip Y for Vulkan
-        
-        // Fix Z for Vulkan [0, 1] if GLM is default [-1, 1]
-        // This matrix maps [-1, 1] to [0, 1]
-        glm::mat4 correction = glm::mat4(1.0f);
-        correction[2][2] = 0.5f;
-        correction[3][2] = 0.5f;*/
-        /*lightProj = correction * lightProj;*/
-
-        m_LightViewProj = lightProj * lightView;
         
         SceneData sceneData;
         sceneData.ViewProjectionMatrix = viewProjection;
-        sceneData.LightViewProjectionMatrix = m_LightViewProj;
         sceneData.CameraPosition = glm::vec4(cameraPosition, 1.0f);
         sceneData.LightDirection = glm::vec4(lightDir, lightIntensity);
         sceneData.LightColor = glm::vec4(lightColor, 1.0f);
         m_CommandList->writeBuffer(m_ConstantBuffer, &sceneData, sizeof(SceneData));
-        m_CommandList->writeBuffer(m_ShadowConstantBuffer, &m_LightViewProj, sizeof(glm::mat4));
 
         if (m_EditorTarget)
         {
@@ -1113,30 +993,6 @@ namespace Lynx
         // 3. Clear Screen
         nvrhi::utils::ClearColorAttachment(m_CommandList, m_CurrentFramebuffer, 0, nvrhi::Color(0.1f, 0.1f, 0.1f, 1.0f));
         nvrhi::utils::ClearDepthStencilAttachment(m_CommandList, m_CurrentFramebuffer, 1.0f, 0);
-
-        // 4. Setup Draw State
-        /*nvrhi::GraphicsState state;
-        state.pipeline = m_PipelineOpaque;
-        state.framebuffer = m_CurrentFramebuffer;
-        state.bindings = { m_BindingSet };
-
-        const auto& fbInfo = m_CurrentFramebuffer->getFramebufferInfo();
-        nvrhi::Viewport viewport = nvrhi::Viewport(
-            (float)fbInfo.width,
-            (float)fbInfo.height
-        );
-        state.viewport.addViewport(viewport);
-        state.viewport.addScissorRect(nvrhi::Rect(
-            0, fbInfo.width,
-            0, fbInfo.height
-        ));
-
-        m_CommandList->setGraphicsState(state);*/
-
-        // 5. Draw
-        //nvrhi::DrawArguments args;
-        //args.vertexCount = 36;
-        //m_CommandList->drawIndexed(args);
     }
 
     void Renderer::SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, const glm::vec4& color, int entityID)
@@ -1156,9 +1012,6 @@ namespace Lynx
             else
                 m_OpaqueQueue.push_back(cmd);
         }
-
-        
-        
         // 1. Bind Texture
         // Check if mesh has a texture. If so, bind it. If not, use white texture.
         // NOTE: This is expensive to do per-draw-call (creating BindingSet).

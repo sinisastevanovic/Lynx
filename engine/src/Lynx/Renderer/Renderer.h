@@ -19,7 +19,6 @@ namespace Lynx
         struct SceneData
         {
             glm::mat4 ViewProjectionMatrix;
-            glm::mat4 LightViewProjectionMatrix;
             glm::vec4 CameraPosition;
 
             glm::vec4 LightDirection; // w is intensity
@@ -81,7 +80,6 @@ namespace Lynx
         void InitNVRHI();
         void InitPipeline();
         void InitBuffers();
-        void ShadowPass();
         void Flush();
 
         void CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height);
@@ -130,18 +128,6 @@ namespace Lynx
         std::vector<nvrhi::BindingSetHandle> m_FrameBindingSets;
 
         bool m_ShouldCreateIDTarget = false;
-
-
-        // Shadow stuff
-        nvrhi::TextureHandle m_ShadowMap;
-        nvrhi::FramebufferHandle m_ShadowFramebuffer;
-        nvrhi::GraphicsPipelineHandle m_ShadowPipeline;
-        nvrhi::BindingLayoutHandle m_ShadowBindingLayout;
-        nvrhi::BindingSetHandle m_ShadowBindingSet;
-        nvrhi::BufferHandle m_ShadowConstantBuffer;
-        glm::mat4 m_LightViewProj;
-        glm::vec3 m_LightDir;
-        uint32_t m_ShadowMapSize = 4096;
     };
 }
 
