@@ -12,10 +12,12 @@ layout(location = 2) out vec3 v_Normal;
 layout(location = 3) out vec4 v_Tangent; // Changed to vec4
 layout(location = 4) out vec4 v_MeshColor;
 layout(location = 5) out vec4 v_VertexColor;
-layout(location = 6) out flat int v_EntityID;
+layout(location = 6) out vec4 v_fragPosLightSpace;
+layout(location = 7) out flat int v_EntityID;
 
 layout(set = 0, binding = 0) uniform UBO {
     mat4 u_ViewProjection;
+    mat4 u_LightViewProjection;
     vec4 u_CameraPosition;
     vec4 u_LightDirection;
     vec4 u_LightColor;
@@ -46,6 +48,8 @@ void main() {
     v_Tangent.xyz = normalize(normalMatrix * a_Tangent.xyz);
     v_Tangent.w = a_Tangent.w;
 
+    v_fragPosLightSpace = ubo.u_LightViewProjection * vec4(v_WorldPos, 1.0);
+
     gl_Position = ubo.u_ViewProjection * worldPos;
 }
 
@@ -57,13 +61,15 @@ layout(location = 2) in vec3 v_Normal;
 layout(location = 3) in vec4 v_Tangent; // Changed to vec4
 layout(location = 4) in vec4 v_MeshColor;
 layout(location = 5) in vec4 v_VertexColor;
-layout(location = 6) in flat int v_EntityID;
+layout(location = 6) in vec4 v_fragPosLightSpace;
+layout(location = 7) in flat int v_EntityID;
 
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out int outEntityID;
 
 layout(set = 0, binding = 0) uniform UBO {
     mat4 u_ViewProjection;
+    mat4 u_LightViewProjection;
     vec4 u_CameraPosition;
     vec4 u_LightDirection;
     vec4 u_LightColor;
@@ -80,11 +86,37 @@ layout(set = 0, binding = 1) uniform texture2D u_AlbedoMap;
 layout(set = 0, binding = 2) uniform texture2D u_NormalMap;
 layout(set = 0, binding = 3) uniform texture2D u_MetallicRoughnessMap;
 layout(set = 0, binding = 4) uniform texture2D u_EmissiveMap;
-layout(set = 0, binding = 5) uniform sampler u_Sampler;
+layout(set = 0, binding = 5) uniform texture2D u_ShadowMap;
+layout(set = 0, binding = 6) uniform sampler u_Sampler;
 
 const float PI = 3.14159265359;
 
-// ... (PBR Functions same as before) ...
+float CalculateShadow(vec4 fragPosLightSpace)
+{
+    // perform perspective divide
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    // transform to [0,1] range
+    projCoords = projCoords * 0.5 + 0.5;
+    //projCoords.xy = projCoords.xy * 0.5 + 0.5;
+
+    //projCoords.y = 1.0 - projCoords.y;
+    // keep the shadow at 0.0 when outside the far_plane region of the light's frustum.
+    if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0) 
+        return 0.0;
+
+    // Y-flip is handled in the projection matrix construction in C++.
+
+    float closestDepth = texture(sampler2D(u_ShadowMap, u_Sampler), projCoords.xy).r;
+    float currentDepth = projCoords.z;
+
+    // Simple bias to prevent shadow acne
+    float bias = 0.005;
+    float shadow = currentDepth - bias > closestDepth  ? 1.0 : 0.0;
+
+    return shadow;
+}
+
+// ... PBR Functions ...
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
     float a = roughness * roughness;
     float a2 = a * a;
@@ -169,7 +201,10 @@ void main() {
     kD *= 1.0 - metallic;
 
     float NdotL = max(dot(N, L), 0.0);
-    vec3 Lo = (kD * albedo / PI + specular) * ubo.u_LightColor.rgb * ubo.u_LightDirection.w * NdotL;
+
+    float shadow = CalculateShadow(v_fragPosLightSpace);
+
+    vec3 Lo = (kD * albedo / PI + specular) * ubo.u_LightColor.rgb * ubo.u_LightDirection.w * NdotL * (1.0 - shadow);
 
     // 4. Final Color
     vec3 ambient = vec3(0.03) * albedo;

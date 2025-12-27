@@ -19,6 +19,7 @@ namespace Lynx
         struct SceneData
         {
             glm::mat4 ViewProjectionMatrix;
+            glm::mat4 LightViewProjectionMatrix;
             glm::vec4 CameraPosition;
 
             glm::vec4 LightDirection; // w is intensity
@@ -33,6 +34,16 @@ namespace Lynx
             nvrhi::FramebufferHandle Framebuffer;
             uint32_t Width = 0;
             uint32_t Height = 0;
+        };
+
+        struct RenderCommand
+        {
+            std::shared_ptr<StaticMesh> Mesh;
+            int SubmeshIndex;
+            glm::mat4 Transform;
+            glm::vec4 Color;
+            int EntityID;
+            float DistanceToCamera;
         };
         
         Renderer(GLFWwindow* window, bool initIDTarget = false);
@@ -70,8 +81,12 @@ namespace Lynx
         void InitNVRHI();
         void InitPipeline();
         void InitBuffers();
+        void ShadowPass();
+        void Flush();
 
         void CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height);
+
+        void BindMaterial(Material* material, nvrhi::BindingSetDesc& desc);
 
     private:
         // TODO: Pimpl idiom
@@ -83,7 +98,6 @@ namespace Lynx
 
         nvrhi::ShaderHandle m_VertexShader;
         nvrhi::ShaderHandle m_PixelShader;
-        nvrhi::GraphicsPipelineHandle m_Pipeline;
         nvrhi::BufferHandle m_ConstantBuffer;
         nvrhi::BindingSetHandle m_BindingSet;
         nvrhi::BindingLayoutHandle m_BindingLayout;
@@ -93,6 +107,12 @@ namespace Lynx
         nvrhi::TextureHandle m_DefaultMetallicRoughnessTexture;
         nvrhi::StagingTextureHandle m_StageBuffer;
 
+        nvrhi::GraphicsPipelineHandle m_PipelineOpaque;
+        nvrhi::GraphicsPipelineHandle m_PipelineTransparent;
+        std::vector<RenderCommand> m_OpaqueQueue;
+        std::vector<RenderCommand> m_TransparentQueue;
+        glm::vec3 m_CameraPosition;
+        
         // One NVRHI framebuffer wrapper per swapchain image
         std::vector<nvrhi::FramebufferHandle> m_SwapchainFramebuffers;
         nvrhi::TextureHandle m_SwapchainDepth;
@@ -110,6 +130,18 @@ namespace Lynx
         std::vector<nvrhi::BindingSetHandle> m_FrameBindingSets;
 
         bool m_ShouldCreateIDTarget = false;
+
+
+        // Shadow stuff
+        nvrhi::TextureHandle m_ShadowMap;
+        nvrhi::FramebufferHandle m_ShadowFramebuffer;
+        nvrhi::GraphicsPipelineHandle m_ShadowPipeline;
+        nvrhi::BindingLayoutHandle m_ShadowBindingLayout;
+        nvrhi::BindingSetHandle m_ShadowBindingSet;
+        nvrhi::BufferHandle m_ShadowConstantBuffer;
+        glm::mat4 m_LightViewProj;
+        glm::vec3 m_LightDir;
+        uint32_t m_ShadowMapSize = 4096;
     };
 }
 

@@ -1,4 +1,8 @@
 ﻿#include "Renderer.h"
+
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_transform.hpp>
+
 #include "ShaderUtils.h"
 #include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
@@ -146,7 +150,10 @@ namespace Lynx
         m_FrameBindingSets.clear();
         m_ConstantBuffer = nullptr;
         m_SwapchainDepth = nullptr;
-        m_Pipeline = nullptr;
+        m_OpaqueQueue.clear();
+        m_PipelineOpaque = nullptr;
+        m_TransparentQueue.clear();
+        m_PipelineTransparent = nullptr;
         m_VertexShader = nullptr;
         m_PixelShader = nullptr;
         m_CommandList = nullptr;
@@ -190,7 +197,8 @@ namespace Lynx
     {
         m_VulkanState->Device.waitIdle();
 
-        m_Pipeline = nullptr;
+        m_PipelineOpaque = nullptr;
+        m_PipelineTransparent = nullptr;
         m_BindingLayout = nullptr;
         m_BindingSet = nullptr;
         m_VertexShader = nullptr;
@@ -597,6 +605,20 @@ namespace Lynx
         m_CommandList->writeTexture(m_DefaultMetallicRoughnessTexture, 0, 0, &mrPixel, 4);
         m_CommandList->close();
         m_NvrhiDevice->executeCommandList(m_CommandList);
+
+        // --- SHADOWS ---
+        nvrhi::TextureDesc shadowDesc = nvrhi::TextureDesc()
+            .setWidth(m_ShadowMapSize)
+            .setHeight(m_ShadowMapSize)
+            .setFormat(nvrhi::Format::D32)
+            .setIsRenderTarget(true)
+            .setDebugName("ShadowMap")
+            .setInitialState(nvrhi::ResourceStates::DepthWrite)
+            .setKeepInitialState(true);
+        m_ShadowMap = m_NvrhiDevice->createTexture(shadowDesc);
+
+        auto shadowFBDesc = nvrhi::FramebufferDesc().setDepthAttachment(m_ShadowMap);
+        m_ShadowFramebuffer = m_NvrhiDevice->createFramebuffer(shadowFBDesc);
     }
     
     void Renderer::InitBuffers()
@@ -612,6 +634,133 @@ namespace Lynx
         {
             LX_CORE_ERROR("Failed to create Constant Buffer!");
         }
+
+        nvrhi::BufferDesc shadowCBDesc;
+        shadowCBDesc.byteSize = 256;
+        shadowCBDesc.isConstantBuffer = true;
+        shadowCBDesc.initialState = nvrhi::ResourceStates::ConstantBuffer;
+        shadowCBDesc.keepInitialState = true;
+        shadowCBDesc.debugName = "ShadowUBO";
+        m_ShadowConstantBuffer = m_NvrhiDevice->createBuffer(shadowCBDesc);
+
+        // TODO: Remove?
+        glm::mat4 identity(1.0f);
+        m_CommandList->open();
+        m_CommandList->writeBuffer(m_ShadowConstantBuffer, &identity, sizeof(glm::mat4));
+        m_CommandList->close();
+        m_NvrhiDevice->executeCommandList(m_CommandList);
+    }
+
+    void Renderer::ShadowPass()
+    {
+        //m_CommandList->writeBuffer(m_ShadowConstantBuffer, &m_LightViewProj, sizeof(glm::mat4));
+        m_CommandList->clearDepthStencilTexture(m_ShadowMap, nvrhi::AllSubresources, true, 1.0f, false, 0);
+        auto state = nvrhi::GraphicsState()
+        .setPipeline(m_ShadowPipeline)
+        .setFramebuffer(m_ShadowFramebuffer)
+        .addBindingSet(m_ShadowBindingSet);
+        state.viewport.addViewport(nvrhi::Viewport(m_ShadowMapSize, m_ShadowMapSize));
+        state.viewport.addScissorRect(nvrhi::Rect(0, m_ShadowMapSize, 0, m_ShadowMapSize));
+        m_CommandList->setGraphicsState(state);
+
+        for (const auto& cmd : m_OpaqueQueue)
+        {
+            const auto& submesh = cmd.Mesh->GetSubmeshes()[cmd.SubmeshIndex];
+
+            auto vbBinding = nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0);
+            auto ibBinding = nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT);
+            state.vertexBuffers = { vbBinding };
+            state.indexBuffer = ibBinding;
+            m_CommandList->setGraphicsState(state);
+
+            m_CommandList->setPushConstants(&cmd.Transform, sizeof(glm::mat4));
+
+            nvrhi::DrawArguments args;
+            args.vertexCount = submesh.IndexCount;
+            m_CommandList->drawIndexed(args);
+        }
+
+        // TODO: Draw masked objects with alpha cutoff
+    }
+
+    void Renderer::Flush()
+    {
+        ShadowPass();
+        
+        const auto& fbInfo = m_CurrentFramebuffer->getFramebufferInfo();
+        nvrhi::Viewport viewport(fbInfo.width, fbInfo.height);
+        nvrhi::Rect scissor(0, fbInfo.width, 0, fbInfo.height);
+        
+        std::sort(m_OpaqueQueue.begin(), m_OpaqueQueue.end(),
+            [](const RenderCommand& a, const RenderCommand& b) { return a.DistanceToCamera < b.DistanceToCamera; });
+
+        for (const auto& cmd : m_OpaqueQueue)
+        {
+            const auto& submesh = cmd.Mesh->GetSubmeshes()[cmd.SubmeshIndex];
+
+            auto state = nvrhi::GraphicsState()
+               .setPipeline(m_PipelineOpaque)
+               .setFramebuffer(m_CurrentFramebuffer)
+               .addVertexBuffer(nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0))
+               .setIndexBuffer(nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT));
+            state.viewport.addViewport(viewport);
+            state.viewport.addScissorRect(scissor);
+
+            auto bindingSetDesc = nvrhi::BindingSetDesc();
+            BindMaterial(submesh.Material.get(), bindingSetDesc);
+            auto bindingSet = m_NvrhiDevice->createBindingSet(bindingSetDesc, m_BindingLayout);
+            state.addBindingSet(bindingSet);
+
+            m_CommandList->setGraphicsState(state);
+
+            PushData push;
+            push.Model = cmd.Transform;
+            push.Color = cmd.Color;
+            push.EntityID = cmd.EntityID;
+            push.AlphaCutoff = submesh.Material->Mode == AlphaMode::Mask ? submesh.Material->AlphaCutoff : -1.0f;
+            m_CommandList->setPushConstants(&push, sizeof(PushData));
+        
+            nvrhi::DrawArguments args;
+            args.vertexCount = submesh.IndexCount;
+            m_CommandList->drawIndexed(args);
+        }
+
+        std::sort(m_TransparentQueue.begin(), m_TransparentQueue.end(),
+            [](const RenderCommand& a, const RenderCommand& b) { return a.DistanceToCamera < b.DistanceToCamera; });
+
+        for (const auto& cmd : m_TransparentQueue)
+        {
+            const auto& submesh = cmd.Mesh->GetSubmeshes()[cmd.SubmeshIndex];
+
+            auto state = nvrhi::GraphicsState()
+               .setPipeline(m_PipelineTransparent)
+               .setFramebuffer(m_CurrentFramebuffer)
+               .addVertexBuffer(nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0))
+               .setIndexBuffer(nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT));
+            state.viewport.addViewport(viewport);
+            state.viewport.addScissorRect(scissor);
+
+            auto bindingSetDesc = nvrhi::BindingSetDesc();
+            BindMaterial(submesh.Material.get(), bindingSetDesc);
+            auto bindingSet = m_NvrhiDevice->createBindingSet(bindingSetDesc, m_BindingLayout);
+            state.addBindingSet(bindingSet);
+
+            m_CommandList->setGraphicsState(state);
+
+            PushData push;
+            push.Model = cmd.Transform;
+            push.Color = cmd.Color;
+            push.EntityID = cmd.EntityID;
+            push.AlphaCutoff = -1.0f;
+            m_CommandList->setPushConstants(&push, sizeof(PushData));
+        
+            nvrhi::DrawArguments args;
+            args.vertexCount = submesh.IndexCount;
+            m_CommandList->drawIndexed(args);
+        }
+
+        m_OpaqueQueue.clear();
+        m_TransparentQueue.clear();
     }
 
     void Renderer::CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height)
@@ -657,6 +806,61 @@ namespace Lynx
         target.Framebuffer = m_NvrhiDevice->createFramebuffer(fbDesc);
     }
 
+    void Renderer::BindMaterial(Material* material, nvrhi::BindingSetDesc& desc)
+    {
+        nvrhi::TextureHandle albedo = m_DefaultTexture;
+        nvrhi::TextureHandle normal = m_DefaultNormalTexture;
+        nvrhi::TextureHandle mr = m_DefaultTexture;
+        nvrhi::TextureHandle emiss = m_DefaultBlackTexture;
+
+        SamplerSettings samplerSettings;
+        samplerSettings.FilterMode = TextureFilter::Linear;
+        samplerSettings.WrapMode = TextureWrap::Repeat;
+
+        if (material)
+        {
+            if (material->AlbedoTexture.IsValid())
+            {
+                auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(material->AlbedoTexture);
+                if (texture)
+                {
+                    albedo = texture->GetTextureHandle();
+                    // TODO: If we want per-texture samplers, we need more sampler slots or combined image samplers
+                    samplerSettings = texture->GetSamplerSettings();
+                }
+            }
+
+            if (material->NormalMap.IsValid())
+            {
+                auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(material->NormalMap);
+                if (texture)
+                    normal = texture->GetTextureHandle();
+            }
+
+            if (material->MetallicRoughnessTexture.IsValid())
+            {
+                auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(material->MetallicRoughnessTexture);
+                if (texture)
+                    mr = texture->GetTextureHandle();
+            }
+
+            if (material->EmissiveTexture.IsValid())
+            {
+                auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(material->EmissiveTexture);
+                if (texture)
+                    emiss = texture->GetTextureHandle();
+            }
+        }
+
+        desc.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer))
+            .addItem(nvrhi::BindingSetItem::Texture_SRV(1, albedo))
+            .addItem(nvrhi::BindingSetItem::Texture_SRV(2, normal))
+            .addItem(nvrhi::BindingSetItem::Texture_SRV(3, mr))
+            .addItem(nvrhi::BindingSetItem::Texture_SRV(4, emiss))
+            .addItem(nvrhi::BindingSetItem::Texture_SRV(5, m_ShadowMap))
+            .addItem(nvrhi::BindingSetItem::Sampler(6, GetSampler(samplerSettings)));
+    }
+
     void Renderer::InitPipeline()
     {
         std::shared_ptr<Shader> shaderAsset;
@@ -682,7 +886,8 @@ namespace Lynx
         .addItem(nvrhi::BindingLayoutItem::Texture_SRV(2)) // Normal
         .addItem(nvrhi::BindingLayoutItem::Texture_SRV(3)) // MetallicRoughness
         .addItem(nvrhi::BindingLayoutItem::Texture_SRV(4)) // Emissive
-        .addItem(nvrhi::BindingLayoutItem::Sampler(5));
+        .addItem(nvrhi::BindingLayoutItem::Texture_SRV(5)) // Shadow Map
+        .addItem(nvrhi::BindingLayoutItem::Sampler(6));
         
         layoutDesc.bindingOffsets.shaderResource = 0;
         layoutDesc.bindingOffsets.sampler = 0;
@@ -705,7 +910,7 @@ namespace Lynx
         bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(2, m_DefaultNormalTexture));
         bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(3, m_DefaultMetallicRoughnessTexture));
         bindingSetDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(4, m_DefaultBlackTexture));
-        bindingSetDesc.addItem(nvrhi::BindingSetItem::Sampler(5, GetSampler(defaultSamplerSettings)));
+        bindingSetDesc.addItem(nvrhi::BindingSetItem::Sampler(6, GetSampler(defaultSamplerSettings)));
         m_BindingSet = m_NvrhiDevice->createBindingSet(bindingSetDesc, m_BindingLayout);
         
         if (!m_BindingSet)
@@ -720,15 +925,12 @@ namespace Lynx
         pipeDesc.primType = nvrhi::PrimitiveType::TriangleList;
         pipeDesc.renderState.rasterState.frontCounterClockwise = true;
         pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::Back;
+
+        // Opaque Pipeline
         pipeDesc.renderState.depthStencilState.depthTestEnable = true;
         pipeDesc.renderState.depthStencilState.depthWriteEnable = true;
         pipeDesc.renderState.depthStencilState.depthFunc = nvrhi::ComparisonFunc::Less;
-        pipeDesc.renderState.blendState.targets[0]
-            .setBlendEnable(true)
-            .setSrcBlend(nvrhi::BlendFactor::SrcAlpha)
-            .setDestBlend(nvrhi::BlendFactor::InvSrcAlpha)
-            .setSrcBlendAlpha(nvrhi::BlendFactor::One)
-            .setDestBlendAlpha(nvrhi::BlendFactor::InvSrcAlpha);
+        pipeDesc.renderState.blendState.targets[0].setBlendEnable(false);
 
         if (m_ShouldCreateIDTarget)
         {
@@ -736,7 +938,7 @@ namespace Lynx
             .setBlendEnable(false)
             .setColorWriteMask(nvrhi::ColorMask::All);
         }
-                
+
         nvrhi::VertexAttributeDesc attributes[] = {
             nvrhi::VertexAttributeDesc()
                 .setName("POSITION")
@@ -771,20 +973,80 @@ namespace Lynx
         };
         pipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(attributes, 5, m_VertexShader);
 
-        // TODO: Only in editor
         if (m_ShouldCreateIDTarget)
         {
             auto fbInfo = nvrhi::FramebufferInfo()
                 .addColorFormat(nvrhi::Format::BGRA8_UNORM)
                 .addColorFormat(nvrhi::Format::R32_SINT)
                 .setDepthFormat(nvrhi::Format::D32);
-        
-            m_Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, fbInfo);
+            
+            m_PipelineOpaque = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, fbInfo);
         }
         else
         {
-            m_Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, m_SwapchainFramebuffers[0]->getFramebufferInfo());
+            m_PipelineOpaque = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, m_SwapchainFramebuffers[0]->getFramebufferInfo());
         }
+
+        // Transparent Pipeline
+        pipeDesc.renderState.depthStencilState.depthWriteEnable = false;
+        pipeDesc.renderState.blendState.targets[0]
+            .setBlendEnable(true)
+            .setSrcBlend(nvrhi::BlendFactor::SrcAlpha)
+            .setDestBlend(nvrhi::BlendFactor::InvSrcAlpha)
+            .setSrcBlendAlpha(nvrhi::BlendFactor::One)
+            .setDestBlendAlpha(nvrhi::BlendFactor::InvSrcAlpha);
+
+        if (m_ShouldCreateIDTarget)
+        {
+            auto fbInfo = nvrhi::FramebufferInfo()
+                .addColorFormat(nvrhi::Format::BGRA8_UNORM)
+                .addColorFormat(nvrhi::Format::R32_SINT)
+                .setDepthFormat(nvrhi::Format::D32);
+            
+            m_PipelineTransparent = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, fbInfo);
+        }
+        else
+        {
+            m_PipelineTransparent = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, m_SwapchainFramebuffers[0]->getFramebufferInfo());
+        }
+
+        // --- Shadow Pipeline ---
+        auto shadowShaderAsset = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/ShadowMap.glsl");
+        auto shadowLayoutDesc = nvrhi::BindingLayoutDesc()
+            .setVisibility(nvrhi::ShaderType::All)
+            .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
+            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(glm::mat4)));
+        shadowLayoutDesc.bindingOffsets.shaderResource = 0;
+        shadowLayoutDesc.bindingOffsets.sampler = 0;
+        shadowLayoutDesc.bindingOffsets.constantBuffer = 0;
+        shadowLayoutDesc.bindingOffsets.unorderedAccess = 0;
+        m_ShadowBindingLayout = m_NvrhiDevice->createBindingLayout(shadowLayoutDesc);
+
+        auto shadowBindingSetDesc = nvrhi::BindingSetDesc()
+            .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ShadowConstantBuffer));
+        m_ShadowBindingSet = m_NvrhiDevice->createBindingSet(shadowBindingSetDesc, m_ShadowBindingLayout);
+
+        auto shadowPipeDesc = nvrhi::GraphicsPipelineDesc()
+        .addBindingLayout(m_ShadowBindingLayout)
+        .setVertexShader(shadowShaderAsset->GetVertexShader())
+        .setFragmentShader(shadowShaderAsset->GetPixelShader())
+        .setPrimType(nvrhi::PrimitiveType::TriangleList);
+        shadowPipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::Front;
+        shadowPipeDesc.renderState.rasterState.depthBias = 1;
+        shadowPipeDesc.renderState.rasterState.slopeScaledDepthBias = 1.0f;
+        shadowPipeDesc.renderState.depthStencilState.depthTestEnable = true;
+        shadowPipeDesc.renderState.depthStencilState.depthWriteEnable = true;
+
+        nvrhi::VertexAttributeDesc shadowAttribs[] = {
+            nvrhi::VertexAttributeDesc()
+                .setName("POSITION")
+                .setFormat(nvrhi::Format::RGB32_FLOAT)
+                .setBufferIndex(0)
+                .setOffset(offsetof(Vertex, Position))
+                .setElementStride(sizeof(Vertex))
+        };
+        shadowPipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(shadowAttribs, 1, shadowShaderAsset->GetVertexShader());
+        m_ShadowPipeline = m_NvrhiDevice->createGraphicsPipeline(shadowPipeDesc, m_ShadowFramebuffer->getFramebufferInfo());
     }
 
     void Renderer::BeginScene(const glm::mat4& viewProjection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity)
@@ -811,12 +1073,31 @@ namespace Lynx
         // 2. Start recording
         m_CommandList->open();
         
+        m_CameraPosition = cameraPosition;
+        m_LightDir = lightDir;
+        glm::vec3 center = glm::vec3(0, 0, 0);
+        glm::mat4 lightView = glm::lookAt(center - glm::vec3(lightDir) * 50.0f, center, glm::vec3(0, 1, 0));
+        glm::mat4 lightProj = glm::orthoRH_ZO(-100.0f, 100.0f, -100.0f, 100.0f, 1.0f, 100.0f);
+        lightProj[1][1] *= -1;
+        /*lightProj[1][1] *= -1; // Flip Y for Vulkan
+        
+        // Fix Z for Vulkan [0, 1] if GLM is default [-1, 1]
+        // This matrix maps [-1, 1] to [0, 1]
+        glm::mat4 correction = glm::mat4(1.0f);
+        correction[2][2] = 0.5f;
+        correction[3][2] = 0.5f;*/
+        /*lightProj = correction * lightProj;*/
+
+        m_LightViewProj = lightProj * lightView;
+        
         SceneData sceneData;
         sceneData.ViewProjectionMatrix = viewProjection;
+        sceneData.LightViewProjectionMatrix = m_LightViewProj;
         sceneData.CameraPosition = glm::vec4(cameraPosition, 1.0f);
         sceneData.LightDirection = glm::vec4(lightDir, lightIntensity);
         sceneData.LightColor = glm::vec4(lightColor, 1.0f);
         m_CommandList->writeBuffer(m_ConstantBuffer, &sceneData, sizeof(SceneData));
+        m_CommandList->writeBuffer(m_ShadowConstantBuffer, &m_LightViewProj, sizeof(glm::mat4));
 
         if (m_EditorTarget)
         {
@@ -834,8 +1115,8 @@ namespace Lynx
         nvrhi::utils::ClearDepthStencilAttachment(m_CommandList, m_CurrentFramebuffer, 1.0f, 0);
 
         // 4. Setup Draw State
-        nvrhi::GraphicsState state;
-        state.pipeline = m_Pipeline;
+        /*nvrhi::GraphicsState state;
+        state.pipeline = m_PipelineOpaque;
         state.framebuffer = m_CurrentFramebuffer;
         state.bindings = { m_BindingSet };
 
@@ -850,7 +1131,7 @@ namespace Lynx
             0, fbInfo.height
         ));
 
-        m_CommandList->setGraphicsState(state);
+        m_CommandList->setGraphicsState(state);*/
 
         // 5. Draw
         //nvrhi::DrawArguments args;
@@ -863,97 +1144,20 @@ namespace Lynx
         if (!mesh)
             return;
 
-        auto getTex = [&](AssetHandle handle, nvrhi::TextureHandle defaultTex)
+        float dist = glm::distance(m_CameraPosition, glm::vec3(transform[3]));
+
+        for (int i = 0; i < mesh->GetSubmeshes().size(); ++i)
         {
-            if (handle.IsValid())
-            {
-                auto t = Engine::Get().GetAssetManager().GetAsset<Texture>(handle);
-                if (t)
-                    return t->GetTextureHandle();
-            }
-            return defaultTex;
-        };
+            const auto& submesh = mesh->GetSubmeshes()[i];
+            RenderCommand cmd = { mesh, i, transform, color, entityID, dist };
 
-        for (const auto& submesh : mesh->GetSubmeshes())
-        {
-            if (!submesh.Material)
-                continue;
-            
-            // Create Binding Set for this draw call
-            nvrhi::TextureHandle albedo = m_DefaultTexture;
-            nvrhi::TextureHandle normal = m_DefaultNormalTexture;
-            nvrhi::TextureHandle mr = m_DefaultTexture;
-            nvrhi::TextureHandle emiss = m_DefaultBlackTexture;
-
-            SamplerSettings defaultSamplerSettings;
-            defaultSamplerSettings.FilterMode = TextureFilter::Linear;
-            defaultSamplerSettings.WrapMode = TextureWrap::Repeat;
-
-            if (submesh.Material->AlbedoTexture.IsValid())
-            {
-                auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(submesh.Material->AlbedoTexture);
-                if (texture)
-                {
-                    albedo = texture->GetTextureHandle();
-                    // TODO: If we want per-texture samplers, we need more sampler slots or combined image samplers
-                    defaultSamplerSettings = texture->GetSamplerSettings();
-                }
-            }
-
-            if (submesh.Material->NormalMap.IsValid())
-            {
-                auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(submesh.Material->NormalMap);
-                if (texture)
-                    normal = texture->GetTextureHandle();
-            }
-
-            if (submesh.Material->MetallicRoughnessTexture.IsValid())
-            {
-                auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(submesh.Material->MetallicRoughnessTexture);
-                if (texture)
-                    mr = texture->GetTextureHandle();
-            }
-
-            if (submesh.Material->EmissiveTexture.IsValid())
-            {
-                auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(submesh.Material->EmissiveTexture);
-                if (texture)
-                    emiss = texture->GetTextureHandle();
-            }
-
-            // TODO OPTIMIZATION NOTE: Creating a BindingSet every frame/draw is SLOW.
-            // In a real engine, this should be cached in the Material object.
-            // But for now, we do it here.
-            auto bindingSetDesc = nvrhi::BindingSetDesc()
-                .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ConstantBuffer))
-                .addItem(nvrhi::BindingSetItem::Texture_SRV(1, albedo))
-                .addItem(nvrhi::BindingSetItem::Texture_SRV(2, normal))
-                .addItem(nvrhi::BindingSetItem::Texture_SRV(3, mr))
-                .addItem(nvrhi::BindingSetItem::Texture_SRV(4, emiss))
-                .addItem(nvrhi::BindingSetItem::Sampler(5, GetSampler(defaultSamplerSettings)));
-            auto bindingSet = m_NvrhiDevice->createBindingSet(bindingSetDesc, m_BindingLayout);
-
-            // 2. Bind Geometry
-            auto state = nvrhi::GraphicsState()
-                .setPipeline(m_Pipeline)
-                .setFramebuffer(m_CurrentFramebuffer)
-                .addBindingSet(bindingSet)
-                .addVertexBuffer(nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0))
-                .setIndexBuffer(nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT));
-
-            m_CommandList->setGraphicsState(state);
-
-            PushData push;
-            push.Model = transform;
-            push.Color = color;
-            push.EntityID = entityID;
-            push.AlphaCutoff = submesh.Material->Mode == AlphaMode::Mask ? submesh.Material->AlphaCutoff : -1.0f;
-            m_CommandList->setPushConstants(&push, sizeof(PushData));
-        
-            nvrhi::DrawArguments args;
-            args.vertexCount = submesh.IndexCount;
-            m_CommandList->drawIndexed(args);
+            if (submesh.Material->Mode == AlphaMode::Translucent)
+                m_TransparentQueue.push_back(cmd);
+            else
+                m_OpaqueQueue.push_back(cmd);
         }
+
+        
         
         // 1. Bind Texture
         // Check if mesh has a texture. If so, bind it. If not, use white texture.
@@ -972,6 +1176,8 @@ namespace Lynx
 
     void Renderer::EndScene()
     {
+        Flush();
+        
         // 1. Close recording
         m_CommandList->close();
 
