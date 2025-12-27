@@ -8,6 +8,7 @@ add_executable(editor ${EDITOR_SOURCES})
 
 target_compile_definitions(editor PRIVATE
     "IMGUI_API=__declspec(dllimport)"
+    GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
 
 set_target_properties(editor PROPERTIES

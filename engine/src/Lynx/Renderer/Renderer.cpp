@@ -190,6 +190,7 @@ namespace Lynx
     void Renderer::Init()
     {
         InitPipeline();
+        InitShadows();
         LX_CORE_INFO("Renderer initialized successfully (Pipeline loaded).");
     }
 
@@ -622,6 +623,175 @@ namespace Lynx
         }
     }
 
+    void Renderer::InitShadows()
+    {
+        // 1. Texture & Framebuffer (Depth Only)
+        nvrhi::TextureDesc shadowMapDesc;
+        shadowMapDesc.width = m_ShadowPass.Resolution;
+        shadowMapDesc.height = m_ShadowPass.Resolution;
+        shadowMapDesc.format = nvrhi::Format::D32;
+        shadowMapDesc.isRenderTarget = true;
+        shadowMapDesc.debugName = "ShadowMap";
+        shadowMapDesc.initialState = nvrhi::ResourceStates::DepthWrite;
+        shadowMapDesc.keepInitialState = true;
+        m_ShadowPass.ShadowMap = m_NvrhiDevice->createTexture(shadowMapDesc);
+
+        nvrhi::FramebufferDesc fbDesc;
+        fbDesc.setDepthAttachment(m_ShadowPass.ShadowMap);
+        m_ShadowPass.Framebuffer = m_NvrhiDevice->createFramebuffer(fbDesc);
+
+        // 2. Constant Buffer (Shadow UBO)
+        nvrhi::BufferDesc cbDesc;
+        cbDesc.byteSize = sizeof(ShadowSceneData); // Just the mat4
+        cbDesc.isConstantBuffer = true;
+        cbDesc.debugName = "ShadowCB";
+        cbDesc.initialState = nvrhi::ResourceStates::ConstantBuffer;
+        cbDesc.keepInitialState = true;
+        m_ShadowPass.ConstantBuffer = m_NvrhiDevice->createBuffer(cbDesc);
+
+        // 3. Pipeline & Layout
+        auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/Shadow.glsl");
+
+        // Layout: UBO (0) + Albedo(1) + Sampler(2)
+        nvrhi::BindingLayoutDesc layoutDesc;
+        layoutDesc.setVisibility(nvrhi::ShaderType::All);
+        layoutDesc.addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0)); // Binding 0: UBO
+        layoutDesc.addItem(nvrhi::BindingLayoutItem::Texture_SRV(1));    // Binding 1: Albedo
+        layoutDesc.addItem(nvrhi::BindingLayoutItem::Sampler(2));        // Binding 2: Sampler
+        layoutDesc.addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(PushData)));
+        layoutDesc.bindingOffsets.shaderResource = 0;
+        layoutDesc.bindingOffsets.sampler = 0;
+        layoutDesc.bindingOffsets.constantBuffer = 0;
+        layoutDesc.bindingOffsets.unorderedAccess = 0;
+        m_ShadowPass.BindingLayout = m_NvrhiDevice->createBindingLayout(layoutDesc);
+
+        // Create a base BindingSet that just has the UBO
+        // (We will need to create dynamic BindingSets for materials,
+        //  OR we cheat and use one global binding set if we just bind white texture for everything opaque)
+        // For proper masked support, we need per-material binding sets.
+        // Let's create a "Default" binding set for Opaque objects that uses the White texture.
+
+        nvrhi::BindingSetDesc bsDesc;
+        bsDesc.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ShadowPass.ConstantBuffer));
+        bsDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(1, m_DefaultTexture)); // Default White
+        bsDesc.addItem(nvrhi::BindingSetItem::Sampler(2, m_SamplerCache.begin()->second)); // Any linear sampler
+        m_ShadowPass.BindingSet = m_NvrhiDevice->createBindingSet(bsDesc, m_ShadowPass.BindingLayout);
+
+        nvrhi::VertexAttributeDesc attributes[] = {
+            nvrhi::VertexAttributeDesc()
+                .setName("POSITION")
+                .setFormat(nvrhi::Format::RGB32_FLOAT)
+                .setBufferIndex(0)
+                .setOffset(offsetof(Vertex, Position))
+                .setElementStride(sizeof(Vertex)),
+            nvrhi::VertexAttributeDesc()
+                .setName("NORMAL")
+                .setFormat(nvrhi::Format::RGB32_FLOAT)
+                .setBufferIndex(0)
+                .setOffset(offsetof(Vertex, Normal))
+                .setElementStride(sizeof(Vertex)),
+            nvrhi::VertexAttributeDesc()
+                .setName("TANGENT")
+                .setFormat(nvrhi::Format::RGBA32_FLOAT) // Note: RGBA for Tangent
+                .setBufferIndex(0)
+                .setOffset(offsetof(Vertex, Tangent))
+                .setElementStride(sizeof(Vertex)),
+            nvrhi::VertexAttributeDesc()
+                .setName("TEXCOORD")
+                .setFormat(nvrhi::Format::RG32_FLOAT)
+                .setBufferIndex(0)
+                .setOffset(offsetof(Vertex, TexCoord))
+                .setElementStride(sizeof(Vertex)),
+            nvrhi::VertexAttributeDesc()
+                .setName("COLOR")
+                .setFormat(nvrhi::Format::RGBA32_FLOAT)
+                .setBufferIndex(0)
+                .setOffset(offsetof(Vertex, Color))
+                .setElementStride(sizeof(Vertex))
+        };
+
+        nvrhi::GraphicsPipelineDesc pipeDesc;
+        pipeDesc.bindingLayouts = { m_ShadowPass.BindingLayout };
+        pipeDesc.VS = shader->GetVertexShader();
+        pipeDesc.PS = shader->GetPixelShader();
+        pipeDesc.primType = nvrhi::PrimitiveType::TriangleList;
+        pipeDesc.inputLayout = m_NvrhiDevice->createInputLayout(attributes, 5, shader->GetVertexShader());
+
+        // Shadow Bias Settings
+        pipeDesc.renderState.rasterState.depthBias = 1.0f;
+        pipeDesc.renderState.rasterState.slopeScaledDepthBias = 2.0f;
+        pipeDesc.renderState.rasterState.frontCounterClockwise = true;
+        pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::Back;
+
+        pipeDesc.renderState.depthStencilState.depthTestEnable = true;
+        pipeDesc.renderState.depthStencilState.depthWriteEnable = true;
+        pipeDesc.renderState.depthStencilState.depthFunc = nvrhi::ComparisonFunc::Less;
+
+        m_ShadowPass.Pipeline = m_NvrhiDevice->createGraphicsPipeline(pipeDesc, m_ShadowPass.Framebuffer->getFramebufferInfo());
+
+        // 4. Create Comparison Sampler for Main Pass
+        nvrhi::SamplerDesc shadowSamplerDesc;
+        shadowSamplerDesc.addressU = shadowSamplerDesc.addressV = nvrhi::SamplerAddressMode::Border;
+        shadowSamplerDesc.borderColor = nvrhi::Color(1.0f); // Shadows outside are white (lit)
+        shadowSamplerDesc.reductionType = nvrhi::SamplerReductionType::Comparison;
+        m_ShadowPass.ShadowSampler = m_NvrhiDevice->createSampler(shadowSamplerDesc);
+
+    }
+
+    void Renderer::RenderShadows()
+    {
+        m_CommandList->beginMarker("ShadowPass");
+
+        nvrhi::utils::ClearDepthStencilAttachment(m_CommandList, m_ShadowPass.Framebuffer, 1.0f, 0);
+
+        ShadowSceneData shadowData;
+        shadowData.ViewProjectionMatrix = m_LightViewProjMatrix;
+        m_CommandList->writeBuffer(m_ShadowPass.ConstantBuffer, &shadowData, sizeof(ShadowSceneData));
+
+        // 2. Setup Render State
+        nvrhi::GraphicsState state;
+        state.pipeline = m_ShadowPass.Pipeline;
+        state.framebuffer = m_ShadowPass.Framebuffer;
+        state.viewport.addViewport(nvrhi::Viewport(m_ShadowPass.Resolution, m_ShadowPass.Resolution));
+        state.viewport.addScissorRect(nvrhi::Rect(0, m_ShadowPass.Resolution, 0, m_ShadowPass.Resolution));
+
+        // Bind the Default Set (UBO + White Texture) initially
+        state.addBindingSet(m_ShadowPass.BindingSet);
+        m_CommandList->setGraphicsState(state);
+
+        // 3. Draw
+        // Note: Ideally, for masked objects, you'd create a temporary BindingSet pointing to their texture.
+        // For now, to keep this step focused, we will render everything as Opaque using the default white texture.
+        // This means leaves will cast square shadows. We can fix "Masked" support in the next specific step if you want.
+
+        auto drawQueue = [&](std::vector<RenderCommand>& queue) {
+            for (const auto& cmd : queue) {
+                const auto& submesh = cmd.Mesh->GetSubmeshes()[cmd.SubmeshIndex];
+
+                PushData push;
+                push.Model = cmd.Transform;
+                push.AlphaCutoff = -1.0f; // Force opaque for now
+
+                m_CommandList->setPushConstants(&push, sizeof(PushData));
+
+                auto drawState = state;
+                drawState.addVertexBuffer(nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0));
+                drawState.setIndexBuffer(nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT));
+                m_CommandList->setGraphicsState(drawState);
+                
+                nvrhi::DrawArguments args;
+                args.vertexCount = submesh.IndexCount;
+
+                m_CommandList->drawIndexed(args);
+            }
+        };
+
+        drawQueue(m_OpaqueQueue);
+        drawQueue(m_TransparentQueue);
+
+        m_CommandList->endMarker();
+    }
+
     void Renderer::Flush()
     {
         const auto& fbInfo = m_CurrentFramebuffer->getFramebufferInfo();
@@ -794,7 +964,9 @@ namespace Lynx
             .addItem(nvrhi::BindingSetItem::Texture_SRV(2, normal))
             .addItem(nvrhi::BindingSetItem::Texture_SRV(3, mr))
             .addItem(nvrhi::BindingSetItem::Texture_SRV(4, emiss))
-            .addItem(nvrhi::BindingSetItem::Sampler(5, GetSampler(samplerSettings)));
+            .addItem(nvrhi::BindingSetItem::Sampler(5, GetSampler(samplerSettings)))
+            .addItem(nvrhi::BindingSetItem::Texture_SRV(6, m_ShadowPass.ShadowMap))
+            .addItem(nvrhi::BindingSetItem::Sampler(7, m_ShadowPass.ShadowSampler));
     }
 
     void Renderer::InitPipeline()
@@ -822,7 +994,9 @@ namespace Lynx
         .addItem(nvrhi::BindingLayoutItem::Texture_SRV(2)) // Normal
         .addItem(nvrhi::BindingLayoutItem::Texture_SRV(3)) // MetallicRoughness
         .addItem(nvrhi::BindingLayoutItem::Texture_SRV(4)) // Emissive
-        .addItem(nvrhi::BindingLayoutItem::Sampler(5));
+        .addItem(nvrhi::BindingLayoutItem::Sampler(5))
+        .addItem(nvrhi::BindingLayoutItem::Texture_SRV(6)) // Shadow map
+        .addItem(nvrhi::BindingLayoutItem::Sampler(7));
         
         layoutDesc.bindingOffsets.shaderResource = 0;
         layoutDesc.bindingOffsets.sampler = 0;
@@ -971,9 +1145,56 @@ namespace Lynx
         m_CommandList->open();
         
         m_CameraPosition = cameraPosition;
+
+        glm::vec3 center = cameraPosition;
+
+        glm::vec3 lightDirNorm = glm::normalize(lightDir);
+        glm::vec3 lightPos = center - lightDirNorm * 100.0f; // Move back enough to not clip near objects
+        
+        glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+        if (glm::abs(glm::dot(lightDirNorm, up)) > 0.99f)
+            up = glm::vec3(0.0f, 0.0f, 1.0f);
+
+        glm::mat4 lightView = glm::lookAt(lightPos, center, up);
+
+        float orthoSize = 100.0f;
+        float zNear = 0.1f;
+        float zFar = 1000.0f;
+
+        glm::mat4 lightProj = glm::ortho(-orthoSize, orthoSize, -orthoSize, orthoSize, zNear, zFar);
+        
+        // Flip Y for Vulkan (Y is down in clip space)
+        // Handled in Shader Bias Matrix now
+        // lightProj[1][1] *= -1.0f; 
+
+        m_LightViewProjMatrix = lightProj * lightView;
+
+        // Shadow Map Stabilization
+        // We need to snap the projection to the nearest texel in Light Space to avoid shimmering
+        float shadowMapRes = (float)m_ShadowPass.Resolution;
+        
+        // Project a reference point (Origin) to Shadow Map NDC Space
+        glm::vec4 shadowOrigin = m_LightViewProjMatrix * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        shadowOrigin /= shadowOrigin.w; 
+
+        // NDC is [-1, 1] for XY. Resolution is [0, Res].
+        float texelSizeNDC = 2.0f / shadowMapRes;
+
+        // Snap to grid
+        float snappedX = round(shadowOrigin.x / texelSizeNDC) * texelSizeNDC;
+        float snappedY = round(shadowOrigin.y / texelSizeNDC) * texelSizeNDC;
+
+        // Calculate offset
+        float dX = snappedX - shadowOrigin.x;
+        float dY = snappedY - shadowOrigin.y;
+
+        // Apply offset to the Projection Matrix
+        m_LightViewProjMatrix[3][0] += dX;
+        m_LightViewProjMatrix[3][1] += dY;
         
         SceneData sceneData;
         sceneData.ViewProjectionMatrix = viewProjection;
+        sceneData.LightViewProjection = m_LightViewProjMatrix;
         sceneData.CameraPosition = glm::vec4(cameraPosition, 1.0f);
         sceneData.LightDirection = glm::vec4(lightDir, lightIntensity);
         sceneData.LightColor = glm::vec4(lightColor, 1.0f);
@@ -1029,6 +1250,7 @@ namespace Lynx
 
     void Renderer::EndScene()
     {
+        RenderShadows();
         Flush();
         
         // 1. Close recording

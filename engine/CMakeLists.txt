@@ -11,6 +11,7 @@ target_compile_definitions(engine PRIVATE
     GLFW_STATIC
     VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
     "IMGUI_API=__declspec(dllexport)"
+    GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
 
 find_package(Lua REQUIRED)

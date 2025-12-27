@@ -19,10 +19,16 @@ namespace Lynx
         struct SceneData
         {
             glm::mat4 ViewProjectionMatrix;
+            glm::mat4 LightViewProjection;
             glm::vec4 CameraPosition;
 
             glm::vec4 LightDirection; // w is intensity
             glm::vec4 LightColor; // w is padding/unused
+        };
+
+        struct ShadowSceneData
+        {
+            glm::mat4 ViewProjectionMatrix;
         };
 
         struct RenderTarget
@@ -43,6 +49,19 @@ namespace Lynx
             glm::vec4 Color;
             int EntityID;
             float DistanceToCamera;
+        };
+
+        struct ShadowPassData
+        {
+            nvrhi::FramebufferHandle Framebuffer;
+            nvrhi::TextureHandle ShadowMap;
+            nvrhi::BufferHandle ConstantBuffer;
+            nvrhi::GraphicsPipelineHandle Pipeline;
+            nvrhi::BindingLayoutHandle BindingLayout;
+            nvrhi::BindingSetHandle BindingSet;
+            nvrhi::SamplerHandle ShadowSampler;
+
+            uint32_t Resolution = 4096;
         };
         
         Renderer(GLFWwindow* window, bool initIDTarget = false);
@@ -80,6 +99,8 @@ namespace Lynx
         void InitNVRHI();
         void InitPipeline();
         void InitBuffers();
+        void InitShadows();
+        void RenderShadows();
         void Flush();
 
         void CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height);
@@ -128,6 +149,9 @@ namespace Lynx
         std::vector<nvrhi::BindingSetHandle> m_FrameBindingSets;
 
         bool m_ShouldCreateIDTarget = false;
+
+        ShadowPassData m_ShadowPass;
+        glm::mat4 m_LightViewProjMatrix;
     };
 }
 
