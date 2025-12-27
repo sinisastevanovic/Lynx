@@ -12,9 +12,11 @@ layout(location = 2) out vec3 v_Normal;
 layout(location = 3) out vec4 v_Tangent; // Changed to vec4
 layout(location = 4) out vec4 v_MeshColor;
 layout(location = 5) out vec4 v_VertexColor;
+layout(location = 6) out vec4 v_ShadowCoord;
 
 layout(set = 0, binding = 0) uniform UBO {
     mat4 u_ViewProjection;
+    mat4 u_LightViewProjection;
     vec4 u_CameraPosition;
     vec4 u_LightDirection;
     vec4 u_LightColor;
@@ -43,6 +45,18 @@ void main() {
     v_Tangent.xyz = normalize(normalMatrix * a_Tangent.xyz);
     v_Tangent.w = a_Tangent.w;
 
+    // Calculate shadow coordinate
+    // Offset matrix to move from [-1, 1] to [0, 1]
+    // We flip Y here (-0.5 scale) to match Vulkan's inverted Y in clip space vs Texture coords
+    const mat4 biasMat = mat4(
+        0.5, 0.0, 0.0, 0.0,
+        0.0, -0.5, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.5, 0.5, 0.0, 1.0
+    );
+
+    v_ShadowCoord = (biasMat * ubo.u_LightViewProjection) * vec4(v_WorldPos, 1.0);
+
     gl_Position = ubo.u_ViewProjection * worldPos;
 }
 
@@ -54,11 +68,13 @@ layout(location = 2) in vec3 v_Normal;
 layout(location = 3) in vec4 v_Tangent; // Changed to vec4
 layout(location = 4) in vec4 v_MeshColor;
 layout(location = 5) in vec4 v_VertexColor;
+layout(location = 6) in vec4 v_ShadowCoord;
 
 layout(location = 0) out vec4 outColor;
 
 layout(set = 0, binding = 0) uniform UBO {
     mat4 u_ViewProjection;
+    mat4 u_LightViewProjection;
     vec4 u_CameraPosition;
     vec4 u_LightDirection;
     vec4 u_LightColor;
@@ -75,10 +91,41 @@ layout(set = 0, binding = 2) uniform texture2D u_NormalMap;
 layout(set = 0, binding = 3) uniform texture2D u_MetallicRoughnessMap;
 layout(set = 0, binding = 4) uniform texture2D u_EmissiveMap;
 layout(set = 0, binding = 5) uniform sampler u_Sampler;
+layout(set = 0, binding = 6) uniform texture2D u_ShadowMap;
+layout(set = 0, binding = 7) uniform sampler u_ShadowSampler;
 
 const float PI = 3.14159265359;
 
-// ... (PBR Functions same as before) ...
+float CalculateShadow(vec4 shadowCoord)
+{
+    // Perspective divide (not strictly needed for ortho, but good practice)
+    vec3 projCoords = shadowCoord.xyz / shadowCoord.w;
+
+    // Check if outside shadow map range
+    if(projCoords.z > 1.0 || projCoords.z < 0.0) return 1.0;
+
+    if (projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+        return 1.0;
+
+    // PCF (Percentage Closer Filtering)
+    // Sample 3x3 grid
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(sampler2DShadow(u_ShadowMap, u_ShadowSampler), 0);
+
+    for(int x = -1; x <= 1; ++x)
+    {
+        for(int y = -1; y <= 1; ++y)
+        {
+            // texture() on samplerShadow returns 1.0 if lit, 0.0 if shadowed
+            shadow += texture(sampler2DShadow(u_ShadowMap, u_ShadowSampler),
+                              vec3(projCoords.xy + vec2(x, y) * texelSize, projCoords.z));
+        }
+    }
+
+    return shadow / 9.0;
+}
+
+// ... PBR Functions ...
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
     float a = roughness * roughness;
     float a2 = a * a;
@@ -163,7 +210,12 @@ void main() {
     kD *= 1.0 - metallic;
 
     float NdotL = max(dot(N, L), 0.0);
-    vec3 Lo = (kD * albedo / PI + specular) * ubo.u_LightColor.rgb * ubo.u_LightDirection.w * NdotL;
+
+    float shadow = CalculateShadow(v_ShadowCoord);
+    //outColor = vec4(vec3(shadow), 1.0);
+    //return;
+
+    vec3 Lo = (kD * albedo / PI + specular) * ubo.u_LightColor.rgb * ubo.u_LightDirection.w * NdotL * shadow;
 
     // 4. Final Color
     vec3 ambient = vec3(0.03) * albedo;
