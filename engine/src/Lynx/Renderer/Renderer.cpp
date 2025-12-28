@@ -167,6 +167,13 @@ namespace Lynx
             m_EditorTarget->Framebuffer = nullptr;
             m_EditorTarget.reset();
         }
+        m_ShadowPass.ShadowSampler = nullptr;
+        m_ShadowPass.BindingSet = nullptr;
+        m_ShadowPass.BindingLayout = nullptr;
+        m_ShadowPass.Pipeline = nullptr;
+        m_ShadowPass.ConstantBuffer = nullptr;
+        m_ShadowPass.ShadowMap = nullptr;
+        m_ShadowPass.Framebuffer = nullptr;
         m_NvrhiDevice = nullptr;
         m_ImGuiBackend.reset();
 
@@ -767,14 +774,47 @@ namespace Lynx
         auto drawQueue = [&](std::vector<RenderCommand>& queue) {
             for (const auto& cmd : queue) {
                 const auto& submesh = cmd.Mesh->GetSubmeshes()[cmd.SubmeshIndex];
+                auto material = submesh.Material.get();
 
                 PushData push;
                 push.Model = cmd.Transform;
-                push.AlphaCutoff = -1.0f; // Force opaque for now
+                push.AlphaCutoff = (material->Mode == AlphaMode::Mask) ? material->AlphaCutoff : -1.0f; // Force opaque for now
 
                 m_CommandList->setPushConstants(&push, sizeof(PushData));
 
                 auto drawState = state;
+                nvrhi::BindingSetHandle handle;
+                
+                if (material->Mode == AlphaMode::Mask)
+                {
+                    nvrhi::BindingSetDesc bsDesc;
+                    bsDesc.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ShadowPass.ConstantBuffer));
+
+                    SamplerSettings samplerSettings;
+
+                    nvrhi::TextureHandle texHandle = m_DefaultTexture;
+                    if (material->AlbedoTexture.IsValid())
+                    {
+                        auto t = Engine::Get().GetAssetManager().GetAsset<Texture>(material->AlbedoTexture);
+                        if (t)
+                        {
+                            texHandle = t->GetTextureHandle();
+                            samplerSettings = t->GetSamplerSettings();
+                        }
+                    }
+
+                    bsDesc.addItem(nvrhi::BindingSetItem::Texture_SRV(1, texHandle));
+                    bsDesc.addItem(nvrhi::BindingSetItem::Sampler(2, GetSampler(samplerSettings)));
+
+                    handle = m_NvrhiDevice->createBindingSet(bsDesc, m_ShadowPass.BindingLayout);
+                    drawState.bindings = {handle};
+                }
+                else
+                {
+                    drawState.bindings ={ m_ShadowPass.BindingSet};
+                }
+
+                
                 drawState.addVertexBuffer(nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0));
                 drawState.setIndexBuffer(nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT));
                 m_CommandList->setGraphicsState(drawState);
@@ -787,7 +827,7 @@ namespace Lynx
         };
 
         drawQueue(m_OpaqueQueue);
-        drawQueue(m_TransparentQueue);
+       // drawQueue(m_TransparentQueue);
 
         m_CommandList->endMarker();
     }
