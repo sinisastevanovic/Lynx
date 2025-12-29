@@ -239,17 +239,37 @@ namespace Lynx
             {
                 LX_CORE_INFO("Reloading script for Entity {0}", (uint64_t)entityId);
 
-                std::string scriptPath = Engine::Get().GetAssetRegistry().Get(lsc.ScriptHandle).FilePath.string();
-
-                if (isRuntime && lsc.Self.valid() && lsc.Self["OnDestroy"].valid())
+                std::unordered_map<std::string, sol::object> backupProps;
+                if (lsc.Self.valid())
                 {
-                    sol::protected_function_result result = lsc.Self["OnDestroy"](lsc.Self);
-                    if (!result.valid())
+                    sol::optional<sol::table> propsOpt = lsc.Self["Properties"];
+                    if (propsOpt)
                     {
-                        sol::error err = result;
-                        LX_CORE_ERROR("Lua Runtime Error: {0}", err.what());
+                        sol::table propsDef = propsOpt.value();
+                        for (auto& [key, value] : propsDef)
+                        {
+                            if (key.is<std::string>())
+                            {
+                                std::string name = key.as<std::string>();
+                                sol::object val = lsc.Self[name];
+                                if (val.valid())
+                                    backupProps[name] = val;
+                            }
+                        }
+                    }
+
+                    if (isRuntime && lsc.Self["OnDestroy"].valid())
+                    {
+                        sol::protected_function_result result = lsc.Self["OnDestroy"](lsc.Self);
+                        if (!result.valid())
+                        {
+                            sol::error err = result;
+                            LX_CORE_ERROR("Lua Runtime Error: {0}", err.what());
+                        }
                     }
                 }
+
+                std::string scriptPath = Engine::Get().GetAssetRegistry().Get(lsc.ScriptHandle).FilePath.string();
 
                 sol::load_result result = m_Data->Lua.load_file(scriptPath);
                 if (!result.valid())
@@ -264,6 +284,28 @@ namespace Lynx
                 {
                     lsc.Self = scriptResult.get<sol::table>();
                     lsc.Self["CurrentEntity"] = entity;
+
+                    sol::optional<sol::table> propertiesOption = lsc.Self["Properties"];
+                    if (propertiesOption)
+                    {
+                        sol::table properties = propertiesOption.value();
+                        for (auto& [key, value] : properties)
+                        {
+                            std::string propName = key.as<std::string>();
+                            sol::table propDef = value.as<sol::table>();
+                            // Set default
+                            lsc.Self[propName] = propDef["Default"];
+                        }
+                    }
+
+                    for (auto& [name, val] : backupProps)
+                    {
+                        // Check if the new script still has this property
+                        if (propertiesOption && propertiesOption.value()[name].valid())
+                        {
+                            lsc.Self[name] = val;
+                        }
+                    }
 
                     if (isRuntime && lsc.Self["OnCreate"].valid())
                     {
