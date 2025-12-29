@@ -28,6 +28,13 @@ namespace Lynx
             uint32_t Width = 0;
             uint32_t Height = 0;
         };
+
+        struct RenderStats
+        {
+            uint32_t DrawCalls = 0;
+            uint32_t IndexCount = 0;
+            float FrameTime = 0.0f;
+        };
         
         Renderer(GLFWwindow* window, bool initIDTarget = false);
         ~Renderer();
@@ -38,7 +45,7 @@ namespace Lynx
         void OnResize(uint32_t width, uint32_t height);
         void EnsureEditorViewport(uint32_t width, uint32_t height);
 
-        void BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, bool editMode = false);
+        void BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, float deltaTime, bool editMode = false);
         void EndScene();
         
         nvrhi::TextureHandle GetViewportTexture() const;
@@ -60,11 +67,15 @@ namespace Lynx
         void SetShowColliders(bool show) { m_ShowColliders = show; }
         bool GetShowColliders() const { return m_ShowColliders; }
 
+        const RenderStats& GetRenderStats() const { return m_Stats; }
+        void ResetStats();
+
     private:
         void InitVulkan(GLFWwindow* window);
         void InitNVRHI();
         void InitBuffers();
         void CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height);
+        void PrepareDrawCalls();
 
     private:
         // TODO: Pimpl idiom
@@ -76,6 +87,7 @@ namespace Lynx
         nvrhi::StagingTextureHandle m_StageBuffer;
 
         nvrhi::BufferHandle m_GlobalCB;
+        nvrhi::BufferHandle m_InstanceBuffer;
         nvrhi::TextureHandle m_WhiteTex;
         nvrhi::TextureHandle m_NormalTex;
         nvrhi::TextureHandle m_BlackTex;
@@ -102,6 +114,8 @@ namespace Lynx
 
         bool m_ShowGrid = true;
         bool m_ShowColliders = false;
+
+        RenderStats m_Stats;
     };
 }
 

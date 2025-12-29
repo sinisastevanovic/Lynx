@@ -19,6 +19,12 @@ namespace Lynx
 
         void Execute(RenderContext& ctx, RenderData& renderData)
         {
+            // Sort transparent by distance
+            std::ranges::sort(renderData.TransparentQueue,
+              [](const RenderCommand& a, const RenderCommand& b) {
+                  return a.DistanceToCamera < b.DistanceToCamera; 
+              });
+            
             for (auto& pass : m_Passes)
                 pass->Execute(ctx, renderData);
         }

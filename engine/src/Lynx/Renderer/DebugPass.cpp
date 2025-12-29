@@ -105,6 +105,9 @@ namespace Lynx
 
         ctx.CommandList->endMarker();
 
+        renderData.DrawCalls++;
+        renderData.IndexCount += vertices.size();
+
         // Clear lines for next frame
         DebugRenderer::Clear();
     }

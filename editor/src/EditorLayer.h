@@ -4,6 +4,7 @@
 #include "Panels/AssetBrowserPanel.h"
 #include "Panels/InspectorPanel.h"
 #include "Panels/SceneHierarchyPanel.h"
+#include "Panels/StatsPanel.h"
 #include "Panels/Viewport.h"
 
 namespace Lynx
@@ -33,6 +34,7 @@ namespace Lynx
         SceneHierarchyPanel m_SceneHierarchyPanel;
         InspectorPanel m_InspectorPanel;
         AssetBrowserPanel m_AssetBrowserPanel;
+        StatsPanel m_StatsPanel;
 
         std::shared_ptr<Scene> m_EditorScene;
         std::shared_ptr<Scene> m_RuntimeScene;

@@ -203,7 +203,7 @@ namespace Lynx
                 break;
             }
             
-            m_Renderer->BeginScene(cameraView, cameraProjection, cameraPos, lightDir, lightColor, lightIntensity, m_SceneState == SceneState::Edit);
+            m_Renderer->BeginScene(cameraView, cameraProjection, cameraPos, lightDir, lightColor, lightIntensity, deltaTime, m_SceneState == SceneState::Edit);
             auto view = m_Scene->Reg().view<TransformComponent, MeshComponent>();
             for (auto entity : view)
             {

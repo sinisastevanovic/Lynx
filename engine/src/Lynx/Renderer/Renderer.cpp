@@ -144,6 +144,7 @@ namespace Lynx
         m_BlackTex = nullptr;
         m_MetallicRoughnessTex = nullptr;
         m_GlobalCB = nullptr;
+        m_InstanceBuffer = nullptr;
         m_SwapchainDepth = nullptr;
         m_CommandList = nullptr;
         m_SwapchainFramebuffers.clear();
@@ -344,6 +345,13 @@ namespace Lynx
         }
 
         return entityID;
+    }
+
+    void Renderer::ResetStats()
+    {
+        m_CurrentFrameData.DrawCalls = 0;
+        m_CurrentFrameData.IndexCount = 0;
+        memset(&m_Stats, 0, sizeof(RenderStats));
     }
 
     void Renderer::InitVulkan(GLFWwindow* window)
@@ -648,8 +656,67 @@ namespace Lynx
         target.Framebuffer = m_NvrhiDevice->createFramebuffer(fbDesc);
     }
 
-    void Renderer::BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, bool editMode)
+    void Renderer::PrepareDrawCalls()
     {
+        std::vector<GPUInstanceData> allInstanceData;
+        m_CurrentFrameData.OpaqueDrawCalls.clear();
+
+        // Flatten all batches into single array
+        for (auto& [key, commands] : m_CurrentFrameData.OpaqueBatches)
+        {
+            if (commands.empty())
+                continue;
+
+            std::sort(commands.begin(), commands.end(),
+                [](const RenderCommand& a, const RenderCommand& b) {
+                    return a.DistanceToCamera < b.DistanceToCamera; 
+            });
+
+            uint32_t startOffset = (uint32_t)allInstanceData.size();
+            for (auto& cmd : commands)
+            {
+                allInstanceData.push_back({ cmd.Transform, cmd.Color, cmd.EntityID });
+            }
+
+            m_CurrentFrameData.OpaqueDrawCalls.push_back({ key, startOffset, (uint32_t)commands.size() });
+        }
+
+        for (auto& cmd : m_CurrentFrameData.TransparentQueue)
+        {
+            cmd.InstanceOffset = (int)allInstanceData.size();
+            allInstanceData.push_back({ cmd.Transform, cmd.Color, cmd.EntityID });
+        }
+
+        // Create or resize GPU Buffer
+        size_t requiredSize = allInstanceData.size() * sizeof(GPUInstanceData);
+        if (requiredSize > 0)
+        {
+            if (!m_InstanceBuffer || m_InstanceBuffer->getDesc().byteSize < requiredSize)
+            {
+                nvrhi::BufferDesc desc;
+                desc.byteSize = (uint64_t)(requiredSize * 1.5);
+                desc.structStride = sizeof(GPUInstanceData);
+                desc.debugName = "InstanceBuffer";
+                desc.initialState = nvrhi::ResourceStates::ShaderResource;
+                desc.keepInitialState = true;
+                m_InstanceBuffer = m_NvrhiDevice->createBuffer(desc);
+            }
+
+            // TODO: This isnt ideal? 
+            //m_CommandList->open();
+            m_CommandList->writeBuffer(m_InstanceBuffer, allInstanceData.data(), requiredSize);
+            //m_CommandList->close();
+            //m_NvrhiDevice->executeCommandList(m_CommandList);
+        }
+        
+        m_CurrentFrameData.InstanceBuffer = m_InstanceBuffer;
+    }
+
+    void Renderer::BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, float deltaTime, bool editMode)
+    {
+        ResetStats();
+        m_Stats.FrameTime = deltaTime;
+        
         // 0. Wait for Fence
         if (m_VulkanState->Device.waitForFences(1, &m_VulkanState->InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
         {
@@ -671,7 +738,8 @@ namespace Lynx
         // 2. Start recording
         m_CommandList->open();
 
-        m_CurrentFrameData.OpaqueQueue.clear();
+        m_CurrentFrameData.OpaqueBatches.clear();
+        m_CurrentFrameData.OpaqueDrawCalls.clear();
         m_CurrentFrameData.TransparentQueue.clear();
         
         glm::vec3 center = cameraPosition;
@@ -764,10 +832,16 @@ namespace Lynx
             const auto& submesh = mesh->GetSubmeshes()[i];
             RenderCommand cmd = { mesh, i, transform, color, entityID, dist };
 
+            BatchKey key = { mesh.get(), (uint32_t)i, submesh.Material.get() };
+
             if (submesh.Material->Mode == AlphaMode::Translucent)
+            {
                 m_CurrentFrameData.TransparentQueue.push_back(cmd);
+            }
             else
-                m_CurrentFrameData.OpaqueQueue.push_back(cmd);
+            {
+                m_CurrentFrameData.OpaqueBatches[key].push_back(cmd);
+            }
         }
         // 1. Bind Texture
         // Check if mesh has a texture. If so, bind it. If not, use white texture.
@@ -786,7 +860,12 @@ namespace Lynx
 
     void Renderer::EndScene()
     {
+        PrepareDrawCalls();
+        
         m_Pipeline.Execute(m_RenderContext, m_CurrentFrameData);
+
+        m_Stats.DrawCalls = m_CurrentFrameData.DrawCalls;
+        m_Stats.IndexCount = m_CurrentFrameData.IndexCount;
         
         // 1. Close recording
         m_CommandList->close();

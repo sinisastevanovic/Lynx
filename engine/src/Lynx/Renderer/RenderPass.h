@@ -7,13 +7,48 @@
 
 namespace Lynx
 {
-    struct PushData
+    struct GPUInstanceData
     {
         glm::mat4 Model;
         glm::vec4 Color;
-        float AlphaCutoff;
         int EntityID;
-        float Padding[2];
+        float Padding[3];
+    };
+
+    struct BatchKey
+    {
+        StaticMesh* Mesh;
+        uint32_t SubmeshIndex;
+        Material* Material;
+
+        bool operator==(const BatchKey& other) const
+        {
+            return Mesh == other.Mesh && SubmeshIndex == other.SubmeshIndex && Material == other.Material;
+        }
+    };
+
+    struct BatchKeyHasher
+    {
+        std::size_t operator()(const BatchKey& key) const
+        {
+            size_t h1 = std::hash<void*>()(key.Mesh);
+            size_t h2 = std::hash<uint32_t>()(key.SubmeshIndex);
+            size_t h3 = std::hash<void*>()(key.Material);
+            return h1 ^ (h2 << 1) ^ (h3 << 2);
+        }
+    };
+
+    struct BatchDrawCall
+    {
+        BatchKey Key;
+        uint32_t FirstInstance;
+        uint32_t InstanceCount;
+    };
+    
+    struct PushData
+    {
+        float AlphaCutoff;
+        float Padding[3];
     };
 
     struct SceneData
@@ -32,13 +67,17 @@ namespace Lynx
         glm::mat4 Transform;
         glm::vec4 Color;
         int EntityID;
-        float DistanceToCamera;
+        float DistanceToCamera; // TODO: reuse this!
+        int InstanceOffset = -1;
     };
 
     struct RenderData
     {
-        std::vector<RenderCommand> OpaqueQueue;
+        std::unordered_map<BatchKey, std::vector<RenderCommand>, BatchKeyHasher> OpaqueBatches;
         std::vector<RenderCommand> TransparentQueue;
+
+        std::vector<BatchDrawCall> OpaqueDrawCalls;
+        nvrhi::BufferHandle InstanceBuffer;
 
         glm::mat4 View;
         glm::mat4 Projection;
@@ -56,6 +95,9 @@ namespace Lynx
         nvrhi::FramebufferHandle TargetFramebuffer;
 
         bool ShowGrid = true;
+
+        uint32_t DrawCalls = 0;
+        uint32_t IndexCount = 0;
     };
 
     struct RenderContext
@@ -73,6 +115,8 @@ namespace Lynx
 
         std::function<nvrhi::SamplerHandle(SamplerSettings)> GetSampler;
     };
+
+    
 
     class RenderPass
     {

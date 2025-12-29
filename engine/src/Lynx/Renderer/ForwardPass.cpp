@@ -18,6 +18,7 @@ namespace Lynx
             .addItem(nvrhi::BindingLayoutItem::Sampler(5))
             .addItem(nvrhi::BindingLayoutItem::Texture_SRV(6)) // Shadow Map
             .addItem(nvrhi::BindingLayoutItem::Sampler(7))
+            .addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(10))
             .setBindingOffsets({0, 0, 0, 0});
         m_BindingLayout = ctx.Device->createBindingLayout(layoutDesc);
 
@@ -90,15 +91,17 @@ namespace Lynx
 
     void ForwardPass::Execute(RenderContext& ctx, RenderData& renderData)
     {
-        DrawQueue(ctx, renderData, renderData.OpaqueQueue, m_PipelineOpaque);
+        if (renderData.InstanceBuffer != m_CachedInstanceBuffer)
+        {
+            m_BindingSetCache.clear();
+            m_CachedInstanceBuffer = renderData.InstanceBuffer;
+        }
+        
+        DrawBatches(ctx, renderData, renderData.OpaqueDrawCalls, m_PipelineOpaque);
         DrawQueue(ctx, renderData, renderData.TransparentQueue, m_PipelineTransparent);
     }
 
-    void ForwardPass::CreatePipeline(RenderContext& ctx, nvrhi::IFramebuffer* fb)
-    {
-    }
-
-    nvrhi::BindingSetHandle ForwardPass::GetOrCreateBindingSet(RenderContext& ctx, Material* material, nvrhi::TextureHandle shadowMap,
+    nvrhi::BindingSetHandle ForwardPass::GetOrCreateBindingSet(RenderContext& ctx, RenderData& renderData, Material* material, nvrhi::TextureHandle shadowMap,
         nvrhi::SamplerHandle shadowSampler)
     {
         if (m_BindingSetCache.contains(material))
@@ -146,20 +149,16 @@ namespace Lynx
             .addItem(nvrhi::BindingSetItem::Texture_SRV(4, emissive))
             .addItem(nvrhi::BindingSetItem::Sampler(5, ctx.GetSampler(samplerSettings)))
             .addItem(nvrhi::BindingSetItem::Texture_SRV(6, shadowMap))
-            .addItem(nvrhi::BindingSetItem::Sampler(7, shadowSampler));
+            .addItem(nvrhi::BindingSetItem::Sampler(7, shadowSampler))
+            .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(10, renderData.InstanceBuffer));
 
         return m_BindingSetCache[material] = ctx.Device->createBindingSet(desc, m_BindingLayout);
     }
 
     void ForwardPass::DrawQueue(RenderContext& ctx, RenderData& renderData, std::vector<RenderCommand>& queue, nvrhi::GraphicsPipelineHandle pipeline)
     {
-        // Sort by material to minimize BindingSet switches
-        std::sort(queue.begin(), queue.end(), [](const RenderCommand& a, const RenderCommand& b)
-        {
-            auto matA = a.Mesh->GetSubmeshes()[a.SubmeshIndex].Material.get();
-            auto matB = b.Mesh->GetSubmeshes()[b.SubmeshIndex].Material.get();
-            return matA < matB;
-        });
+        if (queue.empty())
+            return;
 
         for (const auto& cmd : queue)
         {
@@ -173,17 +172,55 @@ namespace Lynx
             const auto& fbInfo = renderData.TargetFramebuffer->getFramebufferInfo();
             state.viewport.addViewport(nvrhi::Viewport(fbInfo.width, fbInfo.height));
             state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
-            state.addBindingSet(GetOrCreateBindingSet(ctx, submesh.Material.get(), renderData.ShadowMap, renderData.ShadowSampler));
+            state.addBindingSet(GetOrCreateBindingSet(ctx, renderData, submesh.Material.get(), renderData.ShadowMap, renderData.ShadowSampler));
 
             ctx.CommandList->setGraphicsState(state);
 
             PushData push;
-            push.Model = cmd.Transform;
-            push.Color = cmd.Color;
             push.AlphaCutoff = submesh.Material->Mode == AlphaMode::Mask ? submesh.Material->AlphaCutoff : -1.0f;
-            push.EntityID = cmd.EntityID;
             ctx.CommandList->setPushConstants(&push, sizeof(PushData));
-            ctx.CommandList->drawIndexed(nvrhi::DrawArguments().setVertexCount(submesh.IndexCount));
+            ctx.CommandList->drawIndexed(nvrhi::DrawArguments()
+                .setVertexCount(submesh.IndexCount)
+                .setInstanceCount(1)
+                .setStartInstanceLocation(cmd.InstanceOffset));
+
+            renderData.DrawCalls++;
+            renderData.IndexCount += submesh.IndexCount;
+        }
+    }
+
+    void ForwardPass::DrawBatches(RenderContext& ctx, RenderData& renderData, std::vector<BatchDrawCall>& batches, nvrhi::GraphicsPipelineHandle pipeline)
+    {
+        for (const auto& batch : batches)
+        {
+            if (batch.InstanceCount <= 0)
+                continue;
+
+            const auto& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
+            auto state = nvrhi::GraphicsState()
+                .setPipeline(pipeline)
+                .setFramebuffer(renderData.TargetFramebuffer)
+                .addVertexBuffer(nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0))
+                .setIndexBuffer(nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT));
+
+            const auto& fbInfo = renderData.TargetFramebuffer->getFramebufferInfo();
+            state.viewport.addViewport(nvrhi::Viewport(fbInfo.width, fbInfo.height));
+            state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
+            state.addBindingSet(GetOrCreateBindingSet(ctx, renderData, submesh.Material.get(), renderData.ShadowMap, renderData.ShadowSampler));
+
+            ctx.CommandList->setGraphicsState(state);
+
+            PushData push;
+            push.AlphaCutoff = submesh.Material->Mode == AlphaMode::Mask ? submesh.Material->AlphaCutoff : -1.0f;
+            ctx.CommandList->setPushConstants(&push, sizeof(PushData));
+
+            ctx.CommandList->drawIndexed(nvrhi::DrawArguments()
+                .setVertexCount(submesh.IndexCount)
+                .setInstanceCount(batch.InstanceCount)
+                .setStartInstanceLocation(batch.FirstInstance));
+            
+            renderData.DrawCalls++;
+            renderData.IndexCount += submesh.IndexCount * batch.InstanceCount;
         }
     }
 }

@@ -68,8 +68,6 @@ int main(int argc, char** argv)
             editorLayer.DrawMenuBar();
             ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
             
-            ImGui::ShowDemoWindow();
-
             editorLayer.OnImGuiRender();
         });
         

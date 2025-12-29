@@ -71,5 +71,8 @@ namespace Lynx
         ctx.CommandList->draw(nvrhi::DrawArguments().setVertexCount(6));
 
         ctx.CommandList->endMarker();
+
+        renderData.DrawCalls++;
+        renderData.IndexCount += 6;
     }
 }

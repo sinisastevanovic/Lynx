@@ -114,6 +114,7 @@ namespace Lynx
         m_SceneHierarchyPanel.OnImGuiRender();
         m_InspectorPanel.OnImGuiRender(m_Engine->GetActiveScene(),m_Engine->ComponentRegistry);
         m_AssetBrowserPanel.OnImGuiRender();
+        m_StatsPanel.OnImGuiRender();
     }
 
     void EditorLayer::OnScenePlay()

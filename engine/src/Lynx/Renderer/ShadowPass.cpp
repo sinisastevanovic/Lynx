@@ -53,14 +53,11 @@ namespace Lynx
             .addItem(nvrhi::BindingLayoutItem::Texture_SRV(1))    // Albedo (for alpha mask)
             .addItem(nvrhi::BindingLayoutItem::Sampler(2))        // Sampler
             .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(PushData)))
+            .addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(10))
             .setBindingOffsets({0, 0, 0, 0});
         m_BindingLayout = ctx.Device->createBindingLayout(layoutDesc);
 
-        auto bsDesc = nvrhi::BindingSetDesc()
-            .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ShadowConstantBuffer))
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(1, ctx.WhiteTexture))
-            .addItem(nvrhi::BindingSetItem::Sampler(2, ctx.GetSampler({})));
-        m_DefaultBindingSet = ctx.Device->createBindingSet(bsDesc, m_BindingLayout);
+        
 
         auto pipeDesc = nvrhi::GraphicsPipelineDesc();
         pipeDesc.bindingLayouts = { m_BindingLayout };
@@ -114,6 +111,23 @@ namespace Lynx
 
     void ShadowPass::Execute(RenderContext& ctx, RenderData& renderData)
     {
+        if (renderData.InstanceBuffer != m_CachedInstanceBuffer)
+        {
+            m_MaskedBindingSets.clear();
+            m_DefaultBindingSet.Reset();
+            m_CachedInstanceBuffer = renderData.InstanceBuffer;
+        }
+        
+        if (!m_DefaultBindingSet)
+        {
+            auto bsDesc = nvrhi::BindingSetDesc()
+                    .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ShadowConstantBuffer))
+                    .addItem(nvrhi::BindingSetItem::Texture_SRV(1, ctx.WhiteTexture))
+                    .addItem(nvrhi::BindingSetItem::Sampler(2, ctx.GetSampler({})))
+                    .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(10, renderData.InstanceBuffer));
+            m_DefaultBindingSet = ctx.Device->createBindingSet(bsDesc, m_BindingLayout);
+        }
+        
         renderData.ShadowMap = m_ShadowMap;
         renderData.ShadowSampler = m_ShadowSampler;
 
@@ -133,9 +147,12 @@ namespace Lynx
         state.bindings = { m_DefaultBindingSet };
         ctx.CommandList->setGraphicsState(state);
 
-        for (const auto& cmd : renderData.OpaqueQueue)
+        for (const auto& batch : renderData.OpaqueDrawCalls)
         {
-            const auto& submesh = cmd.Mesh->GetSubmeshes()[cmd.SubmeshIndex];
+            if (batch.InstanceCount <= 0)
+                continue;
+
+            const auto& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
 
             auto material = submesh.Material.get();
             bool isMasked = (material->Mode == AlphaMode::Mask);
@@ -143,7 +160,7 @@ namespace Lynx
             if (isMasked)
             {
                 auto specificState = state;
-                specificState.bindings = { GetMaskedBindingSet(ctx, material) };
+                specificState.bindings = { GetMaskedBindingSet(ctx, renderData, material) };
                 specificState.vertexBuffers = { nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0) };
                 specificState.indexBuffer = nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT);
                 ctx.CommandList->setGraphicsState(specificState);
@@ -157,16 +174,23 @@ namespace Lynx
             }
 
             PushData push;
-            push.Model = cmd.Transform;
-            push.AlphaCutoff = isMasked ? material->AlphaCutoff : 1.0f;
+            push.AlphaCutoff = isMasked ? material->AlphaCutoff : -1.0f;
+
             ctx.CommandList->setPushConstants(&push, sizeof(PushData));
-            ctx.CommandList->drawIndexed(nvrhi::DrawArguments().setVertexCount(submesh.IndexCount));
+
+            ctx.CommandList->drawIndexed(nvrhi::DrawArguments()
+                .setVertexCount(submesh.IndexCount)
+                .setInstanceCount(batch.InstanceCount)
+                .setStartInstanceLocation(batch.FirstInstance));
+
+            renderData.DrawCalls++;
+            renderData.IndexCount += submesh.IndexCount * batch.InstanceCount;
         }
 
         ctx.CommandList->endMarker();
     }
 
-    nvrhi::BindingSetHandle ShadowPass::GetMaskedBindingSet(RenderContext& ctx, Material* material)
+    nvrhi::BindingSetHandle ShadowPass::GetMaskedBindingSet(RenderContext& ctx, RenderData& renderData, Material* material)
     {
         if (m_MaskedBindingSets.contains(material))
             return m_MaskedBindingSets[material];
@@ -186,7 +210,8 @@ namespace Lynx
         auto bsDesc = nvrhi::BindingSetDesc()
             .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ShadowConstantBuffer))
             .addItem(nvrhi::BindingSetItem::Texture_SRV(1, albedo))
-            .addItem(nvrhi::BindingSetItem::Sampler(2, ctx.GetSampler(samplerSettings)));
+            .addItem(nvrhi::BindingSetItem::Sampler(2, ctx.GetSampler(samplerSettings)))
+            .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(10, renderData.InstanceBuffer));;
 
         return m_MaskedBindingSets[material] = ctx.Device->createBindingSet(bsDesc, m_BindingLayout);
     }

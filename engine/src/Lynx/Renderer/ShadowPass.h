@@ -16,7 +16,7 @@ namespace Lynx
         nvrhi::SamplerHandle GetShadowSampler() const { return m_ShadowSampler; }
 
     private:
-        nvrhi::BindingSetHandle GetMaskedBindingSet(RenderContext& ctx, Material* material);
+        nvrhi::BindingSetHandle GetMaskedBindingSet(RenderContext& ctx, RenderData& renderData, Material* material);
 
     private:
         uint32_t m_Resolution;
@@ -26,6 +26,7 @@ namespace Lynx
         nvrhi::SamplerHandle m_ShadowSampler;
 
         nvrhi::BufferHandle m_ShadowConstantBuffer;
+        nvrhi::BufferHandle m_CachedInstanceBuffer;
 
         nvrhi::BindingLayoutHandle m_BindingLayout;
         nvrhi::GraphicsPipelineHandle m_Pipeline;
