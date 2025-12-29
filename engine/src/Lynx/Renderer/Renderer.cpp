@@ -159,8 +159,11 @@ namespace Lynx
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
             m_VulkanState->Device.destroySemaphore(m_VulkanState->ImageAvailableSemaphores[i]);
-            m_VulkanState->Device.destroySemaphore(m_VulkanState->RenderFinishedSemaphores[i]);
             m_VulkanState->Device.destroyFence(m_VulkanState->InFlightFences[i]);
+        }
+
+        for (auto& sem : m_VulkanState->RenderFinishedSemaphores) {
+            m_VulkanState->Device.destroySemaphore(sem);
         }
         
         m_VulkanState->Device.destroySwapchainKHR(m_VulkanState->Swapchain);
@@ -474,8 +477,8 @@ namespace Lynx
         
         // 8. Sync Objects
         m_VulkanState->ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        m_VulkanState->RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         m_VulkanState->InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+        m_VulkanState->RenderFinishedSemaphores.resize(m_VulkanState->SwapchainImages.size());
 
         vk::SemaphoreCreateInfo semInfo;
         vk::FenceCreateInfo fenceInfo;
@@ -484,8 +487,12 @@ namespace Lynx
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
             m_VulkanState->ImageAvailableSemaphores[i] = m_VulkanState->Device.createSemaphore(semInfo);
-            m_VulkanState->RenderFinishedSemaphores[i] = m_VulkanState->Device.createSemaphore(semInfo);
             m_VulkanState->InFlightFences[i] = m_VulkanState->Device.createFence(fenceInfo);
+        }
+
+        for (size_t i = 0; i < m_VulkanState->RenderFinishedSemaphores.size(); i++)
+        {
+            m_VulkanState->RenderFinishedSemaphores[i] = m_VulkanState->Device.createSemaphore(semInfo);
         }
     }
 
@@ -793,7 +800,7 @@ namespace Lynx
         vkDevice->queueWaitForSemaphore(nvrhi::CommandQueue::Graphics, (VkSemaphore)m_VulkanState->ImageAvailableSemaphores[m_CurrentFrame], 0);
 
         // SYNC: Signal RenderFinished after executing
-        vkDevice->queueSignalSemaphore(nvrhi::CommandQueue::Graphics, (VkSemaphore)m_VulkanState->RenderFinishedSemaphores[m_CurrentFrame], 0);
+        vkDevice->queueSignalSemaphore(nvrhi::CommandQueue::Graphics, (VkSemaphore)m_VulkanState->RenderFinishedSemaphores[m_CurrentImageIndex], 0);
 
         m_NvrhiDevice->executeCommandList(m_CommandList);
 
@@ -822,12 +829,9 @@ namespace Lynx
         presentInfo.pImageIndices = &m_CurrentImageIndex;
         
         presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = &m_VulkanState->RenderFinishedSemaphores[m_CurrentFrame];
-
-        m_VulkanState->GraphicsQueue.presentKHR(&presentInfo);
+        presentInfo.pWaitSemaphores = &m_VulkanState->RenderFinishedSemaphores[m_CurrentImageIndex];
         
-        // Heavy wait for debugging
-        m_VulkanState->Device.waitIdle();
+        m_VulkanState->GraphicsQueue.presentKHR(&presentInfo);
         
         m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
@@ -866,6 +870,9 @@ namespace Lynx
 
         m_VulkanState->Device.waitIdle();
 
+        for (auto& sem : m_VulkanState->RenderFinishedSemaphores)
+            m_VulkanState->Device.destroySemaphore(sem);
+
         m_SwapchainFramebuffers.clear();
         m_SwapchainDepth = nullptr;
         m_CurrentFrameData.TargetFramebuffer = nullptr;
@@ -901,6 +908,13 @@ namespace Lynx
         
         m_VulkanState->Swapchain = m_VulkanState->Device.createSwapchainKHR(swapInfo);
         m_VulkanState->SwapchainImages = m_VulkanState->Device.getSwapchainImagesKHR(m_VulkanState->Swapchain);
+
+        m_VulkanState->RenderFinishedSemaphores.resize(m_VulkanState->SwapchainImages.size());
+        vk::SemaphoreCreateInfo semInfo;
+        for (size_t i = 0; i < m_VulkanState->RenderFinishedSemaphores.size(); i++)
+        {
+            m_VulkanState->RenderFinishedSemaphores[i] = m_VulkanState->Device.createSemaphore(semInfo);
+        }
 
         // Recreate NVRHI Resources
         nvrhi::TextureDesc depthDesc;
