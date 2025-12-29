@@ -90,7 +90,7 @@ void MyGame::OnStart()
 
         auto& collider = player.AddComponent<Lynx::CapsuleColliderComponent>();
         collider.Radius = 0.5f;
-        collider.Height = 2.0f;
+        collider.HalfHeight = 1.0f;
 
         player.AddComponent<WeaponComponent>();
     }

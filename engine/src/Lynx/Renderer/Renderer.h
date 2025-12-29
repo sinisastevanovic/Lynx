@@ -38,7 +38,7 @@ namespace Lynx
         void OnResize(uint32_t width, uint32_t height);
         void EnsureEditorViewport(uint32_t width, uint32_t height);
 
-        void BeginScene(const glm::mat4& viewProjection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity);
+        void BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, bool editMode = false);
         void EndScene();
         
         nvrhi::TextureHandle GetViewportTexture() const;
@@ -53,6 +53,12 @@ namespace Lynx
         nvrhi::TextureHandle CreateTexture(const TextureSpecification& specification, unsigned char* data);
 
         int ReadIdFromBuffer(uint32_t x, uint32_t y);
+
+        void SetShowGrid(bool show) { m_ShowGrid = show; }
+        bool GetShowGrid() const { return m_ShowGrid; }
+
+        void SetShowColliders(bool show) { m_ShowColliders = show; }
+        bool GetShowColliders() const { return m_ShowColliders; }
 
     private:
         void InitVulkan(GLFWwindow* window);
@@ -93,6 +99,9 @@ namespace Lynx
         RenderData m_CurrentFrameData;
 
         int m_ShadowMapResolution = 4096;
+
+        bool m_ShowGrid = true;
+        bool m_ShowColliders = false;
     };
 }
 

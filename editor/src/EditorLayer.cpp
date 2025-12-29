@@ -48,7 +48,7 @@ namespace Lynx
 
     void EditorLayer::DrawToolBar()
     {
-        ImGui::Begin("Toolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar);
+        ImGui::Begin("Toolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
         SceneState state = Engine::Get().GetSceneState();
         const char* label = (state == SceneState::Edit) ? "Play" : "Stop";
@@ -59,7 +59,51 @@ namespace Lynx
             else
                 OnSceneStop();
         }
-        
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        auto& colors = ImGui::GetStyle().Colors;
+        const auto& buttonHovered = colors[ImGuiCol_ButtonHovered];
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(buttonHovered.x, buttonHovered.y, buttonHovered.z, 0.5f));
+        const auto& buttonActive = colors[ImGuiCol_ButtonActive];
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(buttonActive.x, buttonActive.y, buttonActive.z, 0.5f));
+
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - 100.0f); // Align to right? Or keep left.
+
+        if (ImGui::Button("View Options"))
+        {
+            ImGui::OpenPopup("ViewOptionsPopup");
+        }
+
+        if (ImGui::BeginPopup("ViewOptionsPopup"))
+        {
+            ImGui::PushItemFlag(ImGuiItemFlags_AutoClosePopups, false);
+            bool showGrid = m_Engine->GetRenderer().GetShowGrid();
+            if (ImGui::MenuItem("Show Grid", nullptr, &showGrid))
+            {
+                m_Engine->GetRenderer().SetShowGrid(showGrid);
+            }
+            /*if (ImGui::Selectable("Show Grid", &showGrid, ImGuiSelectableFlags_DontClosePopups))
+            {
+                m_Engine->GetRenderer().SetShowGrid(showGrid);
+            }*/
+
+            bool showColliders = m_Engine->GetRenderer().GetShowColliders();
+            if (ImGui::MenuItem("Show Colliders", nullptr, &showColliders))
+            {
+                m_Engine->GetRenderer().SetShowColliders(showColliders);
+            }
+
+            /*if (ImGui::Selectable("Show Colliders", &showColliders, ImGuiSelectableFlags_DontClosePopups))
+            {
+                m_Engine->GetRenderer().SetShowColliders(showColliders);
+            }*/
+            ImGui::PopItemFlag();
+            ImGui::EndPopup();
+        }
+
+        //ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(3);
         ImGui::End();
     }
 

@@ -100,7 +100,7 @@ namespace Lynx
                 else if (m_Registry.all_of<CapsuleColliderComponent>(entity))
                 {
                     auto& collider = m_Registry.get<CapsuleColliderComponent>(entity);
-                    float halfHeight = (collider.Height - (collider.Radius * 2.0f)) * 0.5f;
+                    float halfHeight = collider.HalfHeight - collider.Radius;
                     if (halfHeight <= 0.0f)
                         halfHeight = 0.01f;
 
@@ -241,7 +241,7 @@ namespace Lynx
                 else if (m_Registry.all_of<CapsuleColliderComponent>(entity))
                 {
                     auto& collider = m_Registry.get<CapsuleColliderComponent>(entity);
-                    float halfHeight = (collider.Height - (collider.Radius * 2.0f)) * 0.5f;
+                    float halfHeight = collider.HalfHeight - collider.Radius;
                     if (halfHeight <= 0.0f)
                         halfHeight = 0.01f;
 

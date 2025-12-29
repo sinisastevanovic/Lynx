@@ -40,6 +40,8 @@ namespace Lynx
         std::vector<RenderCommand> OpaqueQueue;
         std::vector<RenderCommand> TransparentQueue;
 
+        glm::mat4 View;
+        glm::mat4 Projection;
         glm::mat4 ViewProjection;
         glm::vec3 CameraPosition;
 
@@ -52,6 +54,8 @@ namespace Lynx
         nvrhi::SamplerHandle ShadowSampler;
 
         nvrhi::FramebufferHandle TargetFramebuffer;
+
+        bool ShowGrid = true;
     };
 
     struct RenderContext

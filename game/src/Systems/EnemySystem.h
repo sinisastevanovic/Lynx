@@ -98,6 +98,6 @@ private:
 
         auto& collider = enemy.AddComponent<Lynx::CapsuleColliderComponent>();
         collider.Radius = 0.4f;
-        collider.Height = 1.8f;
+        collider.HalfHeight = 0.9f;
     }
 };

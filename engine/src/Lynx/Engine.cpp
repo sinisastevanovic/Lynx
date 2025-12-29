@@ -21,6 +21,7 @@
 #include "ScriptRegistry.h"
 #include "Event/ActionEvent.h"
 #include "ImGui/EditorUIHelpers.h"
+#include "Renderer/DebugRenderer.h"
 #include "Scene/Components/LuaScriptComponent.h"
 #include "Scene/Components/NativeScriptComponent.h"
 
@@ -135,7 +136,8 @@ namespace Lynx
 
             ImGui::Render();
 
-            glm::mat4 cameraViewProj;
+            glm::mat4 cameraView;
+            glm::mat4 cameraProjection;
             glm::vec3 cameraPos;
 
             auto viewportSize = m_Renderer->GetViewportSize();
@@ -152,8 +154,8 @@ namespace Lynx
                         if (!camera.FixedAspectRatio)
                             camera.Camera.SetViewportSize(viewportSize.first, viewportSize.second);
                         
-                        glm::mat4 viewMatrix = glm::inverse(transform.GetTransform());
-                        cameraViewProj = camera.Camera.GetProjection() * viewMatrix;
+                        cameraView = glm::inverse(transform.GetTransform());
+                        cameraProjection = camera.Camera.GetProjection();
 
                         cameraPos = transform.Translation;
 
@@ -167,7 +169,8 @@ namespace Lynx
             {
                 m_EditorCamera.SetViewportSize((float)viewportSize.first, (float)viewportSize.second);
                 m_EditorCamera.OnUpdate(deltaTime);
-                cameraViewProj = m_EditorCamera.GetViewProjection();
+                cameraView = m_EditorCamera.GetView();
+                cameraProjection = m_EditorCamera.GetProjection();
                 cameraPos = m_EditorCamera.GetPosition();
             }
 
@@ -200,7 +203,7 @@ namespace Lynx
                 break;
             }
             
-            m_Renderer->BeginScene(cameraViewProj, cameraPos, lightDir, lightColor, lightIntensity);
+            m_Renderer->BeginScene(cameraView, cameraProjection, cameraPos, lightDir, lightColor, lightIntensity, m_SceneState == SceneState::Edit);
             auto view = m_Scene->Reg().view<TransformComponent, MeshComponent>();
             for (auto entity : view)
             {
@@ -209,20 +212,42 @@ namespace Lynx
                 m_Renderer->SubmitMesh(mesh, transform.GetTransform(), meshComp.Color, (int)entity);
             }
 
-            if (false && m_SceneState == SceneState::Edit) // Render collider meshes
-            {
-                auto colliderView = m_Scene->Reg().view<TransformComponent, BoxColliderComponent>();
+            /*DebugRenderer::DrawLine({0,0,0}, {1,0,0}, {1,0,0,1}); // X - Re
+            DebugRenderer::DrawLine({0,0,0}, {0,1,0}, {0,1,0,1}); // Y - Gr
+            DebugRenderer::DrawLine({0,0,0}, {0,0,1}, {0,0,1,1}); // Z - Bl
 
-                for (auto entity : colliderView)
+            // Draw a test box
+            DebugRenderer::DrawBox({-2, 1, -2}, {-1, 2, -1}, {1, 1, 0, 1});
+
+            DebugRenderer::DrawSphere({1, 0, 1}, 2.0f);*/
+
+            if (m_Renderer->GetShowColliders()) // Render collider meshes
+            {
+                glm::vec4 debugColor = { 0.0f, 1.0f, 0.0f, 1.0f };
+                
+                auto boxView = m_Scene->Reg().view<TransformComponent, BoxColliderComponent>();
+                for (auto entity : boxView)
                 {
-                    auto [transform, collider] = colliderView.get<TransformComponent, BoxColliderComponent>(entity);
-                    // We calculate a transform that matches the collider's bounds
-                    // BoxCollider::HalfSize * 2 = Full Scale
+                    auto [transform, collider] = boxView.get<TransformComponent, BoxColliderComponent>(entity);
                     glm::mat4 colliderTransform = glm::translate(glm::mat4(1.0f), transform.Translation)
                         * glm::toMat4(transform.Rotation)
                         * glm::scale(glm::mat4(1.0f), collider.HalfSize * 2.0f);
 
-                    m_Renderer->SubmitMesh(cubeMesh, colliderTransform, glm::vec4(0.0f, 1.0f, 0.0f, 0.5f), (int)entity);
+                    DebugRenderer::DrawBox(colliderTransform, debugColor);
+                }
+
+                auto sphereView = m_Scene->Reg().view<TransformComponent, SphereColliderComponent>();
+                for (auto entity : sphereView)
+                {
+                    auto [transform, collider] = sphereView.get<TransformComponent, SphereColliderComponent>(entity);
+                    DebugRenderer::DrawSphere(transform.Translation, collider.Radius, debugColor);
+                }
+
+                auto capsuleView = m_Scene->Reg().view<TransformComponent, CapsuleColliderComponent>();
+                for (auto entity : capsuleView)
+                {
+                    auto [transform, collider] = capsuleView.get<TransformComponent, CapsuleColliderComponent>(entity);
+                    DebugRenderer::DrawCapsule(transform.Translation, collider.Radius, collider.HalfHeight, transform.Rotation, debugColor);
                 }
             }
 
@@ -616,19 +641,19 @@ namespace Lynx
             {
                 auto& ccComp = reg.get<CapsuleColliderComponent>(entity);
                 ImGui::DragFloat("Radius", &ccComp.Radius);
-                ImGui::DragFloat("Height", &ccComp.Height);
+                ImGui::DragFloat("HalfHeight", &ccComp.HalfHeight);
             },
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& ccComp = reg.get<CapsuleColliderComponent>(entity);
                 json["Radius"] = ccComp.Radius;
-                json["Height"] = ccComp.Height;
+                json["HalfHeight"] = ccComp.HalfHeight;
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
                 auto& ccComp = reg.get_or_emplace<CapsuleColliderComponent>(entity);
                 ccComp.Radius = json["Radius"];
-                ccComp.Height = json["Height"];
+                ccComp.HalfHeight = json["HalfHeight"];
             });
 
         ComponentRegistry.RegisterComponent<NativeScriptComponent>("NativeScript",

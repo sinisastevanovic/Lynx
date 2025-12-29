@@ -44,7 +44,7 @@ namespace Lynx
     struct CapsuleColliderComponent
     {
         float Radius = 0.5f;
-        float Height = 1.0f;
+        float HalfHeight = 0.5f;
 
         CapsuleColliderComponent() = default;
         CapsuleColliderComponent(const CapsuleColliderComponent&) = default;

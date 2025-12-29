@@ -9,6 +9,7 @@
 #include "Lynx/Engine.h"
 #include "Lynx/Input.h"
 #include "Lynx/Asset/Script.h"
+#include "Lynx/Renderer/DebugRenderer.h"
 
 namespace Lynx
 {
@@ -85,7 +86,33 @@ namespace Lynx
             "GetAxis", &Input::GetAxis
         );
 
-        LX_CORE_INFO("ScriptEngine Initialized");
+        // --- DEBUG ---
+        auto debug = m_Data->Lua.create_named_table("Debug");
+        debug.set_function("DrawLine", [](glm::vec3 start, glm::vec3 end, glm::vec4 color)
+        {
+            DebugRenderer::DrawLine(start, end, color); 
+        });
+
+        debug.set_function("DrawBox", sol::overload(
+            [](glm::vec3 min, glm::vec3 max, glm::vec4 color) {
+                DebugRenderer::DrawBox(min, max, color);
+            },
+            [](glm::vec3 center, glm::vec3 size, glm::quat rotation, glm::vec4 color) {
+                // Wait, we need to construct the matrix for the OBB version
+                glm::mat4 transform = glm::translate(glm::mat4(1.0f), center)
+                    * glm::toMat4(rotation)
+                    * glm::scale(glm::mat4(1.0f), size);
+                DebugRenderer::DrawBox(transform, color);
+            }
+        ));
+
+        debug.set_function("DrawSphere", [](glm::vec3 center, float radius, glm::vec4 color) {
+            DebugRenderer::DrawSphere(center, radius, color);
+        });
+
+        debug.set_function("DrawCapsule", [](glm::vec3 center, float radius, float height, glm::quat rotation, glm::vec4 color) {
+            DebugRenderer::DrawCapsule(center, radius, height * 0.5f, rotation, color); // Note: Height/2 conversion?
+        });
     }
 
     void ScriptEngine::Shutdown()

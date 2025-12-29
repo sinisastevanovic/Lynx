@@ -7,7 +7,9 @@
 #include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
+#include "DebugPass.h"
 #include "ForwardPass.h"
+#include "GridPass.h"
 #include "ShadowPass.h"
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
@@ -197,6 +199,11 @@ namespace Lynx
 
         m_Pipeline.AddPass(std::make_unique<ShadowPass>(m_ShadowMapResolution));
         m_Pipeline.AddPass(std::make_unique<ForwardPass>());
+        if (m_ShouldCreateIDTarget)
+        {
+            m_Pipeline.AddPass(std::make_unique<GridPass>());
+        }
+        m_Pipeline.AddPass(std::make_unique<DebugPass>());
 
         m_Pipeline.Init(m_RenderContext);
 
@@ -641,7 +648,7 @@ namespace Lynx
         target.Framebuffer = m_NvrhiDevice->createFramebuffer(fbDesc);
     }
 
-    void Renderer::BeginScene(const glm::mat4& viewProjection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity)
+    void Renderer::BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, bool editMode)
     {
         // 0. Wait for Fence
         if (m_VulkanState->Device.waitForFences(1, &m_VulkanState->InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
@@ -713,12 +720,15 @@ namespace Lynx
         lightViewProj[3][0] += dX;
         lightViewProj[3][1] += dY;
 
-        m_CurrentFrameData.ViewProjection = viewProjection;
+        m_CurrentFrameData.View = view;
+        m_CurrentFrameData.Projection = projection;
+        m_CurrentFrameData.ViewProjection = projection * view;
         m_CurrentFrameData.CameraPosition = cameraPosition;
         m_CurrentFrameData.LightDirection = lightDir;
         m_CurrentFrameData.LightColor = lightColor;
         m_CurrentFrameData.LightIntensity = lightIntensity;
         m_CurrentFrameData.LightViewProj = lightViewProj;
+        m_CurrentFrameData.ShowGrid = editMode && m_ShowGrid;
         if (m_EditorTarget)
         {
             m_CurrentFrameData.TargetFramebuffer = m_EditorTarget->Framebuffer;
@@ -730,7 +740,7 @@ namespace Lynx
         }
         
         SceneData sceneData;
-        sceneData.ViewProjectionMatrix = viewProjection;
+        sceneData.ViewProjectionMatrix = m_CurrentFrameData.ViewProjection;
         sceneData.LightViewProjection = lightViewProj;
         sceneData.CameraPosition = glm::vec4(cameraPosition, 1.0f);
         sceneData.LightDirection = glm::vec4(lightDir, lightIntensity);
