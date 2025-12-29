@@ -64,16 +64,14 @@ namespace Lynx
     {
         std::shared_ptr<StaticMesh> Mesh;
         int SubmeshIndex;
-        glm::mat4 Transform;
-        glm::vec4 Color;
-        int EntityID;
-        float DistanceToCamera; // TODO: reuse this!
+        GPUInstanceData InstanceData; 
+        float DistanceToCamera;
         int InstanceOffset = -1;
     };
 
     struct RenderData
     {
-        std::unordered_map<BatchKey, std::vector<RenderCommand>, BatchKeyHasher> OpaqueBatches;
+        std::unordered_map<BatchKey, std::vector<GPUInstanceData>, BatchKeyHasher> OpaqueBatches;
         std::vector<RenderCommand> TransparentQueue;
 
         std::vector<BatchDrawCall> OpaqueDrawCalls;

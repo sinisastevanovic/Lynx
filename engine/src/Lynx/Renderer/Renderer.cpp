@@ -662,29 +662,21 @@ namespace Lynx
         m_CurrentFrameData.OpaqueDrawCalls.clear();
 
         // Flatten all batches into single array
-        for (auto& [key, commands] : m_CurrentFrameData.OpaqueBatches)
+        for (auto& [key, instances] : m_CurrentFrameData.OpaqueBatches)
         {
-            if (commands.empty())
+            if (instances.empty())
                 continue;
 
-            std::sort(commands.begin(), commands.end(),
-                [](const RenderCommand& a, const RenderCommand& b) {
-                    return a.DistanceToCamera < b.DistanceToCamera; 
-            });
-
             uint32_t startOffset = (uint32_t)allInstanceData.size();
-            for (auto& cmd : commands)
-            {
-                allInstanceData.push_back({ cmd.Transform, cmd.Color, cmd.EntityID });
-            }
+            allInstanceData.insert(allInstanceData.end(), instances.begin(), instances.end());
 
-            m_CurrentFrameData.OpaqueDrawCalls.push_back({ key, startOffset, (uint32_t)commands.size() });
+            m_CurrentFrameData.OpaqueDrawCalls.push_back({ key, startOffset, (uint32_t)instances.size() });
         }
 
         for (auto& cmd : m_CurrentFrameData.TransparentQueue)
         {
             cmd.InstanceOffset = (int)allInstanceData.size();
-            allInstanceData.push_back({ cmd.Transform, cmd.Color, cmd.EntityID });
+            allInstanceData.push_back({ cmd.InstanceData.Model, cmd.InstanceData.Color, cmd.InstanceData.EntityID });
         }
 
         // Create or resize GPU Buffer
@@ -830,17 +822,22 @@ namespace Lynx
         for (int i = 0; i < mesh->GetSubmeshes().size(); ++i)
         {
             const auto& submesh = mesh->GetSubmeshes()[i];
-            RenderCommand cmd = { mesh, i, transform, color, entityID, dist };
 
+            GPUInstanceData instance = { transform, color, entityID };
             BatchKey key = { mesh.get(), (uint32_t)i, submesh.Material.get() };
 
             if (submesh.Material->Mode == AlphaMode::Translucent)
             {
+                RenderCommand cmd;
+                cmd.Mesh = mesh;
+                cmd.SubmeshIndex = i;
+                cmd.InstanceData = instance;
+                cmd.DistanceToCamera = dist;
                 m_CurrentFrameData.TransparentQueue.push_back(cmd);
             }
             else
             {
-                m_CurrentFrameData.OpaqueBatches[key].push_back(cmd);
+                m_CurrentFrameData.OpaqueBatches[key].push_back(instance);
             }
         }
         // 1. Bind Texture
