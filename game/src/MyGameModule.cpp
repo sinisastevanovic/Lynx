@@ -45,8 +45,96 @@ void MyGame::RegisterComponents(Lynx::ComponentRegistry* registry)
     [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
     {
         auto& playerComponent = reg.get_or_emplace<PlayerComponent>(entity);
-        auto moveSpeed = json["MoveSpeed"];
-        playerComponent.MoveSpeed = moveSpeed;
+        playerComponent.MoveSpeed = json["MoveSpeed"];
+    });
+
+    registry->RegisterComponent<EnemyComponent>("Enemy Component",
+    [](entt::registry& reg, entt::entity entity)
+    {
+        auto& comp = reg.get<EnemyComponent>(entity);
+        ImGui::DragFloat("Move Speed", &comp.MoveSpeed, 0.1f);
+        ImGui::DragFloat("Health", &comp.Health, 0.1f);
+    },
+    [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+    {
+        auto& comp = reg.get<EnemyComponent>(entity);
+        json["MoveSpeed"] = comp.MoveSpeed;
+        json["Health"] = comp.Health;
+    },
+    [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+    {
+        auto& comp = reg.get_or_emplace<EnemyComponent>(entity);
+        comp.MoveSpeed = json["MoveSpeed"];
+        comp.Health = json["Health"];
+    });
+
+    registry->RegisterComponent<EnemySpawnerComponent>("EnemySpawnerComponent",
+    [](entt::registry& reg, entt::entity entity)
+    {
+        auto& comp = reg.get<EnemySpawnerComponent>(entity);
+        ImGui::DragFloat("SpawnRate", &comp.SpawnRate, 0.1f);
+        ImGui::DragInt("MaxEnemies", &comp.MaxEnemies, 1);
+    },
+    [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+    {
+        auto& comp = reg.get<EnemySpawnerComponent>(entity);
+        json["SpawnRate"] = comp.SpawnRate;
+        json["MaxEnemies"] = comp.MaxEnemies;
+    },
+    [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+    {
+        auto& comp = reg.get_or_emplace<EnemySpawnerComponent>(entity);
+        comp.SpawnRate = json["SpawnRate"];
+        comp.MaxEnemies = json["MaxEnemies"];
+    });
+
+    registry->RegisterComponent<WeaponComponent>("Weapon Component",
+    [](entt::registry& reg, entt::entity entity)
+    {
+        auto& comp = reg.get<WeaponComponent>(entity);
+        ImGui::DragFloat("Fire Rate", &comp.FireRate, 0.1f);
+        ImGui::DragFloat("Range", &comp.Range, 0.1f);
+        ImGui::DragFloat("Damage", &comp.Damage, 0.1f);
+        ImGui::DragFloat("Projectile Speed", &comp.ProjectileSpeed, 0.1f);
+    },
+    [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+    {
+        auto& comp = reg.get<WeaponComponent>(entity);
+        json["FireRate"] = comp.FireRate;
+        json["Range"] = comp.Range;
+        json["Damage"] = comp.Damage;
+        json["ProjectileSpeed"] = comp.ProjectileSpeed;
+    },
+    [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+    {
+        auto& comp = reg.get_or_emplace<WeaponComponent>(entity);
+        comp.FireRate = json["FireRate"];
+        comp.Range = json["Range"];
+        comp.Damage = json["Damage"];
+        comp.ProjectileSpeed = json["ProjectileSpeed"];
+    });
+
+    registry->RegisterComponent<ProjectileComponent>("Projectile Component",
+    [](entt::registry& reg, entt::entity entity)
+    {
+        auto& comp = reg.get<ProjectileComponent>(entity);
+        ImGui::DragFloat("Damage", &comp.Damage, 0.1f);
+        ImGui::DragFloat("Lifetime", &comp.Lifetime, 0.1f);
+        ImGui::DragFloat("Radius", &comp.Radius, 0.1f);
+    },
+    [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+    {
+        auto& comp = reg.get<ProjectileComponent>(entity);
+        json["Damage"] = comp.Damage;
+        json["Lifetime"] = comp.Lifetime;
+        json["Radius"] = comp.Radius;
+    },
+    [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+    {
+        auto& comp = reg.get_or_emplace<ProjectileComponent>(entity);
+        comp.Damage = json["Damage"];
+        comp.Lifetime = json["Lifetime"];
+        comp.Radius = json["Radius"];
     });
 }
 
