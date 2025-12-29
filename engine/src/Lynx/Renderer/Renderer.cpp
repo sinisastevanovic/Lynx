@@ -199,6 +199,9 @@ namespace Lynx
         m_Pipeline.AddPass(std::make_unique<ForwardPass>());
 
         m_Pipeline.Init(m_RenderContext);
+
+        m_ImGuiBackend = std::make_unique<ImGui_NVRHI>();
+        m_ImGuiBackend->init(m_NvrhiDevice);
         
         LX_CORE_INFO("Renderer initialized successfully (Pipeline loaded).");
     }
@@ -224,9 +227,9 @@ namespace Lynx
         desc.setAddressU(addressMode).setAddressV(addressMode).setAddressW(addressMode);
 
         if (settings.FilterMode == TextureFilter::Linear)
-            desc.setMinFilter(false).setMagFilter(false).setMipFilter(false);
+            desc.setMinFilter(true).setMagFilter(true).setMipFilter(true);
         else
-            desc.setMinFilter(true).setMagFilter(true).setMipFilter(false); // TODO: mipFilter
+            desc.setMinFilter(false).setMagFilter(false).setMipFilter(false); // TODO: mipFilter
 
         nvrhi::SamplerHandle handle = m_NvrhiDevice->createSampler(desc);
         m_SamplerCache[settings] = handle;
@@ -269,20 +272,6 @@ namespace Lynx
         }
         
         return result;
-    }
-
-    bool Renderer::InitImGui()
-    {
-        m_ImGuiBackend = std::make_unique<ImGui_NVRHI>();
-        return m_ImGuiBackend->init(m_NvrhiDevice);
-    }
-
-    void Renderer::RenderImGui()
-    {
-        if (m_ImGuiBackend)
-        {
-            m_ImGuiBackend->render(m_SwapchainFramebuffers[m_CurrentImageIndex]);
-        }
     }
 
     int Renderer::ReadIdFromBuffer(uint32_t x, uint32_t y)
@@ -737,7 +726,7 @@ namespace Lynx
         }
         else
         {
-            m_CurrentFrameData.TargetFramebuffer = m_SwapchainFramebuffers[m_CurrentFrame];
+            m_CurrentFrameData.TargetFramebuffer = m_SwapchainFramebuffers[m_CurrentImageIndex];
         }
         
         SceneData sceneData;
@@ -813,8 +802,8 @@ namespace Lynx
             m_CommandList->close();
             m_NvrhiDevice->executeCommandList(m_CommandList);
         }
-        
-        RenderImGui();
+
+        m_ImGuiBackend->render(m_SwapchainFramebuffers[m_CurrentImageIndex]);
 
         // Signal Fence for CPU Sync
         vk::SubmitInfo submitInfo;

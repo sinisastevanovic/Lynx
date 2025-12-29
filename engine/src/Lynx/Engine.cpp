@@ -50,19 +50,15 @@ namespace Lynx
         m_PhysicsSystem = std::make_unique<PhysicsSystem>();
         
         m_Renderer = std::make_unique<Renderer>(m_Window->GetNativeWindow(), editorMode);
-        m_Renderer->Init();
-
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-
-        ImGui::StyleColorsDark();
-
         ImGui_ImplGlfw_InitForVulkan(m_Window->GetNativeWindow(), true);
-        m_Renderer->InitImGui();
+        ImGui::StyleColorsDark();
+        m_Renderer->Init();
 
         m_ScriptEngine = std::make_unique<ScriptEngine>();
         

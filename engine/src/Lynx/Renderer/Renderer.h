@@ -52,9 +52,6 @@ namespace Lynx
         nvrhi::SamplerHandle GetSampler(const SamplerSettings& settings);
         nvrhi::TextureHandle CreateTexture(const TextureSpecification& specification, unsigned char* data);
 
-        bool InitImGui();
-        void RenderImGui();
-
         int ReadIdFromBuffer(uint32_t x, uint32_t y);
 
     private:
