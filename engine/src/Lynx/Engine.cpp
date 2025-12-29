@@ -216,7 +216,6 @@ namespace Lynx
             if (false && m_SceneState == SceneState::Edit) // Render collider meshes
             {
                 auto colliderView = m_Scene->Reg().view<TransformComponent, BoxColliderComponent>();
-                m_Renderer->SetTexture(nullptr);
 
                 for (auto entity : colliderView)
                 {
