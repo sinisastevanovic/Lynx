@@ -136,6 +136,7 @@ namespace Lynx
         m_Pipeline.Clear();
         m_RenderContext = RenderContext();
         m_CurrentFrameData = RenderData();
+        m_OpaqueBatches.clear();
         m_StageBuffer = nullptr;
 
         m_SamplerCache.clear();
@@ -148,14 +149,7 @@ namespace Lynx
         m_SwapchainDepth = nullptr;
         m_CommandList = nullptr;
         m_SwapchainFramebuffers.clear();
-        if (m_EditorTarget)
-        {
-            m_EditorTarget->Depth = nullptr;
-            m_EditorTarget->Color = nullptr;
-            m_EditorTarget->IdBuffer = nullptr;
-            m_EditorTarget->Framebuffer = nullptr;
-            m_EditorTarget.reset();
-        }
+        m_EditorTarget.reset();
         m_NvrhiDevice = nullptr;
         m_ImGuiBackend.reset();
 
@@ -662,7 +656,7 @@ namespace Lynx
         m_CurrentFrameData.OpaqueDrawCalls.clear();
 
         // Flatten all batches into single array
-        for (auto& [key, instances] : m_CurrentFrameData.OpaqueBatches)
+        for (auto& [key, instances] : m_OpaqueBatches)
         {
             if (instances.empty())
                 continue;
@@ -672,6 +666,11 @@ namespace Lynx
 
             m_CurrentFrameData.OpaqueDrawCalls.push_back({ key, startOffset, (uint32_t)instances.size() });
         }
+
+        std::ranges::sort(m_CurrentFrameData.TransparentQueue,
+          [](const RenderCommand& a, const RenderCommand& b) {
+              return a.DistanceToCamera > b.DistanceToCamera; 
+          });
 
         for (auto& cmd : m_CurrentFrameData.TransparentQueue)
         {
@@ -694,11 +693,7 @@ namespace Lynx
                 m_InstanceBuffer = m_NvrhiDevice->createBuffer(desc);
             }
 
-            // TODO: This isnt ideal? 
-            //m_CommandList->open();
             m_CommandList->writeBuffer(m_InstanceBuffer, allInstanceData.data(), requiredSize);
-            //m_CommandList->close();
-            //m_NvrhiDevice->executeCommandList(m_CommandList);
         }
         
         m_CurrentFrameData.InstanceBuffer = m_InstanceBuffer;
@@ -730,7 +725,7 @@ namespace Lynx
         // 2. Start recording
         m_CommandList->open();
 
-        m_CurrentFrameData.OpaqueBatches.clear();
+        m_OpaqueBatches.clear();
         m_CurrentFrameData.OpaqueDrawCalls.clear();
         m_CurrentFrameData.TransparentQueue.clear();
         
@@ -837,7 +832,7 @@ namespace Lynx
             }
             else
             {
-                m_CurrentFrameData.OpaqueBatches[key].push_back(instance);
+                m_OpaqueBatches[key].push_back(instance);
             }
         }
         // 1. Bind Texture
@@ -1017,10 +1012,6 @@ namespace Lynx
             fbDesc.setDepthAttachment(m_SwapchainDepth);
             m_SwapchainFramebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
         }
-        
-        // Reset current image index/frame?
-        // m_CurrentImageIndex = 0; // Acquire will set this.
-        // m_CurrentFrame = 0; // Sync frames are separate from swapchain images. Keep cycling.
     }
 
     void Renderer::EnsureEditorViewport(uint32_t width, uint32_t height)

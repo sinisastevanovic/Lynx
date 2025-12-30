@@ -106,6 +106,8 @@ namespace Lynx
         
         std::unordered_map<SamplerSettings, nvrhi::SamplerHandle> m_SamplerCache;
 
+        std::unordered_map<BatchKey, std::vector<GPUInstanceData>, BatchKeyHasher> m_OpaqueBatches;
+
         RenderPipeline m_Pipeline;
         RenderContext m_RenderContext;
         RenderData m_CurrentFrameData;

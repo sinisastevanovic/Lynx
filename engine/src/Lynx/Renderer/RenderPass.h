@@ -71,7 +71,6 @@ namespace Lynx
 
     struct RenderData
     {
-        std::unordered_map<BatchKey, std::vector<GPUInstanceData>, BatchKeyHasher> OpaqueBatches;
         std::vector<RenderCommand> TransparentQueue;
 
         std::vector<BatchDrawCall> OpaqueDrawCalls;
