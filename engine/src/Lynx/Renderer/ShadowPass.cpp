@@ -145,6 +145,9 @@ namespace Lynx
             if (batch.InstanceCount <= 0)
                 continue;
 
+            if (!(batch.Key.RenderFlags & RenderFlags::ShadowPass))
+                continue;
+
             const auto& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
 
             auto material = submesh.Material.get();

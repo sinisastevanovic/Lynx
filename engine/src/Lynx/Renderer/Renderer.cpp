@@ -819,7 +819,7 @@ namespace Lynx
             const auto& submesh = mesh->GetSubmeshes()[i];
 
             GPUInstanceData instance = { transform, color, entityID };
-            BatchKey key = { mesh.get(), (uint32_t)i, submesh.Material.get() };
+            BatchKey key = { mesh.get(), (uint32_t)i, submesh.Material.get(), Flags };
 
             if (submesh.Material->Mode == AlphaMode::Translucent)
             {
@@ -828,6 +828,7 @@ namespace Lynx
                 cmd.SubmeshIndex = i;
                 cmd.InstanceData = instance;
                 cmd.DistanceToCamera = dist;
+                cmd.Flags = Flags;
                 m_CurrentFrameData.TransparentQueue.push_back(cmd);
             }
             else

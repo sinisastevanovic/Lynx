@@ -176,6 +176,9 @@ namespace Lynx
 
         for (const auto& cmd : queue)
         {
+            if (!(cmd.Flags & RenderFlags::MainPass))
+                continue;
+            
             const auto& submesh = cmd.Mesh->GetSubmeshes()[cmd.SubmeshIndex];
             auto state = nvrhi::GraphicsState()
                 .setPipeline(pipeline)
@@ -209,6 +212,9 @@ namespace Lynx
         for (const auto& batch : batches)
         {
             if (batch.InstanceCount <= 0)
+                continue;
+
+            if (!(batch.Key.RenderFlags & RenderFlags::MainPass))
                 continue;
 
             const auto& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];

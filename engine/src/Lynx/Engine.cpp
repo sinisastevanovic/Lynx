@@ -218,11 +218,16 @@ namespace Lynx
                 if (mesh)
                 {
                     AABB worldBounds = TransformAABB(mesh->GetBounds(), transform.GetTransform());
-                    bool visibleToCamera = camFrustum.IsOnFrustum(worldBounds);
-                    //bool visibleToLight = lightFrustum.IsOnFrustum(worldBounds);
-                    if (visibleToCamera)
+                    // TODO: Check if this is worth it. Using these flags splits the batches up, so more draw calls, but less geometry drawn...
+                    RenderFlags flags = RenderFlags::None;
+                    if (camFrustum.IsOnFrustum(worldBounds))
+                        flags = flags | RenderFlags::MainPass;
+                    if (lightFrustum.IsOnFrustum(worldBounds))
+                        flags = flags | RenderFlags::ShadowPass;
+
+                    if (flags != RenderFlags::None)
                     {
-                        m_Renderer->SubmitMesh(mesh, transform.GetTransform(), RenderFlags::All, meshComp.Color, (int)entity);
+                        m_Renderer->SubmitMesh(mesh, transform.GetTransform(), flags, meshComp.Color, (int)entity);
                     }
                 }
                 

@@ -30,10 +30,11 @@ namespace Lynx
         StaticMesh* Mesh;
         uint32_t SubmeshIndex;
         Material* Material;
+        RenderFlags RenderFlags;
 
         bool operator==(const BatchKey& other) const
         {
-            return Mesh == other.Mesh && SubmeshIndex == other.SubmeshIndex && Material == other.Material;
+            return Mesh == other.Mesh && SubmeshIndex == other.SubmeshIndex && Material == other.Material && RenderFlags == other.RenderFlags;
         }
     };
 
