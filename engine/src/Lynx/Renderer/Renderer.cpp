@@ -14,6 +14,7 @@
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
 #include "nvrhi/validation.h"
+#include "Passes/DepthPass.h"
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
@@ -193,6 +194,7 @@ namespace Lynx
         m_RenderContext.PresentationFramebufferInfo = fbInfo;
 
         m_Pipeline.AddPass(std::make_unique<ShadowPass>(m_ShadowMapResolution));
+        m_Pipeline.AddPass(std::make_unique<DepthPass>());
         m_Pipeline.AddPass(std::make_unique<ForwardPass>());
         if (m_ShouldCreateIDTarget)
         {

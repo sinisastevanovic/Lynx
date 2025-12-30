@@ -77,7 +77,8 @@ namespace Lynx
 
         // Opaque
         pipeDesc.renderState.depthStencilState.depthTestEnable = true;
-        pipeDesc.renderState.depthStencilState.depthWriteEnable = true;
+        pipeDesc.renderState.depthStencilState.depthWriteEnable = false;
+        pipeDesc.renderState.depthStencilState.depthFunc = nvrhi::ComparisonFunc::Equal;
         pipeDesc.renderState.blendState.targets[0].setBlendEnable(false);
 
         if (ctx.PresentationFramebufferInfo.colorFormats.size() > 1)

@@ -180,8 +180,8 @@ namespace Lynx
                 .setInstanceCount(batch.InstanceCount)
                 .setStartInstanceLocation(batch.FirstInstance));
 
-            renderData.DrawCalls++;
-            renderData.IndexCount += submesh.IndexCount * batch.InstanceCount;
+            //renderData.DrawCalls++;
+            //renderData.IndexCount += submesh.IndexCount * batch.InstanceCount;
         }
 
         ctx.CommandList->endMarker();
