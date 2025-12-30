@@ -94,7 +94,7 @@ namespace Lynx
         bounds[0] = { viewportMinRegion.x + viewportOffset.x, viewportMinRegion.y + viewportOffset.y };
         bounds[1] = { viewportMaxRegion.x + viewportOffset.x, viewportMaxRegion.y + viewportOffset.y };
 
-        if (ImGui::IsWindowHovered() && !ImGuizmo::IsUsing())
+        if (isFocused && !ImGuizmo::IsUsing())
         {
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {

@@ -88,6 +88,7 @@ namespace Lynx
 
         // Transparent
         pipeDesc.renderState.depthStencilState.depthWriteEnable = false;
+        pipeDesc.renderState.depthStencilState.depthFunc = nvrhi::ComparisonFunc::Less;
         pipeDesc.renderState.blendState.targets[0]
             .setBlendEnable(true)
             .setSrcBlend(nvrhi::BlendFactor::SrcAlpha)
