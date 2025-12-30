@@ -14,7 +14,7 @@ layout(location = 4) out vec4 v_MeshColor;
 layout(location = 5) out vec4 v_VertexColor;
 layout(location = 6) out vec4 v_ShadowCoord;
 layout(location = 7) out flat int v_EntityID;
-
+ 
 layout(set = 0, binding = 0) uniform UBO {
     mat4 u_ViewProjection;
     mat4 u_LightViewProjection;
@@ -23,25 +23,36 @@ layout(set = 0, binding = 0) uniform UBO {
     vec4 u_LightColor;
 } ubo;
 
+struct InstanceData
+{
+    mat4 Model;
+    vec4 Color;
+    int EntityID;
+    float Padding[3];
+};
+
+layout(std430, set = 0, binding = 10) readonly buffer InstanceBuffer {
+    InstanceData instances[];
+} u_Instances;
+
 layout(push_constant) uniform PushConsts {
-    mat4 u_Model;
-    vec4 u_Color;
     float u_AlphaCutoff;
-    int u_EntityID;
 } push;
 
 void main() {
-    v_TexCoord = a_TexCoord;
-    v_MeshColor = push.u_Color;
-    v_VertexColor = a_Color;
-    v_EntityID = push.u_EntityID;
+    InstanceData data = u_Instances.instances[gl_InstanceIndex];
 
-    vec4 worldPos = push.u_Model * vec4(a_Position, 1.0);
+    v_TexCoord = a_TexCoord;
+    v_MeshColor = data.Color;
+    v_VertexColor = a_Color;
+    v_EntityID = data.EntityID;
+
+    vec4 worldPos = data.Model * vec4(a_Position, 1.0);
     v_WorldPos = worldPos.xyz;
 
     // TODO: This is maybe needed?
     //mat3 normalMatrix = transpose(inverse(mat3(push.u_Model)));
-    mat3 normalMatrix = mat3(push.u_Model);
+    mat3 normalMatrix = mat3(data.Model);
     v_Normal = normalize(normalMatrix * a_Normal);
 
     // Pass tangent and its handedness
@@ -85,20 +96,19 @@ layout(set = 0, binding = 0) uniform UBO {
     vec4 u_LightColor;
 } ubo;
 
+layout(set = 0, binding = 1) uniform texture2D u_ShadowMap;
+layout(set = 0, binding = 2) uniform sampler u_ShadowSampler;
+
 layout(push_constant) uniform PushConsts {
-    mat4 u_Model;
-    vec4 u_Color;
     float u_AlphaCutoff;
-    int u_EntityID;
 } push;
 
-layout(set = 0, binding = 1) uniform texture2D u_AlbedoMap;
-layout(set = 0, binding = 2) uniform texture2D u_NormalMap;
-layout(set = 0, binding = 3) uniform texture2D u_MetallicRoughnessMap;
-layout(set = 0, binding = 4) uniform texture2D u_EmissiveMap;
-layout(set = 0, binding = 5) uniform sampler u_Sampler;
-layout(set = 0, binding = 6) uniform texture2D u_ShadowMap;
-layout(set = 0, binding = 7) uniform sampler u_ShadowSampler;
+layout(set = 1, binding = 0) uniform texture2D u_AlbedoMap;
+layout(set = 1, binding = 1) uniform texture2D u_NormalMap;
+layout(set = 1, binding = 2) uniform texture2D u_MetallicRoughnessMap;
+layout(set = 1, binding = 3) uniform texture2D u_EmissiveMap;
+layout(set = 1, binding = 4) uniform sampler u_Sampler;
+
 
 const float PI = 3.14159265359;
 

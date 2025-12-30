@@ -14,14 +14,26 @@ layout(set = 0, binding = 0) uniform UBO {
 } ubo;
 
 layout(push_constant) uniform PushConsts {
-    mat4 u_Model;
-    vec4 u_Color;
     float u_AlphaCutoff;
 } push;
 
+struct InstanceData
+{
+    mat4 Model;
+    vec4 Color;
+    int EntityID;
+    float Padding[3];
+};
+
+// Binding 10 (arbitrary high number to avoid conflict with textures)
+layout(std430, set = 0, binding = 10) readonly buffer InstanceBuffer {
+    InstanceData instances[];
+} u_Instances;
+
 void main() {
+    InstanceData data = u_Instances.instances[gl_InstanceIndex];
     v_TexCoord = a_TexCoord;
-    gl_Position = ubo.u_ViewProjection * push.u_Model * vec4(a_Position, 1.0);
+    gl_Position = ubo.u_ViewProjection * data.Model * vec4(a_Position, 1.0);
 }
 
 #type pixel
@@ -30,13 +42,11 @@ void main() {
 layout(location = 0) in vec2 v_TexCoord;
 
 layout(push_constant) uniform PushConsts {
-    mat4 u_Model;
-    vec4 u_Color;
     float u_AlphaCutoff;
 } push;
 
-layout(set = 0, binding = 1) uniform texture2D u_AlbedoMap;
-layout(set = 0, binding = 2) uniform sampler u_Sampler;
+layout(set = 1, binding = 0) uniform texture2D u_AlbedoMap;
+layout(set = 1, binding = 1) uniform sampler u_Sampler;
 
 void main() {
     if (push.u_AlphaCutoff >= 0.0) {
