@@ -7,26 +7,34 @@ namespace Lynx
 {
     void ForwardPass::Init(RenderContext& ctx)
     {
-        auto layoutDesc = nvrhi::BindingLayoutDesc()
+        // Global Layout (Set 0)
+        auto globalLayoutDesc = nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::All)
             .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
             .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(PushData)))
-            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(1)) // Albedo
-            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(2)) // Normal
-            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(3)) // MR
-            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(4)) // Emissive
-            .addItem(nvrhi::BindingLayoutItem::Sampler(5))
-            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(6)) // Shadow Map
-            .addItem(nvrhi::BindingLayoutItem::Sampler(7))
+            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(1)) // Shadow Map
+            .addItem(nvrhi::BindingLayoutItem::Sampler(2))
             .addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(10))
             .setBindingOffsets({0, 0, 0, 0});
-        m_BindingLayout = ctx.Device->createBindingLayout(layoutDesc);
+        m_GlobalBindingLayout = ctx.Device->createBindingLayout(globalLayoutDesc);
+
+        // Material Layout (Set 1)
+        auto matLayoutDesc = nvrhi::BindingLayoutDesc()
+            .setVisibility(nvrhi::ShaderType::All)
+            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(0)) // Albedo
+            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(1)) // Normal
+            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(2)) // MR
+            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(3)) // Emissive
+            .addItem(nvrhi::BindingLayoutItem::Sampler(4))
+            .setBindingOffsets({0, 0, 0, 0});
+        m_MaterialBindingLayout = ctx.Device->createBindingLayout(matLayoutDesc);
 
         std::string shaderPath = ctx.PresentationFramebufferInfo.colorFormats.size() > 1 ? "engine/resources/Shaders/StandardEditor.glsl" : "engine/resources/Shaders/Standard.glsl";
         auto shaderAsset = Engine::Get().GetAssetManager().GetAsset<Shader>(shaderPath);
 
         auto pipeDesc = nvrhi::GraphicsPipelineDesc()
-            .addBindingLayout(m_BindingLayout)
+            .addBindingLayout(m_GlobalBindingLayout)
+            .addBindingLayout(m_MaterialBindingLayout)
             .setVertexShader(shaderAsset->GetVertexShader())
             .setFragmentShader(shaderAsset->GetPixelShader())
             .setPrimType(nvrhi::PrimitiveType::TriangleList);
@@ -91,24 +99,17 @@ namespace Lynx
 
     void ForwardPass::Execute(RenderContext& ctx, RenderData& renderData)
     {
-        if (renderData.InstanceBuffer != m_CachedInstanceBuffer)
-        {
-            m_BindingSetCache.clear();
-            m_CachedInstanceBuffer = renderData.InstanceBuffer;
-        }
+        CreateGlobalBindingSet(ctx, renderData);
         
         DrawBatches(ctx, renderData, renderData.OpaqueDrawCalls, m_PipelineOpaque);
         DrawQueue(ctx, renderData, renderData.TransparentQueue, m_PipelineTransparent);
     }
 
-    nvrhi::BindingSetHandle ForwardPass::GetOrCreateBindingSet(RenderContext& ctx, RenderData& renderData, Material* material, nvrhi::TextureHandle shadowMap,
-        nvrhi::SamplerHandle shadowSampler)
+    nvrhi::BindingSetHandle ForwardPass::GetMaterialBindingSet(RenderContext& ctx, Material* material)
     {
-        if (m_BindingSetCache.contains(material))
-            return m_BindingSetCache[material];
+        if (m_MaterialBindingSetCache.contains(material))
+            return m_MaterialBindingSetCache[material];
 
-        nvrhi::BindingSetDesc desc;
-        desc.addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer));
         nvrhi::TextureHandle albedo = ctx.WhiteTexture;
         nvrhi::TextureHandle normal = ctx.NormalTexture;
         nvrhi::TextureHandle mr = ctx.MetallicRoughnessTexture;
@@ -142,17 +143,30 @@ namespace Lynx
                     emissive = tex->GetTextureHandle();
             }
         }
+        auto desc = nvrhi::BindingSetDesc()
+            .addItem(nvrhi::BindingSetItem::Texture_SRV(0, albedo))
+            .addItem(nvrhi::BindingSetItem::Texture_SRV(1, normal))
+            .addItem(nvrhi::BindingSetItem::Texture_SRV(2, mr))
+            .addItem(nvrhi::BindingSetItem::Texture_SRV(3, emissive))
+            .addItem(nvrhi::BindingSetItem::Sampler(4, ctx.GetSampler(samplerSettings)));
 
-        desc.addItem(nvrhi::BindingSetItem::Texture_SRV(1, albedo))
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(2, normal))
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(3, mr))
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(4, emissive))
-            .addItem(nvrhi::BindingSetItem::Sampler(5, ctx.GetSampler(samplerSettings)))
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(6, shadowMap))
-            .addItem(nvrhi::BindingSetItem::Sampler(7, shadowSampler))
+        return m_MaterialBindingSetCache[material] = ctx.Device->createBindingSet(desc, m_MaterialBindingLayout);
+    }
+
+    void ForwardPass::CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData)
+    {
+        if (m_GlobalBindingSet && m_CachedInstanceBuffer == renderData.InstanceBuffer)
+            return;
+
+        m_CachedInstanceBuffer = renderData.InstanceBuffer;
+        auto desc = nvrhi::BindingSetDesc()
+            .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer))
+            .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(PushData)))
+            .addItem(nvrhi::BindingSetItem::Texture_SRV(1, renderData.ShadowMap)) // Shadow Map
+            .addItem(nvrhi::BindingSetItem::Sampler(2, renderData.ShadowSampler))
             .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(10, renderData.InstanceBuffer));
 
-        return m_BindingSetCache[material] = ctx.Device->createBindingSet(desc, m_BindingLayout);
+        m_GlobalBindingSet = ctx.Device->createBindingSet(desc, m_GlobalBindingLayout);
     }
 
     void ForwardPass::DrawQueue(RenderContext& ctx, RenderData& renderData, std::vector<RenderCommand>& queue, nvrhi::GraphicsPipelineHandle pipeline)
@@ -172,7 +186,8 @@ namespace Lynx
             const auto& fbInfo = renderData.TargetFramebuffer->getFramebufferInfo();
             state.viewport.addViewport(nvrhi::Viewport(fbInfo.width, fbInfo.height));
             state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
-            state.addBindingSet(GetOrCreateBindingSet(ctx, renderData, submesh.Material.get(), renderData.ShadowMap, renderData.ShadowSampler));
+            state.addBindingSet(m_GlobalBindingSet);
+            state.addBindingSet(GetMaterialBindingSet(ctx, submesh.Material.get()));
 
             ctx.CommandList->setGraphicsState(state);
 
@@ -206,7 +221,8 @@ namespace Lynx
             const auto& fbInfo = renderData.TargetFramebuffer->getFramebufferInfo();
             state.viewport.addViewport(nvrhi::Viewport(fbInfo.width, fbInfo.height));
             state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
-            state.addBindingSet(GetOrCreateBindingSet(ctx, renderData, submesh.Material.get(), renderData.ShadowMap, renderData.ShadowSampler));
+            state.addBindingSet(m_GlobalBindingSet);
+            state.addBindingSet(GetMaterialBindingSet(ctx, submesh.Material.get()));
 
             ctx.CommandList->setGraphicsState(state);
 

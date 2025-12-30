@@ -17,6 +17,7 @@ namespace Lynx
 
     private:
         nvrhi::BindingSetHandle GetMaskedBindingSet(RenderContext& ctx, RenderData& renderData, Material* material);
+        void CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData);
 
     private:
         uint32_t m_Resolution;
@@ -28,10 +29,12 @@ namespace Lynx
         nvrhi::BufferHandle m_ShadowConstantBuffer;
         nvrhi::BufferHandle m_CachedInstanceBuffer;
 
-        nvrhi::BindingLayoutHandle m_BindingLayout;
+        nvrhi::BindingLayoutHandle m_GlobalBindingLayout;
+        nvrhi::BindingLayoutHandle m_MaterialBindingLayout;
         nvrhi::GraphicsPipelineHandle m_Pipeline;
 
-        nvrhi::BindingSetHandle m_DefaultBindingSet;
+        nvrhi::BindingSetHandle m_GlobalBindingSet;
+        nvrhi::BindingSetHandle m_OpaqueBindingSet;
         std::unordered_map<Material*, nvrhi::BindingSetHandle> m_MaskedBindingSets;
     };
 }

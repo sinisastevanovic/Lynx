@@ -47,20 +47,28 @@ namespace Lynx
         auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/Shadow.glsl");
         LX_ASSERT(shader, "Failed to load Shadow Shader!");
 
-        auto layoutDesc = nvrhi::BindingLayoutDesc()
+        auto globalDesc = nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::All)
             .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0)) // UBO
-            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(1))    // Albedo (for alpha mask)
-            .addItem(nvrhi::BindingLayoutItem::Sampler(2))        // Sampler
             .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(PushData)))
             .addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(10))
             .setBindingOffsets({0, 0, 0, 0});
-        m_BindingLayout = ctx.Device->createBindingLayout(layoutDesc);
+        m_GlobalBindingLayout = ctx.Device->createBindingLayout(globalDesc);
 
-        
+        auto matDesc = nvrhi::BindingLayoutDesc()
+            .setVisibility(nvrhi::ShaderType::All)
+            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))    // Albedo (for alpha mask)
+            .addItem(nvrhi::BindingLayoutItem::Sampler(1))        // Sampler
+            .setBindingOffsets({0, 0, 0, 0});
+        m_MaterialBindingLayout = ctx.Device->createBindingLayout(matDesc);
+
+        auto bsDesc = nvrhi::BindingSetDesc()
+            .addItem(nvrhi::BindingSetItem::Texture_SRV(0, ctx.WhiteTexture))
+            .addItem(nvrhi::BindingSetItem::Sampler(1, ctx.GetSampler(SamplerSettings())));
+        m_OpaqueBindingSet = ctx.Device->createBindingSet(bsDesc, m_MaterialBindingLayout);
 
         auto pipeDesc = nvrhi::GraphicsPipelineDesc();
-        pipeDesc.bindingLayouts = { m_BindingLayout };
+        pipeDesc.bindingLayouts = { m_GlobalBindingLayout, m_MaterialBindingLayout };
         pipeDesc.VS = shader->GetVertexShader();
         pipeDesc.PS = shader->GetPixelShader();
         pipeDesc.primType = nvrhi::PrimitiveType::TriangleList;
@@ -111,22 +119,7 @@ namespace Lynx
 
     void ShadowPass::Execute(RenderContext& ctx, RenderData& renderData)
     {
-        if (renderData.InstanceBuffer != m_CachedInstanceBuffer)
-        {
-            m_MaskedBindingSets.clear();
-            m_DefaultBindingSet.Reset();
-            m_CachedInstanceBuffer = renderData.InstanceBuffer;
-        }
-        
-        if (!m_DefaultBindingSet)
-        {
-            auto bsDesc = nvrhi::BindingSetDesc()
-                    .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ShadowConstantBuffer))
-                    .addItem(nvrhi::BindingSetItem::Texture_SRV(1, ctx.WhiteTexture))
-                    .addItem(nvrhi::BindingSetItem::Sampler(2, ctx.GetSampler({})))
-                    .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(10, renderData.InstanceBuffer));
-            m_DefaultBindingSet = ctx.Device->createBindingSet(bsDesc, m_BindingLayout);
-        }
+        CreateGlobalBindingSet(ctx, renderData);
         
         renderData.ShadowMap = m_ShadowMap;
         renderData.ShadowSampler = m_ShadowSampler;
@@ -144,7 +137,7 @@ namespace Lynx
         state.viewport.addViewport(nvrhi::Viewport(m_Resolution, m_Resolution));
         state.viewport.addScissorRect(nvrhi::Rect(0, m_Resolution, 0, m_Resolution));
 
-        state.bindings = { m_DefaultBindingSet };
+        state.bindings = { m_GlobalBindingSet };
         ctx.CommandList->setGraphicsState(state);
 
         for (const auto& batch : renderData.OpaqueDrawCalls)
@@ -160,7 +153,7 @@ namespace Lynx
             if (isMasked)
             {
                 auto specificState = state;
-                specificState.bindings = { GetMaskedBindingSet(ctx, renderData, material) };
+                specificState.bindings = { m_GlobalBindingSet, GetMaskedBindingSet(ctx, renderData, material) };
                 specificState.vertexBuffers = { nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0) };
                 specificState.indexBuffer = nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT);
                 ctx.CommandList->setGraphicsState(specificState);
@@ -168,6 +161,7 @@ namespace Lynx
             else
             {
                 // TODO: We could optimize this by sorting Opaque vs Masked.
+                state.bindings = { m_GlobalBindingSet, m_OpaqueBindingSet };
                 state.vertexBuffers = { nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0) };
                 state.indexBuffer = nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT);
                 ctx.CommandList->setGraphicsState(state);
@@ -208,11 +202,23 @@ namespace Lynx
         }
 
         auto bsDesc = nvrhi::BindingSetDesc()
-            .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ShadowConstantBuffer))
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(1, albedo))
-            .addItem(nvrhi::BindingSetItem::Sampler(2, ctx.GetSampler(samplerSettings)))
-            .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(10, renderData.InstanceBuffer));;
+            .addItem(nvrhi::BindingSetItem::Texture_SRV(0, albedo))
+            .addItem(nvrhi::BindingSetItem::Sampler(1, ctx.GetSampler(samplerSettings)));
 
-        return m_MaskedBindingSets[material] = ctx.Device->createBindingSet(bsDesc, m_BindingLayout);
+        return m_MaskedBindingSets[material] = ctx.Device->createBindingSet(bsDesc, m_MaterialBindingLayout);
+    }
+
+    void ShadowPass::CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData)
+    {
+        if (m_GlobalBindingSet && m_CachedInstanceBuffer == renderData.InstanceBuffer)
+            return;
+        
+        m_CachedInstanceBuffer = renderData.InstanceBuffer;
+        auto desc = nvrhi::BindingSetDesc()
+            .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ShadowConstantBuffer))
+            .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(PushData)))
+            .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(10, renderData.InstanceBuffer));
+
+        m_GlobalBindingSet = ctx.Device->createBindingSet(desc, m_GlobalBindingLayout);
     }
 }
