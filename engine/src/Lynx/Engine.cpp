@@ -202,14 +202,30 @@ namespace Lynx
                 lightIntensity = light.Intensity;
                 break;
             }
-            
+
             m_Renderer->BeginScene(cameraView, cameraProjection, cameraPos, lightDir, lightColor, lightIntensity, deltaTime, m_SceneState == SceneState::Edit);
+
+            Frustum camFrustum;
+            camFrustum.FromViewProjection(cameraProjection * cameraView);
+
+            Frustum lightFrustum;
+            lightFrustum.FromViewProjection(m_Renderer->GetLightViewProjMatrix());
             auto view = m_Scene->Reg().view<TransformComponent, MeshComponent>();
             for (auto entity : view)
             {
                 auto [transform, meshComp] = view.get<TransformComponent, MeshComponent>(entity);
                 auto mesh = m_AssetManager->GetAsset<StaticMesh>(meshComp.Mesh);
-                m_Renderer->SubmitMesh(mesh, transform.GetTransform(), meshComp.Color, (int)entity);
+                if (mesh)
+                {
+                    AABB worldBounds = TransformAABB(mesh->GetBounds(), transform.GetTransform());
+                    bool visibleToCamera = camFrustum.IsOnFrustum(worldBounds);
+                    //bool visibleToLight = lightFrustum.IsOnFrustum(worldBounds);
+                    if (visibleToCamera)
+                    {
+                        m_Renderer->SubmitMesh(mesh, transform.GetTransform(), RenderFlags::All, meshComp.Color, (int)entity);
+                    }
+                }
+                
             }
 
             /*DebugRenderer::DrawLine({0,0,0}, {1,0,0}, {1,0,0,1}); // X - Re

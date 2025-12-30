@@ -7,6 +7,16 @@
 
 namespace Lynx
 {
+    enum class RenderFlags : uint8_t
+    {
+        None = 0,
+        MainPass = 1 << 0,
+        ShadowPass = 1 << 1,
+        All = MainPass | ShadowPass
+    };
+    inline RenderFlags operator|(RenderFlags a, RenderFlags b) { return (RenderFlags)((uint8_t)a | (uint8_t)b); }
+    inline bool operator&(RenderFlags a, RenderFlags b) { return ((uint8_t)a & (uint8_t)b) != 0; }
+    
     struct GPUInstanceData
     {
         glm::mat4 Model;
@@ -67,6 +77,7 @@ namespace Lynx
         GPUInstanceData InstanceData; 
         float DistanceToCamera;
         int InstanceOffset = -1;
+        RenderFlags Flags = RenderFlags::All;
     };
 
     struct RenderData

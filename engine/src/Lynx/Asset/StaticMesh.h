@@ -6,6 +6,7 @@
 
 #include "MeshSpecification.h"
 #include "Material.h"
+#include "Lynx/Renderer/Frustum.h"
 
 namespace Lynx
 {
@@ -41,6 +42,8 @@ namespace Lynx
 
         const std::vector<Submesh>& GetSubmeshes() const { return m_Submeshes; }
 
+        const AABB& GetBounds() const { return m_Bounds; }
+
         virtual bool Reload() override;
 
     private:
@@ -49,6 +52,7 @@ namespace Lynx
     private:
         std::vector<Submesh> m_Submeshes;
         StaticMeshSpecification m_Specification;
+        AABB m_Bounds;
         
         std::string m_FilePath;
     };

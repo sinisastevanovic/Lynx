@@ -10,8 +10,8 @@
 
 namespace Lynx
 {
-    void TraverseNodes(const tinygltf::Model& model, const tinygltf::Node& node, const glm::mat4& parentTransform, std::vector<Submesh>& submeshes, const std::string& filePath);
-    void ProcessMesh(const tinygltf::Model& model, const tinygltf::Mesh& mesh, const glm::mat4& transform, std::vector<Submesh>& submeshes, const std::string& filePath);
+    void TraverseNodes(const tinygltf::Model& model, const tinygltf::Node& node, const glm::mat4& parentTransform, std::vector<Submesh>& submeshes, const std::string& filePath, AABB& bounds);
+    void ProcessMesh(const tinygltf::Model& model, const tinygltf::Mesh& mesh, const glm::mat4& transform, std::vector<Submesh>& submeshes, const std::string& filePath, AABB& bounds);
     
     StaticMesh::StaticMesh(const std::string& filepath)
         : m_FilePath(filepath)
@@ -48,6 +48,7 @@ namespace Lynx
     void StaticMesh::LoadAndUpload()
     {
         m_Submeshes.clear();
+        m_Bounds = AABB();
 
         tinygltf::Model model;
         tinygltf::TinyGLTF loader;
@@ -69,27 +70,27 @@ namespace Lynx
 
         for (int nodeIndex : scene.nodes)
         {
-            TraverseNodes(model, model.nodes[nodeIndex], glm::mat4(1.0f), m_Submeshes, m_FilePath);
+            TraverseNodes(model, model.nodes[nodeIndex], glm::mat4(1.0f), m_Submeshes, m_FilePath, m_Bounds);
         }
     }
 
-    void TraverseNodes(const tinygltf::Model& model, const tinygltf::Node& node, const glm::mat4& parentTransform, std::vector<Submesh>& submeshes, const std::string& filePath)
+    void TraverseNodes(const tinygltf::Model& model, const tinygltf::Node& node, const glm::mat4& parentTransform, std::vector<Submesh>& submeshes, const std::string& filePath, AABB& bounds)
     {
         glm::mat4 localTransform = GLTFHelpers::GetLocalTransform(node);
         glm::mat4 globalTransform = parentTransform * localTransform;
 
         if (node.mesh >= 0)
         {
-            ProcessMesh(model, model.meshes[node.mesh], globalTransform, submeshes, filePath);
+            ProcessMesh(model, model.meshes[node.mesh], globalTransform, submeshes, filePath, bounds);
         }
 
         for (int childIndex : node.children)
         {
-            TraverseNodes(model, model.nodes[childIndex], globalTransform, submeshes, filePath);
+            TraverseNodes(model, model.nodes[childIndex], globalTransform, submeshes, filePath, bounds);
         }
     }
 
-    void ProcessMesh(const tinygltf::Model& model, const tinygltf::Mesh& mesh, const glm::mat4& transform, std::vector<Submesh>& submeshes, const std::string& filePath)
+    void ProcessMesh(const tinygltf::Model& model, const tinygltf::Mesh& mesh, const glm::mat4& transform, std::vector<Submesh>& submeshes, const std::string& filePath, AABB& bounds)
     {
         glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(transform)));
 
@@ -128,7 +129,8 @@ namespace Lynx
             {
                 glm::vec3 pos(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
                 vertices[i].Position = glm::vec3(transform * glm::vec4(pos, 1.0f));
-
+                bounds.Expand(vertices[i].Position);
+                
                 if (!normals.empty())
                 {
                     glm::vec3 norm(normals[i * 3], normals[i * 3 + 1], normals[i * 3 + 2]);
