@@ -131,7 +131,11 @@ namespace Lynx
     nvrhi::BindingSetHandle DepthPass::GetMaterialBindingSet(RenderContext& ctx, Material* material)
     {
         if (m_MaterialBindingSetCache.contains(material))
-            return m_MaterialBindingSetCache[material];
+        {
+            auto& entry = m_MaterialBindingSetCache[material];
+            if (entry.Version == material->GetVersion())
+                return entry.BindingSet;
+        }
 
         nvrhi::TextureHandle albedo = ctx.WhiteTexture;
         SamplerSettings samplerSettings;
@@ -140,15 +144,20 @@ namespace Lynx
         {
             if (auto tex = Engine::Get().GetAssetManager().GetAsset<Texture>(material->AlbedoTexture))
             {
-                albedo = tex->GetTextureHandle();
-                samplerSettings = tex->GetSamplerSettings();
+                if (auto handle = tex->GetTextureHandle())
+                {
+                    albedo = handle;
+                    samplerSettings = tex->GetSamplerSettings();
+                }
             }
         }
 
         auto desc = nvrhi::BindingSetDesc()
             .addItem(nvrhi::BindingSetItem::Texture_SRV(0, albedo))
             .addItem(nvrhi::BindingSetItem::Sampler(1, ctx.GetSampler(samplerSettings)));
-
-        return m_MaterialBindingSetCache[material] = ctx.Device->createBindingSet(desc, m_MaterialBindingLayout);
+        auto set = ctx.Device->createBindingSet(desc, m_MaterialBindingLayout);
+        uint32_t version = material ? material->GetVersion() : 0;
+        m_MaterialBindingSetCache[material] = { set, version };
+        return set;
     }
 }

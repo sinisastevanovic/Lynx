@@ -35,7 +35,7 @@ namespace Lynx
 
         nvrhi::BindingSetHandle m_GlobalBindingSet;
         nvrhi::BindingSetHandle m_OpaqueBindingSet;
-        std::unordered_map<Material*, nvrhi::BindingSetHandle> m_MaskedBindingSets;
+        std::unordered_map<Material*, MaterialCacheEntry> m_MaskedBindingSets;
     };
 }
 

@@ -57,7 +57,8 @@ namespace Lynx
         std::vector<std::unique_ptr<FileWatcher>> m_FileWatchers;
         std::vector<FileEvent> m_FileEvents;
         std::vector<AssetHandle> m_ProcessedChangedAssets;
-        std::mutex m_Mutex;
+
+        mutable std::recursive_mutex m_Mutex;
     };
 }
 

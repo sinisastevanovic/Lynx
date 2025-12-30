@@ -10,13 +10,12 @@
 
 namespace Lynx
 {
-    void TraverseNodes(const tinygltf::Model& model, const tinygltf::Node& node, const glm::mat4& parentTransform, std::vector<Submesh>& submeshes, const std::string& filePath, AABB& bounds);
-    void ProcessMesh(const tinygltf::Model& model, const tinygltf::Mesh& mesh, const glm::mat4& transform, std::vector<Submesh>& submeshes, const std::string& filePath, AABB& bounds);
+    void TraverseNodes(const tinygltf::Model& model, const tinygltf::Node& node, const glm::mat4& parentTransform, std::vector<SubmeshSourceData>& submeshes, const std::string& filePath, AABB& bounds);
+    void ProcessMesh(const tinygltf::Model& model, const tinygltf::Mesh& mesh, const glm::mat4& transform, std::vector<SubmeshSourceData>& submeshes, const std::string& filePath, AABB& bounds);
     
     StaticMesh::StaticMesh(const std::string& filepath)
-        : m_FilePath(filepath)
+        : Asset(filepath)
     {
-        LoadAndUpload();
     }
 
     StaticMesh::StaticMesh(std::vector<Vertex> vertices, std::vector<uint32_t> indices)
@@ -25,6 +24,8 @@ namespace Lynx
         auto defaultTex = Engine::Get().GetAssetManager().GetDefaultTexture();
         if (defaultTex)
             submeshMaterial->AlbedoTexture = defaultTex->GetHandle();
+
+        Engine::Get().GetAssetManager().AddRuntimeAsset(submeshMaterial);
         
         auto [vb, ib] = Engine::Get().GetRenderer().CreateMeshBuffers(vertices, indices);
         Submesh sub;
@@ -33,6 +34,9 @@ namespace Lynx
         sub.IndexCount = (uint32_t)indices.size();
         sub.Material = submeshMaterial;
         sub.Name = "RuntimeCreated";
+
+        m_Submeshes.push_back(sub);
+        m_State = AssetState::Ready;
     }
 
     bool StaticMesh::Reload()
@@ -40,12 +44,14 @@ namespace Lynx
         if (m_FilePath.empty())
             return false;
 
-        LoadAndUpload();
-
-        return true;
+        if (LoadSourceData())
+        {
+            return CreateRenderResources();
+        }
+        return false;
     }
 
-    void StaticMesh::LoadAndUpload()
+    bool StaticMesh::LoadSourceData()
     {
         m_Submeshes.clear();
         m_Bounds = AABB();
@@ -63,18 +69,68 @@ namespace Lynx
         if (!ret)
         {
             LX_CORE_ERROR("Failed to load glTF: {0}", err);
-            return;
+            return false;
         }
 
         const tinygltf::Scene& scene = model.scenes[model.defaultScene > -1 ? model.defaultScene : 0];
 
         for (int nodeIndex : scene.nodes)
         {
-            TraverseNodes(model, model.nodes[nodeIndex], glm::mat4(1.0f), m_Submeshes, m_FilePath, m_Bounds);
+            TraverseNodes(model, model.nodes[nodeIndex], glm::mat4(1.0f), m_SourceData, m_FilePath, m_Bounds);
         }
+
+        return !m_SourceData.empty();
     }
 
-    void TraverseNodes(const tinygltf::Model& model, const tinygltf::Node& node, const glm::mat4& parentTransform, std::vector<Submesh>& submeshes, const std::string& filePath, AABB& bounds)
+    bool StaticMesh::CreateRenderResources()
+    {
+        m_Submeshes.clear();
+
+        for (const auto& source : m_SourceData)
+        {
+            auto [vb, ib] = Engine::Get().GetRenderer().CreateMeshBuffers(source.Vertices, source.Indices);
+
+            auto material = std::make_shared<Material>();
+            material->AlbedoColor = source.MaterialData.AlbedoColor;
+            material->Metallic = source.MaterialData.Metallic;
+            material->Roughness = source.MaterialData.Roughness;
+            material->EmissiveColor = source.MaterialData.EmissiveColor;
+            material->Mode = source.MaterialData.Mode;
+            material->AlphaCutoff = source.MaterialData.AlphaCutoff;
+
+            auto& am = Engine::Get().GetAssetManager();
+            if (!source.MaterialData.AlbedoPath.empty())
+                material->AlbedoTexture = am.GetAssetHandle(source.MaterialData.AlbedoPath);
+            else if (auto def = am.GetDefaultTexture())
+                material->AlbedoTexture = def->GetHandle();
+
+            if (!source.MaterialData.MetallicRoughnessPath.empty())
+                material->MetallicRoughnessTexture = am.GetAssetHandle(source.MaterialData.MetallicRoughnessPath);
+            if (!source.MaterialData.NormalPath.empty())
+            {
+                material->NormalMap = am.GetAssetHandle(source.MaterialData.NormalPath);
+                material->UseNormalMap = true;
+            }
+            if (!source.MaterialData.EmissivePath.empty())
+                material->EmissiveTexture = am.GetAssetHandle(source.MaterialData.EmissivePath);
+
+            Engine::Get().GetAssetManager().AddRuntimeAsset(material);
+
+            Submesh sub;
+            sub.VertexBuffer = vb;
+            sub.IndexBuffer = ib;
+            sub.IndexCount = (uint32_t)source.Indices.size();
+            sub.Material = material;
+            sub.Name = source.Name;
+            m_Submeshes.push_back(sub);
+        }
+
+        m_SourceData.clear();
+        IncrementVersion();
+        return true;
+    }
+
+    void TraverseNodes(const tinygltf::Model& model, const tinygltf::Node& node, const glm::mat4& parentTransform, std::vector<SubmeshSourceData>& submeshes, const std::string& filePath, AABB& bounds)
     {
         glm::mat4 localTransform = GLTFHelpers::GetLocalTransform(node);
         glm::mat4 globalTransform = parentTransform * localTransform;
@@ -90,7 +146,7 @@ namespace Lynx
         }
     }
 
-    void ProcessMesh(const tinygltf::Model& model, const tinygltf::Mesh& mesh, const glm::mat4& transform, std::vector<Submesh>& submeshes, const std::string& filePath, AABB& bounds)
+    void ProcessMesh(const tinygltf::Model& model, const tinygltf::Mesh& mesh, const glm::mat4& transform, std::vector<SubmeshSourceData>& submeshes, const std::string& filePath, AABB& bounds)
     {
         glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(transform)));
 
@@ -122,59 +178,60 @@ namespace Lynx
                 colorComponents = (accessor.type == TINYGLTF_TYPE_VEC3) ? 3 : 4;
             }
 
+            SubmeshSourceData sourceData;
+
             size_t vertexCount = positions.size() / 3;
-            std::vector<Vertex> vertices(vertexCount);
+            sourceData.Vertices.resize(vertexCount);
 
             for (size_t i = 0; i < vertexCount; ++i)
             {
                 glm::vec3 pos(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
-                vertices[i].Position = glm::vec3(transform * glm::vec4(pos, 1.0f));
-                bounds.Expand(vertices[i].Position);
+                sourceData.Vertices[i].Position = glm::vec3(transform * glm::vec4(pos, 1.0f));
+                bounds.Expand(sourceData.Vertices[i].Position);
                 
                 if (!normals.empty())
                 {
                     glm::vec3 norm(normals[i * 3], normals[i * 3 + 1], normals[i * 3 + 2]);
-                    vertices[i].Normal = glm::normalize(normalMatrix * norm);
+                    sourceData.Vertices[i].Normal = glm::normalize(normalMatrix * norm);
                 }
                 else
                 {
-                    vertices[i].Normal = {0, 1, 0};
+                    sourceData.Vertices[i].Normal = {0, 1, 0};
                 }
 
                 if (!tangents.empty())
                 {
                     glm::vec3 tan(tangents[i * 4], tangents[i * 4 + 1], tangents[i * 4 + 2]);
                     float w = tangents[i * 4 + 3];
-                    vertices[i].Tangent = glm::vec4(glm::normalize(normalMatrix * tan), w);
+                    sourceData.Vertices[i].Tangent = glm::vec4(glm::normalize(normalMatrix * tan), w);
                 }
                 else
                 {
-                    vertices[i].Tangent = {0, 0, 0, 1};
+                    sourceData.Vertices[i].Tangent = {0, 0, 0, 1};
                 }
 
                 if (!uvs.empty())
                 {
-                    vertices[i].TexCoord = {uvs[i * 2], uvs[i * 2 + 1]};
+                    sourceData.Vertices[i].TexCoord = {uvs[i * 2], uvs[i * 2 + 1]};
                 }
                 else
                 {
-                    vertices[i].TexCoord = {0, 0};
+                    sourceData.Vertices[i].TexCoord = {0, 0};
                 }
 
                 if (!colors.empty())
                 {
                     if (colorComponents == 3)
-                        vertices[i].Color = { colors[i * 3], colors[i * 3 + 1], colors[i * 3 + 2], 1.0f };
+                        sourceData.Vertices[i].Color = { colors[i * 3], colors[i * 3 + 1], colors[i * 3 + 2], 1.0f };
                     else
-                        vertices[i].Color = { colors[i * 4], colors[i * 4 + 1], colors[i * 4 + 2], colors[i * 4 + 3] };
+                        sourceData.Vertices[i].Color = { colors[i * 4], colors[i * 4 + 1], colors[i * 4 + 2], colors[i * 4 + 3] };
                 }
                 else
                 {
-                    vertices[i].Color = {1, 1, 1, 1};
+                    sourceData.Vertices[i].Color = {1, 1, 1, 1};
                 }
             }
 
-            std::vector<uint32_t> indices;
             if (primitive.indices >= 0)
             {
                 const tinygltf::Accessor& accessor = model.accessors[primitive.indices];
@@ -182,7 +239,7 @@ namespace Lynx
                 const unsigned char* indexData = &model.buffers[indexView.buffer].data[indexView.byteOffset + accessor.byteOffset];
                 size_t indexStride = accessor.ByteStride(indexView);
 
-                indices.reserve(accessor.count);
+                sourceData.Indices.reserve(accessor.count);
                 for (size_t i = 0; i < accessor.count; ++i)
                 {
                     uint32_t index = 0;
@@ -192,38 +249,38 @@ namespace Lynx
                         index = *(const uint32_t*)(indexData + i * indexStride);
                     else if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
                         index = *(const uint8_t*)(indexData + i * indexStride);
-                    indices.push_back(index);
+                    sourceData.Indices.push_back(index);
                 }
             }
             else
             {
-                indices.resize(vertexCount);
+                sourceData.Indices.resize(vertexCount);
                 for (size_t i = 0; i < vertexCount; ++i)
-                    indices[i] = i;
+                    sourceData.Indices[i] = i;
             }
 
             if (normals.empty())
             {
-                for (size_t i = 0; i < indices.size(); i += 3)
+                for (size_t i = 0; i < sourceData.Indices.size(); i += 3)
                 {
-                    uint32_t idx0 = indices[i+0];
-                    uint32_t idx1 = indices[i+1];
-                    uint32_t idx2 = indices[i+2];
+                    uint32_t idx0 = sourceData.Indices[i+0];
+                    uint32_t idx1 = sourceData.Indices[i+1];
+                    uint32_t idx2 = sourceData.Indices[i+2];
 
-                    glm::vec3 v0 = vertices[idx0].Position;
-                    glm::vec3 v1 = vertices[idx1].Position;
-                    glm::vec3 v2 = vertices[idx2].Position;
+                    glm::vec3 v0 = sourceData.Vertices[idx0].Position;
+                    glm::vec3 v1 = sourceData.Vertices[idx1].Position;
+                    glm::vec3 v2 = sourceData.Vertices[idx2].Position;
 
                     glm::vec3 edge1 = v1 - v0;
                     glm::vec3 edge2 = v2 - v0;
                     glm::vec3 normal = glm::normalize(glm::cross(edge1, edge2));
 
-                    vertices[idx0].Normal += normal;
-                    vertices[idx1].Normal += normal;
-                    vertices[idx2].Normal += normal;
+                    sourceData.Vertices[idx0].Normal += normal;
+                    sourceData.Vertices[idx1].Normal += normal;
+                    sourceData.Vertices[idx2].Normal += normal;
                 }
 
-                for (auto& v : vertices)
+                for (auto& v : sourceData.Vertices)
                 {
                     if (glm::length(v.Normal) > 0.0f)
                         v.Normal = glm::normalize(v.Normal);
@@ -232,15 +289,15 @@ namespace Lynx
 
             if (tangents.empty())
             {
-                for (size_t i = 0; i < indices.size(); i += 3)
+                for (size_t i = 0; i < sourceData.Indices.size(); i += 3)
                 {
-                    uint32_t idx0 = indices[i];
-                    uint32_t idx1 = indices[i+1];
-                    uint32_t idx2 = indices[i+2];
+                    uint32_t idx0 = sourceData.Indices[i];
+                    uint32_t idx1 = sourceData.Indices[i+1];
+                    uint32_t idx2 = sourceData.Indices[i+2];
 
-                    auto& v0 = vertices[idx0];
-                    auto& v1 = vertices[idx1];
-                    auto& v2 = vertices[idx2];
+                    auto& v0 = sourceData.Vertices[idx0];
+                    auto& v1 = sourceData.Vertices[idx1];
+                    auto& v2 = sourceData.Vertices[idx2];
 
                     glm::vec3 edge1 = v1.Position - v0.Position;
                     glm::vec3 edge2 = v2.Position - v0.Position;
@@ -262,7 +319,7 @@ namespace Lynx
                     v2.Tangent += glm::vec4(tangent, 0.0f);
                 }
 
-                for (auto& v : vertices)
+                for (auto& v : sourceData.Vertices)
                 {
                     if (glm::length(glm::vec3(v.Tangent)) > 0.0f)
                         v.Tangent = glm::vec4(glm::normalize(glm::vec3(v.Tangent)), 1.0f);
@@ -272,13 +329,13 @@ namespace Lynx
             }
 
             // TODO: we should probably create a new material with the asset system here later.
-            auto submeshMaterial = std::make_shared<Material>();
+            //auto submeshMaterial = std::make_shared<Material>();
             if (primitive.material >= 0)
             {
                 const tinygltf::Material& gltfMaterial = model.materials[primitive.material];
                 const auto& pbr = gltfMaterial.pbrMetallicRoughness;
-
-                submeshMaterial->AlbedoColor = glm::vec4(
+                
+                sourceData.MaterialData.AlbedoColor = glm::vec4(
                     (float)pbr.baseColorFactor[0],
                     (float)pbr.baseColorFactor[1],
                     (float)pbr.baseColorFactor[2],
@@ -290,18 +347,18 @@ namespace Lynx
                     int imageIndex = model.textures[pbr.baseColorTexture.index].source;
                     std::string texturePath = std::filesystem::path(filePath).parent_path().string() + "/" +
                         model.images[imageIndex].uri;
-                    submeshMaterial->AlbedoTexture = Engine::Get().GetAssetManager().GetAssetHandle(texturePath);
+                    sourceData.MaterialData.AlbedoPath = texturePath;
                 }
 
-                submeshMaterial->Metallic = (float)pbr.metallicFactor;
-                submeshMaterial->Roughness = (float)pbr.roughnessFactor;
+                sourceData.MaterialData.Metallic = (float)pbr.metallicFactor;
+                sourceData.MaterialData.Roughness = (float)pbr.roughnessFactor;
 
                 if (pbr.metallicRoughnessTexture.index >= 0)
                 {
                     int imageIndex = model.textures[pbr.metallicRoughnessTexture.index].source;
                     std::string texturePath = std::filesystem::path(filePath).parent_path().string() + "/" +
                         model.images[imageIndex].uri;
-                    submeshMaterial->MetallicRoughnessTexture = Engine::Get().GetAssetManager().GetAssetHandle(texturePath);
+                    sourceData.MaterialData.MetallicRoughnessPath = texturePath;
                 }
 
                 if (gltfMaterial.normalTexture.index >= 0)
@@ -309,15 +366,10 @@ namespace Lynx
                     int imageIndex = model.textures[gltfMaterial.normalTexture.index].source;
                     std::string texturePath = std::filesystem::path(filePath).parent_path().string() + "/" +
                         model.images[imageIndex].uri;
-                    submeshMaterial->NormalMap = Engine::Get().GetAssetManager().GetAssetHandle(texturePath);
-                    submeshMaterial->UseNormalMap = true;
-                }
-                else
-                {
-                    submeshMaterial->UseNormalMap = false;
+                    sourceData.MaterialData.NormalPath = texturePath;
                 }
 
-                submeshMaterial->EmissiveColor = glm::vec3(
+                sourceData.MaterialData.EmissiveColor = glm::vec3(
                     (float)gltfMaterial.emissiveFactor[0],
                     (float)gltfMaterial.emissiveFactor[1],
                     (float)gltfMaterial.emissiveFactor[2]
@@ -328,39 +380,26 @@ namespace Lynx
                     int imageIndex = model.textures[gltfMaterial.emissiveTexture.index].source;
                     std::string texturePath = std::filesystem::path(filePath).parent_path().string() + "/" +
                         model.images[imageIndex].uri;
-                    submeshMaterial->EmissiveTexture = Engine::Get().GetAssetManager().GetAssetHandle(texturePath);
+                    sourceData.MaterialData.EmissivePath = texturePath;
                 }
 
                 if (gltfMaterial.alphaMode == "MASK")
                 {
-                    submeshMaterial->Mode = AlphaMode::Mask;
-                    submeshMaterial->AlphaCutoff = (float)gltfMaterial.alphaCutoff;
+                    sourceData.MaterialData.Mode = AlphaMode::Mask;
+                    sourceData.MaterialData.AlphaCutoff = (float)gltfMaterial.alphaCutoff;
                 }
                 else if (gltfMaterial.alphaMode == "BLEND")
                 {
-                    submeshMaterial->Mode = AlphaMode::Translucent;
+                    sourceData.MaterialData.Mode = AlphaMode::Translucent;
                 }
                 else
                 {
-                    submeshMaterial->Mode = AlphaMode::Opaque;
+                    sourceData.MaterialData.Mode = AlphaMode::Opaque;
                 }
             }
-            else
-            {
-                auto defaultTex = Engine::Get().GetAssetManager().GetDefaultTexture();
-                if (defaultTex)
-                    submeshMaterial->AlbedoTexture = defaultTex->GetHandle();
-            }
 
-            auto [vb, ib] = Engine::Get().GetRenderer().CreateMeshBuffers(vertices, indices);
-            Submesh sub;
-            sub.VertexBuffer = vb;
-            sub.IndexBuffer = ib;
-            sub.IndexCount = (uint32_t)indices.size();
-            sub.Material = submeshMaterial;
-            sub.Name = mesh.name;
-
-            submeshes.push_back(sub);
+            sourceData.Name = mesh.name;
+            submeshes.push_back(sourceData);
         }
     }
 }

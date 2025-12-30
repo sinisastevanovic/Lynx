@@ -16,6 +16,8 @@ namespace Lynx
         static AssetType GetStaticType() { return AssetType::Material; }
         virtual AssetType GetType() const override { return GetStaticType(); }
 
+        bool DependsOn(AssetHandle handle) const override;
+
         glm::vec4 AlbedoColor = { 1.0f, 1.0f, 1.0f, 1.0f };
         float Metallic = 0.0f;
         float Roughness = 0.5f;
@@ -33,9 +35,6 @@ namespace Lynx
         bool UseNormalMap = false;
 
         virtual bool Reload() override;
-
-    private:
-        std::string m_Filepath;
     };
 
 }

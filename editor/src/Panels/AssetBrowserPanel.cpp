@@ -77,8 +77,11 @@ namespace Lynx
                                 auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(metadata.Handle);
                                 if (texture)
                                 {
-                                    m_ThumbnailCache[metadata.Handle] = texture;
-                                    icon = texture;
+                                    if (texture->GetTextureHandle())
+                                    {
+                                        m_ThumbnailCache[metadata.Handle] = texture;
+                                        icon = texture;
+                                    }
                                 }
                             }
                         }

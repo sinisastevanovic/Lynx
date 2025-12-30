@@ -125,6 +125,11 @@ namespace Lynx
         std::function<nvrhi::SamplerHandle(SamplerSettings)> GetSampler;
     };
 
+    struct MaterialCacheEntry
+    {
+        nvrhi::BindingSetHandle BindingSet;
+        uint32_t Version;
+    };
     
 
     class RenderPass

@@ -21,7 +21,7 @@ namespace Lynx
         nvrhi::BindingSetHandle m_GlobalBindingSet;
         nvrhi::BindingSetHandle m_OpaqueBindingSet;
         nvrhi::BufferHandle m_CachedInstanceBuffer;
-        std::unordered_map<Material*, nvrhi::BindingSetHandle> m_MaterialBindingSetCache;
+        std::unordered_map<Material*, MaterialCacheEntry> m_MaterialBindingSetCache;
 
         void CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData);
         nvrhi::BindingSetHandle GetMaterialBindingSet(RenderContext& ctx, Material* material);

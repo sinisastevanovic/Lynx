@@ -190,7 +190,11 @@ namespace Lynx
     nvrhi::BindingSetHandle ShadowPass::GetMaskedBindingSet(RenderContext& ctx, RenderData& renderData, Material* material)
     {
         if (m_MaskedBindingSets.contains(material))
-            return m_MaskedBindingSets[material];
+        {
+            auto& entry = m_MaskedBindingSets[material];
+            if (entry.Version == material->GetVersion())
+                return entry.BindingSet;
+        }
 
         nvrhi::TextureHandle albedo = ctx.WhiteTexture;
         SamplerSettings samplerSettings;
@@ -199,8 +203,11 @@ namespace Lynx
         {
             if (auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(material->AlbedoTexture))
             {
-                albedo = texture->GetTextureHandle();
-                samplerSettings = texture->GetSamplerSettings();
+                if (auto handle = texture->GetTextureHandle())
+                {
+                    albedo = handle;
+                    samplerSettings = texture->GetSamplerSettings();
+                }
             }
         }
 
@@ -208,7 +215,10 @@ namespace Lynx
             .addItem(nvrhi::BindingSetItem::Texture_SRV(0, albedo))
             .addItem(nvrhi::BindingSetItem::Sampler(1, ctx.GetSampler(samplerSettings)));
 
-        return m_MaskedBindingSets[material] = ctx.Device->createBindingSet(bsDesc, m_MaterialBindingLayout);
+        auto set = ctx.Device->createBindingSet(bsDesc, m_MaterialBindingLayout);
+        uint32_t version = material ? material->GetVersion() : 0;
+        m_MaskedBindingSets[material] = { set, version };
+        return set;
     }
 
     void ShadowPass::CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData)

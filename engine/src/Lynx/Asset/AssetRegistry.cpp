@@ -23,7 +23,7 @@ namespace Lynx
             m_FileWatchers.push_back(std::make_unique<FileWatcher>(dir, [this](FileAction action, const std::filesystem::path& path,
                 const std::filesystem::path& newPath)
             {
-                std::lock_guard<std::mutex> lock(m_Mutex);
+                std::lock_guard<std::recursive_mutex> lock(m_Mutex);
                 m_FileEvents.push_back({action, path, newPath});
             }));
         };
@@ -44,7 +44,7 @@ namespace Lynx
     {
         std::vector<FileEvent> eventsToProcess;
         {
-            std::lock_guard<std::mutex> lock(m_Mutex);
+            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
             eventsToProcess = std::move(m_FileEvents);
         }
 
@@ -329,6 +329,7 @@ namespace Lynx
 
     const AssetMetadata& AssetRegistry::Get(AssetHandle handle) const
     {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         if (m_AssetMetadata.contains(handle))
             return m_AssetMetadata.at(handle);
         return m_NullMetadata;
@@ -336,6 +337,7 @@ namespace Lynx
 
     const AssetMetadata& AssetRegistry::Get(const std::filesystem::path& assetPath) const
     {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         if (m_PathToHandle.contains(assetPath))
             return Get(m_PathToHandle.at(assetPath));
         return m_NullMetadata;
@@ -343,16 +345,19 @@ namespace Lynx
 
     bool AssetRegistry::Contains(AssetHandle handle) const
     {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_AssetMetadata.contains(handle);
     }
 
     bool AssetRegistry::Contains(const std::filesystem::path& assetPath) const
     {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         return m_PathToHandle.contains(assetPath);
     }
 
     AssetHandle AssetRegistry::ImportAsset(const std::filesystem::path& assetPath)
     {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         if (AssetUtils::IsAssetExtensionSupported(assetPath))
         {
             ProcessFile(assetPath);

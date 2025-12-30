@@ -23,7 +23,8 @@ namespace Lynx
         nvrhi::BindingLayoutHandle m_MaterialBindingLayout;
 
         nvrhi::BindingSetHandle m_GlobalBindingSet;
-        std::unordered_map<Material*, nvrhi::BindingSetHandle> m_MaterialBindingSetCache;
+
+        std::unordered_map<Material*, MaterialCacheEntry> m_MaterialBindingSetCache;
         
         nvrhi::GraphicsPipelineHandle m_PipelineOpaque;
         nvrhi::GraphicsPipelineHandle m_PipelineTransparent;

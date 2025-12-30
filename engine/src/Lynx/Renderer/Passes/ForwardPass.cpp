@@ -109,8 +109,12 @@ namespace Lynx
 
     nvrhi::BindingSetHandle ForwardPass::GetMaterialBindingSet(RenderContext& ctx, Material* material)
     {
-        if (m_MaterialBindingSetCache.contains(material))
-            return m_MaterialBindingSetCache[material];
+        if (material && m_MaterialBindingSetCache.contains(material))
+        {
+            auto& entry = m_MaterialBindingSetCache[material];
+            if (entry.Version == material->GetVersion())
+                return entry.BindingSet;
+        }
 
         nvrhi::TextureHandle albedo = ctx.WhiteTexture;
         nvrhi::TextureHandle normal = ctx.NormalTexture;
@@ -125,24 +129,36 @@ namespace Lynx
             {
                 if (auto tex = assetManager.GetAsset<Texture>(material->AlbedoTexture))
                 {
-                    albedo = tex->GetTextureHandle();
-                    samplerSettings = tex->GetSamplerSettings();
+                    if (auto handle = tex->GetTextureHandle())
+                    {
+                        albedo = handle;
+                        samplerSettings = tex->GetSamplerSettings();
+                    }
                 }
             }
             if (material->NormalMap)
             {
                 if (auto tex = assetManager.GetAsset<Texture>(material->NormalMap))
-                    normal = tex->GetTextureHandle();
+                {
+                    if (auto handle = tex->GetTextureHandle())
+                        normal = handle;
+                }
             }
             if (material->MetallicRoughnessTexture)
             {
                 if (auto tex = assetManager.GetAsset<Texture>(material->MetallicRoughnessTexture))
-                    mr = tex->GetTextureHandle();
+                {
+                    if (auto handle = tex->GetTextureHandle())
+                        mr = handle;
+                }
             }
             if (material->EmissiveTexture)
             {
                 if (auto tex = assetManager.GetAsset<Texture>(material->EmissiveTexture))
-                    emissive = tex->GetTextureHandle();
+                {
+                    if (auto handle = tex->GetTextureHandle())
+                        emissive = handle;
+                }
             }
         }
         auto desc = nvrhi::BindingSetDesc()
@@ -152,7 +168,11 @@ namespace Lynx
             .addItem(nvrhi::BindingSetItem::Texture_SRV(3, emissive))
             .addItem(nvrhi::BindingSetItem::Sampler(4, ctx.GetSampler(samplerSettings)));
 
-        return m_MaterialBindingSetCache[material] = ctx.Device->createBindingSet(desc, m_MaterialBindingLayout);
+        auto newSet = ctx.Device->createBindingSet(desc, m_MaterialBindingLayout);
+        uint32_t currentVersion = material ? material->GetVersion() : 0;
+        m_MaterialBindingSetCache[material] = { newSet, currentVersion };
+        
+        return newSet;
     }
 
     void ForwardPass::CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData)
