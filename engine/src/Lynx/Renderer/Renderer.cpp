@@ -7,10 +7,10 @@
 #include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
-#include "DebugPass.h"
-#include "ForwardPass.h"
-#include "GridPass.h"
-#include "ShadowPass.h"
+#include "Passes/DebugPass.h"
+#include "Passes/ForwardPass.h"
+#include "Passes/GridPass.h"
+#include "Passes/ShadowPass.h"
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
 #include "nvrhi/validation.h"

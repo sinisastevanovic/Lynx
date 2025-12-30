@@ -1,6 +1,6 @@
 #include "DebugPass.h"
 
-#include "DebugRenderer.h"
+#include "Lynx/Renderer/DebugRenderer.h"
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
 

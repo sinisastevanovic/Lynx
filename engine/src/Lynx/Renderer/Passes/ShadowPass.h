@@ -1,5 +1,5 @@
 #pragma once
-#include "RenderPass.h"
+#include "Lynx/Renderer/RenderPass.h"
 
 namespace Lynx
 {
