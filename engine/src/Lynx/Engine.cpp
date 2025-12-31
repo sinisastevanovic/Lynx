@@ -16,6 +16,7 @@
 
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
+#include <glm/gtc/type_ptr.hpp>
 #include <nlohmann/json.hpp>
 
 #include "ScriptRegistry.h"
@@ -227,7 +228,7 @@ namespace Lynx
 
                     if (flags != RenderFlags::None)
                     {
-                        m_Renderer->SubmitMesh(mesh, transform.GetTransform(), flags, meshComp.Color, (int)entity);
+                        m_Renderer->SubmitMesh(mesh, transform.GetTransform(), flags, (int)entity);
                     }
                 }
                 
@@ -543,37 +544,46 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& meshComp = reg.get<MeshComponent>(entity);
-                /*std::string meshName = Engine::Get().GetAssetManager().GetAssetName(meshComp.Mesh);
-                char buffer[256];
-                memset(buffer, 0, sizeof(buffer));
-                strcpy_s(buffer, sizeof(buffer), meshName.c_str());
-                ImGui::InputText("Static Mesh", buffer, sizeof(buffer), ImGuiInputTextFlags_ReadOnly);
-                if (ImGui::BeginDragDropTarget())
-                {
-                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(AssetUtils::GetDragDropPayload(AssetType::StaticMesh)))
-                    {
-                        uint64_t data = *(const uint64_t*)payload->Data;
-                        meshComp.Mesh = AssetHandle(data);
-                    }
-                    ImGui::EndDragDropTarget();
-                }*/
+               
                 EditorUIHelpers::DrawAssetSelection("Static Mesh", meshComp.Mesh, AssetType::StaticMesh);
-                ImGui::ColorEdit4("Color", &meshComp.Color[0]);
+                if (meshComp.Mesh)
+                {
+                    auto mesh = Engine::Get().GetAssetManager().GetAsset<StaticMesh>(meshComp.Mesh);
+                    if (mesh)
+                    {
+                        auto& submeshes = mesh->GetSubmeshes();
+                        int index = 0;
+                        for (auto& submesh : submeshes)
+                        {
+                            if (submesh.Material)
+                            {
+                                std::string matId = "Material " + std::to_string(index);
+                                ImGui::PushID(matId.c_str());
 
-                
+                                ImGui::Text(matId.c_str());
+                                ImGui::ColorEdit4("Albedo Color", &submesh.Material->AlbedoColor.r);
+                                ImGui::DragFloat("Metallic", &submesh.Material->Metallic);
+                                ImGui::DragFloat("Roughness", &submesh.Material->Roughness);
+                                ImGui::ColorEdit3("Emissive Color", &submesh.Material->EmissiveColor.r);
+                                ImGui::DragFloat("Emissive Strength", &submesh.Material->EmissiveStrength);
+                                ImGui::Separator();
+                                
+                                ImGui::PopID();
+                            }
+                            index++;
+                        }
+                    }
+                }
             },
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& meshComp = reg.get<MeshComponent>(entity);
                 json["Mesh"] = (uint64_t)meshComp.Mesh;
-                json["Color"] = { meshComp.Color.r, meshComp.Color.g, meshComp.Color.b, meshComp.Color.a };
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
                 auto& meshComp = reg.get_or_emplace<MeshComponent>(entity);
                 meshComp.Mesh = AssetHandle(json["Mesh"]);
-                const auto& color = json["Color"];
-                meshComp.Color = glm::vec4(color[0], color[1], color[2], color[3]);
             });
 
         ComponentRegistry.RegisterComponent<RigidBodyComponent>("RigidBody",

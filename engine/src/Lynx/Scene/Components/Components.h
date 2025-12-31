@@ -69,8 +69,6 @@ namespace Lynx
     struct MeshComponent
     {
         AssetHandle Mesh = AssetHandle::Null();
-        
-        glm::vec4 Color = { 1.0f, 1.0f, 1.0f, 1.0f };
 
         MeshComponent() = default;
         MeshComponent(const MeshComponent&) = default;

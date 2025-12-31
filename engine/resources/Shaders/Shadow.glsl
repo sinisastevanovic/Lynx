@@ -20,7 +20,6 @@ layout(push_constant) uniform PushConsts {
 struct InstanceData
 {
     mat4 Model;
-    vec4 Color;
     int EntityID;
     float Padding[3];
 };

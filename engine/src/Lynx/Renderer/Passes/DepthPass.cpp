@@ -5,12 +5,18 @@
 
 namespace Lynx
 {
+    struct DepthPushData
+    {
+        float AlphaCutoff;
+        float Padding[3];
+    };
+    
     void DepthPass::Init(RenderContext& ctx)
     {
         auto globalLayoutDesc = nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::All)
             .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
-            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(PushData)))
+            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(DepthPushData)))
             .addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(10))
             .setBindingOffsets({0, 0, 0, 0});
         m_GlobalBindingLayout = ctx.Device->createBindingLayout(globalLayoutDesc);
@@ -99,9 +105,9 @@ namespace Lynx
             state.indexBuffer = nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT);
             ctx.CommandList->setGraphicsState(state);
 
-            PushData push;
+            DepthPushData push;
             push.AlphaCutoff = isMasked ? material->AlphaCutoff : -1.0f;
-            ctx.CommandList->setPushConstants(&push, sizeof(PushData));
+            ctx.CommandList->setPushConstants(&push, sizeof(DepthPushData));
 
             ctx.CommandList->drawIndexed(nvrhi::DrawArguments()
                 .setVertexCount(submesh.IndexCount)

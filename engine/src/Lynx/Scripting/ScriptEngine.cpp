@@ -77,7 +77,6 @@ namespace Lynx
         );
 
         m_Data->Lua.new_usertype<MeshComponent>("MeshComponent",
-            "Color", &MeshComponent::Color,
             "MeshHandle", &MeshComponent::Mesh
         );
 

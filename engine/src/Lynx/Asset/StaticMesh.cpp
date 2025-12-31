@@ -86,6 +86,9 @@ namespace Lynx
     {
         m_Submeshes.clear();
 
+        // TODO: We should add a JobSystem to be able to load multiple assets simoultaniously here.
+        // So we don't need this intermediate data. 
+
         for (const auto& source : m_SourceData)
         {
             auto [vb, ib] = Engine::Get().GetRenderer().CreateMeshBuffers(source.Vertices, source.Indices);
@@ -397,7 +400,6 @@ namespace Lynx
                     sourceData.MaterialData.Mode = AlphaMode::Opaque;
                 }
             }
-
             sourceData.Name = mesh.name;
             submeshes.push_back(sourceData);
         }

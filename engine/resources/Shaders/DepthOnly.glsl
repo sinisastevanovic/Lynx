@@ -17,7 +17,6 @@ layout(set = 0, binding = 0) uniform UBO {
 struct InstanceData
 {
     mat4 Model;
-    vec4 Color;
     int EntityID;
     float Padding[3];
 };

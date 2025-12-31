@@ -20,7 +20,6 @@ namespace Lynx
     struct GPUInstanceData
     {
         glm::mat4 Model;
-        glm::vec4 Color;
         int EntityID;
         float Padding[3];
     };
@@ -58,8 +57,12 @@ namespace Lynx
     
     struct PushData
     {
+        glm::vec4 AlbedoColor;
+        glm::vec4 EmissiveColorStrength;
+        float MetallicStrength;
+        float RoughnessStrength;
         float AlphaCutoff;
-        float Padding[3];
+        float Padding;
     };
 
     struct SceneData

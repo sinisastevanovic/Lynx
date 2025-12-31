@@ -218,6 +218,10 @@ namespace Lynx
 
             PushData push;
             push.AlphaCutoff = submesh.Material->Mode == AlphaMode::Mask ? submesh.Material->AlphaCutoff : -1.0f;
+            push.AlbedoColor = submesh.Material->AlbedoColor;
+            push.EmissiveColorStrength = glm::vec4(submesh.Material->EmissiveColor, submesh.Material->EmissiveStrength);
+            push.MetallicStrength = submesh.Material->Metallic;
+            push.RoughnessStrength = submesh.Material->Roughness;
             ctx.CommandList->setPushConstants(&push, sizeof(PushData));
             ctx.CommandList->drawIndexed(nvrhi::DrawArguments()
                 .setVertexCount(submesh.IndexCount)
@@ -256,6 +260,10 @@ namespace Lynx
 
             PushData push;
             push.AlphaCutoff = submesh.Material->Mode == AlphaMode::Mask ? submesh.Material->AlphaCutoff : -1.0f;
+            push.AlbedoColor = submesh.Material->AlbedoColor;
+            push.EmissiveColorStrength = glm::vec4(submesh.Material->EmissiveColor, submesh.Material->EmissiveStrength);
+            push.MetallicStrength = submesh.Material->Metallic;
+            push.RoughnessStrength = submesh.Material->Roughness;
             ctx.CommandList->setPushConstants(&push, sizeof(PushData));
 
             ctx.CommandList->drawIndexed(nvrhi::DrawArguments()

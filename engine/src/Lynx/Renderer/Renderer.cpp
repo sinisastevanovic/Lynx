@@ -677,7 +677,7 @@ namespace Lynx
         for (auto& cmd : m_CurrentFrameData.TransparentQueue)
         {
             cmd.InstanceOffset = (int)allInstanceData.size();
-            allInstanceData.push_back({ cmd.InstanceData.Model, cmd.InstanceData.Color, cmd.InstanceData.EntityID });
+            allInstanceData.push_back({ cmd.InstanceData.Model, cmd.InstanceData.EntityID });
         }
 
         // Create or resize GPU Buffer
@@ -809,7 +809,7 @@ namespace Lynx
         nvrhi::utils::ClearDepthStencilAttachment(m_CommandList, m_CurrentFrameData.TargetFramebuffer, 1.0f, 0);
     }
 
-    void Renderer::SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, RenderFlags Flags, const glm::vec4& color, int entityID)
+    void Renderer::SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, RenderFlags Flags, int entityID)
     {
         if (!mesh)
             return;
@@ -820,7 +820,7 @@ namespace Lynx
         {
             const auto& submesh = mesh->GetSubmeshes()[i];
 
-            GPUInstanceData instance = { transform, color, entityID };
+            GPUInstanceData instance = { transform, entityID };
             BatchKey key = { mesh.get(), (uint32_t)i, submesh.Material.get(), Flags };
 
             if (submesh.Material->Mode == AlphaMode::Translucent)

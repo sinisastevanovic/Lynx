@@ -65,7 +65,6 @@ private:
 
         auto& mesh = bullet.AddComponent<Lynx::MeshComponent>();
         mesh.Mesh = assetManager.GetDefaultCube()->GetHandle();
-        mesh.Color = { 1.0f, 1.0f, 0.0f, 1.0f };
 
         auto& proj = bullet.AddComponent<ProjectileComponent>();
         proj.Damage = weapon.Damage;

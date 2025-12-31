@@ -10,9 +10,8 @@ layout(location = 0) out vec2 v_TexCoord;
 layout(location = 1) out vec3 v_WorldPos;
 layout(location = 2) out vec3 v_Normal;
 layout(location = 3) out vec4 v_Tangent; // Changed to vec4
-layout(location = 4) out vec4 v_MeshColor;
-layout(location = 5) out vec4 v_VertexColor;
-layout(location = 6) out vec4 v_ShadowCoord;
+layout(location = 4) out vec4 v_VertexColor;
+layout(location = 5) out vec4 v_ShadowCoord;
 
 layout(set = 0, binding = 0) uniform UBO {
     mat4 u_ViewProjection;
@@ -22,14 +21,9 @@ layout(set = 0, binding = 0) uniform UBO {
     vec4 u_LightColor;
 } ubo;
 
-layout(push_constant) uniform PushConsts {
-    float u_AlphaCutoff;
-} push;
-
 struct InstanceData
 {
     mat4 Model;
-    vec4 Color;
     int EntityID;
     float Padding[3];
 };
@@ -38,11 +32,18 @@ layout(std430, set = 0, binding = 10) readonly buffer InstanceBuffer {
     InstanceData instances[];
 } u_Instances;
 
+layout(push_constant) uniform PushConsts {
+    vec4 u_AlbedoColor;
+    vec4 u_EmissiveColorStrength;
+    float u_Metallic;
+    float u_Roughness;
+    float u_AlphaCutoff;
+} push;
+
 void main() {
     InstanceData data = u_Instances.instances[gl_InstanceIndex];
 
     v_TexCoord = a_TexCoord;
-    v_MeshColor = data.Color;
     v_VertexColor = a_Color;
 
     vec4 worldPos = data.Model * vec4(a_Position, 1.0);
@@ -78,9 +79,8 @@ layout(location = 0) in vec2 v_TexCoord;
 layout(location = 1) in vec3 v_WorldPos;
 layout(location = 2) in vec3 v_Normal;
 layout(location = 3) in vec4 v_Tangent; // Changed to vec4
-layout(location = 4) in vec4 v_MeshColor;
-layout(location = 5) in vec4 v_VertexColor;
-layout(location = 6) in vec4 v_ShadowCoord;
+layout(location = 4) in vec4 v_VertexColor;
+layout(location = 5) in vec4 v_ShadowCoord;
 
 layout(location = 0) out vec4 outColor;
 
@@ -96,6 +96,10 @@ layout(set = 0, binding = 1) uniform texture2D u_ShadowMap;
 layout(set = 0, binding = 2) uniform sampler u_ShadowSampler;
 
 layout(push_constant) uniform PushConsts {
+    vec4 u_AlbedoColor;
+    vec4 u_EmissiveColorStrength;
+    float u_Metallic;
+    float u_Roughness;
     float u_AlphaCutoff;
 } push;
 
@@ -197,13 +201,14 @@ void main() {
         if (albedoSample.a < push.u_AlphaCutoff)
             discard;
     }
-    vec3 albedo = pow(albedoSample.rgb, vec3(2.2)) * v_MeshColor.rgb;
+    vec3 albedo = pow(albedoSample.rgb, vec3(2.2)) * push.u_AlbedoColor.rgb;
 
     vec4 mrSample = texture(sampler2D(u_MetallicRoughnessMap, u_Sampler), v_TexCoord);
-    float metallic = mrSample.b;
-    float roughness = mrSample.g;
+    float metallic = mrSample.b * push.u_Metallic;
+    float roughness = mrSample.g * push.u_Roughness;
 
-    vec3 emissive = texture(sampler2D(u_EmissiveMap, u_Sampler), v_TexCoord).rgb;
+    vec3 emissiveTex = texture(sampler2D(u_EmissiveMap, u_Sampler), v_TexCoord).rgb;
+    vec3 emissive = emissiveTex * push.u_EmissiveColorStrength.rgb * push.u_EmissiveColorStrength.a;
 
     // 3. Cook-Torrance BRDF
     vec3 F0 = vec3(0.04);

@@ -52,7 +52,7 @@ namespace Lynx
         std::pair<uint32_t, uint32_t> GetViewportSize() const;
 
         std::pair<nvrhi::BufferHandle, nvrhi::BufferHandle> CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices);
-        void SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, RenderFlags flags, const glm::vec4& color = glm::vec4(1.0f), int entityID = -1);
+        void SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, RenderFlags flags, int entityID = -1);
 
         nvrhi::DeviceHandle GetDeviceHandle() const { return m_NvrhiDevice; }
 

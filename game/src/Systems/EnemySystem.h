@@ -90,7 +90,6 @@ private:
 
         auto& mesh = enemy.AddComponent<Lynx::MeshComponent>();
         mesh.Mesh = assetManager.GetAsset("assets/Models/Bottle/WaterBottle.gltf")->GetHandle();
-        mesh.Color = { 1.0f, 0.2f, 0.2f, 1.0f };
 
         auto& rb = enemy.AddComponent<Lynx::RigidBodyComponent>();
         rb.Type = Lynx::RigidBodyType::Dynamic;

@@ -10,6 +10,12 @@ namespace Lynx
     {
         glm::mat4 ViewProjectionMatrix;
     };
+
+    struct ShadowPushData
+    {
+        float AlphaCutoff;
+        float Padding[3];
+    };
     
     ShadowPass::ShadowPass(uint32_t resolution)
         : m_Resolution(resolution)
@@ -50,7 +56,7 @@ namespace Lynx
         auto globalDesc = nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::All)
             .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0)) // UBO
-            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(PushData)))
+            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(ShadowPushData)))
             .addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(10))
             .setBindingOffsets({0, 0, 0, 0});
         m_GlobalBindingLayout = ctx.Device->createBindingLayout(globalDesc);
@@ -170,10 +176,10 @@ namespace Lynx
                 ctx.CommandList->setGraphicsState(state);
             }
 
-            PushData push;
+            ShadowPushData push;
             push.AlphaCutoff = isMasked ? material->AlphaCutoff : -1.0f;
 
-            ctx.CommandList->setPushConstants(&push, sizeof(PushData));
+            ctx.CommandList->setPushConstants(&push, sizeof(ShadowPushData));
 
             ctx.CommandList->drawIndexed(nvrhi::DrawArguments()
                 .setVertexCount(submesh.IndexCount)
@@ -229,7 +235,7 @@ namespace Lynx
         m_CachedInstanceBuffer = renderData.InstanceBuffer;
         auto desc = nvrhi::BindingSetDesc()
             .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ShadowConstantBuffer))
-            .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(PushData)))
+            .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(ShadowPushData)))
             .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(10, renderData.InstanceBuffer));
 
         m_GlobalBindingSet = ctx.Device->createBindingSet(desc, m_GlobalBindingLayout);
