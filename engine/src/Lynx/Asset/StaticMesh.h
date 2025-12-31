@@ -41,6 +41,7 @@ namespace Lynx
             float Metallic = 1.0f;
             float Roughness = 1.0f;
             glm::vec3 EmissiveColor = { 0, 0, 0 };
+            float EmissiveStrength = 0.0f;
             AlphaMode Mode = AlphaMode::Opaque;
             float AlphaCutoff = 0.5f;
 

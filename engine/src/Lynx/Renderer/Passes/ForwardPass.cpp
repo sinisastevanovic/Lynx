@@ -119,7 +119,7 @@ namespace Lynx
         nvrhi::TextureHandle albedo = ctx.WhiteTexture;
         nvrhi::TextureHandle normal = ctx.NormalTexture;
         nvrhi::TextureHandle mr = ctx.MetallicRoughnessTexture;
-        nvrhi::TextureHandle emissive = ctx.BlackTexture;
+        nvrhi::TextureHandle emissive = ctx.WhiteTexture;
         SamplerSettings samplerSettings;
 
         if (material)

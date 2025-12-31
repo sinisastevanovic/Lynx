@@ -238,9 +238,6 @@ void main() {
     vec3 ambient = vec3(0.03) * albedo;
     vec3 color = ambient + Lo + emissive;
 
-    color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0/2.2));
-
     outColor = vec4(color, albedoSample.a);
     //outColor = vec4(N * 0.5 + 0.5, 1.0);
     //outColor = vec4(T * 0.5 + 0.5, 1.0);

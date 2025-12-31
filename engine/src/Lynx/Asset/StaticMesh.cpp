@@ -98,6 +98,7 @@ namespace Lynx
             material->Metallic = source.MaterialData.Metallic;
             material->Roughness = source.MaterialData.Roughness;
             material->EmissiveColor = source.MaterialData.EmissiveColor;
+            material->EmissiveStrength = source.MaterialData.EmissiveStrength;
             material->Mode = source.MaterialData.Mode;
             material->AlphaCutoff = source.MaterialData.AlphaCutoff;
 
@@ -378,6 +379,15 @@ namespace Lynx
                     (float)gltfMaterial.emissiveFactor[2]
                 );
 
+                if (gltfMaterial.extensions.count("KHR_materials_emissive_strength"))
+                {
+                    const auto& ext = gltfMaterial.extensions.at("KHR_materials_emissive_strength");
+                    if (ext.Has("emissiveStrength"))
+                    {
+                        sourceData.MaterialData.EmissiveStrength = (float)ext.Get("emissiveStrength").GetNumberAsDouble();
+                    }
+                }
+                
                 if (gltfMaterial.emissiveTexture.index >= 0)
                 {
                     int imageIndex = model.textures[gltfMaterial.emissiveTexture.index].source;

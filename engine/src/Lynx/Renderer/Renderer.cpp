@@ -135,6 +135,7 @@ namespace Lynx
             m_NvrhiDevice->runGarbageCollection();
 
         m_Pipeline.Clear();
+        m_CompositePass.reset();
         m_RenderContext = RenderContext();
         m_CurrentFrameData = RenderData();
         m_OpaqueBatches.clear();
@@ -147,10 +148,9 @@ namespace Lynx
         m_MetallicRoughnessTex = nullptr;
         m_GlobalCB = nullptr;
         m_InstanceBuffer = nullptr;
-        m_SwapchainDepth = nullptr;
         m_CommandList = nullptr;
         m_SwapchainFramebuffers.clear();
-        m_EditorTarget.reset();
+        m_SceneTarget.reset();
         m_NvrhiDevice = nullptr;
         m_ImGuiBackend.reset();
 
@@ -188,7 +188,7 @@ namespace Lynx
 
         // TODO: Make sure this is up-to-date...
         nvrhi::FramebufferInfo fbInfo;
-        fbInfo.addColorFormat(nvrhi::Format::BGRA8_UNORM);
+        fbInfo.addColorFormat(nvrhi::Format::RGBA16_FLOAT);
         if (m_ShouldCreateIDTarget) fbInfo.addColorFormat(nvrhi::Format::R32_SINT);
         fbInfo.setDepthFormat(nvrhi::Format::D32);
         m_RenderContext.PresentationFramebufferInfo = fbInfo;
@@ -203,6 +203,8 @@ namespace Lynx
         m_Pipeline.AddPass(std::make_unique<DebugPass>());
 
         m_Pipeline.Init(m_RenderContext);
+        m_CompositePass = std::make_unique<CompositePass>();
+        m_CompositePass->Init(m_RenderContext);
 
         m_ImGuiBackend = std::make_unique<ImGui_NVRHI>();
         m_ImGuiBackend->init(m_NvrhiDevice);
@@ -280,7 +282,7 @@ namespace Lynx
 
     int Renderer::ReadIdFromBuffer(uint32_t x, uint32_t y)
     {
-        if (!m_EditorTarget || !m_EditorTarget->IdBuffer)
+        if (!m_SceneTarget || !m_SceneTarget->IdBuffer)
             return -1;
 
         if (!m_StageBuffer)
@@ -321,7 +323,7 @@ namespace Lynx
         dstSlice.mipLevel = 0;
         dstSlice.arraySlice = 0;
 
-        m_CommandList->copyTexture(m_StageBuffer, dstSlice, m_EditorTarget->IdBuffer, srcSlice);
+        m_CommandList->copyTexture(m_StageBuffer, dstSlice, m_SceneTarget->IdBuffer, srcSlice);
         m_CommandList->close();
         m_NvrhiDevice->executeCommandList(m_CommandList);
 
@@ -515,15 +517,6 @@ namespace Lynx
             m_NvrhiDevice = nvrhiValidationLayer;
         }*/
 
-        nvrhi::TextureDesc depthDesc;
-        depthDesc.width = m_VulkanState->SwapchainExtent.width;
-        depthDesc.height = m_VulkanState->SwapchainExtent.height;
-        depthDesc.format = nvrhi::Format::D32;
-        depthDesc.isRenderTarget = true;
-        depthDesc.initialState = nvrhi::ResourceStates::DepthWrite;
-        depthDesc.keepInitialState = true;
-        m_SwapchainDepth = m_NvrhiDevice->createTexture(depthDesc);
-
         for (auto vkImage : m_VulkanState->SwapchainImages)
         {
             nvrhi::TextureDesc desc;
@@ -537,7 +530,6 @@ namespace Lynx
             nvrhi::TextureHandle texture = m_NvrhiDevice->createHandleForNativeTexture(nvrhi::ObjectTypes::VK_Image, (VkImage)vkImage, desc);
             nvrhi::FramebufferDesc fbDesc;
             fbDesc.addColorAttachment(texture);
-            fbDesc.setDepthAttachment(m_SwapchainDepth);
             m_SwapchainFramebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
         }
 
@@ -617,9 +609,9 @@ namespace Lynx
         auto colorDesc = nvrhi::TextureDesc()
             .setWidth(width)
             .setHeight(height)
-            .setFormat(nvrhi::Format::BGRA8_UNORM)
+            .setFormat(nvrhi::Format::RGBA16_FLOAT)
             .setIsRenderTarget(true)
-            .setDebugName("OffscreenColor")
+            .setDebugName("SceneHDR")
             .setInitialState(nvrhi::ResourceStates::ShaderResource)
             .setKeepInitialState(true);
         target.Color = m_NvrhiDevice->createTexture(colorDesc);
@@ -629,27 +621,45 @@ namespace Lynx
             .setHeight(height)
             .setFormat(nvrhi::Format::D32)
             .setIsRenderTarget(true)
-            .setDebugName("OffscreenDepth")
+            .setDebugName("SceneDepth")
             .setInitialState(nvrhi::ResourceStates::DepthWrite)
             .setKeepInitialState(true);
         target.Depth = m_NvrhiDevice->createTexture(depthDesc);
 
-        auto idDesc = nvrhi::TextureDesc()
+        auto outputDesc = nvrhi::TextureDesc()
             .setWidth(width)
             .setHeight(height)
-            .setFormat(nvrhi::Format::R32_SINT)
+            .setFormat(nvrhi::Format::BGRA8_UNORM)
             .setIsRenderTarget(true)
-            .setDebugName("OffscreenId")
-            .setInitialState(nvrhi::ResourceStates::RenderTarget)
-            .setKeepInitialState(true)
-            .setClearValue(nvrhi::Color(-1.0f, 0.0f, 0.0f, 0.0f));
-        target.IdBuffer = m_NvrhiDevice->createTexture(idDesc);
+            .setDebugName("SceneLDR")
+            .setInitialState(nvrhi::ResourceStates::ShaderResource)
+            .setKeepInitialState(true);
+        target.Output = m_NvrhiDevice->createTexture(outputDesc);
 
-        auto fbDesc = nvrhi::FramebufferDesc()
+        if (m_ShouldCreateIDTarget)
+        {
+            auto idDesc = nvrhi::TextureDesc()
+                .setWidth(width)
+                .setHeight(height)
+                .setFormat(nvrhi::Format::R32_SINT)
+                .setIsRenderTarget(true)
+                .setDebugName("OffscreenId")
+                .setInitialState(nvrhi::ResourceStates::RenderTarget)
+                .setKeepInitialState(true)
+                .setClearValue(nvrhi::Color(-1.0f, 0.0f, 0.0f, 0.0f));
+            target.IdBuffer = m_NvrhiDevice->createTexture(idDesc);
+        }
+
+        auto hdrFBDesc = nvrhi::FramebufferDesc()
             .addColorAttachment(target.Color)
-            .addColorAttachment(target.IdBuffer)
             .setDepthAttachment(target.Depth);
-        target.Framebuffer = m_NvrhiDevice->createFramebuffer(fbDesc);
+        if (m_ShouldCreateIDTarget)
+            hdrFBDesc.addColorAttachment(target.IdBuffer);
+        target.HDRFramebuffer = m_NvrhiDevice->createFramebuffer(hdrFBDesc);
+
+        auto ldrFBDesc = nvrhi::FramebufferDesc()
+            .addColorAttachment(target.Output);
+        target.LDRFramebuffer = m_NvrhiDevice->createFramebuffer(ldrFBDesc);
     }
 
     void Renderer::PrepareDrawCalls()
@@ -786,15 +796,17 @@ namespace Lynx
         m_CurrentFrameData.LightIntensity = lightIntensity;
         m_CurrentFrameData.LightViewProj = lightViewProj;
         m_CurrentFrameData.ShowGrid = editMode && m_ShowGrid;
-        if (m_EditorTarget)
+        if (!m_SceneTarget)
         {
-            m_CurrentFrameData.TargetFramebuffer = m_EditorTarget->Framebuffer;
-            m_CommandList->clearTextureUInt(m_EditorTarget->IdBuffer, nvrhi::AllSubresources, (uint32_t)-1);
+            auto [w, h] = GetViewportSize();
+            m_SceneTarget = std::make_unique<RenderTarget>();
+            CreateRenderTarget(*m_SceneTarget, w, h);
         }
-        else
-        {
-            m_CurrentFrameData.TargetFramebuffer = m_SwapchainFramebuffers[m_CurrentImageIndex];
-        }
+
+        m_CurrentFrameData.TargetFramebuffer = m_SceneTarget->HDRFramebuffer;
+        m_CurrentFrameData.SceneColorInput = m_SceneTarget->Color;
+        if (m_SceneTarget->IdBuffer)
+            m_CommandList->clearTextureUInt(m_SceneTarget->IdBuffer, nvrhi::AllSubresources, (uint32_t)-1);
         
         SceneData sceneData;
         sceneData.ViewProjectionMatrix = m_CurrentFrameData.ViewProjection;
@@ -861,6 +873,18 @@ namespace Lynx
 
         m_Stats.DrawCalls = m_CurrentFrameData.DrawCalls;
         m_Stats.IndexCount = m_CurrentFrameData.IndexCount;
+
+        m_CurrentFrameData.SceneColorInput = m_SceneTarget->Color;
+        if (m_ShouldCreateIDTarget)
+        {
+            m_CurrentFrameData.TargetFramebuffer = m_SceneTarget->LDRFramebuffer;
+        }
+        else
+        {
+            m_CurrentFrameData.TargetFramebuffer = m_SwapchainFramebuffers[m_CurrentImageIndex];
+        }
+
+        m_CompositePass->Execute(m_RenderContext, m_CurrentFrameData);
         
         // 1. Close recording
         m_CommandList->close();
@@ -869,23 +893,12 @@ namespace Lynx
         nvrhi::vulkan::IDevice* vkDevice = static_cast<nvrhi::vulkan::IDevice*>(m_NvrhiDevice.Get());
         
         // SYNC: Wait for the image to be available before executing
-        //vkDevice->waitForIdle();
         vkDevice->queueWaitForSemaphore(nvrhi::CommandQueue::Graphics, (VkSemaphore)m_VulkanState->ImageAvailableSemaphores[m_CurrentFrame], 0);
 
         // SYNC: Signal RenderFinished after executing
         vkDevice->queueSignalSemaphore(nvrhi::CommandQueue::Graphics, (VkSemaphore)m_VulkanState->RenderFinishedSemaphores[m_CurrentImageIndex], 0);
 
         m_NvrhiDevice->executeCommandList(m_CommandList);
-
-        if (m_EditorTarget)
-        {
-            m_CommandList->open();
-            m_CommandList->setTextureState(m_EditorTarget->Color, nvrhi::AllSubresources, nvrhi::ResourceStates::ShaderResource);
-            m_CommandList->commitBarriers();
-            nvrhi::utils::ClearColorAttachment(m_CommandList, m_SwapchainFramebuffers[m_CurrentImageIndex], 0, nvrhi::Color(0,0,0,1));
-            m_CommandList->close();
-            m_NvrhiDevice->executeCommandList(m_CommandList);
-        }
 
         m_ImGuiBackend->render(m_SwapchainFramebuffers[m_CurrentImageIndex]);
 
@@ -947,7 +960,6 @@ namespace Lynx
             m_VulkanState->Device.destroySemaphore(sem);
 
         m_SwapchainFramebuffers.clear();
-        m_SwapchainDepth = nullptr;
         m_CurrentFrameData.TargetFramebuffer = nullptr;
         
         // We don't strictly need to clear the vector of vk::Image handles, 
@@ -990,15 +1002,6 @@ namespace Lynx
         }
 
         // Recreate NVRHI Resources
-        nvrhi::TextureDesc depthDesc;
-        depthDesc.width = m_VulkanState->SwapchainExtent.width;
-        depthDesc.height = m_VulkanState->SwapchainExtent.height;
-        depthDesc.format = nvrhi::Format::D32;
-        depthDesc.isRenderTarget = true;
-        depthDesc.initialState = nvrhi::ResourceStates::DepthWrite;
-        depthDesc.keepInitialState = true;
-        m_SwapchainDepth = m_NvrhiDevice->createTexture(depthDesc);
-
         for (auto vkImage : m_VulkanState->SwapchainImages)
         {
             nvrhi::TextureDesc desc;
@@ -1012,7 +1015,6 @@ namespace Lynx
             nvrhi::TextureHandle texture = m_NvrhiDevice->createHandleForNativeTexture(nvrhi::ObjectTypes::VK_Image, (VkImage)vkImage, desc);
             nvrhi::FramebufferDesc fbDesc;
             fbDesc.addColorAttachment(texture);
-            fbDesc.setDepthAttachment(m_SwapchainDepth);
             m_SwapchainFramebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
         }
     }
@@ -1022,30 +1024,29 @@ namespace Lynx
         if (width == 0 || height == 0)
             return;
 
-        if (!m_EditorTarget)
+        if (!m_SceneTarget)
         {
-            m_EditorTarget = std::make_unique<RenderTarget>();
-            CreateRenderTarget(*m_EditorTarget, width, height);
+            m_SceneTarget = std::make_unique<RenderTarget>();
+            CreateRenderTarget(*m_SceneTarget, width, height);
         }
-        else if (m_EditorTarget->Width != width || m_EditorTarget->Height != height)
+        else if (m_SceneTarget->Width != width || m_SceneTarget->Height != height)
         {
             m_VulkanState->Device.waitIdle();
-            m_EditorTarget->Framebuffer = nullptr;
-            m_EditorTarget->Color = nullptr;
-            m_EditorTarget->Depth = nullptr;
-            CreateRenderTarget(*m_EditorTarget, width, height);
+            m_SceneTarget.reset();
+            m_SceneTarget = std::make_unique<RenderTarget>();
+            CreateRenderTarget(*m_SceneTarget, width, height);
         }
     }
 
     nvrhi::TextureHandle Renderer::GetViewportTexture() const
     {
-        return m_EditorTarget ? m_EditorTarget->Color : nullptr;
+        return m_SceneTarget ? m_SceneTarget->Output : nullptr;
     }
 
     std::pair<uint32_t, uint32_t> Renderer::GetViewportSize() const
     {
-        if (m_EditorTarget)
-            return { m_EditorTarget->Width, m_EditorTarget->Height };
+        if (m_SceneTarget)
+            return { m_SceneTarget->Width, m_SceneTarget->Height };
 
         return { m_VulkanState->SwapchainExtent.width, m_VulkanState->SwapchainExtent.height };
     }

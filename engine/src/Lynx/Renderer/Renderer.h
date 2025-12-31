@@ -9,6 +9,7 @@
 
 #include "RenderPipeline.h"
 #include "RenderPass.h"
+#include "Passes/CompositePass.h"
 
 struct GLFWwindow;
 
@@ -21,10 +22,18 @@ namespace Lynx
     public:
         struct RenderTarget
         {
+            // HDR Scene Color (RGBA16_FLOAT)
             nvrhi::TextureHandle Color;
+            // Depth Buffer (D32)
             nvrhi::TextureHandle Depth;
+            // LDR Final Color (BGRA8_UNORM)
+            nvrhi::TextureHandle Output;
+            // Framebuffer for ForwardPass (Color + Depth)
+            nvrhi::FramebufferHandle HDRFramebuffer;
+            // Framebuffer for CompositePass (Output)
+            nvrhi::FramebufferHandle LDRFramebuffer;
+            // ID buffer for picking
             nvrhi::TextureHandle IdBuffer;
-            nvrhi::FramebufferHandle Framebuffer;
             uint32_t Width = 0;
             uint32_t Height = 0;
         };
@@ -97,12 +106,11 @@ namespace Lynx
 
         // One NVRHI framebuffer wrapper per swapchain image
         std::vector<nvrhi::FramebufferHandle> m_SwapchainFramebuffers;
-        nvrhi::TextureHandle m_SwapchainDepth;
         uint32_t m_CurrentImageIndex = 0;
         uint32_t m_CurrentFrame = 0;
         static const int MAX_FRAMES_IN_FLIGHT = 2;
 
-        std::unique_ptr<RenderTarget> m_EditorTarget;
+        std::unique_ptr<RenderTarget> m_SceneTarget;
         std::unique_ptr<ImGui_NVRHI> m_ImGuiBackend;
         bool m_ShouldCreateIDTarget = false;
         
@@ -111,6 +119,7 @@ namespace Lynx
         std::unordered_map<BatchKey, std::vector<GPUInstanceData>, BatchKeyHasher> m_OpaqueBatches;
 
         RenderPipeline m_Pipeline;
+        std::unique_ptr<CompositePass> m_CompositePass;
         RenderContext m_RenderContext;
         RenderData m_CurrentFrameData;
 

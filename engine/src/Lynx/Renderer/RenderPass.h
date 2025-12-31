@@ -105,6 +105,7 @@ namespace Lynx
         nvrhi::SamplerHandle ShadowSampler;
 
         nvrhi::FramebufferHandle TargetFramebuffer;
+        nvrhi::TextureHandle SceneColorInput;
 
         bool ShowGrid = true;
 
