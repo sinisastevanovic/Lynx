@@ -110,6 +110,7 @@ namespace Lynx
 
         bool ShowGrid = true;
         float BloomIntensity;
+        bool FXAAEnabled; 
 
         uint32_t DrawCalls = 0;
         uint32_t IndexCount = 0;

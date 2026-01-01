@@ -162,6 +162,7 @@ namespace Lynx
             ctx.CommandList->setPushConstants(&push, sizeof(push));
             ctx.CommandList->draw(nvrhi::DrawArguments().setVertexCount(3));
         }
+        renderData.BloomTexture = m_BloomTexture;
         ctx.CommandList->endMarker();
     }
 

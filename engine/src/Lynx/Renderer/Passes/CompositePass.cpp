@@ -5,6 +5,13 @@
 
 namespace Lynx
 {
+    struct CompositePushData
+    {
+        float BloomIntensity;
+        int FXAAEnabled;
+        float Padding[2];
+    };
+    
     void CompositePass::Init(RenderContext& ctx)
     {
         auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/Composite.glsl");
@@ -14,7 +21,7 @@ namespace Lynx
             .addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))
             .addItem(nvrhi::BindingLayoutItem::Sampler(1))
             .addItem(nvrhi::BindingLayoutItem::Texture_SRV(2))
-            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(float)))
+            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(CompositePushData)))
             .setBindingOffsets({0, 0, 0, 0});
         m_BindingLayout = ctx.Device->createBindingLayout(layoutDesc);
 
@@ -43,11 +50,14 @@ namespace Lynx
                 .addItem(nvrhi::BindingSetItem::Texture_SRV(0, renderData.SceneColorInput))
                 .addItem(nvrhi::BindingSetItem::Sampler(1, ctx.GetSampler(SamplerSettings())))
                 .addItem(nvrhi::BindingSetItem::Texture_SRV(2, bloom))
-                .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(float)));
+                .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(CompositePushData)));
             m_BindingSet = ctx.Device->createBindingSet(bsDesc, m_BindingLayout);
         }
 
-        ctx.CommandList->setPushConstants(&renderData.BloomIntensity, sizeof(float));
+        CompositePushData push;
+        push.BloomIntensity = renderData.BloomIntensity;
+        push.FXAAEnabled = renderData.FXAAEnabled ? 1 : 0;
+        ctx.CommandList->setPushConstants(&push, sizeof(CompositePushData));
 
         auto state = nvrhi::GraphicsState()
             .setPipeline(m_Pipeline)

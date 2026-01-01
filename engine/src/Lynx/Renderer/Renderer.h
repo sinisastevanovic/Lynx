@@ -85,6 +85,9 @@ namespace Lynx
         BloomSettings& GetBloomSettings() { return m_BloomPass->GetSettings(); }
         const BloomSettings& GetBloomSettings() const { return m_BloomPass->GetSettings(); }
 
+        void SetFXAAEnabled(bool enabled) { m_FXAAEnabled = enabled; }
+        bool GetFXAAEnabled() const { return m_FXAAEnabled; }
+
     private:
         void InitVulkan(GLFWwindow* window);
         void InitNVRHI();
@@ -132,6 +135,7 @@ namespace Lynx
 
         bool m_ShowGrid = true;
         bool m_ShowColliders = false;
+        bool m_FXAAEnabled = true;
 
         RenderStats m_Stats;
     };

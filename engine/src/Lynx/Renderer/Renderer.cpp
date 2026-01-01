@@ -880,8 +880,9 @@ namespace Lynx
         m_Stats.IndexCount = m_CurrentFrameData.IndexCount;
 
         m_CurrentFrameData.SceneColorInput = m_SceneTarget->Color;
+        m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled;
         m_BloomPass->Execute(m_RenderContext, m_CurrentFrameData);
-        m_CurrentFrameData.BloomTexture = m_BloomPass->GetResult(); // TODO: Let the bloom pass do that itself!
+
         if (m_ShouldCreateIDTarget)
         {
             m_CurrentFrameData.TargetFramebuffer = m_SceneTarget->LDRFramebuffer;
