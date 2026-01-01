@@ -16,6 +16,11 @@ layout (location = 0) out vec4 outColor;
 
 layout (set = 0, binding = 0) uniform texture2D u_SceneTexture;
 layout (set = 0, binding = 1) uniform sampler u_Sampler;
+layout (set = 0, binding = 2) uniform texture2D u_BloomTexture;
+
+layout(push_constant) uniform PushConsts {
+    float u_BloomIntensity;
+} push;
 
 vec3 ACESToneMapping(vec3 color)
 {
@@ -31,6 +36,10 @@ void main()
 {
     vec2 flippedUV = vec2(v_TexCoord.x, 1.0 - v_TexCoord.y);
     vec3 hdrColor = texture(sampler2D(u_SceneTexture, u_Sampler), flippedUV).rgb;
+    vec3 bloomColor = texture(sampler2D(u_BloomTexture, u_Sampler), v_TexCoord).rgb;
+
+    hdrColor += bloomColor * push.u_BloomIntensity;
+
     vec3 mapped = ACESToneMapping(hdrColor);
 
     // Gamma Correction

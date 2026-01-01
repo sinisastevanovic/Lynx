@@ -106,8 +106,10 @@ namespace Lynx
 
         nvrhi::FramebufferHandle TargetFramebuffer;
         nvrhi::TextureHandle SceneColorInput;
+        nvrhi::TextureHandle BloomTexture;
 
         bool ShowGrid = true;
+        float BloomIntensity;
 
         uint32_t DrawCalls = 0;
         uint32_t IndexCount = 0;

@@ -70,18 +70,18 @@ void main() {
     float line = min(grid.x, grid.y);
 
     // Base grid color
-    vec4 color = vec4(0.2, 0.2, 0.2, 1.0 - min(line, 1.0));
+    vec4 color = vec4(0.1, 0.1, 0.1, 1.0 - min(line, 1.0));
 
     // Highlight major axes
     float axisWidth = 1.5; // Controls axis line thickness
 
     // Z Axis (Blue) - Where X is near 0
     if (abs(worldPos.x) < derivative.x * axisWidth)
-        color = vec4(0.0, 0.0, 1.0, 1.0 - min(line, 1.0));
+        color = vec4(0.0, 0.0, 0.8, 1.0 - min(line, 1.0));
 
     // X Axis (Red) - Where Z is near 0
     if (abs(worldPos.z) < derivative.y * axisWidth)
-        color = vec4(1.0, 0.0, 0.0, 1.0 - min(line, 1.0));
+        color = vec4(0.8, 0.0, 0.0, 1.0 - min(line, 1.0));
 
     // Calculate distance fade to prevent moire patterns and horizon artifacts
     float dist = distance(ubo.u_CameraPosition.xyz, worldPos);

@@ -135,6 +135,7 @@ namespace Lynx
             m_NvrhiDevice->runGarbageCollection();
 
         m_Pipeline.Clear();
+        m_BloomPass.reset();
         m_CompositePass.reset();
         m_RenderContext = RenderContext();
         m_CurrentFrameData = RenderData();
@@ -203,6 +204,10 @@ namespace Lynx
         m_Pipeline.AddPass(std::make_unique<DebugPass>());
 
         m_Pipeline.Init(m_RenderContext);
+
+        m_BloomPass = std::make_unique<BloomPass>();
+        m_BloomPass->Init(m_RenderContext);
+        
         m_CompositePass = std::make_unique<CompositePass>();
         m_CompositePass->Init(m_RenderContext);
 
@@ -875,6 +880,8 @@ namespace Lynx
         m_Stats.IndexCount = m_CurrentFrameData.IndexCount;
 
         m_CurrentFrameData.SceneColorInput = m_SceneTarget->Color;
+        m_BloomPass->Execute(m_RenderContext, m_CurrentFrameData);
+        m_CurrentFrameData.BloomTexture = m_BloomPass->GetResult(); // TODO: Let the bloom pass do that itself!
         if (m_ShouldCreateIDTarget)
         {
             m_CurrentFrameData.TargetFramebuffer = m_SceneTarget->LDRFramebuffer;

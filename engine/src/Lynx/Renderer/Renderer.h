@@ -9,6 +9,7 @@
 
 #include "RenderPipeline.h"
 #include "RenderPass.h"
+#include "Passes/BloomPass.h"
 #include "Passes/CompositePass.h"
 
 struct GLFWwindow;
@@ -81,6 +82,9 @@ namespace Lynx
 
         glm::mat4 GetLightViewProjMatrix() const { return m_CurrentFrameData.LightViewProj; }
 
+        BloomSettings& GetBloomSettings() { return m_BloomPass->GetSettings(); }
+        const BloomSettings& GetBloomSettings() const { return m_BloomPass->GetSettings(); }
+
     private:
         void InitVulkan(GLFWwindow* window);
         void InitNVRHI();
@@ -120,6 +124,7 @@ namespace Lynx
 
         RenderPipeline m_Pipeline;
         std::unique_ptr<CompositePass> m_CompositePass;
+        std::unique_ptr<BloomPass> m_BloomPass;
         RenderContext m_RenderContext;
         RenderData m_CurrentFrameData;
 

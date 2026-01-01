@@ -13,6 +13,8 @@ namespace Lynx
             .setVisibility(nvrhi::ShaderType::Pixel)
             .addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))
             .addItem(nvrhi::BindingLayoutItem::Sampler(1))
+            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(2))
+            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(float)))
             .setBindingOffsets({0, 0, 0, 0});
         m_BindingLayout = ctx.Device->createBindingLayout(layoutDesc);
 
@@ -30,14 +32,22 @@ namespace Lynx
 
     void CompositePass::Execute(RenderContext& ctx, RenderData& renderData)
     {
-        if (!m_BindingSet || m_CachedInput != renderData.SceneColorInput)
+        if (!m_BindingSet || m_CachedInput != renderData.SceneColorInput || m_CachedBloom != renderData.BloomTexture)
         {
             m_CachedInput = renderData.SceneColorInput;
+            m_CachedBloom = renderData.BloomTexture;
+
+            nvrhi::TextureHandle bloom = renderData.BloomTexture ? renderData.BloomTexture : ctx.BlackTexture;
+            
             auto bsDesc = nvrhi::BindingSetDesc()
                 .addItem(nvrhi::BindingSetItem::Texture_SRV(0, renderData.SceneColorInput))
-                .addItem(nvrhi::BindingSetItem::Sampler(1, ctx.GetSampler(SamplerSettings())));
+                .addItem(nvrhi::BindingSetItem::Sampler(1, ctx.GetSampler(SamplerSettings())))
+                .addItem(nvrhi::BindingSetItem::Texture_SRV(2, bloom))
+                .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(float)));
             m_BindingSet = ctx.Device->createBindingSet(bsDesc, m_BindingLayout);
         }
+
+        ctx.CommandList->setPushConstants(&renderData.BloomIntensity, sizeof(float));
 
         auto state = nvrhi::GraphicsState()
             .setPipeline(m_Pipeline)

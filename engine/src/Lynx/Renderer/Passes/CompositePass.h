@@ -17,6 +17,7 @@ namespace Lynx
         nvrhi::BindingSetHandle m_BindingSet;
         nvrhi::GraphicsPipelineHandle m_Pipeline;
         nvrhi::TextureHandle m_CachedInput;
+        nvrhi::TextureHandle m_CachedBloom;
     
     };
 }
