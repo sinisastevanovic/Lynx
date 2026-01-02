@@ -33,8 +33,15 @@ namespace Lynx
             .addItem(nvrhi::BindingSetItem::Sampler(1, ctx.GetSampler(SamplerSettings())));
         m_OpaqueBindingSet = ctx.Device->createBindingSet(bsDesc, m_MaterialBindingLayout);
 
-        auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/DepthOnly.glsl");
-
+        m_PipelineState.SetPath("engine/resources/Shaders/DepthOnly.glsl");
+        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipelines(ctx, shader);
+        });
+    }
+    
+    void DepthPass::CreatePipelines(RenderContext& ctx, std::shared_ptr<Shader> shader)
+    {
         auto pipeDesc = nvrhi::GraphicsPipelineDesc()
             .addBindingLayout(m_GlobalBindingLayout)
             .addBindingLayout(m_MaterialBindingLayout)
@@ -74,6 +81,11 @@ namespace Lynx
 
     void DepthPass::Execute(RenderContext& ctx, RenderData& renderData)
     {
+        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipelines(ctx, shader);
+        });
+        
         CreateGlobalBindingSet(ctx, renderData);
 
         ctx.CommandList->beginMarker("DepthPrePass");
@@ -120,6 +132,7 @@ namespace Lynx
 
         ctx.CommandList->endMarker();
     }
+
 
     void DepthPass::CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData)
     {

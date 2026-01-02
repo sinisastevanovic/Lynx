@@ -16,6 +16,7 @@ namespace Lynx
         nvrhi::SamplerHandle GetShadowSampler() const { return m_ShadowSampler; }
 
     private:
+        void CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader);
         nvrhi::BindingSetHandle GetMaskedBindingSet(RenderContext& ctx, RenderData& renderData, Material* material);
         void CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData);
 
@@ -36,6 +37,8 @@ namespace Lynx
         nvrhi::BindingSetHandle m_GlobalBindingSet;
         nvrhi::BindingSetHandle m_OpaqueBindingSet;
         std::unordered_map<Material*, MaterialCacheEntry> m_MaskedBindingSets;
+
+        PipelineState m_PipelineState;
     };
 }
 

@@ -30,13 +30,20 @@ namespace Lynx
         m_MaterialBindingLayout = ctx.Device->createBindingLayout(matLayoutDesc);
 
         std::string shaderPath = ctx.PresentationFramebufferInfo.colorFormats.size() > 1 ? "engine/resources/Shaders/StandardEditor.glsl" : "engine/resources/Shaders/Standard.glsl";
-        auto shaderAsset = Engine::Get().GetAssetManager().GetAsset<Shader>(shaderPath);
+        m_PipelineState.SetPath(shaderPath);
+        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipelines(ctx, shader);
+        });
+    }
 
+    void ForwardPass::CreatePipelines(RenderContext& ctx, std::shared_ptr<Shader> shader)
+    {
         auto pipeDesc = nvrhi::GraphicsPipelineDesc()
             .addBindingLayout(m_GlobalBindingLayout)
             .addBindingLayout(m_MaterialBindingLayout)
-            .setVertexShader(shaderAsset->GetVertexShader())
-            .setFragmentShader(shaderAsset->GetPixelShader())
+            .setVertexShader(shader->GetVertexShader())
+            .setFragmentShader(shader->GetPixelShader())
             .setPrimType(nvrhi::PrimitiveType::TriangleList);
         pipeDesc.renderState.rasterState.frontCounterClockwise = true;
         pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::Back;
@@ -73,7 +80,7 @@ namespace Lynx
                 .setOffset(offsetof(Vertex, Color))
                 .setElementStride(sizeof(Vertex))
         };
-        pipeDesc.inputLayout = ctx.Device->createInputLayout(attributes, 5, shaderAsset->GetVertexShader());
+        pipeDesc.inputLayout = ctx.Device->createInputLayout(attributes, 5, shader->GetVertexShader());
 
         // Opaque
         pipeDesc.renderState.depthStencilState.depthTestEnable = true;
@@ -101,6 +108,11 @@ namespace Lynx
 
     void ForwardPass::Execute(RenderContext& ctx, RenderData& renderData)
     {
+        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipelines(ctx, shader);
+        });
+        
         CreateGlobalBindingSet(ctx, renderData);
         
         DrawBatches(ctx, renderData, renderData.OpaqueDrawCalls, m_PipelineOpaque);
@@ -275,4 +287,6 @@ namespace Lynx
             renderData.IndexCount += submesh.IndexCount * batch.InstanceCount;
         }
     }
+
+    
 }

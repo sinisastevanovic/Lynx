@@ -22,6 +22,17 @@ namespace Lynx
             .setBindingOffsets({0, 0, 0, 0})
         );
 
+        m_Sampler = ctx.GetSampler(SamplerSettings{TextureWrap::Clamp, TextureFilter::Linear});
+
+        m_PipelineState.SetPath("engine/resources/Shaders/Bloom.glsl");
+        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipeline(ctx, shader);
+        });
+    }
+    
+    void BloomPass::CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader)
+    {
         auto pipeDesc = nvrhi::GraphicsPipelineDesc()
             .addBindingLayout(m_BindingLayout)
             .setVertexShader(shader->GetVertexShader())
@@ -38,8 +49,6 @@ namespace Lynx
         nvrhi::FramebufferInfo fbInfo;
         fbInfo.addColorFormat(nvrhi::Format::RGBA16_FLOAT);
         m_Pipeline = ctx.Device->createGraphicsPipeline(pipeDesc, fbInfo);
-
-        m_Sampler = ctx.GetSampler(SamplerSettings{TextureWrap::Clamp, TextureFilter::Linear});
     }
 
     void BloomPass::EnsureResources(RenderContext& ctx, uint32_t width, uint32_t height)
@@ -85,6 +94,7 @@ namespace Lynx
         }
     }
 
+
     void BloomPass::Execute(RenderContext& ctx, RenderData& renderData)
     {
         if (!m_Settings.Enabled)
@@ -92,6 +102,11 @@ namespace Lynx
             renderData.BloomIntensity = 0.0f;
             return;
         }
+
+        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipeline(ctx, shader);
+        });
         
         // 1. Resize if needed
         const auto& fbInfo = renderData.TargetFramebuffer->getFramebufferInfo();

@@ -36,6 +36,9 @@ namespace Lynx
         const BloomSettings& GetSettings() const { return m_Settings; }
 
     private:
+        void CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader);
+
+    private:
         nvrhi::GraphicsPipelineHandle m_Pipeline;
         nvrhi::BindingLayoutHandle m_BindingLayout;
         nvrhi::SamplerHandle m_Sampler;
@@ -53,6 +56,8 @@ namespace Lynx
         uint32_t m_Height = 0;
         const uint32_t MAX_MIPS = 6;
         uint32_t m_MipCount = 0;
+
+        PipelineState m_PipelineState;
     };
 
 }

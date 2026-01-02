@@ -17,8 +17,6 @@ namespace Lynx
     {
         m_Device = device;
 
-        auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/MipMapGen.glsl");
-
         auto layoutDesc = nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::Compute)
             .addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))
@@ -27,11 +25,6 @@ namespace Lynx
             .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(MipMapPushConstants)))
             .setBindingOffsets({0, 0, 0, 0});
         m_BindingLayout = m_Device->createBindingLayout(layoutDesc);
-
-        auto computePipeDesc = nvrhi::ComputePipelineDesc()
-            .addBindingLayout(m_BindingLayout)
-            .setComputeShader(shader->GetComputeShader());
-        m_Pipeline = m_Device->createComputePipeline(computePipeDesc);
 
         auto samplerDesc = nvrhi::SamplerDesc()
             .setAllFilters(true)
@@ -46,10 +39,21 @@ namespace Lynx
             .setInitialState(nvrhi::ResourceStates::UnorderedAccess)
             .setKeepInitialState(true);
         m_NullTexture = m_Device->createTexture(nullDesc);
+
+        m_PipelineState.SetPath("engine/resources/Shaders/MipMapGen.glsl");
+        m_PipelineState.Update([this](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipeline(shader);
+        });
     }
 
     void MipMapGenPass::Generate(nvrhi::CommandListHandle commandList, nvrhi::TextureHandle texture)
     {
+        m_PipelineState.Update([this](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipeline(shader);
+        });
+        
         const auto& desc = texture->getDesc();
         uint32_t mipLevels = desc.mipLevels;
 
@@ -114,5 +118,13 @@ namespace Lynx
         }
 
         commandList->endMarker();
+    }
+
+    void MipMapGenPass::CreatePipeline(std::shared_ptr<Shader> shader)
+    {
+        auto computePipeDesc = nvrhi::ComputePipelineDesc()
+            .addBindingLayout(m_BindingLayout)
+            .setComputeShader(shader->GetComputeShader());
+        m_Pipeline = m_Device->createComputePipeline(computePipeDesc);
     }
 }

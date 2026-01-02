@@ -16,7 +16,6 @@ namespace Lynx
     bool Shader::Reload()
     {
         LoadAndCompile();
-        Engine::Get().GetRenderer().ReloadShaders();
         return true;
     }
 

@@ -271,19 +271,23 @@ namespace Lynx
         if (j.contains("Type"))
             metadata.Type = static_cast<AssetType>(j["Type"]);
 
-        if (j.contains("Settings"))
+        metadata.FilePath = metadataPath.parent_path() / metadataPath.stem();
+
+        metadata.Specification = AssetSpecification::CreateFromType(metadata.Type);
+        uint32_t diskVersion = 0;
+
+        if (metadata.Specification)
         {
-            if (metadata.Type == AssetType::Texture)
+            if (j.contains("Settings"))
             {
-                auto spec = std::make_shared<TextureSpecification>();
-                spec->Deserialize(j["Settings"]);
-                metadata.Specification = spec;
+                metadata.Specification->Deserialize(j["Settings"]);
+                diskVersion = j["Settings"].value("Version", 0);
             }
-            else if (metadata.Type == AssetType::Material)
+
+            if (diskVersion < metadata.Specification->GetCurrentVersion())
             {
-                auto spec = std::make_shared<StaticMeshSpecification>();
-                spec->Deserialize(j["Settings"]);
-                metadata.Specification = spec;
+                LX_CORE_WARN("Migrating {0} from v{1} to v{2}", metadataPath.string(), diskVersion, metadata.Specification->GetCurrentVersion());
+                WriteMetadata(metadata);
             }
         }
 

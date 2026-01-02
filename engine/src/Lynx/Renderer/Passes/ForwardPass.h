@@ -12,6 +12,7 @@ namespace Lynx
         void Execute(RenderContext& ctx, RenderData& renderData) override;
 
     private:
+        void CreatePipelines(RenderContext& ctx, std::shared_ptr<Shader> shader);
         nvrhi::BindingSetHandle GetMaterialBindingSet(RenderContext& ctx, Material* material);
         void CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData);
         
@@ -29,7 +30,8 @@ namespace Lynx
         nvrhi::GraphicsPipelineHandle m_PipelineOpaque;
         nvrhi::GraphicsPipelineHandle m_PipelineTransparent;
         nvrhi::BufferHandle m_CachedInstanceBuffer;
-        
+
+        PipelineState m_PipelineState;
     };
 }
 

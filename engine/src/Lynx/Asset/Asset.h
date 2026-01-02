@@ -4,6 +4,11 @@
 
 namespace Lynx
 {
+    struct AssetSpecification;
+}
+
+namespace Lynx
+{
     enum class AssetState
     {
         None,
@@ -23,12 +28,6 @@ namespace Lynx
         AssetHandle GetHandle() const { return m_Handle; }
         std::string GetFilePath() const { return m_FilePath; }
 
-        // TODO: Move these to protected
-        virtual bool Reload() { LX_CORE_ERROR("AssetType does not support hot reloading yet!"); return false; }
-
-        virtual bool LoadSourceData() { return true; }
-        virtual bool CreateRenderResources() { return true; }
-
         virtual bool DependsOn(AssetHandle handle) const { return false; }
         bool IsRuntime() const { return m_IsRuntime; }
 
@@ -37,8 +36,12 @@ namespace Lynx
         AssetState GetState() const { return m_State; }
         uint32_t GetVersion() const { return m_Version; }
 
-
     protected:
+        virtual bool Reload() { LX_CORE_ERROR("AssetType does not support hot reloading yet!"); return false; }
+
+        virtual bool LoadSourceData() { return true; }
+        virtual bool CreateRenderResources() { return true; }
+        
         void SetHandle(AssetHandle handle) { m_Handle = handle; }
         void SetState(AssetState state) { m_State = state; }
         void IncrementVersion() { m_Version++; }

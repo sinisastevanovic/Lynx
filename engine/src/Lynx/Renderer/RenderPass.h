@@ -7,6 +7,8 @@
 
 namespace Lynx
 {
+    class Shader;
+
     enum class RenderFlags : uint8_t
     {
         None = 0,
@@ -145,5 +147,19 @@ namespace Lynx
         virtual ~RenderPass() = default;
         virtual void Init(RenderContext& ctx) = 0;
         virtual void Execute(RenderContext& ctx, RenderData& renderData) = 0;
+    };
+
+    class PipelineState
+    {
+    public:
+        PipelineState() = default;
+        PipelineState(const std::string& shaderPath) : m_Path(shaderPath) {}
+
+        void SetPath(const std::string& path) { m_Path = path; }
+        bool Update(std::function<void(std::shared_ptr<Shader>)> builder);
+        
+    private:
+        std::string m_Path;
+        uint32_t m_Version = -1;
     };
 }

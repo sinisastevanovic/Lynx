@@ -221,14 +221,6 @@ namespace Lynx
         LX_CORE_INFO("Renderer initialized successfully (Pipeline loaded).");
     }
 
-    void Renderer::ReloadShaders()
-    {
-        m_VulkanState->Device.waitIdle();
-
-        m_Pipeline.Init(m_RenderContext);
-        LX_CORE_INFO("Shaders Reloaded and Pipeline Recreated!");
-    }
-
     nvrhi::SamplerHandle Renderer::GetSampler(const SamplerSettings& settings)
     {
         auto it = m_SamplerCache.find(settings);

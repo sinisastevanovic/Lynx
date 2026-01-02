@@ -1,5 +1,7 @@
 #pragma once
-#include <nlohmann/json_fwd.hpp>
+#include <nlohmann/json.hpp>
+
+#include "AssetTypes.h"
 
 namespace Lynx
 {
@@ -10,5 +12,9 @@ namespace Lynx
 
         virtual void Serialize(nlohmann::json& json) const = 0;
         virtual void Deserialize(const nlohmann::json& json) = 0;
+
+        virtual uint32_t GetCurrentVersion() const { return 1; }
+
+        static std::shared_ptr<AssetSpecification> CreateFromType(AssetType type);
     };
 }

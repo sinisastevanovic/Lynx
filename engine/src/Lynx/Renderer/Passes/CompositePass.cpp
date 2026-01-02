@@ -14,8 +14,6 @@ namespace Lynx
     
     void CompositePass::Init(RenderContext& ctx)
     {
-        auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/Composite.glsl");
-
         auto layoutDesc = nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::Pixel)
             .addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))
@@ -25,6 +23,15 @@ namespace Lynx
             .setBindingOffsets({0, 0, 0, 0});
         m_BindingLayout = ctx.Device->createBindingLayout(layoutDesc);
 
+        m_PipelineState.SetPath("engine/resources/Shaders/Composite.glsl");
+        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipeline(ctx, shader);
+        });
+    }
+    
+    void CompositePass::CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader)
+    {
         auto pipeDesc = nvrhi::GraphicsPipelineDesc()
             .addBindingLayout(m_BindingLayout)
             .setVertexShader(shader->GetVertexShader())
@@ -39,6 +46,11 @@ namespace Lynx
 
     void CompositePass::Execute(RenderContext& ctx, RenderData& renderData)
     {
+        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipeline(ctx, shader);
+        });
+        
         if (!m_BindingSet || m_CachedInput != renderData.SceneColorInput || m_CachedBloom != renderData.BloomTexture)
         {
             m_CachedInput = renderData.SceneColorInput;
@@ -71,4 +83,5 @@ namespace Lynx
         ctx.CommandList->setGraphicsState(state);
         ctx.CommandList->draw(nvrhi::DrawArguments().setVertexCount(3));
     }
+
 }

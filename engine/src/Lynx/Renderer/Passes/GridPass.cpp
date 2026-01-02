@@ -24,9 +24,15 @@ namespace Lynx
             .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer));
         m_BindingSet = ctx.Device->createBindingSet(bsDesc, m_BindingLayout);
 
-        auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/Grid.glsl");
-        LX_ASSERT(shader, "GridPass: Failed to load Grid shader!");
+        m_PipelineState.SetPath("engine/resources/Shaders/Grid.glsl");
+        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipeline(ctx, shader);
+        });
+    }
 
+    void GridPass::CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader)
+    {
         nvrhi::GraphicsPipelineDesc pipeDesc;
         pipeDesc.bindingLayouts = { m_BindingLayout };
         pipeDesc.VS = shader->GetVertexShader();
@@ -51,6 +57,12 @@ namespace Lynx
     {
         if (!renderData.ShowGrid)
             return;
+
+        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipeline(ctx, shader);
+        });
+        
         ctx.CommandList->beginMarker("GridPass");
 
         GridPushConstants push;

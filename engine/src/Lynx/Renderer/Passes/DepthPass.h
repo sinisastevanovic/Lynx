@@ -12,10 +12,14 @@ namespace Lynx
         void Execute(RenderContext& ctx, RenderData& renderData) override;
 
     private:
+        void CreatePipelines(RenderContext& ctx, std::shared_ptr<Shader> shader);
+        void CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData);
+        nvrhi::BindingSetHandle GetMaterialBindingSet(RenderContext& ctx, Material* material);
+
+    private:
         nvrhi::BindingLayoutHandle m_GlobalBindingLayout;
         nvrhi::BindingLayoutHandle m_MaterialBindingLayout;
         nvrhi::GraphicsPipelineHandle m_Pipeline;
-        nvrhi::GraphicsPipelineHandle m_PipelineMasked;
 
         // Caching
         nvrhi::BindingSetHandle m_GlobalBindingSet;
@@ -23,8 +27,9 @@ namespace Lynx
         nvrhi::BufferHandle m_CachedInstanceBuffer;
         std::unordered_map<Material*, MaterialCacheEntry> m_MaterialBindingSetCache;
 
-        void CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData);
-        nvrhi::BindingSetHandle GetMaterialBindingSet(RenderContext& ctx, Material* material);
+        PipelineState m_PipelineState;
+
+        
     };
 }
 

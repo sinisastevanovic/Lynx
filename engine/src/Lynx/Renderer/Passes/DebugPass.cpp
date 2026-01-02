@@ -20,9 +20,25 @@ namespace Lynx
             .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer));
         m_BindingSet = ctx.Device->createBindingSet(bsDesc, m_BindingLayout);
 
-        // 3. Load Shader
-        auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/DebugLine.glsl");
+        // 5. Create Dynamic Vertex Buffer (Start small, resize if needed)
+        nvrhi::BufferDesc vbDesc;
+        vbDesc.byteSize = 10000 * sizeof(LineVertex); // ~10k lines capacity
+        vbDesc.isVertexBuffer = true;
+        vbDesc.debugName = "DebugLineVB";
+        vbDesc.canHaveUAVs = false;
+        vbDesc.setInitialState(nvrhi::ResourceStates::VertexBuffer);
+        vbDesc.keepInitialState = true;
+        m_VertexBuffer = ctx.Device->createBuffer(vbDesc);
 
+        m_PipelineState.SetPath("engine/resources/Shaders/DebugLine.glsl");
+        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipeline(ctx, shader);
+        });
+    }
+    
+    void DebugPass::CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader)
+    {
         // 4. Create Pipeline
         nvrhi::GraphicsPipelineDesc pipeDesc;
         pipeDesc.bindingLayouts = {m_BindingLayout};
@@ -46,22 +62,17 @@ namespace Lynx
                 .setDepthWriteEnable(false); // Usually off for debug lines so they don't occlude transparency
 
         m_Pipeline = ctx.Device->createGraphicsPipeline(pipeDesc, ctx.PresentationFramebufferInfo);
-
-        // 5. Create Dynamic Vertex Buffer (Start small, resize if needed)
-        nvrhi::BufferDesc vbDesc;
-        vbDesc.byteSize = 10000 * sizeof(LineVertex); // ~10k lines capacity
-        vbDesc.isVertexBuffer = true;
-        vbDesc.debugName = "DebugLineVB";
-        vbDesc.canHaveUAVs = false;
-        vbDesc.setInitialState(nvrhi::ResourceStates::VertexBuffer);
-        vbDesc.keepInitialState = true;
-        m_VertexBuffer = ctx.Device->createBuffer(vbDesc);
     }
-
+    
     void DebugPass::Execute(RenderContext& ctx, RenderData& renderData)
     {
         const auto& lines = DebugRenderer::GetLines();
         if (lines.empty()) return;
+
+        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipeline(ctx, shader);
+        });
 
         ctx.CommandList->beginMarker("DebugPass");
 
@@ -111,4 +122,5 @@ namespace Lynx
         // Clear lines for next frame
         DebugRenderer::Clear();
     }
+
 }

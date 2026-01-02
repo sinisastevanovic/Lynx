@@ -51,7 +51,6 @@ namespace Lynx
         ~Renderer();
 
         void Init();
-        void ReloadShaders();
         
         void OnResize(uint32_t width, uint32_t height);
         void EnsureEditorViewport(uint32_t width, uint32_t height);

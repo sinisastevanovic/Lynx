@@ -1,6 +1,6 @@
 #pragma once
 #include <string>
-#include <nlohmann/json.hpp>
+
 
 #include "AssetSpecification.h"
 
@@ -54,8 +54,11 @@ namespace Lynx
 
         TextureSpecification() = default;
 
+        virtual uint32_t GetCurrentVersion() const override { return 1; }
+
         virtual void Serialize(nlohmann::json& json) const override
         {
+            json["Version"] = GetCurrentVersion();
             json["TextureFormat"] = Format;
             json["WrapMode"] = SamplerSettings.WrapMode;
             json["FilterMode"] = SamplerSettings.FilterMode;

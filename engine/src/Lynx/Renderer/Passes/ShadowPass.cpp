@@ -50,9 +50,6 @@ namespace Lynx
             .setReductionType(nvrhi::SamplerReductionType::Comparison);
         m_ShadowSampler = ctx.Device->createSampler(samplerDesc);
 
-        auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/Shadow.glsl");
-        LX_ASSERT(shader, "Failed to load Shadow Shader!");
-
         auto globalDesc = nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::All)
             .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0)) // UBO
@@ -73,6 +70,15 @@ namespace Lynx
             .addItem(nvrhi::BindingSetItem::Sampler(1, ctx.GetSampler(SamplerSettings())));
         m_OpaqueBindingSet = ctx.Device->createBindingSet(bsDesc, m_MaterialBindingLayout);
 
+        m_PipelineState.SetPath("engine/resources/Shaders/Shadow.glsl");
+        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipeline(ctx, shader);
+        });
+    }
+
+    void ShadowPass::CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader)
+    {
         auto pipeDesc = nvrhi::GraphicsPipelineDesc();
         pipeDesc.bindingLayouts = { m_GlobalBindingLayout, m_MaterialBindingLayout };
         pipeDesc.VS = shader->GetVertexShader();
@@ -125,6 +131,11 @@ namespace Lynx
 
     void ShadowPass::Execute(RenderContext& ctx, RenderData& renderData)
     {
+        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            this->CreatePipeline(ctx, shader);
+        });
+        
         CreateGlobalBindingSet(ctx, renderData);
         
         renderData.ShadowMap = m_ShadowMap;
@@ -192,6 +203,8 @@ namespace Lynx
 
         ctx.CommandList->endMarker();
     }
+
+    
 
     nvrhi::BindingSetHandle ShadowPass::GetMaskedBindingSet(RenderContext& ctx, RenderData& renderData, Material* material)
     {
