@@ -12,9 +12,24 @@
 #include "Components/LuaScriptComponent.h"
 #include "Components/NativeScriptComponent.h"
 #include "Lynx/Scripting/ScriptEngine.h"
+#include <glm/gtx/matrix_decompose.hpp>
 
 namespace Lynx
 {
+    static void SetTransformFromMatrix(TransformComponent& transform, const glm::mat4& matrix)
+    {
+        glm::vec3 scale;
+        glm::quat rotation;
+        glm::vec3 translation;
+        glm::vec3 skew;
+        glm::vec4 perspective;
+
+        glm::decompose(matrix, scale, rotation, translation, skew, perspective);
+        transform.Translation = translation;
+        transform.Rotation = rotation;
+        transform.Scale = scale;
+    }
+    
     static void OnRigidBodyComponentDestroyed(entt::registry& registry, entt::entity entity)
     {
         auto& rb = registry.get<RigidBodyComponent>(entity);
@@ -67,13 +82,34 @@ namespace Lynx
         Entity entity = { m_Registry.create(), this };
         entity.AddComponent<IDComponent>();
         entity.AddComponent<TransformComponent>();
+        entity.AddComponent<RelationshipComponent>();
         auto& tag = entity.AddComponent<TagComponent>();
         tag.Tag = name.empty() ? "Entity" : name;
         return entity;
     }
 
-    void Scene::DestroyEntity(entt::entity entity)
+    void Scene::DestroyEntity(entt::entity entity, bool excludeChildren)
     {
+        if (!m_Registry.valid(entity))
+            return;
+
+        auto& rel = m_Registry.get<RelationshipComponent>(entity);
+        entt::entity child = rel.FirstChild;
+        while (child != entt::null)
+        {
+            entt::entity nextChild = m_Registry.get<RelationshipComponent>(child).NextSibling;
+            if (excludeChildren)
+            {
+                DetachEntityKeepWorld(child);
+            }
+            else
+            {
+                DestroyEntity(child, false);
+            }
+            child = nextChild;
+        }
+        
+        DetachEntity(entity);
         m_Registry.destroy(entity);
     }
 
@@ -84,12 +120,18 @@ namespace Lynx
         auto& physicsSystem = Engine::Get().GetPhysicsSystem();
         JPH::BodyInterface& bodyInterface = physicsSystem.GetBodyInterface();
 
-        auto view = m_Registry.view<TransformComponent, RigidBodyComponent>();
+        auto view = m_Registry.view<TransformComponent, RigidBodyComponent, RelationshipComponent>();
         for (auto entity : view)
         {
-            auto [transform, rb] = view.get<TransformComponent, RigidBodyComponent>(entity);
+            auto [transform, rb, rel] = view.get<TransformComponent, RigidBodyComponent, RelationshipComponent>(entity);
             if (!rb.RuntimeBodyCreated)
             {
+                if (rel.Parent != entt::null)
+                {
+                    DetachEntity(entity);
+                    LX_CORE_WARN("Entity was detached, as entities with RigidBodyComponents cannot be attached to another entity!");
+                }
+                
                 JPH::ShapeRefC shape;
 
                 if (m_Registry.all_of<BoxColliderComponent>(entity))
@@ -225,10 +267,17 @@ namespace Lynx
         JPH::BodyInterface& bodyInterface = physicsSystem.GetBodyInterface();
 
         // Sync physics -> transforms
-        auto view = m_Registry.view<TransformComponent, RigidBodyComponent>();
+        auto view = m_Registry.view<TransformComponent, RigidBodyComponent, RelationshipComponent>();
         for (auto entity : view)
         {
-            auto [transform, rb] = view.get<TransformComponent, RigidBodyComponent>(entity);
+            auto [transform, rb, rel] = view.get<TransformComponent, RigidBodyComponent, RelationshipComponent>(entity);
+
+            if (rel.Parent != entt::null)
+            {
+                DetachEntity(entity);
+                LX_CORE_WARN("Entity was detached, as entities with RigidBodyComponents cannot be attached to another entity!");
+            }
+            
             if (!rb.RuntimeBodyCreated)
             {
                 JPH::ShapeRefC shape;
@@ -300,5 +349,129 @@ namespace Lynx
 
     void Scene::OnUpdateEditor(float deltaTime)
     {
+    }
+
+    void Scene::AttachEntity(entt::entity child, entt::entity parent)
+    {
+        DetachEntity(child);
+
+        auto& childRel = m_Registry.get<RelationshipComponent>(child);
+        childRel.Parent = parent;
+
+        auto& parentRel = m_Registry.get<RelationshipComponent>(parent);
+        if (parentRel.FirstChild == entt::null)
+        {
+            parentRel.FirstChild = child;
+        }
+        else
+        {
+            entt::entity current = parentRel.FirstChild;
+            while (true)
+            {
+                auto& currentRel = m_Registry.get<RelationshipComponent>(current);
+                if (currentRel.NextSibling == entt::null)
+                {
+                    currentRel.NextSibling = child;
+                    childRel.PrevSibling = currentRel.PrevSibling;
+                    break;
+                }
+                current = currentRel.NextSibling;
+            }
+        }
+
+        parentRel.ChildrenCount++;
+    }
+
+    void Scene::AttachEntityKeepWorld(entt::entity child, entt::entity parent)
+    {
+        auto& childTransform = m_Registry.get<TransformComponent>(child);
+        auto& parentTransform = m_Registry.get<TransformComponent>(parent);
+
+        glm::mat4 childWorld = childTransform.WorldMatrix;
+        glm::mat4 parentWorld = parentTransform.WorldMatrix;
+        glm::mat4 parentInverse = glm::inverse(parentWorld);
+
+        glm::mat4 newLocal = parentInverse * childWorld;
+        SetTransformFromMatrix(childTransform, newLocal);
+
+        AttachEntity(child, parent);
+        UpdateEntityTransform(child, parentWorld);
+    }
+
+    void Scene::DetachEntity(entt::entity child)
+    {
+        auto& childRel = m_Registry.get<RelationshipComponent>(child);
+        entt::entity parent = childRel.Parent;
+
+        if (parent == entt::null)
+            return;
+
+        auto& parentRel = m_Registry.get<RelationshipComponent>(parent);
+
+        if (parentRel.FirstChild == child)
+        {
+            parentRel.FirstChild = childRel.NextSibling;
+        }
+
+        if (childRel.PrevSibling != entt::null)
+        {
+            m_Registry.get<RelationshipComponent>(childRel.PrevSibling).NextSibling = childRel.NextSibling;
+        }
+
+        if (childRel.NextSibling != entt::null)
+        {
+            m_Registry.get<RelationshipComponent>(childRel.NextSibling).PrevSibling = childRel.PrevSibling;
+        }
+
+        childRel.Parent = entt::null;
+        childRel.NextSibling = entt::null;
+        childRel.PrevSibling = entt::null;
+
+        parentRel.ChildrenCount--;
+    }
+
+    void Scene::DetachEntityKeepWorld(entt::entity child)
+    {
+        auto& rel = m_Registry.get<RelationshipComponent>(child);
+        if (rel.Parent == entt::null)
+            return;
+
+        auto& childTransform = m_Registry.get<TransformComponent>(child);
+        SetTransformFromMatrix(childTransform, childTransform.WorldMatrix);
+        DetachEntity(child);
+        childTransform.WorldMatrix = childTransform.GetTransform();
+    }
+
+    void Scene::UpdateGlobalTransforms()
+    {
+        auto view = m_Registry.view<TransformComponent, RelationshipComponent>();
+        for (auto entity : view)
+        {
+            const auto& rel = view.get<RelationshipComponent>(entity);
+            if (rel.Parent == entt::null)
+            {
+                auto& transform = view.get<TransformComponent>(entity);
+                transform.WorldMatrix = transform.GetTransform();
+
+                if (rel.FirstChild != entt::null)
+                {
+                    UpdateEntityTransform(rel.FirstChild, transform.WorldMatrix);
+                }
+            }
+        }
+    }
+
+    void Scene::UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform)
+    {
+        auto& transform = m_Registry.get<TransformComponent>(entity);
+        auto& rel = m_Registry.get<RelationshipComponent>(entity);
+
+        transform.WorldMatrix = parentTransform * transform.GetTransform();
+
+        if (rel.NextSibling != entt::null)
+            UpdateEntityTransform(rel.NextSibling, parentTransform);
+
+        if (rel.FirstChild != entt::null)
+            UpdateEntityTransform(rel.FirstChild, transform.WorldMatrix);
     }
 }

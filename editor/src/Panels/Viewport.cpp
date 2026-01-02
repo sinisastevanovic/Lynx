@@ -58,7 +58,8 @@ namespace Lynx
 
             auto scene = Engine::Get().GetActiveScene();
             auto& tc = scene->Reg().get<TransformComponent>(m_Selection);
-            glm::mat4 transform = tc.GetTransform();
+            auto& rel = scene->Reg().get<RelationshipComponent>(m_Selection);
+            glm::mat4 transform = tc.WorldMatrix;
 
             bool snap = ImGui::GetIO().KeyCtrl;
             float snapValue = 0.5f;
@@ -72,8 +73,15 @@ namespace Lynx
 
             if (ImGuizmo::IsUsing())
             {
+                glm::mat4 localMatrix = transform;
+                if (rel.Parent != entt::null)
+                {
+                    auto& parentTC = scene->Reg().get<TransformComponent>(rel.Parent);
+                    localMatrix = glm::inverse(parentTC.WorldMatrix) * transform;
+                }
+                
                 float matrixTranslation[3], matrixRotation[3], matrixScale[3];
-                ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transform), matrixTranslation, matrixRotation, matrixScale);
+                ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(localMatrix), matrixTranslation, matrixRotation, matrixScale);
 
                 tc.Translation = glm::vec3(matrixTranslation[0], matrixTranslation[1], matrixTranslation[2]);
                 tc.SetRotationEuler(glm::radians(glm::vec3(matrixRotation[0], matrixRotation[1], matrixRotation[2])));

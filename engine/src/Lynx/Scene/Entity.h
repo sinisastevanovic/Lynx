@@ -54,6 +54,22 @@ namespace Lynx
             m_Scene->m_Registry.remove<T>(m_EntityHandle);
         }
 
+        void AttachEntity(Entity parent, bool keepWorld = true)
+        {
+            if (keepWorld)
+                m_Scene->AttachEntityKeepWorld(m_EntityHandle, parent);
+            else
+                m_Scene->AttachEntity(m_EntityHandle, parent);
+        }
+
+        void DetachEntity(bool keepWorld = true)
+        {
+            if (keepWorld)
+                m_Scene->DetachEntityKeepWorld(m_EntityHandle);
+            else
+                m_Scene->DetachEntity(m_EntityHandle);
+        }
+
         UUID GetUUID()
         {
             return GetComponent<IDComponent>().ID;

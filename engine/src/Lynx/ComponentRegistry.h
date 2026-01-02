@@ -68,7 +68,7 @@ namespace Lynx
 
             info.add = [](entt::registry& registry, entt::entity entity)
             {
-                registry.emplace<T>(entity);
+                registry.emplace_or_replace<T>(entity);
             };
 
             info.has = [](entt::registry& registry, entt::entity entity)

@@ -31,6 +31,8 @@ namespace Lynx
         glm::quat Rotation = { 1.0f, 0.0f, 0.0f, 0.0f };
         glm::vec3 Scale = { 1.0f, 1.0f, 1.0f };
 
+        glm::mat4 WorldMatrix = glm::mat4(1.0f);
+
         TransformComponent() = default;
         TransformComponent(const TransformComponent&) = default;
         TransformComponent(const glm::vec3& translation) : Translation(translation) {}
@@ -64,6 +66,19 @@ namespace Lynx
         {
             Rotation = glm::quat(rotation);
         }
+    };
+
+    struct RelationshipComponent
+    {
+        entt::entity Parent = entt::null;
+        entt::entity FirstChild = entt::null;
+        entt::entity NextSibling = entt::null;
+        entt::entity PrevSibling = entt::null;
+
+        size_t ChildrenCount = 0;
+        
+        RelationshipComponent() = default;
+        RelationshipComponent(const RelationshipComponent&) = default;
     };
 
     struct MeshComponent

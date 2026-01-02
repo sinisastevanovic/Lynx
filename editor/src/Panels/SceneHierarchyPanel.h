@@ -21,6 +21,7 @@ namespace Lynx
     private:
         Scene* m_Context = nullptr;
         entt::entity m_Selection{ entt::null };
+        entt::entity m_DeferredDeletion{ entt::null };
         std::function<void(entt::entity)> OnSelectionChangedCallback = nullptr;
     };
 }

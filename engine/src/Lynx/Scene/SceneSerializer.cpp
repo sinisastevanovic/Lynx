@@ -54,14 +54,20 @@ namespace Lynx
         std::string sceneName = sceneJson["Scene"];
         LX_CORE_INFO("Deserializing scene: {}", sceneName);
 
+        std::unordered_map<uint64_t, entt::entity> uuidMap;
+
         auto entities = sceneJson["Entities"];
         if (entities.is_array())
         {
             for (auto& entityJson : entities)
             {
+                uint64_t uuid = entityJson["ID"].get<uint64_t>();
                 Entity newEntity = m_Scene->CreateEntity();
                 auto& idComp = newEntity.GetComponent<IDComponent>();
-                idComp.ID = UUID(entityJson["ID"].get<uint64_t>());
+
+                uuidMap[uuid] = newEntity;
+                
+                idComp.ID = UUID(uuid);
 
                 const auto& registeredComponents = Engine::Get().GetComponentRegistry().GetRegisteredComponents();
                 for (auto& [key, value] : entityJson.items())
@@ -74,6 +80,27 @@ namespace Lynx
                             info.add(m_Scene->Reg(), newEntity);
                             info.deserialize(m_Scene->Reg(), newEntity, value);
                         }
+                    }
+                }
+            }
+        }
+
+        for (auto& entityJson : entities)
+        {
+            uint64_t childUUID = entityJson["ID"].get<uint64_t>();
+
+            if (entityJson.contains("Relationship"))
+            {
+                auto& relJson = entityJson["Relationship"];
+                if (relJson.contains("Parent"))
+                {
+                    uint64_t parentUUID = relJson["Parent"].get<uint64_t>();
+                    if (uuidMap.contains(childUUID) && uuidMap.contains(parentUUID))
+                    {
+                        entt::entity child = uuidMap[childUUID];
+                        entt::entity parent = uuidMap[parentUUID];
+
+                        m_Scene->AttachEntity(child, parent);
                     }
                 }
             }

@@ -143,6 +143,8 @@ namespace Lynx
 
             auto viewportSize = m_Renderer->GetViewportSize();
 
+            m_Scene->UpdateGlobalTransforms();
+            
             bool foundCamera = false;
             {
                 auto view = m_Scene->Reg().view<TransformComponent, CameraComponent>();
@@ -155,7 +157,7 @@ namespace Lynx
                         if (!camera.FixedAspectRatio)
                             camera.Camera.SetViewportSize(viewportSize.first, viewportSize.second);
                         
-                        cameraView = glm::inverse(transform.GetTransform());
+                        cameraView = glm::inverse(transform.WorldMatrix);
                         cameraProjection = camera.Camera.GetProjection();
 
                         cameraPos = transform.Translation;
@@ -174,6 +176,7 @@ namespace Lynx
                 cameraProjection = m_EditorCamera.GetProjection();
                 cameraPos = m_EditorCamera.GetPosition();
             }
+
 
             // TODO: We should load all the textures and meshes before we run the scene!!!
             if (m_SceneState == SceneState::Play)
@@ -218,7 +221,7 @@ namespace Lynx
                 auto mesh = m_AssetManager->GetAsset<StaticMesh>(meshComp.Mesh);
                 if (mesh)
                 {
-                    AABB worldBounds = TransformAABB(mesh->GetBounds(), transform.GetTransform());
+                    AABB worldBounds = TransformAABB(mesh->GetBounds(), transform.WorldMatrix);
                     // TODO: Check if this is worth it. Using these flags splits the batches up, so more draw calls, but less geometry drawn...
                     RenderFlags flags = RenderFlags::None;
                     if (camFrustum.IsOnFrustum(worldBounds))
@@ -228,7 +231,7 @@ namespace Lynx
 
                     if (flags != RenderFlags::None)
                     {
-                        m_Renderer->SubmitMesh(mesh, transform.GetTransform(), flags, (int)entity);
+                        m_Renderer->SubmitMesh(mesh, transform.WorldMatrix, flags, (int)entity);
                     }
                 }
                 
@@ -409,6 +412,23 @@ namespace Lynx
                 transform.Rotation = glm::quat(rot[0], rot[1], rot[2], rot[3]);
                 auto scale = json["Scale"];
                 transform.Scale = glm::vec3(scale[0], scale[1], scale[2]);
+            });
+
+        m_ComponentRegistry.RegisterComponent<RelationshipComponent>("Relationship",
+            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+            {
+                auto& comp = reg.get<RelationshipComponent>(entity);
+                if (comp.Parent != entt::null)
+                {
+                    if (reg.all_of<IDComponent>(comp.Parent))
+                    {
+                        json["Parent"] = (uint64_t)reg.get<IDComponent>(comp.Parent).ID;
+                    }
+                }
+            },
+            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+            {
+                
             });
 
         m_ComponentRegistry.RegisterComponent<TagComponent>("Tag",
