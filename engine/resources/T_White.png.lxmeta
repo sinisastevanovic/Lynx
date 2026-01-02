@@ -1,4 +1,13 @@
 {
+    "Settings": {
+        "FilterMode": 0,
+        "GenerateMips": false,
+        "IsSRGB": false,
+        "TextureFormat": 1,
+        "UseAnisotropy": false,
+        "Version": 2,
+        "WrapMode": 0
+    },
     "Type": 1,
-    "UUID": 4314268673432672631
+    "UUID": 8395672661612956467
 }
