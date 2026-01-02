@@ -35,19 +35,7 @@ namespace Lynx
         auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/Blit.glsl");
         if (!m_BindingLayout) Init(m_Device); // Ensure layout exists
 
-        // Create Pipeline for this format
-        nvrhi::FramebufferInfo fbInfo;
-        fbInfo.addColorFormat(desc.format);
-
-        auto pipeDesc = nvrhi::GraphicsPipelineDesc()
-            .addBindingLayout(m_BindingLayout)
-            .setVertexShader(shader->GetVertexShader())
-            .setFragmentShader(shader->GetPixelShader())
-            .setPrimType(nvrhi::PrimitiveType::TriangleList);
-        pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::None;
-        pipeDesc.renderState.depthStencilState.depthTestEnable = false;
-
-        auto pipeline = m_Device->createGraphicsPipeline(pipeDesc, fbInfo);
+        auto pipeline = GetCachedPipeline(desc.format);
 
         // Sampler (Linear Clamp)
         if (!m_Sampler) {
@@ -86,5 +74,30 @@ namespace Lynx
         }
 
         commandList->endMarker();
+    }
+
+    nvrhi::GraphicsPipelineHandle MipMapBlitPass::GetCachedPipeline(nvrhi::Format format)
+    {
+        if (m_PipelineCache.contains(format))
+            return m_PipelineCache[format];
+
+        auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/Blit.glsl");
+
+        nvrhi::FramebufferInfo fbInfo;
+        fbInfo.addColorFormat(format); // The key variation
+
+        auto pipeDesc = nvrhi::GraphicsPipelineDesc()
+            .addBindingLayout(m_BindingLayout)
+            .setVertexShader(shader->GetVertexShader())
+            .setFragmentShader(shader->GetPixelShader())
+            .setPrimType(nvrhi::PrimitiveType::TriangleList);
+        pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::None;
+        pipeDesc.renderState.depthStencilState.depthTestEnable = false;
+        pipeDesc.renderState.blendState.targets[0].setBlendEnable(false);
+
+        auto pipeline = m_Device->createGraphicsPipeline(pipeDesc, fbInfo);
+        m_PipelineCache[format] = pipeline;
+
+        return pipeline;
     }
 }

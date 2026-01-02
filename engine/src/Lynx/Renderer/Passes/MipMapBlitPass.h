@@ -14,12 +14,16 @@ namespace Lynx
         void Generate(nvrhi::CommandListHandle commandList, nvrhi::TextureHandle texture);
 
     private:
+        nvrhi::GraphicsPipelineHandle GetCachedPipeline(nvrhi::Format format);
+
+    private:
         nvrhi::DeviceHandle m_Device;
 
         nvrhi::BindingLayoutHandle m_BindingLayout;
-        nvrhi::GraphicsPipelineHandle m_Pipeline;
         nvrhi::SamplerHandle m_Sampler;
         PipelineState m_PipelineState;
+
+        std::unordered_map<nvrhi::Format, nvrhi::GraphicsPipelineHandle> m_PipelineCache;
     };
 }
 
