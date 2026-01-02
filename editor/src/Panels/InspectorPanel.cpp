@@ -36,7 +36,7 @@ namespace Lynx
 
             for (const auto& [name, info] : registeredComponents)
             {
-                if (name == "Tag" || name == "Transform")
+                if (name == "Tag" || name == "Transform" || name == "Relationship")
                     continue;
                 
                 if (info.has(m_Context->Reg(), m_Selection))

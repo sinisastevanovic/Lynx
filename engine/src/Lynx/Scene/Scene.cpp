@@ -115,23 +115,39 @@ namespace Lynx
 
     void Scene::OnRuntimeStart()
     {
+        UpdateGlobalTransforms();
+        
         Engine::Get().GetScriptEngine()->OnRuntimeStart(this);
     
         auto& physicsSystem = Engine::Get().GetPhysicsSystem();
         JPH::BodyInterface& bodyInterface = physicsSystem.GetBodyInterface();
 
-        auto view = m_Registry.view<TransformComponent, RigidBodyComponent, RelationshipComponent>();
-        for (auto entity : view)
         {
-            auto [transform, rb, rel] = view.get<TransformComponent, RigidBodyComponent, RelationshipComponent>(entity);
-            if (!rb.RuntimeBodyCreated)
+            auto view = m_Registry.view<TransformComponent, RigidBodyComponent, RelationshipComponent>();
+            std::vector<entt::entity> entitiesToDetach;
+
+            for (auto entity : view)
             {
+                auto [transform, rb, rel] = view.get<TransformComponent, RigidBodyComponent, RelationshipComponent>(entity);
                 if (rel.Parent != entt::null)
                 {
-                    DetachEntity(entity);
-                    LX_CORE_WARN("Entity was detached, as entities with RigidBodyComponents cannot be attached to another entity!");
+                    entitiesToDetach.push_back(entity);
                 }
-                
+            }
+
+            for (auto entity : entitiesToDetach)
+            {
+                DetachEntityKeepWorld(entity);
+                LX_CORE_WARN("Entity with RigidBody was detached from hierarchy at runtime start.");
+            }
+        }
+
+        auto view = m_Registry.view<TransformComponent, RigidBodyComponent>();
+        for (auto entity : view)
+        {
+            auto [transform, rb] = view.get<TransformComponent, RigidBodyComponent>(entity);
+            if (!rb.RuntimeBodyCreated)
+            {
                 JPH::ShapeRefC shape;
 
                 if (m_Registry.all_of<BoxColliderComponent>(entity))
@@ -271,12 +287,6 @@ namespace Lynx
         for (auto entity : view)
         {
             auto [transform, rb, rel] = view.get<TransformComponent, RigidBodyComponent, RelationshipComponent>(entity);
-
-            if (rel.Parent != entt::null)
-            {
-                DetachEntity(entity);
-                LX_CORE_WARN("Entity was detached, as entities with RigidBodyComponents cannot be attached to another entity!");
-            }
             
             if (!rb.RuntimeBodyCreated)
             {
@@ -358,6 +368,12 @@ namespace Lynx
         auto& childRel = m_Registry.get<RelationshipComponent>(child);
         childRel.Parent = parent;
 
+        if (m_Registry.all_of<RigidBodyComponent>(child))
+        {
+            LX_CORE_WARN("Cannot attach an entity that has a RigidBodyComponent!");
+            return;
+        }
+
         auto& parentRel = m_Registry.get<RelationshipComponent>(parent);
         if (parentRel.FirstChild == entt::null)
         {
@@ -384,6 +400,12 @@ namespace Lynx
 
     void Scene::AttachEntityKeepWorld(entt::entity child, entt::entity parent)
     {
+        if (m_Registry.all_of<RigidBodyComponent>(child))
+        {
+            LX_CORE_WARN("Cannot attach an entity that has a RigidBodyComponent!");
+            return;
+        }
+        
         auto& childTransform = m_Registry.get<TransformComponent>(child);
         auto& parentTransform = m_Registry.get<TransformComponent>(parent);
 
