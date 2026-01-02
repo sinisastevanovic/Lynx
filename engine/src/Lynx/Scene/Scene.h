@@ -4,14 +4,16 @@
 #include <entt/entt.hpp>
 #include <glm/fwd.hpp>
 
+#include "Lynx/Asset/Asset.h"
+
 namespace Lynx
 {
     class Entity;
 
-    class LX_API Scene
+    class LX_API Scene : public Asset, public std::enable_shared_from_this<Scene>
     {
     public:
-        Scene();
+        Scene(const std::string& filePath = "");
         ~Scene();
 
         Entity CreateEntity(const std::string& name = std::string());
@@ -30,10 +32,17 @@ namespace Lynx
 
         void UpdateGlobalTransforms();
 
+        static AssetType GetAssetType() { return AssetType::Scene; }
+        virtual AssetType GetType() const override { return Scene::GetAssetType(); }
+
         // Temporary access to registry
         entt::registry& Reg() { return m_Registry; }
 
+    protected:
+        virtual bool LoadSourceData() override;
+
     private:
+        
         void UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform);
         
         entt::registry m_Registry;

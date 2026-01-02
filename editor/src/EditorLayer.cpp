@@ -55,7 +55,16 @@ namespace Lynx
         {
             if (ImGui::BeginMenu("File"))
             {
+                ImGui::BeginDisabled(m_Engine->GetSceneState() == SceneState::Play);
+                if (ImGui::MenuItem("New Scene"))
+                {
+                    NewScene();
+                }
                 if (ImGui::MenuItem("Save Scene", "Ctrl+S"))
+                {
+                    SaveScene();
+                }
+                if (ImGui::MenuItem("Save Scene As"))
                 {
                     SaveSceneAs();
                 }
@@ -63,6 +72,7 @@ namespace Lynx
                 {
                     OpenScene();
                 }
+                ImGui::EndDisabled();
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
@@ -160,6 +170,16 @@ namespace Lynx
         m_Engine->GetScriptEngine()->OnEditorStart(m_Engine->GetActiveScene().get());
     }
 
+    void EditorLayer::NewScene()
+    {
+        m_EditorScene = std::make_shared<Scene>();
+        m_EditorScene->OnRuntimeStop();
+        m_Engine->SetActiveScene(m_EditorScene);
+        m_Engine->GetScriptEngine()->OnEditorStart(m_Engine->GetActiveScene().get());
+        m_SelectedEntity = entt::null;
+        OnSceneContextChanged(m_Engine->GetActiveScene().get());
+    }
+
     void EditorLayer::SaveSceneAs()
     {
         std::string filepath = FileDialogs::SaveFile(AssetUtils::GetFilterForAssetType(AssetType::Scene));
@@ -170,24 +190,42 @@ namespace Lynx
         }
     }
 
+    void EditorLayer::SaveScene()
+    {
+        std::string filepath = m_EditorScene->GetFilePath();
+        if (!filepath.empty())
+        {
+            SceneSerializer serializer(m_EditorScene);
+            serializer.Serialize(filepath);
+        }
+        else
+        {
+            SaveSceneAs();
+        }
+    }
+
     void EditorLayer::OpenScene()
     {
         std::string filepath = FileDialogs::OpenFile(AssetUtils::GetFilterForAssetType(AssetType::Scene));
         if (!filepath.empty())
         {
-            m_EditorScene = std::make_shared<Scene>();
+            m_EditorScene = Engine::Get().GetAssetManager().GetAsset<Scene>(filepath, AssetLoadMode::Blocking);
             m_EditorScene->OnRuntimeStop();
             m_Engine->SetActiveScene(m_EditorScene);
             m_Engine->GetScriptEngine()->OnEditorStart(m_Engine->GetActiveScene().get());
-
-            SceneSerializer serializer(m_EditorScene);
-            if (serializer.Deserialize(filepath))
-            {
-                m_SelectedEntity = entt::null;
-
-                OnSceneContextChanged(m_Engine->GetActiveScene().get());
-            }
+            m_SelectedEntity = entt::null;
+            OnSceneContextChanged(m_Engine->GetActiveScene().get());
         }
+    }
+
+    void EditorLayer::OpenScene(AssetHandle handle)
+    {
+        m_EditorScene = Engine::Get().GetAssetManager().GetAsset<Scene>(handle, AssetLoadMode::Blocking);
+        m_EditorScene->OnRuntimeStop();
+        m_Engine->SetActiveScene(m_EditorScene);
+        m_Engine->GetScriptEngine()->OnEditorStart(m_Engine->GetActiveScene().get());
+        m_SelectedEntity = entt::null;
+        OnSceneContextChanged(m_Engine->GetActiveScene().get());
     }
 
     void EditorLayer::OnSceneContextChanged(Scene* scene)
@@ -208,5 +246,14 @@ namespace Lynx
         m_SelectedAsset = asset;
         for (auto& panel : m_Panels)
             panel->OnSelectedAssetChanged(asset);
+
+        if (Engine::Get().GetAssetRegistry().Contains(m_SelectedAsset))
+        {
+            const auto& metadata = Engine::Get().GetAssetRegistry().Get(m_SelectedAsset);
+            if (metadata.Type == AssetType::Scene)
+            {
+                OpenScene(metadata.Handle);
+            }
+        }
     }
 }

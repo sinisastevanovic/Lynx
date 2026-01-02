@@ -14,6 +14,8 @@
 #include "Lynx/Scripting/ScriptEngine.h"
 #include <glm/gtx/matrix_decompose.hpp>
 
+#include "SceneSerializer.h"
+
 namespace Lynx
 {
     static void SetTransformFromMatrix(TransformComponent& transform, const glm::mat4& matrix)
@@ -66,8 +68,11 @@ namespace Lynx
         }
     }
     
-    Scene::Scene()
+    Scene::Scene(const std::string& filePath)
+        : Asset(filePath)
     {
+        m_Registry.ctx().emplace<Scene*>(this);
+        
         m_Registry.on_destroy<RigidBodyComponent>().connect<&OnRigidBodyComponentDestroyed>();
         m_Registry.on_destroy<NativeScriptComponent>().connect<&OnNativeScriptComponentDestroyed>();
         m_Registry.on_destroy<LuaScriptComponent>().connect<&OnLuaScriptComponentDestroyed>();
@@ -481,6 +486,12 @@ namespace Lynx
                 }
             }
         }
+    }
+
+    bool Scene::LoadSourceData()
+    {
+        SceneSerializer serializer(shared_from_this());
+        return serializer.Deserialize(m_FilePath);
     }
 
     void Scene::UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform)

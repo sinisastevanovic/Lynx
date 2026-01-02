@@ -21,8 +21,11 @@ namespace Lynx
         entt::entity GetSelectedEntity() const { return m_SelectedEntity; }
 
     private:
+        void NewScene();
         void SaveSceneAs();
+        void SaveScene();
         void OpenScene();
+        void OpenScene(AssetHandle handle);
 
         void OnSceneContextChanged(Scene* scene);
         void OnSelectedEntityChanged(entt::entity entity);

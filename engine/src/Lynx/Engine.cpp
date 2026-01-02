@@ -127,6 +127,9 @@ namespace Lynx
             
             m_Window->OnUpdate();
 
+            if (m_Window->GetWidth() == 0 || m_Window->GetHeight() == 0)
+                continue;
+
             m_AssetManager->Update();
 
             ImGui_ImplGlfw_NewFrame();
@@ -806,10 +809,10 @@ namespace Lynx
 
                 if (!lscComp.Self.valid() && lscComp.ScriptHandle.IsValid())
                 {
-                    auto scene = Engine::Get().GetActiveScene();
+                    Scene* scene = reg.ctx().get<Scene*>();
                     if (scene)
                     {
-                        Entity e { entity, scene.get() };
+                        Entity e { entity, scene };
                         Engine::Get().GetScriptEngine()->LoadScript(e);
                     }
                 }

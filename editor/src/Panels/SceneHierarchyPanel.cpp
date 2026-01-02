@@ -13,6 +13,20 @@ namespace Lynx
 
         if (m_Context)
         {
+            std::string sceneName;
+            if (!m_Context->GetFilePath().empty())
+            {
+                std::filesystem::path filePath = m_Context->GetFilePath();
+                sceneName = filePath.stem().string();
+            }
+            else
+            {
+                sceneName = "Untitled";
+            }
+
+            ImGui::Text("%s", sceneName.c_str());
+            ImGui::Separator();
+            
             for (auto entity : m_Context->Reg().view<entt::entity>())
             {
                 auto& rel = m_Context->Reg().get<RelationshipComponent>(entity);

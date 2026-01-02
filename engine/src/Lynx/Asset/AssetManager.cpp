@@ -6,6 +6,7 @@
 #include "Material.h"
 #include "Script.h"
 #include "Shader.h"
+#include "Lynx/Scene/Scene.h"
 
 namespace Lynx
 {
@@ -143,9 +144,11 @@ namespace Lynx
             case AssetType::Shader:
                 newAsset = std::make_shared<Shader>(metadata.FilePath.string());
                 break;
+            case AssetType::Scene:
+                newAsset = std::make_shared<Scene>(metadata.FilePath.string());
+                break;
             case AssetType::None:
             case AssetType::SkeletalMesh:
-            case AssetType::Scene:
             default: LX_CORE_ERROR("AssetType not supported yet ({0})!", static_cast<int>(metadata.Type)); return nullptr;
         }
 

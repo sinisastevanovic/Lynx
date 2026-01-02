@@ -16,6 +16,13 @@ namespace Lynx
             return;
         }
 
+        auto metadata = Engine::Get().GetAssetRegistry().Get(m_SelectedAsset);
+        if (metadata.Type == AssetType::Scene)
+        {
+            ImGui::End();
+            return;
+        }
+
         auto asset = Engine::Get().GetAssetManager().GetAsset<Asset>(m_SelectedAsset);
         if (!asset)
         {
@@ -105,6 +112,12 @@ namespace Lynx
         if (!m_SelectedAsset.IsValid())
             return;
 
+        auto metadata = Engine::Get().GetAssetRegistry().Get(m_SelectedAsset);
+        if (metadata.Type == AssetType::Scene)
+        {
+            return;
+        }
+        
         auto asset = Engine::Get().GetAssetManager().GetAsset<Asset>(handle);
         if (asset && asset->GetType() == AssetType::Texture)
             m_EditingSpec = std::static_pointer_cast<Texture>(asset)->GetSpecification();
