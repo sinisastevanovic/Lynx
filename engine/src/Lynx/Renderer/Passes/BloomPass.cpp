@@ -22,7 +22,7 @@ namespace Lynx
             .setBindingOffsets({0, 0, 0, 0})
         );
 
-        m_Sampler = ctx.GetSampler(SamplerSettings{TextureWrap::Clamp, TextureFilter::Linear});
+        m_Sampler = ctx.GetSampler(SamplerSettings{TextureWrap::Clamp, TextureFilter::Bilinear});
 
         m_PipelineState.SetPath("engine/resources/Shaders/Bloom.glsl");
         m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)

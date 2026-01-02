@@ -15,9 +15,9 @@ namespace Lynx
 
     enum class TextureFilter
     {
-        Linear = 0,
+        Bilinear = 0,
         Nearest,
-        Anisotropic
+        Trilinear
     };
 
     enum class TextureFormat
@@ -34,11 +34,12 @@ namespace Lynx
     struct SamplerSettings
     {
         TextureWrap WrapMode = TextureWrap::Repeat;
-        TextureFilter FilterMode = TextureFilter::Linear;
+        TextureFilter FilterMode = TextureFilter::Trilinear;
+        bool UseAnisotropy = true;
 
         bool operator==(const SamplerSettings& other) const
         {
-            return this->WrapMode == other.WrapMode && this->FilterMode == other.FilterMode;
+            return this->WrapMode == other.WrapMode && this->FilterMode == other.FilterMode && this->UseAnisotropy == other.UseAnisotropy;
         }
     };
 
@@ -54,7 +55,7 @@ namespace Lynx
 
         TextureSpecification() = default;
 
-        virtual uint32_t GetCurrentVersion() const override { return 1; }
+        virtual uint32_t GetCurrentVersion() const override { return 2; }
 
         virtual void Serialize(nlohmann::json& json) const override
         {
@@ -64,6 +65,7 @@ namespace Lynx
             json["FilterMode"] = SamplerSettings.FilterMode;
             json["IsSRGB"] = IsSRGB;
             json["GenerateMips"] = GenerateMips;
+            json["UseAnisotropy"] = SamplerSettings.UseAnisotropy;
         }
 
         virtual void Deserialize(const nlohmann::json& json) override
@@ -71,8 +73,9 @@ namespace Lynx
             Format = (TextureFormat)json["TextureFormat"];
             SamplerSettings.WrapMode = (TextureWrap)json["WrapMode"];
             SamplerSettings.FilterMode = (TextureFilter)json["FilterMode"];
-            IsSRGB = json["IsSRGB"];
-            GenerateMips = json["GenerateMips"];
+            IsSRGB = json.value("IsSRGB", false);
+            GenerateMips = json.value("GenerateMips", true);
+            SamplerSettings.UseAnisotropy = json.value("UseAnisotropy", true);
         }
 
         bool operator==(const TextureSpecification& other) const
@@ -94,7 +97,8 @@ namespace std
         {
             size_t h1 = std::hash<int>{}((int)sampler.WrapMode);
             size_t h2 = std::hash<int>{}((int)sampler.FilterMode);
-            return h1 ^ (h2 << 1);
+            size_t h3 = std::hash<bool>{}(sampler.UseAnisotropy);
+            return h1 ^ (h2 << 1) ^ (h3 << 2);
         }
     };
 }

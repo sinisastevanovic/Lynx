@@ -44,7 +44,7 @@ namespace Lynx
         if (ImGui::Checkbox("Generate Mips", &m_EditingSpec.GenerateMips)) m_IsDirty = true;
         if (ImGui::Checkbox("Is sRGB", &m_EditingSpec.IsSRGB)) m_IsDirty = true;
 
-        const char* filterOptions[] = { "Linear", "Nearest", "Anisotropic" };
+        const char* filterOptions[] = { "Bilinear", "Nearest", "Trilinear" };
         int currentFilter = (int)m_EditingSpec.SamplerSettings.FilterMode;
         if (ImGui::Combo("Filter Mode", &currentFilter, filterOptions, IM_ARRAYSIZE(filterOptions)))
         {
@@ -58,6 +58,14 @@ namespace Lynx
         {
             m_EditingSpec.SamplerSettings.WrapMode = (TextureWrap)currentWrap;
             m_IsDirty = true;
+        }
+
+        if (m_EditingSpec.SamplerSettings.FilterMode == TextureFilter::Trilinear)
+        {
+            if (ImGui::Checkbox("Use Anisotropy", &m_EditingSpec.SamplerSettings.UseAnisotropy))
+            {
+                m_IsDirty = true;
+            }
         }
 
         ImGui::Spacing();

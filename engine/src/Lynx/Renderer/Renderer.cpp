@@ -215,7 +215,7 @@ namespace Lynx
         m_ImGuiBackend = std::make_unique<ImGui_NVRHI>();
         m_ImGuiBackend->init(m_NvrhiDevice);
 
-        m_MipMapGenPass = std::make_unique<MipMapGenPass>();
+        m_MipMapGenPass = std::make_unique<MipMapBlitPass>();
         m_MipMapGenPass->Init(m_NvrhiDevice);
         
         LX_CORE_INFO("Renderer initialized successfully (Pipeline loaded).");
@@ -233,10 +233,16 @@ namespace Lynx
         nvrhi::SamplerAddressMode addressMode = Helpers::WrapModeToNvrhi(settings.WrapMode);
         desc.setAddressU(addressMode).setAddressV(addressMode).setAddressW(addressMode);
 
-        if (settings.FilterMode == TextureFilter::Linear)
+        if (settings.FilterMode == TextureFilter::Nearest)
+            desc.setMinFilter(false).setMagFilter(false).setMipFilter(false);
+        else if (settings.FilterMode == TextureFilter::Bilinear)
+            desc.setMinFilter(true).setMagFilter(true).setMipFilter(false);
+        else if (settings.FilterMode == TextureFilter::Trilinear)
+        {
             desc.setMinFilter(true).setMagFilter(true).setMipFilter(true);
-        else
-            desc.setMinFilter(false).setMagFilter(false).setMipFilter(false); // TODO: mipFilter
+            if (settings.UseAnisotropy)
+                desc.setMaxAnisotropy(m_MaxAnisotropy);
+        }
 
         nvrhi::SamplerHandle handle = m_NvrhiDevice->createSampler(desc);
         m_SamplerCache[settings] = handle;
@@ -259,7 +265,8 @@ namespace Lynx
             .setDebugName(specification.DebugName)
             .enableAutomaticStateTracking(nvrhi::ResourceStates::ShaderResource)
             .setMipLevels(mipLevels)
-            .setIsUAV(specification.GenerateMips);
+            .setIsUAV(false)
+            .setIsRenderTarget(specification.GenerateMips);
 
         auto result = m_NvrhiDevice->createTexture(desc);
         if (!result)
@@ -443,6 +450,7 @@ namespace Lynx
         vk::PhysicalDeviceFeatures features10;
         features10.geometryShader = VK_TRUE;
         features10.independentBlend = VK_TRUE;
+        features10.samplerAnisotropy = VK_TRUE;
 
         features13.pNext = &features12;
         

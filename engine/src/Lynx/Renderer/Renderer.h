@@ -12,6 +12,7 @@
 #include "RenderPass.h"
 #include "Passes/BloomPass.h"
 #include "Passes/CompositePass.h"
+#include "Passes/MipMapBlitPass.h"
 
 struct GLFWwindow;
 
@@ -88,6 +89,9 @@ namespace Lynx
         void SetFXAAEnabled(bool enabled) { m_FXAAEnabled = enabled; }
         bool GetFXAAEnabled() const { return m_FXAAEnabled; }
 
+        void SetMaxAnisotropy(float maxAnisotropy) { m_MaxAnisotropy = maxAnisotropy; }
+        float GetMaxAnisotropy() const { return m_MaxAnisotropy; }
+
     private:
         void InitVulkan(GLFWwindow* window);
         void InitNVRHI();
@@ -128,7 +132,7 @@ namespace Lynx
         RenderPipeline m_Pipeline;
         std::unique_ptr<CompositePass> m_CompositePass;
         std::unique_ptr<BloomPass> m_BloomPass;
-        std::unique_ptr<MipMapGenPass> m_MipMapGenPass;
+        std::unique_ptr<MipMapBlitPass> m_MipMapGenPass;
         RenderContext m_RenderContext;
         RenderData m_CurrentFrameData;
 
@@ -137,6 +141,7 @@ namespace Lynx
         bool m_ShowGrid = true;
         bool m_ShowColliders = false;
         bool m_FXAAEnabled = true;
+        float m_MaxAnisotropy = 16.0f;
 
         RenderStats m_Stats;
     };
