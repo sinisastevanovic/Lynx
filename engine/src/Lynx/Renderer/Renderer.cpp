@@ -137,6 +137,7 @@ namespace Lynx
         m_Pipeline.Clear();
         m_BloomPass.reset();
         m_CompositePass.reset();
+        m_MipMapGenPass.reset();
         m_RenderContext = RenderContext();
         m_CurrentFrameData = RenderData();
         m_OpaqueBatches.clear();
@@ -213,6 +214,9 @@ namespace Lynx
 
         m_ImGuiBackend = std::make_unique<ImGui_NVRHI>();
         m_ImGuiBackend->init(m_NvrhiDevice);
+
+        m_MipMapGenPass = std::make_unique<MipMapGenPass>();
+        m_MipMapGenPass->Init(m_NvrhiDevice);
         
         LX_CORE_INFO("Renderer initialized successfully (Pipeline loaded).");
     }
@@ -249,15 +253,21 @@ namespace Lynx
 
     nvrhi::TextureHandle Renderer::CreateTexture(const TextureSpecification& specification, unsigned char* data)
     {
+        uint32_t mipLevels = 1;
+        if (specification.GenerateMips)
+        {
+            mipLevels = (uint32_t)(std::floor(std::log2(std::max(specification.Width, specification.Height))) + 1);
+        }
+        
         auto desc = nvrhi::TextureDesc()
             .setDimension(nvrhi::TextureDimension::Texture2D)
             .setWidth(specification.Width)
             .setHeight(specification.Height)
             .setFormat(Helpers::TextureFormatToNvrhi(specification.Format, specification.IsSRGB))
             .setDebugName(specification.DebugName)
-            .enableAutomaticStateTracking(nvrhi::ResourceStates::ShaderResource);
-            //.setMipLevels(specification.GenerateMips ? (uint32_t)(floor(log2(std::max(specification.Width, specification.Height))) + 1) : 1);
-            //.setMipLevels(1);
+            .enableAutomaticStateTracking(nvrhi::ResourceStates::ShaderResource)
+            .setMipLevels(mipLevels)
+            .setIsUAV(specification.GenerateMips);
 
         auto result = m_NvrhiDevice->createTexture(desc);
         if (!result)
@@ -278,6 +288,12 @@ namespace Lynx
             auto cmdList = m_NvrhiDevice->createCommandList();
             cmdList->open();
             cmdList->writeTexture(result, 0, 0, data, rowPitch, depthPitch);
+
+            if (specification.GenerateMips)
+            {
+                m_MipMapGenPass->Generate(cmdList, result);
+            }
+            
             cmdList->close();
             m_NvrhiDevice->executeCommandList(cmdList);
         }

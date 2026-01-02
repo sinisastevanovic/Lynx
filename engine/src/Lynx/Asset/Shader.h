@@ -4,6 +4,12 @@
 
 namespace Lynx
 {
+    enum class ShaderType
+    {
+        Standard,
+        Compute
+    };
+    
     class LX_API Shader : public Asset
     {
     public:
@@ -17,15 +23,18 @@ namespace Lynx
 
         nvrhi::ShaderHandle GetVertexShader() const { return m_VertexShader; }
         nvrhi::ShaderHandle GetPixelShader() const { return m_PixelShader; }
+        nvrhi::ShaderHandle GetComputeShader() const { return m_ComputeShader; }
 
     private:
         void LoadAndCompile();
         std::unordered_map<nvrhi::ShaderType, std::string> PreProcess(const std::string& source);
 
     private:
-        std::string m_FilePath;
+        ShaderType m_ShaderType = ShaderType::Standard;
+        
         nvrhi::ShaderHandle m_VertexShader;
         nvrhi::ShaderHandle m_PixelShader;
+        nvrhi::ShaderHandle m_ComputeShader;
     };
 
 }

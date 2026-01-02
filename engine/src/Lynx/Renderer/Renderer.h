@@ -3,6 +3,7 @@
 #include <nvrhi/nvrhi.h>
 #include <glm/glm.hpp>
 
+#include "Passes/MipMapGenPass.h"
 #include "Lynx/Asset/Texture.h"
 #include "Lynx/Asset/StaticMesh.h"
 #include "Lynx/Asset/TextureSpecification.h"
@@ -128,6 +129,7 @@ namespace Lynx
         RenderPipeline m_Pipeline;
         std::unique_ptr<CompositePass> m_CompositePass;
         std::unique_ptr<BloomPass> m_BloomPass;
+        std::unique_ptr<MipMapGenPass> m_MipMapGenPass;
         RenderContext m_RenderContext;
         RenderData m_CurrentFrameData;
 

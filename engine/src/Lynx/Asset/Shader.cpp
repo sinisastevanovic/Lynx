@@ -8,7 +8,7 @@
 namespace Lynx
 {
     Shader::Shader(const std::string& filePath)
-        : m_FilePath(filePath)
+        : Asset(filePath)
     {
         LoadAndCompile();
     }
@@ -38,7 +38,12 @@ namespace Lynx
 
             for (auto& [type, src] : sources)
             {
-                shaderc_shader_kind kind = (type == nvrhi::ShaderType::Vertex) ? shaderc_vertex_shader : shaderc_fragment_shader;
+                shaderc_shader_kind kind;
+                if (type == nvrhi::ShaderType::Vertex) kind = shaderc_vertex_shader;
+                else if (type == nvrhi::ShaderType::Pixel) kind = shaderc_fragment_shader;
+                else if (type == nvrhi::ShaderType::Compute) kind = shaderc_compute_shader;
+                else continue;
+                
                 std::vector<uint32_t> spirv = ShaderUtils::CompileGLSL(src, kind, m_FilePath.c_str());
                 if (spirv.empty())
                     continue;
@@ -46,10 +51,16 @@ namespace Lynx
                 nvrhi::ShaderDesc desc(type);
                 auto handle = device->createShader(desc, spirv.data(), spirv.size() * 4);
 
+                m_ShaderType = ShaderType::Standard;
                 if (type == nvrhi::ShaderType::Vertex)
                     m_VertexShader = handle;
                 else if (type == nvrhi::ShaderType::Pixel)
                     m_PixelShader = handle;
+                else if (type == nvrhi::ShaderType::Compute)
+                {
+                    m_ComputeShader = handle;
+                    m_ShaderType = ShaderType::Compute;
+                }
             }
         }
         else
@@ -79,6 +90,8 @@ namespace Lynx
                 result[nvrhi::ShaderType::Vertex] = shaderCode;
             else if (type == "pixel" || type == "fragment")
                 result[nvrhi::ShaderType::Pixel] = shaderCode;
+            else if (type == "compute")
+                result[nvrhi::ShaderType::Compute] = shaderCode;
         }
 
         return result;

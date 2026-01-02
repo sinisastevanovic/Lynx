@@ -48,7 +48,7 @@ namespace Lynx
         uint32_t Height = 1;
         TextureFormat Format = TextureFormat::RGBA8;
         SamplerSettings SamplerSettings;
-        bool GenerateMips = false;
+        bool GenerateMips = true;
         bool IsSRGB = false;
         std::string DebugName = "Texture";
 
