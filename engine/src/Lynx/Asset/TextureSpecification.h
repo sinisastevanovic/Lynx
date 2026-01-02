@@ -71,6 +71,15 @@ namespace Lynx
             IsSRGB = json["IsSRGB"];
             GenerateMips = json["GenerateMips"];
         }
+
+        bool operator==(const TextureSpecification& other) const
+        {
+            return Format == other.Format &&
+                    SamplerSettings == other.SamplerSettings &&
+                    GenerateMips == other.GenerateMips &&
+                    IsSRGB == other.IsSRGB;
+        }
+        bool operator!=(const TextureSpecification& other) const { return !(*this == other); }
     };
 }
 

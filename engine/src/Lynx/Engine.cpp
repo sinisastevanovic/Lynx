@@ -77,7 +77,7 @@ namespace Lynx
         if (gameModule)
         {
             gameModule->RegisterScripts();
-            gameModule->RegisterComponents(&ComponentRegistry);
+            gameModule->RegisterComponents(&m_ComponentRegistry);
             gameModule->OnStart();
         }
         auto cubeMesh = m_AssetManager->GetDefaultCube();
@@ -377,7 +377,7 @@ namespace Lynx
 
     void Engine::RegisterComponents()
     {
-        ComponentRegistry.RegisterComponent<TransformComponent>("Transform",
+        m_ComponentRegistry.RegisterComponent<TransformComponent>("Transform",
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& transform = reg.get<TransformComponent>(entity);
@@ -411,7 +411,7 @@ namespace Lynx
                 transform.Scale = glm::vec3(scale[0], scale[1], scale[2]);
             });
 
-        ComponentRegistry.RegisterComponent<TagComponent>("Tag",
+        m_ComponentRegistry.RegisterComponent<TagComponent>("Tag",
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& tag = reg.get<TagComponent>(entity).Tag;
@@ -435,7 +435,7 @@ namespace Lynx
                 tagComponent.Tag = tag;
             });
 
-        ComponentRegistry.RegisterComponent<CameraComponent>("Camera",
+        m_ComponentRegistry.RegisterComponent<CameraComponent>("Camera",
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& cameraComp = reg.get<CameraComponent>(entity);
@@ -540,7 +540,7 @@ namespace Lynx
                 }
             });
 
-        ComponentRegistry.RegisterComponent<MeshComponent>("Mesh",
+        m_ComponentRegistry.RegisterComponent<MeshComponent>("Mesh",
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& meshComp = reg.get<MeshComponent>(entity);
@@ -586,7 +586,7 @@ namespace Lynx
                 meshComp.Mesh = AssetHandle(json["Mesh"]);
             });
 
-        ComponentRegistry.RegisterComponent<RigidBodyComponent>("RigidBody",
+        m_ComponentRegistry.RegisterComponent<RigidBodyComponent>("RigidBody",
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& rbComp = reg.get<RigidBodyComponent>(entity);
@@ -632,7 +632,7 @@ namespace Lynx
                 rbComp.LockRotationZ = json["LockRotationZ"];
             });
 
-        ComponentRegistry.RegisterComponent<BoxColliderComponent>("BoxCollider",
+        m_ComponentRegistry.RegisterComponent<BoxColliderComponent>("BoxCollider",
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& bcComp = reg.get<BoxColliderComponent>(entity);
@@ -650,7 +650,7 @@ namespace Lynx
                 bcComp.HalfSize = glm::vec3(halfSize[0], halfSize[1], halfSize[2]);
             });
 
-        ComponentRegistry.RegisterComponent<SphereColliderComponent>("SphereCollider",
+        m_ComponentRegistry.RegisterComponent<SphereColliderComponent>("SphereCollider",
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& scComp = reg.get<SphereColliderComponent>(entity);
@@ -667,7 +667,7 @@ namespace Lynx
                 scComp.Radius = json["Radius"];
             });
 
-        ComponentRegistry.RegisterComponent<CapsuleColliderComponent>("CapsuleCollider",
+        m_ComponentRegistry.RegisterComponent<CapsuleColliderComponent>("CapsuleCollider",
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& ccComp = reg.get<CapsuleColliderComponent>(entity);
@@ -687,7 +687,7 @@ namespace Lynx
                 ccComp.HalfHeight = json["HalfHeight"];
             });
 
-        ComponentRegistry.RegisterComponent<NativeScriptComponent>("NativeScript",
+        m_ComponentRegistry.RegisterComponent<NativeScriptComponent>("NativeScript",
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& nscComp = reg.get<NativeScriptComponent>(entity);
@@ -724,7 +724,7 @@ namespace Lynx
                 }
             });
 
-        ComponentRegistry.RegisterComponent<LuaScriptComponent>("LuaScript",
+        m_ComponentRegistry.RegisterComponent<LuaScriptComponent>("LuaScript",
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& lscComp = reg.get<LuaScriptComponent>(entity);
@@ -833,7 +833,7 @@ namespace Lynx
                 }
             });
 
-        ComponentRegistry.RegisterComponent<DirectionalLightComponent>("DirectionalLight",
+        m_ComponentRegistry.RegisterComponent<DirectionalLightComponent>("DirectionalLight",
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& light = reg.get<DirectionalLightComponent>(entity);

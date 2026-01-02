@@ -23,6 +23,7 @@ namespace Lynx
         uint32_t GetWidth() const { return m_Specification.Width; }
         uint32_t GetHeight() const { return m_Specification.Height; }
 
+        void SetSpecification(const TextureSpecification& spec) { m_Specification = spec; }
         const TextureSpecification& GetSpecification() const { return m_Specification; }
         const SamplerSettings& GetSamplerSettings() const { return m_Specification.SamplerSettings; }
 

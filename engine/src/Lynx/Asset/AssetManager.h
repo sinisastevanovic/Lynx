@@ -58,6 +58,7 @@ namespace Lynx
         std::shared_ptr<StaticMesh> GetDefaultCube();
 
         void Update();
+        void ReloadAsset(AssetHandle handle);
   
     private:
         std::shared_ptr<Asset> LoadAsset(const AssetMetadata& metadata, AssetLoadMode mode, std::function<void(AssetHandle)> onLoaded);
@@ -67,7 +68,6 @@ namespace Lynx
         template<typename T>
         std::shared_ptr<T> GetErrorAsset() { return nullptr; }
 
-        void ReloadAsset(AssetHandle handle);
         void UnloadAsset(AssetHandle handle);
   
     private:

@@ -8,8 +8,8 @@
 
 namespace Lynx
 {
-    AssetBrowserPanel::AssetBrowserPanel()
-        : m_BaseDirectory("assets"), m_CurrentDirectory(m_BaseDirectory)
+    AssetBrowserPanel::AssetBrowserPanel(const std::function<void(AssetHandle)>& selectionChangedCallback)
+        : OnSelectedAssetChangedCallback(selectionChangedCallback), m_BaseDirectory("assets"), m_CurrentDirectory(m_BaseDirectory)
     {
         m_DirectoryIcon = Engine::Get().GetAssetManager().GetAsset<Texture>("engine/resources/Icons/DirectoryIcon_128px.png");
         m_FileIcon = Engine::Get().GetAssetManager().GetAsset<Texture>("engine/resources/Icons/FileIcon_128px.png");
@@ -56,6 +56,7 @@ namespace Lynx
                 ImGui::PushID(filenameString.c_str());
 
                 auto icon = m_FileIcon;
+                AssetMetadata metadata;
                 if (isDirectory)
                 {
                     icon = m_DirectoryIcon;
@@ -64,7 +65,7 @@ namespace Lynx
                 {
                     if (Engine::Get().GetAssetRegistry().Contains(path))
                     {
-                        auto metadata = Engine::Get().GetAssetRegistry().Get(path);
+                        metadata = Engine::Get().GetAssetRegistry().Get(path);
                         if (metadata.Type == AssetType::Texture)
                         {
                             if (m_ThumbnailCache.contains(metadata.Handle))
@@ -88,7 +89,16 @@ namespace Lynx
                     }
                 }
 
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                bool isSelected = path == m_SelectedPath;
+                if (isSelected)
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_HeaderActive]);
+                }
+                else
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                }
+
 
                 ImTextureID texID = (ImTextureID)0;
                 if (icon && icon->GetHandle())
@@ -96,12 +106,34 @@ namespace Lynx
                     texID = (ImTextureID)icon->GetTextureHandle().Get();
                 }
 
-                if (ImGui::ImageButton("btn", texID, { m_ThumbnailSize, m_ThumbnailSize }, { 0, 0 }, { 1, 1 }))
+                bool clicked = ImGui::ImageButton("btn", texID, { m_ThumbnailSize, m_ThumbnailSize }, { 0, 0 }, { 1, 1 });
+
+                ImGui::PopStyleColor();
+
+                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                 {
                     if (isDirectory)
                     {
                         m_CurrentDirectory /= path.filename();
                     }
+                    else
+                    {
+                        OnSelectedAssetChangedCallback(metadata.Handle);
+                    }
+                    m_SelectedPath = path;
+                }
+                
+                if (clicked)
+                {
+                    m_SelectedPath = path;
+                }
+
+                if (isSelected)
+                {
+                    ImVec2 min = ImGui::GetItemRectMin();
+                    ImVec2 max = ImGui::GetItemRectMax();
+                    // Draw a thick rounded border around the button
+                    ImGui::GetWindowDrawList()->AddRect(min, max, IM_COL32(255, 255, 0, 255), 4.0f, 0, 2.0f);
                 }
                 
                 if (!isDirectory && ImGui::BeginDragDropSource())
@@ -115,7 +147,6 @@ namespace Lynx
                     ImGui::EndDragDropSource();
                 }
 
-                ImGui::PopStyleColor();
 
                 if (!isDirectory && ImGui::BeginPopupContextItem())
                 {

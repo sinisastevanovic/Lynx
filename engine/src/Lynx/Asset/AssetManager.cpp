@@ -168,6 +168,25 @@ namespace Lynx
         if (asset->Reload())
         {
             LX_CORE_INFO("Asset reloaded successfully");
+            if (asset->GetType() == AssetType::Texture)
+            {
+                std::lock_guard<std::mutex> lock(m_AssetsMutex);
+                for (auto it = m_TrackedAssets.begin(); it != m_TrackedAssets.end(); )
+                {
+                    if (auto otherAsset = it->lock())
+                    {
+                        if (otherAsset->GetType() == AssetType::Material && otherAsset->DependsOn(asset->GetHandle()))
+                        {
+                            otherAsset->IncrementVersion();
+                        }
+                        ++it;
+                    }
+                    else
+                    {
+                        it = m_TrackedAssets.erase(it);
+                    }
+                }
+            }
         }
     }
 

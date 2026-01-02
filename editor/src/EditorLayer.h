@@ -1,12 +1,7 @@
 #pragma once
 #include <Lynx.h>
 
-#include "Panels/AssetBrowserPanel.h"
-#include "Panels/InspectorPanel.h"
-#include "Panels/RenderSettings.h"
-#include "Panels/SceneHierarchyPanel.h"
-#include "Panels/StatsPanel.h"
-#include "Panels/Viewport.h"
+#include "Panels/EditorPanel.h"
 
 namespace Lynx
 {
@@ -24,24 +19,24 @@ namespace Lynx
         void OnSceneStop();
 
         entt::entity GetSelectedEntity() const { return m_SelectedEntity; }
-        void SetSelectedEntity(entt::entity entity) { m_SelectedEntity = entity; }
 
     private:
         void SaveSceneAs();
         void OpenScene();
+
+        void OnSceneContextChanged(Scene* scene);
+        void OnSelectedEntityChanged(entt::entity entity);
+        void OnSelectedAssetChanged(AssetHandle asset);
         
         Engine* m_Engine;
-        Viewport m_Viewport;
-        SceneHierarchyPanel m_SceneHierarchyPanel;
-        InspectorPanel m_InspectorPanel;
-        AssetBrowserPanel m_AssetBrowserPanel;
-        StatsPanel m_StatsPanel;
-        RenderSettings m_RenderSettings;
+
+        std::vector<std::unique_ptr<EditorPanel>> m_Panels;
 
         std::shared_ptr<Scene> m_EditorScene;
         std::shared_ptr<Scene> m_RuntimeScene;
 
         entt::entity m_SelectedEntity = entt::null;
+        AssetHandle m_SelectedAsset = AssetHandle::Null();
     };
 }
 

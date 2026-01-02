@@ -2,28 +2,11 @@
 
 #include <imgui.h>
 
-#include "../EditorLayer.h"
 #include "Lynx/Scene/Entity.h"
 #include "Lynx/Scene/Components/Components.h"
 
 namespace Lynx
 {
-    SceneHierarchyPanel::SceneHierarchyPanel(EditorLayer* owner)
-        : m_Owner(owner)
-    {
-    }
-
-    SceneHierarchyPanel::SceneHierarchyPanel(const std::shared_ptr<Scene>& context)
-    {
-        SetContext(context);
-    }
-
-    void SceneHierarchyPanel::SetContext(const std::shared_ptr<Scene>& context)
-    {
-        m_Context = context;
-        //m_SelectedEntity = entt::null;
-    }
-
     void SceneHierarchyPanel::OnImGuiRender()
     {
         ImGui::Begin("Scene Hierarchy");
@@ -32,7 +15,7 @@ namespace Lynx
         {
             for (auto entity : m_Context->Reg().view<entt::entity>())
             {
-                DrawEntityNode(entity, m_Owner->GetSelectedEntity() == entity);
+                DrawEntityNode(entity, m_Selection == entity);
             }
 
             if (ImGui::BeginPopupContextWindow(0, ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
@@ -43,11 +26,21 @@ namespace Lynx
                 ImGui::EndPopup();
             }
 
-            if (ImGui::IsMouseDown(0) && ImGui::IsWindowHovered())
-                m_Owner->SetSelectedEntity(entt::null);
+            if (ImGui::IsMouseDown(0) && ImGui::IsWindowHovered() && OnSelectionChangedCallback)
+                OnSelectionChangedCallback(entt::null);
         }
         
         ImGui::End();
+    }
+
+    void SceneHierarchyPanel::OnSceneContextChanged(Scene* context)
+    {
+        m_Context = context;
+    }
+
+    void SceneHierarchyPanel::OnSelectedEntityChanged(entt::entity selectedEntity)
+    {
+        m_Selection = selectedEntity;
     }
 
     void SceneHierarchyPanel::DrawEntityNode(entt::entity entity, bool isSelected)
@@ -59,9 +52,9 @@ namespace Lynx
         flags |= ImGuiTreeNodeFlags_SpanAvailWidth;
 
         bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, tag.c_str());
-        if (ImGui::IsItemClicked())
+        if (ImGui::IsItemClicked() && OnSelectionChangedCallback)
         {
-            m_Owner->SetSelectedEntity(entity);
+            OnSelectionChangedCallback(entity);
         }
 
         if (opened)

@@ -63,7 +63,7 @@ namespace Lynx
                 auto& idComp = newEntity.GetComponent<IDComponent>();
                 idComp.ID = UUID(entityJson["ID"].get<uint64_t>());
 
-                const auto& registeredComponents = Engine::Get().ComponentRegistry.GetRegisteredComponents();
+                const auto& registeredComponents = Engine::Get().GetComponentRegistry().GetRegisteredComponents();
                 for (auto& [key, value] : entityJson.items())
                 {
                     if (registeredComponents.find(key) != registeredComponents.end())
@@ -95,7 +95,7 @@ namespace Lynx
             auto& idComp = registry.get<IDComponent>(entity);
             entityJson["ID"] = (uint64_t)idComp.ID;
 
-            for (const auto& [name, info] : Engine::Get().ComponentRegistry.GetRegisteredComponents())
+            for (const auto& [name, info] : Engine::Get().GetComponentRegistry().GetRegisteredComponents())
             {
                 if (info.has(registry, entity))
                 {

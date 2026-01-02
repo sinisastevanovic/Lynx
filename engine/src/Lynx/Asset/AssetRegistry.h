@@ -36,6 +36,8 @@ namespace Lynx
 
         const std::vector<AssetHandle>& GetChangedAssets() const { return m_ProcessedChangedAssets; }
 
+        void UpdateMetadata(AssetHandle handle, std::shared_ptr<AssetSpecification> spec);
+
         void Update();
         
     private:

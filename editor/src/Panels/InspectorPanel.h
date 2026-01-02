@@ -1,18 +1,22 @@
 #pragma once
 #include <Lynx.h>
 
+#include "EditorPanel.h"
+
 namespace Lynx
 {
-    class EditorLayer;
-    class InspectorPanel
+    class InspectorPanel : public EditorPanel
     {
     public:
-        InspectorPanel(EditorLayer* owner) : m_Owner(owner) {}
+        InspectorPanel() = default;
 
-        void OnImGuiRender(std::shared_ptr<Scene> context, ComponentRegistry& registry);
-
+        virtual void OnImGuiRender() override;
+        virtual void OnSceneContextChanged(Scene* context) override;
+        virtual void OnSelectedEntityChanged(entt::entity selectedEntity) override;
+        
     private:
-        EditorLayer* m_Owner;
+        Scene* m_Context = nullptr;
+        entt::entity m_Selection{ entt::null };
     };
 
 }

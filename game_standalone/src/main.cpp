@@ -14,7 +14,7 @@ int main(int argc, char** argv)
     engine.Initialize();
     
     // We still register types, as systems might rely on the registry.
-    myGame.RegisterComponents(&engine.ComponentRegistry);
+    myGame.RegisterComponents(&engine.GetComponentRegistry());
 
     engine.Run(&myGame);
 

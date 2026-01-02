@@ -37,6 +37,8 @@ namespace Lynx
         float GetPitch() const { return m_Pitch; }
         float GetYaw() const { return m_Yaw; }
 
+        void SetViewportFocused(bool focused) { m_ViewportFocused = focused; }
+
     private:
         void UpdateProjection();
         void UpdateView();
@@ -71,5 +73,7 @@ namespace Lynx
 
         float m_ViewportWidth = 1280.0f;
         float m_ViewportHeight = 720.0f;
+
+        bool m_ViewportFocused = false;
     };
 }

@@ -1,27 +1,27 @@
 #pragma once
 #include <memory>
 
-#include "Lynx/Scene/Scene.h"
+#include "EditorPanel.h"
 
 namespace Lynx
 {
-    class EditorLayer;
-    class SceneHierarchyPanel
+    class SceneHierarchyPanel : public EditorPanel
     {
     public:
-        SceneHierarchyPanel(EditorLayer* owner);
-        SceneHierarchyPanel(const std::shared_ptr<Scene>& context);
+        SceneHierarchyPanel(const std::function<void(entt::entity)>& selectionChangedCallback)
+            : OnSelectionChangedCallback(selectionChangedCallback) {}
 
-        void SetContext(const std::shared_ptr<Scene>& context);
-
-        void OnImGuiRender();
+        virtual void OnImGuiRender() override;
+        virtual void OnSceneContextChanged(Scene* context) override;
+        virtual void OnSelectedEntityChanged(entt::entity selectedEntity) override;
 
     private:
         void DrawEntityNode(entt::entity entity, bool isSelected);
 
     private:
-        EditorLayer* m_Owner;
-        std::shared_ptr<Scene> m_Context;
+        Scene* m_Context = nullptr;
+        entt::entity m_Selection{ entt::null };
+        std::function<void(entt::entity)> OnSelectionChangedCallback = nullptr;
     };
 }
 

@@ -4,17 +4,21 @@
 
 #include <filesystem>
 
+#include "EditorPanel.h"
+
 namespace Lynx
 {
-    class AssetBrowserPanel
+    class AssetBrowserPanel : public EditorPanel
     {
     public:
-        AssetBrowserPanel();
+        AssetBrowserPanel(const std::function<void(AssetHandle)>& selectionChangedCallback);
         virtual ~AssetBrowserPanel() = default;
 
-        void OnImGuiRender();
+        virtual void OnImGuiRender() override;
 
     private:
+        std::function<void(AssetHandle)> OnSelectedAssetChangedCallback = nullptr;
+        std::filesystem::path m_SelectedPath;
         std::filesystem::path m_BaseDirectory;
         std::filesystem::path m_CurrentDirectory;
 

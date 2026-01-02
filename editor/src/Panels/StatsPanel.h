@@ -1,12 +1,14 @@
 #pragma once
+#include "EditorPanel.h"
 
 namespace Lynx
 {
-    class StatsPanel
+    class StatsPanel : public EditorPanel
     {
     public:
         StatsPanel() = default;
-        void OnImGuiRender();
+
+        virtual void OnImGuiRender() override;
 
     private:
         float m_AccumulatedTime = 0.0f;

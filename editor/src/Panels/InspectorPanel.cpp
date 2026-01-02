@@ -6,18 +6,17 @@
 
 namespace Lynx
 {
-    void InspectorPanel::OnImGuiRender(std::shared_ptr<Scene> context, ComponentRegistry& registry)
+    void InspectorPanel::OnImGuiRender()
     {
         ImGui::Begin("Inspector");
 
-        entt::entity selectedEntity = m_Owner->GetSelectedEntity();
-        if (context && selectedEntity != entt::null)
+        if (m_Context && m_Selection != entt::null)
         {
-            const auto& registeredComponents = registry.GetRegisteredComponents();
+            const auto& registeredComponents = Engine::Get().GetComponentRegistry().GetRegisteredComponents();
 
-            if (context->Reg().all_of<TagComponent>(selectedEntity))
+            if (m_Context->Reg().all_of<TagComponent>(m_Selection))
             {
-                auto& tag = context->Reg().get<TagComponent>(selectedEntity).Tag;
+                auto& tag = m_Context->Reg().get<TagComponent>(m_Selection).Tag;
                 char buffer[256];
                 memset(buffer, 0, sizeof(buffer));
                 strcpy_s(buffer, sizeof(buffer), tag.c_str());
@@ -27,11 +26,11 @@ namespace Lynx
                 }
             }
 
-            if (context->Reg().all_of<TransformComponent>(selectedEntity))
+            if (m_Context->Reg().all_of<TransformComponent>(m_Selection))
             {
                 if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
                 {
-                    registeredComponents.at("Transform").drawUI(context->Reg(), selectedEntity);
+                    registeredComponents.at("Transform").drawUI(m_Context->Reg(), m_Selection);
                 }
             }
 
@@ -40,7 +39,7 @@ namespace Lynx
                 if (name == "Tag" || name == "Transform")
                     continue;
                 
-                if (info.has(context->Reg(), selectedEntity))
+                if (info.has(m_Context->Reg(), m_Selection))
                 {
                     ImGui::PushID(name.c_str());
                     bool open = ImGui::CollapsingHeader(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
@@ -50,7 +49,7 @@ namespace Lynx
                         if (ImGui::MenuItem("Remove Component"))
                         {
                             if (info.remove)
-                                info.remove(context->Reg(), selectedEntity);
+                                info.remove(m_Context->Reg(), m_Selection);
 
                             ImGui::CloseCurrentPopup();
                             ImGui::EndPopup();
@@ -62,7 +61,7 @@ namespace Lynx
 
                     if (open)
                     {
-                        info.drawUI(context->Reg(), selectedEntity);
+                        info.drawUI(m_Context->Reg(), m_Selection);
                     }
                     
                     ImGui::PopID();
@@ -77,11 +76,11 @@ namespace Lynx
             {
                 for (const auto& [name, info] : registeredComponents)
                 {
-                    if (!info.has(context->Reg(), selectedEntity))
+                    if (!info.has(m_Context->Reg(), m_Selection))
                     {
                         if (ImGui::MenuItem(name.c_str()))
                         {
-                            info.add(context->Reg(), selectedEntity);
+                            info.add(m_Context->Reg(), m_Selection);
                             ImGui::CloseCurrentPopup();
                         }
                     }
@@ -90,5 +89,15 @@ namespace Lynx
             }
         }
         ImGui::End();
+    }
+
+    void InspectorPanel::OnSceneContextChanged(Scene* context)
+    {
+        m_Context = context;
+    }
+
+    void InspectorPanel::OnSelectedEntityChanged(entt::entity selectedEntity)
+    {
+        m_Selection = selectedEntity;
     }
 }

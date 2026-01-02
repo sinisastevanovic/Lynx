@@ -1,11 +1,12 @@
 #pragma once
+#include "EditorPanel.h"
 
 namespace Lynx
 {
-    class RenderSettings
+    class RenderSettings : public EditorPanel
     {
     public:
-        void OnImGuiRender();
+        virtual void OnImGuiRender() override;
     };
 
 }

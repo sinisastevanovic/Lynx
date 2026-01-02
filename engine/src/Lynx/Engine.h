@@ -38,6 +38,7 @@ namespace Lynx
         Renderer& GetRenderer() { return *m_Renderer; }
         ScriptEngine* GetScriptEngine() { return m_ScriptEngine.get(); }
         EditorCamera& GetEditorCamera() { return m_EditorCamera; }
+        ComponentRegistry& GetComponentRegistry() { return m_ComponentRegistry;}
         
         std::shared_ptr<Scene> GetActiveScene() const { return m_Scene; }
         void SetActiveScene(std::shared_ptr<Scene> scene) { m_Scene = scene; }
@@ -50,7 +51,6 @@ namespace Lynx
         void SetBlockEvents(bool block) { m_BlockEvents = block; }
         bool AreEventsBlocked() const { return m_BlockEvents; }
 
-        ComponentRegistry ComponentRegistry;
 
     private:
         void OnEvent(Event& e);
@@ -67,6 +67,7 @@ namespace Lynx
         std::unique_ptr<PhysicsSystem> m_PhysicsSystem;
         std::unique_ptr<ScriptEngine> m_ScriptEngine;
         std::shared_ptr<Scene> m_Scene;
+        ComponentRegistry m_ComponentRegistry;
         
         EditorCamera m_EditorCamera;
         

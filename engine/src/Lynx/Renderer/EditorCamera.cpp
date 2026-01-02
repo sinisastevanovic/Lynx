@@ -62,7 +62,7 @@ namespace Lynx
 
     void EditorCamera::OnUpdate(float ts)
     {
-        if (!Engine::Get().AreEventsBlocked())
+        if (!Engine::Get().AreEventsBlocked() && m_ViewportFocused)
         {
             const glm::vec2& mouse = { Input::GetMouseX(), Input::GetMouseY() };
             glm::vec2 delta = (mouse - m_InitialMousePosition) * 0.003f;
@@ -100,9 +100,12 @@ namespace Lynx
 
     bool EditorCamera::OnMouseScroll(MouseScrolledEvent& e)
     {
-        float delta = e.GetYOffset() * 0.1f;
-        MouseZoom(delta);
-        UpdateView();
+        if (!Engine::Get().AreEventsBlocked() && m_ViewportFocused)
+        {
+            float delta = e.GetYOffset() * 0.1f;
+            MouseZoom(delta);
+            UpdateView();
+        }
         return false;
     }
 

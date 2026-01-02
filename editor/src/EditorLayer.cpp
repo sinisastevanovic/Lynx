@@ -3,26 +3,49 @@
 #include <imgui.h>
 
 #include "Lynx/Scene/SceneSerializer.h"
+#include "Panels/AssetBrowserPanel.h"
+#include "Panels/AssetPropertiesPanel.h"
+#include "Panels/InspectorPanel.h"
+#include "Panels/RenderSettings.h"
+#include "Panels/SceneHierarchyPanel.h"
+#include "Panels/StatsPanel.h"
+#include "Panels/Viewport.h"
 #include "Utils/PlatformUtils.h"
 
 namespace Lynx
 {
     EditorLayer::EditorLayer(Engine* engine)
-        : m_Engine(engine), m_SceneHierarchyPanel(this), m_InspectorPanel(this)
+        : m_Engine(engine)
     {
         m_EditorScene = engine->GetActiveScene();
     }
 
     void EditorLayer::OnAttach()
     {
-        m_Viewport.SetOwner(this);
-        m_SceneHierarchyPanel.SetContext(m_Engine->GetActiveScene());
+        auto entityCallack = [this](entt::entity entity)
+        {
+            this->OnSelectedEntityChanged(entity);
+        };
+        auto assetCallack = [this](AssetHandle handle)
+        {
+            this->OnSelectedAssetChanged(handle);
+        };
+        m_Panels.push_back(std::make_unique<SceneHierarchyPanel>(entityCallack));
+        m_Panels.push_back(std::make_unique<InspectorPanel>());
+        m_Panels.push_back(std::make_unique<Viewport>(entityCallack));
+        m_Panels.push_back(std::make_unique<AssetBrowserPanel>(assetCallack));
+        m_Panels.push_back(std::make_unique<StatsPanel>());
+        m_Panels.push_back(std::make_unique<RenderSettings>());
+        m_Panels.push_back(std::make_unique<AssetPropertiesPanel>());
+
+        OnSceneContextChanged(m_EditorScene.get());
     }
 
     void EditorLayer::OnDetach()
     {
         m_EditorScene.reset();
         m_RuntimeScene.reset();
+        m_Panels.clear();
     }
 
     void EditorLayer::DrawMenuBar()
@@ -83,10 +106,6 @@ namespace Lynx
             {
                 m_Engine->GetRenderer().SetShowGrid(showGrid);
             }
-            /*if (ImGui::Selectable("Show Grid", &showGrid, ImGuiSelectableFlags_DontClosePopups))
-            {
-                m_Engine->GetRenderer().SetShowGrid(showGrid);
-            }*/
 
             bool showColliders = m_Engine->GetRenderer().GetShowColliders();
             if (ImGui::MenuItem("Show Colliders", nullptr, &showColliders))
@@ -94,10 +113,6 @@ namespace Lynx
                 m_Engine->GetRenderer().SetShowColliders(showColliders);
             }
 
-            /*if (ImGui::Selectable("Show Colliders", &showColliders, ImGuiSelectableFlags_DontClosePopups))
-            {
-                m_Engine->GetRenderer().SetShowColliders(showColliders);
-            }*/
             ImGui::PopItemFlag();
             ImGui::EndPopup();
         }
@@ -110,12 +125,10 @@ namespace Lynx
     void EditorLayer::OnImGuiRender()
     {
         DrawToolBar();
-        m_Viewport.OnImGuiRender();
-        m_SceneHierarchyPanel.OnImGuiRender();
-        m_InspectorPanel.OnImGuiRender(m_Engine->GetActiveScene(),m_Engine->ComponentRegistry);
-        m_AssetBrowserPanel.OnImGuiRender();
-        m_StatsPanel.OnImGuiRender();
-        m_RenderSettings.OnImGuiRender();
+        for (auto& panel : m_Panels)
+        {
+            panel->OnImGuiRender();
+        }
     }
 
     void EditorLayer::OnScenePlay()
@@ -131,7 +144,7 @@ namespace Lynx
         SceneSerializer runtimeSerializer(m_RuntimeScene);
         runtimeSerializer.DeserializeFromString(data);
 
-        m_SceneHierarchyPanel.SetContext(m_RuntimeScene);
+        OnSceneContextChanged(m_RuntimeScene.get());
 
         m_Engine->SetSceneState(SceneState::Play);
     }
@@ -141,7 +154,7 @@ namespace Lynx
         m_SelectedEntity = entt::null;
         m_Engine->SetSceneState(SceneState::Edit);
         m_Engine->SetActiveScene(m_EditorScene);
-        m_SceneHierarchyPanel.SetContext(m_EditorScene);
+        OnSceneContextChanged(m_EditorScene.get());
         m_RuntimeScene = nullptr;
 
         m_Engine->GetScriptEngine()->OnEditorStart(m_Engine->GetActiveScene().get());
@@ -171,9 +184,29 @@ namespace Lynx
             if (serializer.Deserialize(filepath))
             {
                 m_SelectedEntity = entt::null;
-                m_SceneHierarchyPanel.SetContext(m_Engine->GetActiveScene());
 
+                OnSceneContextChanged(m_Engine->GetActiveScene().get());
             }
         }
+    }
+
+    void EditorLayer::OnSceneContextChanged(Scene* scene)
+    {
+        for (auto& panel : m_Panels)
+            panel->OnSceneContextChanged(scene);
+    }
+
+    void EditorLayer::OnSelectedEntityChanged(entt::entity entity)
+    {
+        m_SelectedEntity = entity;
+        for (auto& panel : m_Panels)
+            panel->OnSelectedEntityChanged(entity);
+    }
+
+    void EditorLayer::OnSelectedAssetChanged(AssetHandle asset)
+    {
+        m_SelectedAsset = asset;
+        for (auto& panel : m_Panels)
+            panel->OnSelectedAssetChanged(asset);
     }
 }

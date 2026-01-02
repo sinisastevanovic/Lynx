@@ -13,11 +13,6 @@
 
 namespace Lynx
 {
-    void Viewport::SetOwner(EditorLayer* owner)
-    {
-        m_Owner = owner;
-    }
-
     void Viewport::OnImGuiRender()
     {
         auto& renderer = Lynx::Engine::Get().GetRenderer();
@@ -27,6 +22,7 @@ namespace Lynx
         bool isHovered = ImGui::IsWindowHovered();
 
         Engine::Get().SetBlockEvents(!isFocused);
+        Engine::Get().GetEditorCamera().SetViewportFocused(isHovered && isFocused);
 
         if (isFocused && Engine().Get().GetSceneState() != SceneState::Play)
         {
@@ -46,8 +42,7 @@ namespace Lynx
             ImGui::Image((ImTextureID)texture.Get(), viewportSize);
         }
 
-        auto selectedEntity = m_Owner->GetSelectedEntity();
-        if (selectedEntity != entt::null && m_CurrentGizmoOperation != -1 && Engine().Get().GetSceneState() != SceneState::Play)
+        if (m_Selection != entt::null && m_CurrentGizmoOperation != -1 && Engine().Get().GetSceneState() != SceneState::Play)
         {
             ImGuizmo::BeginFrame();
             ImGuizmo::SetOrthographic(false);
@@ -62,7 +57,7 @@ namespace Lynx
             const glm::mat4& cameraProjection = camera.GetProjection();
 
             auto scene = Engine::Get().GetActiveScene();
-            auto& tc = scene->Reg().get<TransformComponent>(selectedEntity);
+            auto& tc = scene->Reg().get<TransformComponent>(m_Selection);
             glm::mat4 transform = tc.GetTransform();
 
             bool snap = ImGui::GetIO().KeyCtrl;
@@ -110,13 +105,16 @@ namespace Lynx
                 if (mouseX >= 0 && mouseY >= 0 && mouseX < (int)viewportSize2.x && mouseY < (int)viewportSize2.y)
                 {
                     int selectedID = renderer.ReadIdFromBuffer(mouseX, mouseY);
-                    if (selectedID >= 0)
+                    if (OnSelectionChangedCallback)
                     {
-                        m_Owner->SetSelectedEntity((entt::entity)selectedID);
-                    }
-                    else
-                    {
-                        m_Owner->SetSelectedEntity(entt::null);
+                        if (selectedID >= 0)
+                        {
+                            OnSelectionChangedCallback((entt::entity)selectedID);
+                        }
+                        else
+                        {
+                            OnSelectionChangedCallback(entt::null);
+                        }
                     }
                 }
             }
@@ -137,5 +135,10 @@ namespace Lynx
         }
         
         ImGui::End();
+    }
+
+    void Viewport::OnSelectedEntityChanged(entt::entity selectedEntity)
+    {
+        m_Selection = selectedEntity;
     }
 }

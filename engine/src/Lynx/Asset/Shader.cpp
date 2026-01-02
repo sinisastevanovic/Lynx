@@ -62,6 +62,7 @@ namespace Lynx
                     m_ShaderType = ShaderType::Compute;
                 }
             }
+            IncrementVersion();
         }
         else
         {

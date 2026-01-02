@@ -39,7 +39,16 @@ namespace Lynx
         ScanDirectory(projectAssetDir);
         createWatcher(projectAssetDir);
     }
-    
+
+    void AssetRegistry::UpdateMetadata(AssetHandle handle, std::shared_ptr<AssetSpecification> spec)
+    {
+        if (m_AssetMetadata.contains(handle))
+        {
+            m_AssetMetadata[handle].Specification = spec;
+            WriteMetadata(m_AssetMetadata[handle]);
+        }
+    }
+
     void AssetRegistry::Update()
     {
         std::vector<FileEvent> eventsToProcess;
