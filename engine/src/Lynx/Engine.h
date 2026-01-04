@@ -6,6 +6,7 @@
 #include "Physics/PhysicsSystem.h"
 #include "Event/Event.h"
 #include "Lynx/Renderer/EditorCamera.h"
+#include "Scene/Systems/ParticleSystem.h"
 #include "Scripting/ScriptEngine.h"
 
 namespace Lynx
@@ -68,6 +69,7 @@ namespace Lynx
         std::unique_ptr<ScriptEngine> m_ScriptEngine;
         std::shared_ptr<Scene> m_Scene;
         ComponentRegistry m_ComponentRegistry;
+        ParticleSystem m_ParticleSystem;
         
         EditorCamera m_EditorCamera;
         

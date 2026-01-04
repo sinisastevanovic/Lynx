@@ -4,7 +4,7 @@
 
 namespace Lynx
 {
-    enum class AlphaMode { Opaque, Mask, Translucent };
+    enum class AlphaMode { Opaque, Mask, Translucent, Additive };
     
     class LX_API Material : public Asset
     {

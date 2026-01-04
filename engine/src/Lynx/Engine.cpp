@@ -186,6 +186,7 @@ namespace Lynx
             {
                 m_PhysicsSystem->Simulate(deltaTime);
                 m_Scene->OnUpdateRuntime(deltaTime);
+                m_ParticleSystem.OnUpdate(deltaTime, m_Scene.get());
                 if (gameModule)
                 {
                     gameModule->OnUpdate(deltaTime);
