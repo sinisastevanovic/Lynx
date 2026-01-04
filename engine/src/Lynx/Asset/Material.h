@@ -35,6 +35,9 @@ namespace Lynx
         bool UseNormalMap = false;
 
         virtual bool Reload() override;
+
+    protected:
+        virtual bool LoadSourceData() override;
     };
 
 }

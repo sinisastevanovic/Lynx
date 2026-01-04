@@ -3,6 +3,8 @@
 #include <imgui.h>
 
 #include "Lynx/Engine.h"
+#include "Lynx/Asset/Serialization/MaterialSerializer.h"
+#include "Lynx/ImGui/EditorUIHelpers.h"
 
 namespace Lynx
 {
@@ -10,30 +12,19 @@ namespace Lynx
     {
         ImGui::Begin("Asset Properties");
 
-        if (!m_SelectedAsset.IsValid())
+        if (!m_SelectedAsset)
         {
             ImGui::End();
             return;
         }
 
-        auto metadata = Engine::Get().GetAssetRegistry().Get(m_SelectedAsset);
-        if (metadata.Type == AssetType::Scene)
+        if (m_SelectedAsset->GetType() == AssetType::Texture)
         {
-            ImGui::End();
-            return;
+            DrawTextureProperties();
         }
-
-        auto asset = Engine::Get().GetAssetManager().GetAsset<Asset>(m_SelectedAsset);
-        if (!asset)
+        else if (m_SelectedAsset->GetType() == AssetType::Material)
         {
-            ImGui::Text("Could not load asset!");
-            ImGui::End();
-            return;
-        }
-
-        if (asset->GetType() == AssetType::Texture)
-        {
-            DrawTextureProperties(std::static_pointer_cast<Texture>(asset));
+            DrawMaterialProperties();
         }
         else
         {
@@ -43,8 +34,9 @@ namespace Lynx
         ImGui::End();
     }
 
-    void AssetPropertiesPanel::DrawTextureProperties(std::shared_ptr<Texture> texture)
+    void AssetPropertiesPanel::DrawTextureProperties()
     {
+        auto texture = std::static_pointer_cast<Texture>(m_SelectedAsset);
         ImGui::Text("Texture: %s", m_EditingSpec.DebugName.c_str());
         ImGui::Separator();
 
@@ -87,8 +79,8 @@ namespace Lynx
             texture->SetSpecification(m_EditingSpec);
 
             auto specPtr = std::make_shared<TextureSpecification>(m_EditingSpec);
-            Engine::Get().GetAssetRegistry().UpdateMetadata(m_SelectedAsset, specPtr);
-            Engine::Get().GetAssetManager().ReloadAsset(m_SelectedAsset);
+            Engine::Get().GetAssetRegistry().UpdateMetadata(m_SelectedAssetHandle, specPtr);
+            Engine::Get().GetAssetManager().ReloadAsset(m_SelectedAssetHandle);
             //texture->Reload();
             m_IsDirty = false;
         }
@@ -104,22 +96,84 @@ namespace Lynx
         }
     }
 
+    void AssetPropertiesPanel::DrawMaterialProperties()
+    {
+        auto material = std::static_pointer_cast<Material>(m_SelectedAsset);
+        ImGui::Text("Material Editor");
+        ImGui::Separator();
+
+        const char* modes[] = { "Opaque", "Masked", "Translucent", "Additive" };
+        int currentMode = (int)material->Mode;
+        if (ImGui::Combo("Blend Mode", &currentMode, modes, 4))
+        {
+            material->Mode = (AlphaMode)currentMode;
+            m_IsDirty = true;
+        }
+
+        if (ImGui::ColorEdit4("Albedo Color", &material->AlbedoColor.r))
+            m_IsDirty = true;
+
+        if (EditorUIHelpers::DrawAssetSelection("Albedo Map", material->AlbedoTexture, AssetType::Texture))
+            m_IsDirty = true;
+
+        if (ImGui::DragFloat("Metallic", &material->Metallic, 0.01f, 0.0f, 1.0f))
+            m_IsDirty = true;
+        if (ImGui::DragFloat("Roughness", &material->Roughness, 0.01f, 0.0f, 1.0f))
+            m_IsDirty = true;
+        if (EditorUIHelpers::DrawAssetSelection("Normal Map", material->NormalMap, AssetType::Texture))
+            m_IsDirty = true;
+        if (EditorUIHelpers::DrawAssetSelection("ORM Map", material->MetallicRoughnessTexture, AssetType::Texture))
+            m_IsDirty = true;
+
+        if (ImGui::ColorEdit3("Emissive Color", &material->EmissiveColor.r))
+            m_IsDirty = true;
+        if (ImGui::DragFloat("Emissive Strength", &material->EmissiveStrength, 0.1f, 0.0f, 100.0f))
+            m_IsDirty = true;
+        if (EditorUIHelpers::DrawAssetSelection("Emissive Map", material->EmissiveTexture, AssetType::Texture))
+            m_IsDirty = true;
+
+        bool canApply = m_IsDirty;
+        if (!canApply)
+            ImGui::BeginDisabled();
+
+        if (ImGui::Button("Apply Changes"))
+        {
+            MaterialSerializer::Serialize(material->GetFilePath(), material);
+            Engine::Get().GetAssetManager().ReloadAsset(m_SelectedAssetHandle);
+            m_IsDirty = false;
+        }
+
+        if (!canApply)
+            ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        if (ImGui::Button("Revert"))
+        {
+            Engine::Get().GetAssetManager().ReloadAsset(m_SelectedAssetHandle);
+            m_IsDirty = false;
+        }
+    }
+
     void AssetPropertiesPanel::OnSelectedAssetChanged(AssetHandle handle)
     {
-        m_SelectedAsset = handle;
+        m_SelectedAssetHandle = handle;
         m_IsDirty = false;
 
-        if (!m_SelectedAsset.IsValid())
+        if (!m_SelectedAssetHandle.IsValid())
+        {
+            m_SelectedAsset = nullptr;
             return;
+        }
 
-        auto metadata = Engine::Get().GetAssetRegistry().Get(m_SelectedAsset);
+        auto metadata = Engine::Get().GetAssetRegistry().Get(m_SelectedAssetHandle);
         if (metadata.Type == AssetType::Scene)
         {
+            m_SelectedAsset = nullptr;
             return;
         }
         
-        auto asset = Engine::Get().GetAssetManager().GetAsset<Asset>(handle);
-        if (asset && asset->GetType() == AssetType::Texture)
-            m_EditingSpec = std::static_pointer_cast<Texture>(asset)->GetSpecification();
+        m_SelectedAsset = Engine::Get().GetAssetManager().GetAsset<Asset>(handle);
+        if (m_SelectedAsset && m_SelectedAsset->GetType() == AssetType::Texture)
+            m_EditingSpec = std::static_pointer_cast<Texture>(m_SelectedAsset)->GetSpecification();
     }
 }

@@ -314,6 +314,7 @@ namespace Lynx
 
     void AssetRegistry::OnAssetRenamed(const std::filesystem::path& oldPath, const std::filesystem::path& newPath)
     {
+        // TODO: Currently when we rename files, the asset itself doesnt update it's filepath!
         if (!Contains(oldPath))
             return;
 

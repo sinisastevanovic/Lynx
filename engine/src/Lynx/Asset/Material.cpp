@@ -1,5 +1,7 @@
 #include "Material.h"
 
+#include "Serialization/MaterialSerializer.h"
+
 namespace Lynx
 {
     Material::Material(const std::string& filepath)
@@ -22,6 +24,14 @@ namespace Lynx
 
     bool Material::Reload()
     {
-        return true;
+        return LoadSourceData();
+    }
+
+    bool Material::LoadSourceData()
+    {
+        if (m_FilePath.empty())
+            return true;
+
+        return MaterialSerializer::Deserialize(m_FilePath, *this);
     }
 }

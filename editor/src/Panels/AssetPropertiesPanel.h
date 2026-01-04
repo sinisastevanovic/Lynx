@@ -1,5 +1,6 @@
 #pragma once
 #include "EditorPanel.h"
+#include "Lynx/Asset/Material.h"
 #include "Lynx/Asset/TextureSpecification.h"
 
 namespace Lynx
@@ -15,10 +16,12 @@ namespace Lynx
         virtual void OnSelectedAssetChanged(AssetHandle handle) override;
 
     private:
-        void DrawTextureProperties(std::shared_ptr<Texture> texture);
+        void DrawTextureProperties();
+        void DrawMaterialProperties();
 
     private:
-        AssetHandle m_SelectedAsset = AssetHandle::Null();
+        AssetHandle m_SelectedAssetHandle = AssetHandle::Null();
+        std::shared_ptr<Asset> m_SelectedAsset;
 
         TextureSpecification m_EditingSpec;
         bool m_IsDirty = false;

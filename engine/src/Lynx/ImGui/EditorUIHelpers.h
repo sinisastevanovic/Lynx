@@ -5,7 +5,7 @@
 
 namespace Lynx
 {
-    class EditorUIHelpers
+    class LX_API EditorUIHelpers
     {
     public:
         static bool DrawAssetSelection(const char* label, AssetHandle& currentHandle, AssetType typeFilter);

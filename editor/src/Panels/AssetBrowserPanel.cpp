@@ -5,6 +5,7 @@
 #include <algorithm>
 
 #include "Lynx/Engine.h"
+#include "Lynx/Asset/Serialization/MaterialSerializer.h"
 
 namespace Lynx
 {
@@ -41,6 +42,29 @@ namespace Lynx
 
         if (ImGui::BeginTable("AssetBrowserTable", columnCount))
         {
+            if (ImGui::BeginPopupContextWindow("AssetBrowserPopup", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
+            {
+                if (ImGui::MenuItem("Create Material"))
+                {
+                    std::string baseName = "NewMaterial";
+                    std::string extension = ".lxmat";
+                    std::filesystem::path newPath = m_CurrentDirectory / (baseName + extension);
+
+                    int counter = 1;
+                    while (std::filesystem::exists(newPath))
+                    {
+                        newPath = m_CurrentDirectory / (baseName + " (" + std::to_string(counter) + ")" + extension);
+                        counter++;
+                    }
+
+                    auto mat = std::make_shared<Material>();
+                    MaterialSerializer::Serialize(newPath, mat);
+                }
+
+                ImGui::EndPopup();
+            }
+            
+            
             for (auto& directoryEntry : std::filesystem::directory_iterator(m_CurrentDirectory))
             {
                 const auto& path = directoryEntry.path();

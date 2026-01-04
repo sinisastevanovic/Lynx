@@ -164,6 +164,7 @@ namespace Lynx
                     otherAsset->IncrementVersion();
                 }
             }
+            asset->IncrementVersion();
         }
     }
 
