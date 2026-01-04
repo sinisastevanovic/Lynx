@@ -2,6 +2,7 @@
 
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
+#include "Lynx/Renderer/SamplerCache.h"
 
 namespace Lynx
 {
@@ -178,7 +179,7 @@ namespace Lynx
             .addItem(nvrhi::BindingSetItem::Texture_SRV(1, normal))
             .addItem(nvrhi::BindingSetItem::Texture_SRV(2, mr))
             .addItem(nvrhi::BindingSetItem::Texture_SRV(3, emissive))
-            .addItem(nvrhi::BindingSetItem::Sampler(4, ctx.GetSampler(samplerSettings)));
+            .addItem(nvrhi::BindingSetItem::Sampler(4, SamplerCache::Get()->GetSampler(samplerSettings)));
 
         auto newSet = ctx.Device->createBindingSet(desc, m_MaterialBindingLayout);
         uint32_t currentVersion = material ? material->GetVersion() : 0;

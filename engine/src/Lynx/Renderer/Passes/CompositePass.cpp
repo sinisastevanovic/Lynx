@@ -2,6 +2,7 @@
 
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
+#include "Lynx/Renderer/SamplerCache.h"
 
 namespace Lynx
 {
@@ -60,7 +61,7 @@ namespace Lynx
             
             auto bsDesc = nvrhi::BindingSetDesc()
                 .addItem(nvrhi::BindingSetItem::Texture_SRV(0, renderData.SceneColorInput))
-                .addItem(nvrhi::BindingSetItem::Sampler(1, ctx.GetSampler(SamplerSettings())))
+                .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(SamplerSettings())))
                 .addItem(nvrhi::BindingSetItem::Texture_SRV(2, bloom))
                 .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(CompositePushData)));
             m_BindingSet = ctx.Device->createBindingSet(bsDesc, m_BindingLayout);

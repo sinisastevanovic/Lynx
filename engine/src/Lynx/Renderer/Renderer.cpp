@@ -7,6 +7,7 @@
 #include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
+#include "SamplerCache.h"
 #include "Passes/DebugPass.h"
 #include "Passes/ForwardPass.h"
 #include "Passes/GridPass.h"
@@ -78,16 +79,7 @@ namespace Lynx
             return nvrhi::Format::UNKNOWN;
         }
 
-        static nvrhi::SamplerAddressMode WrapModeToNvrhi(TextureWrap wrap)
-        {
-            switch (wrap)
-            {
-                case TextureWrap::Repeat: return nvrhi::SamplerAddressMode::Repeat;
-                case TextureWrap::Clamp: return nvrhi::SamplerAddressMode::Clamp;
-                case TextureWrap::Mirror: return nvrhi::SamplerAddressMode::Mirror;
-            }
-            return nvrhi::SamplerAddressMode::Repeat;
-        }
+        
     }
     
     struct Renderer::VulkanState
@@ -143,7 +135,7 @@ namespace Lynx
         m_OpaqueBatches.clear();
         m_StageBuffer = nullptr;
 
-        m_SamplerCache.clear();
+        SamplerCache::Shutdown();
         m_WhiteTex = nullptr;
         m_NormalTex = nullptr;
         m_BlackTex = nullptr;
@@ -194,6 +186,8 @@ namespace Lynx
         if (m_ShouldCreateIDTarget) fbInfo.addColorFormat(nvrhi::Format::R32_SINT);
         fbInfo.setDepthFormat(nvrhi::Format::D32);
         m_RenderContext.PresentationFramebufferInfo = fbInfo;
+
+        SamplerCache::Init(m_NvrhiDevice, m_MaxAnisotropy);
 
         m_Pipeline.AddPass(std::make_unique<ShadowPass>(m_ShadowMapResolution));
         m_Pipeline.AddPass(std::make_unique<DepthPass>());

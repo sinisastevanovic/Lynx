@@ -2,6 +2,7 @@
 
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
+#include "Lynx/Renderer/SamplerCache.h"
 #include "nvrhi/utils.h"
 
 namespace Lynx
@@ -22,7 +23,7 @@ namespace Lynx
             .setBindingOffsets({0, 0, 0, 0})
         );
 
-        m_Sampler = ctx.GetSampler(SamplerSettings{TextureWrap::Clamp, TextureFilter::Bilinear});
+        m_Sampler = SamplerCache::Get()->GetSampler(SamplerSettings{TextureWrap::Clamp, TextureFilter::Bilinear});
 
         m_PipelineState.SetPath("engine/resources/Shaders/Bloom.glsl");
         m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)

@@ -2,6 +2,7 @@
 
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
+#include "Lynx/Renderer/SamplerCache.h"
 
 namespace Lynx
 {
@@ -30,7 +31,7 @@ namespace Lynx
 
         auto bsDesc = nvrhi::BindingSetDesc()
             .addItem(nvrhi::BindingSetItem::Texture_SRV(0, ctx.WhiteTexture))
-            .addItem(nvrhi::BindingSetItem::Sampler(1, ctx.GetSampler(SamplerSettings())));
+            .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(SamplerSettings())));
         m_OpaqueBindingSet = ctx.Device->createBindingSet(bsDesc, m_MaterialBindingLayout);
 
         m_PipelineState.SetPath("engine/resources/Shaders/DepthOnly.glsl");
@@ -173,7 +174,7 @@ namespace Lynx
 
         auto desc = nvrhi::BindingSetDesc()
             .addItem(nvrhi::BindingSetItem::Texture_SRV(0, albedo))
-            .addItem(nvrhi::BindingSetItem::Sampler(1, ctx.GetSampler(samplerSettings)));
+            .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(samplerSettings)));
         auto set = ctx.Device->createBindingSet(desc, m_MaterialBindingLayout);
         uint32_t version = material ? material->GetVersion() : 0;
         m_MaterialBindingSetCache[material] = { set, version };

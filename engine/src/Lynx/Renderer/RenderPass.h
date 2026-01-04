@@ -130,8 +130,6 @@ namespace Lynx
         nvrhi::TextureHandle BlackTexture;
         nvrhi::TextureHandle NormalTexture;
         nvrhi::TextureHandle MetallicRoughnessTexture;
-
-        std::function<nvrhi::SamplerHandle(SamplerSettings)> GetSampler;
     };
 
     struct MaterialCacheEntry
