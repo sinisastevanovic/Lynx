@@ -30,15 +30,34 @@ namespace Lynx
 
             if (emitter.EmissionRate > 0.0f)
             {
-                emitter.TimeSinceLastEmit += ts;
-                float emitInterval = 1.0f / emitter.EmissionRate;
-
-                while (emitter.TimeSinceLastEmit >= emitInterval)
+                if (emitter.IsLooping)
                 {
-                    emitter.TimeSinceLastEmit -= emitInterval;
-                    EmitParticle(emitter, trans.Translation);
+                    emitter.TimeSinceLastEmit += ts;
+                    float emitInterval = 1.0f / emitter.EmissionRate;
+
+                    while (emitter.TimeSinceLastEmit >= emitInterval)
+                    {
+                        emitter.TimeSinceLastEmit -= emitInterval;
+                        EmitParticle(emitter, trans.Translation);
+                    }
+                }
+                else
+                {
+                    if (!emitter.BurstDone)
+                    {
+                        int burstCount = (int)emitter.EmissionRate;
+                        for (int i = 0; i < burstCount; i++)
+                        {
+                            EmitParticle(emitter, trans.Translation);
+                        }
+                        emitter.BurstDone = true;
+                    }
                 }
             }
+            
+
+            std::vector<ParticleInstanceData> activeParticles;
+            activeParticles.reserve(emitter.ParticlePool.size());
 
             for (auto& particle : emitter.ParticlePool)
             {
@@ -54,6 +73,25 @@ namespace Lynx
                 particle.LifeRemaining -= ts;
                 particle.Position += particle.Velocity * ts;
                 particle.Rotation += 0.01f * ts;
+
+                float life = particle.LifeRemaining / particle.LifeTime;
+
+                ParticleInstanceData data;
+                data.Position = particle.Position;
+                data.Rotation = particle.Rotation;
+                data.Color = glm::mix(particle.ColorEnd, particle.ColorBegin, life);
+                data.Size = glm::mix(particle.SizeEnd, particle.SizeBegin, life);
+                data.Life = life;
+                activeParticles.push_back(data);
+            }
+
+            if (!activeParticles.empty())
+            {
+                auto mat = Engine::Get().GetAssetManager().GetAsset<Material>(emitter.Material);
+                if (mat)
+                {
+                    Engine::Get().GetRenderer().SubmitParticles(mat.get(), activeParticles);
+                }
             }
         }
     }
@@ -81,6 +119,6 @@ namespace Lynx
         particle.LifeTime = props.LifeTime;
         particle.LifeRemaining = props.LifeTime;
 
-        emitter.PoolIndex = --emitter.PoolIndex % emitter.ParticlePool.size();
+        emitter.PoolIndex = (emitter.PoolIndex + 1) % emitter.ParticlePool.size();
     }
 }

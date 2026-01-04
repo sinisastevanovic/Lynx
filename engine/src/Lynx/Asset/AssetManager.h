@@ -63,7 +63,6 @@ namespace Lynx
     private:
         std::shared_ptr<Asset> LoadAsset(const AssetMetadata& metadata, AssetLoadMode mode, std::function<void(AssetHandle)> onLoaded);
         std::shared_ptr<Asset> CreateAssetInstance(const AssetMetadata& metadata);
-        void TrackAsset(std::shared_ptr<Asset> asset);
 
         template<typename T>
         std::shared_ptr<T> GetErrorAsset() { return nullptr; }
@@ -74,7 +73,6 @@ namespace Lynx
         AssetRegistry* m_AssetRegistry = nullptr;
         
         std::unordered_map<AssetHandle, std::shared_ptr<Asset>> m_LoadedAssets;
-        std::vector<std::weak_ptr<Asset>> m_TrackedAssets;
         
         mutable std::mutex m_AssetsMutex;
 

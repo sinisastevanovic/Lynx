@@ -16,6 +16,7 @@
 #include "Lynx/Asset/Shader.h"
 #include "nvrhi/validation.h"
 #include "Passes/DepthPass.h"
+#include "Passes/ParticlePass.h"
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
@@ -134,6 +135,7 @@ namespace Lynx
         m_CurrentFrameData = RenderData();
         m_OpaqueBatches.clear();
         m_StageBuffer = nullptr;
+        m_ParticleInstanceBuffer = nullptr;
 
         SamplerCache::Shutdown();
         m_WhiteTex = nullptr;
@@ -178,7 +180,6 @@ namespace Lynx
         m_RenderContext.BlackTexture = m_BlackTex;
         m_RenderContext.NormalTexture = m_NormalTex;
         m_RenderContext.MetallicRoughnessTexture = m_MetallicRoughnessTex;
-        m_RenderContext.GetSampler = [this](const SamplerSettings& s) { return GetSampler(s); };
 
         // TODO: Make sure this is up-to-date...
         nvrhi::FramebufferInfo fbInfo;
@@ -192,6 +193,7 @@ namespace Lynx
         m_Pipeline.AddPass(std::make_unique<ShadowPass>(m_ShadowMapResolution));
         m_Pipeline.AddPass(std::make_unique<DepthPass>());
         m_Pipeline.AddPass(std::make_unique<ForwardPass>());
+        m_Pipeline.AddPass(std::make_unique<ParticlePass>());
         if (m_ShouldCreateIDTarget)
         {
             m_Pipeline.AddPass(std::make_unique<GridPass>());
@@ -213,34 +215,6 @@ namespace Lynx
         m_MipMapGenPass->Init(m_NvrhiDevice);
         
         LX_CORE_INFO("Renderer initialized successfully (Pipeline loaded).");
-    }
-
-    nvrhi::SamplerHandle Renderer::GetSampler(const SamplerSettings& settings)
-    {
-        auto it = m_SamplerCache.find(settings);
-        if (it != m_SamplerCache.end())
-            return it->second;
-
-        // Create a new Sampler
-        auto desc = nvrhi::SamplerDesc();
-
-        nvrhi::SamplerAddressMode addressMode = Helpers::WrapModeToNvrhi(settings.WrapMode);
-        desc.setAddressU(addressMode).setAddressV(addressMode).setAddressW(addressMode);
-
-        if (settings.FilterMode == TextureFilter::Nearest)
-            desc.setMinFilter(false).setMagFilter(false).setMipFilter(false);
-        else if (settings.FilterMode == TextureFilter::Bilinear)
-            desc.setMinFilter(true).setMagFilter(true).setMipFilter(false);
-        else if (settings.FilterMode == TextureFilter::Trilinear)
-        {
-            desc.setMinFilter(true).setMagFilter(true).setMipFilter(true);
-            if (settings.UseAnisotropy)
-                desc.setMaxAnisotropy(m_MaxAnisotropy);
-        }
-
-        nvrhi::SamplerHandle handle = m_NvrhiDevice->createSampler(desc);
-        m_SamplerCache[settings] = handle;
-        return handle;
     }
 
     nvrhi::TextureHandle Renderer::CreateTexture(const TextureSpecification& specification, unsigned char* data)
@@ -724,6 +698,41 @@ namespace Lynx
         }
         
         m_CurrentFrameData.InstanceBuffer = m_InstanceBuffer;
+
+        std::vector<ParticleInstanceData> allParticleData;
+        m_CurrentFrameData.ParticleQueue.clear();
+
+        for (auto& [material, particles] : m_ParticleBatches)
+        {
+            if (particles.empty())
+                continue;
+
+            ParticleBatch batch;
+            batch.Material = material;
+            batch.StartOffset = (uint32_t)allParticleData.size();
+            batch.Count = (uint32_t)particles.size();
+
+            m_CurrentFrameData.ParticleQueue.push_back(batch);
+            allParticleData.insert(allParticleData.end(), particles.begin(), particles.end());
+        }
+
+        size_t requiredParticleSize = allParticleData.size() * sizeof(ParticleInstanceData);
+        if (requiredParticleSize > 0)
+        {
+            if (!m_ParticleInstanceBuffer || m_ParticleInstanceBuffer->getDesc().byteSize < requiredParticleSize)
+            {
+                nvrhi::BufferDesc desc;
+                desc.byteSize = (uint64_t)(requiredParticleSize * 1.5);
+                desc.structStride = sizeof(ParticleInstanceData);
+                desc.debugName = "ParticleInstanceBuffer";
+                desc.initialState = nvrhi::ResourceStates::ShaderResource;
+                desc.keepInitialState = true;
+                m_ParticleInstanceBuffer = m_NvrhiDevice->createBuffer(desc);
+            }
+
+            m_CommandList->writeBuffer(m_ParticleInstanceBuffer, allParticleData.data(), requiredParticleSize);
+        }
+        m_CurrentFrameData.ParticleInstanceBuffer = m_ParticleInstanceBuffer;
     }
 
     void Renderer::BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, float deltaTime, bool editMode)
@@ -753,8 +762,10 @@ namespace Lynx
         m_CommandList->open();
 
         m_OpaqueBatches.clear();
+        m_ParticleBatches.clear();
         m_CurrentFrameData.OpaqueDrawCalls.clear();
         m_CurrentFrameData.TransparentQueue.clear();
+        m_CurrentFrameData.ParticleQueue.clear();
         
         glm::vec3 center = cameraPosition;
 
@@ -878,6 +889,15 @@ namespace Lynx
 
         // Let's assume for V1 we just use the currently bound texture (from SetTexture)
         // OR we implement a simple lookup.
+    }
+
+    void Renderer::SubmitParticles(Material* material, const std::vector<ParticleInstanceData>& particles)
+    {
+        if (!material || particles.empty())
+            return;
+
+        auto& batch = m_ParticleBatches[material];
+        batch.insert(batch.end(), particles.begin(), particles.end());
     }
 
     void Renderer::EndScene()

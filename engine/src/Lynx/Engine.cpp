@@ -180,23 +180,6 @@ namespace Lynx
                 cameraPos = m_EditorCamera.GetPosition();
             }
 
-
-            // TODO: We should load all the textures and meshes before we run the scene!!!
-            if (m_SceneState == SceneState::Play)
-            {
-                m_PhysicsSystem->Simulate(deltaTime);
-                m_Scene->OnUpdateRuntime(deltaTime);
-                m_ParticleSystem.OnUpdate(deltaTime, m_Scene.get());
-                if (gameModule)
-                {
-                    gameModule->OnUpdate(deltaTime);
-                }
-            }
-            else
-            {
-                m_Scene->OnUpdateEditor(deltaTime);
-            }
-
             glm::vec3 lightDir = { -0.5f, -0.7f, 1.0f };
             glm::vec3 lightColor = { 1.0f, 1.0f, 1.0f };
             float lightIntensity = 1.0f;
@@ -212,6 +195,23 @@ namespace Lynx
             }
 
             m_Renderer->BeginScene(cameraView, cameraProjection, cameraPos, lightDir, lightColor, lightIntensity, deltaTime, m_SceneState == SceneState::Edit);
+
+            m_ParticleSystem.OnUpdate(deltaTime, m_Scene.get());
+
+            // TODO: We should load all the textures and meshes before we run the scene!!!
+            if (m_SceneState == SceneState::Play)
+            {
+                m_PhysicsSystem->Simulate(deltaTime);
+                m_Scene->OnUpdateRuntime(deltaTime);
+                if (gameModule)
+                {
+                    gameModule->OnUpdate(deltaTime);
+                }
+            }
+            else
+            {
+                m_Scene->OnUpdateEditor(deltaTime);
+            }
 
             Frustum camFrustum;
             camFrustum.FromViewProjection(cameraProjection * cameraView);
@@ -879,6 +879,102 @@ namespace Lynx
                 light.Color = glm::vec3(color[0], color[1], color[2]);
                 light.Intensity = json["Intensity"];
                 light.CastShadows = json["CastShadows"];
+            });
+
+        m_ComponentRegistry.RegisterComponent<ParticleEmitterComponent>("ParticleEmitter",
+            [](entt::registry& reg, entt::entity entity)
+            {
+                auto& comp = reg.get<ParticleEmitterComponent>(entity);
+                EditorUIHelpers::DrawAssetSelection("Material", comp.Material, AssetType::Material);
+
+                int maxP = (int)comp.MaxParticles;
+                if (ImGui::DragInt("Max Particles", &maxP, 1.0f, 1, 100000))
+                {
+                    comp.SetMaxParticles(maxP);
+                }
+                
+                ImGui::DragFloat("Emission Rate", &comp.EmissionRate, 0.1f, 0.0f, 1000.0f);
+                if (ImGui::Checkbox("Looping", &comp.IsLooping))
+                {
+                    comp.BurstDone = false;
+                }
+
+                if (!comp.IsLooping)
+                {
+                    ImGui::SameLine();
+                    if (ImGui::Button("Play Burst"))
+                    {
+                        comp.BurstDone = false;
+                    }
+                }
+                
+                if (ImGui::TreeNode("Properties"))
+                {
+                    ImGui::DragFloat3("Position Offset", &comp.Properties.Position.x, 0.1f);
+                    ImGui::DragFloat3("Velocity", &comp.Properties.Velocity.x, 0.1f);
+                    ImGui::DragFloat3("Velocity Variation", &comp.Properties.VelocityVariation.x, 0.1f);
+                
+                    ImGui::ColorEdit4("Color Begin", &comp.Properties.ColorBegin.r);
+                    ImGui::ColorEdit4("Color End", &comp.Properties.ColorEnd.r);
+                
+                    ImGui::DragFloat("Size Begin", &comp.Properties.SizeBegin, 0.1f);
+                    ImGui::DragFloat("Size End", &comp.Properties.SizeEnd, 0.1f);
+                    ImGui::DragFloat("Size Variation", &comp.Properties.SizeVariation, 0.1f);
+                
+                    ImGui::DragFloat("Life Time", &comp.Properties.LifeTime, 0.1f, 0.0f, 100.0f);
+                
+                    ImGui::TreePop();
+                }
+            },
+            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+            {
+                auto& comp = reg.get<ParticleEmitterComponent>(entity);
+                json["Material"] = (uint64_t)comp.Material;
+                json["MaxParticles"] = comp.MaxParticles;
+                json["EmissionRate"] = comp.EmissionRate;
+                json["IsLooping"] = comp.IsLooping;
+
+                auto props = nlohmann::json::object();
+                props["Position"] = { comp.Properties.Position.x, comp.Properties.Position.y, comp.Properties.Position.z };
+                props["Velocity"] = { comp.Properties.Velocity.x, comp.Properties.Velocity.y, comp.Properties.Velocity.z };
+                props["VelocityVariation"] = { comp.Properties.VelocityVariation.x, comp.Properties.VelocityVariation.y, comp.Properties.VelocityVariation.z };
+                props["ColorBegin"] = { comp.Properties.ColorBegin.r, comp.Properties.ColorBegin.g, comp.Properties.ColorBegin.b, comp.Properties.ColorBegin.a };
+                props["ColorEnd"] = { comp.Properties.ColorEnd.r, comp.Properties.ColorEnd.g, comp.Properties.ColorEnd.b, comp.Properties.ColorEnd.a };
+                props["SizeBegin"] = comp.Properties.SizeBegin;
+                props["SizeEnd"] = comp.Properties.SizeEnd;
+                props["SizeVariation"] = comp.Properties.SizeVariation;
+                props["LifeTime"] = comp.Properties.LifeTime;
+
+                json["Properties"] = props;
+            },
+            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+            {
+                auto& comp = reg.get_or_emplace<ParticleEmitterComponent>(entity);
+                if (json.contains("Material")) comp.Material = AssetHandle(json["Material"]);
+                if (json.contains("MaxParticles"))
+                {
+                    comp.SetMaxParticles(json["MaxParticles"]);
+                }
+                if (json.contains("EmissionRate")) comp.EmissionRate = json["EmissionRate"];
+                if (json.contains("IsLooping")) comp.IsLooping = json["IsLooping"];
+
+                if (json.contains("Properties"))
+                {
+                    auto props = json["Properties"];
+                    // Helpers for array reading
+                    auto getVec3 = [](const nlohmann::json& j) { return glm::vec3(j[0], j[1], j[2]); };
+                    auto getVec4 = [](const nlohmann::json& j) { return glm::vec4(j[0], j[1], j[2], j[3]); };
+
+                    comp.Properties.Position = getVec3(props["Position"]);
+                    comp.Properties.Velocity = getVec3(props["Velocity"]);
+                    comp.Properties.VelocityVariation = getVec3(props["VelocityVariation"]);
+                    comp.Properties.ColorBegin = getVec4(props["ColorBegin"]);
+                    comp.Properties.ColorEnd = getVec4(props["ColorEnd"]);
+                    comp.Properties.SizeBegin = props["SizeBegin"];
+                    comp.Properties.SizeEnd = props["SizeEnd"];
+                    comp.Properties.SizeVariation = props["SizeVariation"];
+                    comp.Properties.LifeTime = props["LifeTime"];
+                }
             });
     }
 }

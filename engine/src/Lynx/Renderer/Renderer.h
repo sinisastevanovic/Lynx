@@ -64,10 +64,10 @@ namespace Lynx
 
         std::pair<nvrhi::BufferHandle, nvrhi::BufferHandle> CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices);
         void SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, RenderFlags flags, int entityID = -1);
+        void SubmitParticles(Material* material, const std::vector<ParticleInstanceData>& particles);
 
         nvrhi::DeviceHandle GetDeviceHandle() const { return m_NvrhiDevice; }
 
-        nvrhi::SamplerHandle GetSampler(const SamplerSettings& settings);
         nvrhi::TextureHandle CreateTexture(const TextureSpecification& specification, unsigned char* data);
 
         int ReadIdFromBuffer(uint32_t x, uint32_t y);
@@ -128,6 +128,8 @@ namespace Lynx
         std::unordered_map<SamplerSettings, nvrhi::SamplerHandle> m_SamplerCache;
 
         std::unordered_map<BatchKey, std::vector<GPUInstanceData>, BatchKeyHasher> m_OpaqueBatches;
+        std::unordered_map<Material*, std::vector<ParticleInstanceData>> m_ParticleBatches;
+        nvrhi::BufferHandle m_ParticleInstanceBuffer;
 
         RenderPipeline m_Pipeline;
         std::unique_ptr<CompositePass> m_CompositePass;

@@ -229,6 +229,41 @@ void MyGame::OnStart()
         collider.HalfSize = { 0.1f, 0.3f, 0.1f };
     }
 
+    {
+        auto fireEntity = scene->CreateEntity("Campfire Particle");
+
+        auto& transform = fireEntity.GetComponent<Lynx::TransformComponent>();
+        transform.Translation = { 0.0f, 1.0f, 0.0f };
+
+        auto& emitter = fireEntity.AddComponent<Lynx::ParticleEmitterComponent>();
+
+        // --- Configuration for FIRE Effect ---
+        emitter.EmissionRate = 50.0f;   
+        emitter.Properties.LifeTime = 1.5f; 
+        emitter.Properties.Position = { 0.0f, 0.0f, 0.0f };
+
+        emitter.Properties.Velocity = { 0.0f, 2.0f, 0.0f };
+        emitter.Properties.VelocityVariation = { 0.5f, 1.0f, 0.5f };
+
+        // Color: Bright Orange -> Fading Red
+        emitter.Properties.ColorBegin = { 254.0f/255.0f, 212.0f/255.0f, 123.0f/255.0f, 1.0f };
+        emitter.Properties.ColorEnd   = { 254.0f/255.0f, 109.0f/255.0f, 41.0f/255.0f, 0.0f };
+
+        // Size: Big base -> Small tip
+        emitter.Properties.SizeBegin = 0.5f;
+        emitter.Properties.SizeEnd = 0.1f;
+        emitter.Properties.SizeVariation = 0.2f;
+
+        auto particleMat = std::make_shared<Lynx::Material>();
+        particleMat->AlbedoColor = { 1.0f, 1.0f, 1.0f, 1.0f }; 
+        particleMat->Mode = Lynx::AlphaMode::Additive;
+        particleMat->UseNormalMap = false;
+
+        Lynx::Engine::Get().GetAssetManager().AddRuntimeAsset(particleMat);
+
+        emitter.Material = particleMat->GetHandle();
+    }
+
     auto spawnerEntity = scene->CreateEntity("Spawner");
     auto& spawner = spawnerEntity.AddComponent<EnemySpawnerComponent>();
 

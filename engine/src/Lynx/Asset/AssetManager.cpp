@@ -54,7 +54,6 @@ namespace Lynx
             m_LoadedAssets[metadata.Handle] = newAsset;
         }
         
-        TrackAsset(newAsset);
 
         auto loadTask = [this, newAsset, metadata, onLoaded]()
         {
@@ -68,19 +67,11 @@ namespace Lynx
                         if (newAsset->GetType() == AssetType::Texture)
                         {
                             std::lock_guard<std::mutex> lock(m_AssetsMutex);
-                            for (auto it = m_TrackedAssets.begin(); it != m_TrackedAssets.end(); )
+                            for (auto& [handle, asset] : m_LoadedAssets)
                             {
-                                if (auto asset = it->lock())
+                                if (asset->GetType() == AssetType::Material && asset->DependsOn(newAsset->GetHandle()))
                                 {
-                                    if (asset->GetType() == AssetType::Material && asset->DependsOn(newAsset->GetHandle()))
-                                    {
-                                        asset->IncrementVersion();
-                                    }
-                                    ++it;
-                                }
-                                else
-                                {
-                                    it = m_TrackedAssets.erase(it);
+                                    asset->IncrementVersion();
                                 }
                             }
                         }
@@ -158,12 +149,6 @@ namespace Lynx
         return newAsset;
     }
 
-    void AssetManager::TrackAsset(std::shared_ptr<Asset> asset)
-    {
-        std::lock_guard<std::mutex> lock(m_AssetsMutex);
-        m_TrackedAssets.push_back(asset);
-    }
-
     void AssetManager::ReloadAsset(AssetHandle handle)
     {
         LX_CORE_INFO("Reloading Asset: {0}", handle);
@@ -172,19 +157,11 @@ namespace Lynx
         {
             LX_CORE_INFO("Asset reloaded successfully");
             std::lock_guard<std::mutex> lock(m_AssetsMutex);
-            for (auto it = m_TrackedAssets.begin(); it != m_TrackedAssets.end(); )
+            for (auto& [otherHandle, otherAsset] : m_LoadedAssets)
             {
-                if (auto otherAsset = it->lock())
+                if (otherAsset->DependsOn(asset->GetHandle()))
                 {
-                    if (otherAsset->DependsOn(asset->GetHandle()))
-                    {
-                        otherAsset->IncrementVersion();
-                    }
-                    ++it;
-                }
-                else
-                {
-                    it = m_TrackedAssets.erase(it);
+                    otherAsset->IncrementVersion();
                 }
             }
         }
@@ -245,8 +222,20 @@ namespace Lynx
 
     void AssetManager::AddRuntimeAsset(std::shared_ptr<Asset> asset)
     {
+        if (!asset)
+            return;
+
+        if (asset->GetHandle() == AssetHandle::Null())
+            asset->SetHandle(AssetHandle());
+
         asset->SetIsRuntime(true);
-        TrackAsset(asset);
+        if (asset->GetState() == AssetState::None)
+            asset->SetState(AssetState::Ready);
+        
+        {
+            std::lock_guard<std::mutex> lock(m_AssetsMutex);
+            m_LoadedAssets[asset->GetHandle()] = asset;
+        }
     }
 
     std::shared_ptr<Texture> AssetManager::GetDefaultTexture()

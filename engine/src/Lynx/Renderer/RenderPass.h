@@ -86,12 +86,31 @@ namespace Lynx
         RenderFlags Flags = RenderFlags::All;
     };
 
+    struct ParticleInstanceData
+    {
+        glm::vec3 Position;
+        float Rotation;
+        glm::vec4 Color;
+        float Size;
+        float Life;
+        float Padding[2];
+    };
+
+    struct ParticleBatch
+    {
+        Material* Material;
+        uint32_t StartOffset;
+        uint32_t Count;
+    };
+
     struct RenderData
     {
         std::vector<RenderCommand> TransparentQueue;
-
         std::vector<BatchDrawCall> OpaqueDrawCalls;
         nvrhi::BufferHandle InstanceBuffer;
+
+        std::vector<ParticleBatch> ParticleQueue;
+        nvrhi::BufferHandle ParticleInstanceBuffer;
 
         glm::mat4 View;
         glm::mat4 Projection;
