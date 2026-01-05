@@ -25,6 +25,7 @@
 #include "Renderer/DebugRenderer.h"
 #include "Scene/Components/LuaScriptComponent.h"
 #include "Scene/Components/NativeScriptComponent.h"
+#include "Scene/Components/UIComponents.h"
 
 
 namespace Lynx
@@ -279,6 +280,45 @@ namespace Lynx
                     DebugRenderer::DrawCapsule(transform.Translation, collider.Radius, collider.HalfHeight, transform.Rotation, debugColor);
                 }
             }
+
+            auto [width, height] = m_Renderer->GetViewportSize();
+            m_Scene->UpdateUILayout(width, height);
+
+            {
+                struct UIElement
+                {
+                    Material* Mat;
+                    RectTransformComponent* Rect;
+                    SpriteComponent* Sprite;
+                };
+                std::vector<UIElement> UIElements;
+            
+                auto uiView = m_Scene->Reg().view<RectTransformComponent, SpriteComponent>();
+                for (auto entity : uiView)
+                {
+                    auto [rect, sprite] = uiView.get<RectTransformComponent, SpriteComponent>(entity);
+                    Material* material = nullptr;
+                    if (sprite.Material)
+                    {
+                        auto matAsset = m_AssetManager->GetAsset<Material>(sprite.Material);
+                        if (matAsset)
+                            material = matAsset.get();
+                    }
+
+                    UIElements.push_back({ material, &rect, &sprite });
+
+                    //m_Renderer->SubmitUI(material, rect.ScreenPosition, rect.ScreenSize);
+                }
+
+                std::sort(UIElements.begin(), UIElements.end(), [](const auto& a, const auto& b) {
+                    return a.Sprite->Layer < b.Sprite->Layer;
+                });
+
+                for (const auto& el : UIElements) {
+                    m_Renderer->SubmitUI(el.Mat, el.Rect->ScreenPosition, el.Rect->ScreenSize);
+                }
+            }
+            
 
             m_Renderer->EndScene();
         }
@@ -979,6 +1019,98 @@ namespace Lynx
                     comp.Properties.SizeVariation = props["SizeVariation"];
                     comp.Properties.LifeTime = props["LifeTime"];
                 }
+            });
+
+        m_ComponentRegistry.RegisterComponent<CanvasComponent>("Canvas",
+            [](entt::registry& reg, entt::entity entity)
+            {
+                auto& comp = reg.get<CanvasComponent>(entity);
+                ImGui::Checkbox("Is Screen Space", &comp.IsScreenSpace);
+            },
+            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+            {
+                auto& comp = reg.get<CanvasComponent>(entity);
+                json["IsScreenSpace"] = comp.IsScreenSpace;
+            },
+            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+            {
+                auto& comp = reg.get<CanvasComponent>(entity);
+                if (json.contains("IsScreenSpace"))
+                    comp.IsScreenSpace = json["IsScreenSpace"];
+            });
+
+        m_ComponentRegistry.RegisterComponent<SpriteComponent>("Sprite",
+            [](entt::registry& reg, entt::entity entity)
+            {
+                auto& comp = reg.get<SpriteComponent>(entity);
+                EditorUIHelpers::DrawAssetSelection("Material", comp.Material, AssetType::Material);
+                ImGui::DragInt("Sorting Layer", &comp.Layer);
+            },
+            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+            {
+                auto& comp = reg.get<SpriteComponent>(entity);
+                json["Material"] = (uint64_t)comp.Material;
+                json["Layer"] = comp.Layer;
+            },
+            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+            {
+                auto& comp = reg.get<SpriteComponent>(entity);
+                if (json.contains("Material"))
+                    comp.Material = (AssetHandle)json["IsScreenSpace"].get<uint64_t>();
+                if (json.contains("Layer"))
+                    comp.Layer = json["Layer"];
+            });
+
+        m_ComponentRegistry.RegisterComponent<RectTransformComponent>("RectTransform",
+            [](entt::registry& reg, entt::entity entity)
+            {
+                auto& comp = reg.get<RectTransformComponent>(entity);
+                // TODO: Add anchor presets (Top-Left, Center, Stretch, etc.)
+                ImGui::Text("Anchors");
+                ImGui::DragFloat2("Min", &comp.AnchorMin.x, 0.01, 0.0f, 1.0f);
+                ImGui::DragFloat2("Max", &comp.AnchorMax.x, 0.01, 0.0f, 1.0f);
+                ImGui::Separator();
+
+                bool isStretchX = (comp.AnchorMin.x != comp.AnchorMax.x);
+                bool isStretchY = (comp.AnchorMin.y != comp.AnchorMax.y);
+
+                ImGui::Text("Rect");
+                if (!isStretchX && !isStretchY)
+                {
+                    // TODO: 
+                    ImGui::DragFloat2("Offset Min", &comp.OffsetMin.x);
+                    ImGui::DragFloat2("Offset Max", &comp.OffsetMax.x);
+                }
+                else
+                {
+                    ImGui::DragFloat2("Offset Min", &comp.OffsetMin.x);
+                    ImGui::DragFloat2("Offset Max", &comp.OffsetMax.x);
+                }
+                ImGui::Separator();
+                ImGui::DragFloat("Rotation", &comp.Rotation);
+                ImGui::DragFloat2("Scale", &comp.Scale.x, 0.01f);
+            },
+            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+            {
+                auto& comp = reg.get<RectTransformComponent>(entity);
+                json["AnchorMin"] = { comp.AnchorMin.x, comp.AnchorMin.y };
+                json["AnchorMax"] = { comp.AnchorMax.x, comp.AnchorMax.y };
+                json["OffsetMin"] = { comp.OffsetMin.x, comp.OffsetMin.y };
+                json["OffsetMax"] = { comp.OffsetMax.x, comp.OffsetMax.y };
+                json["Pivot"] = { comp.Pivot.x, comp.Pivot.y };
+                json["Rotation"] = comp.Rotation;
+                json["Scale"] = { comp.Scale.x, comp.Scale.y };
+            },
+            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+            {
+                auto& comp = reg.get<RectTransformComponent>(entity);
+                if (json.contains("AnchorMin")) { comp.AnchorMin.x = json["AnchorMin"][0]; comp.AnchorMin.y = json["AnchorMin"][1]; }
+                if (json.contains("AnchorMax")) { comp.AnchorMax.x = json["AnchorMax"][0]; comp.AnchorMax.y = json["AnchorMax"][1]; }
+                if (json.contains("OffsetMin")) { comp.OffsetMin.x = json["OffsetMin"][0]; comp.OffsetMin.y = json["OffsetMin"][1]; }
+                if (json.contains("OffsetMax")) { comp.OffsetMax.x = json["OffsetMax"][0]; comp.OffsetMax.y = json["OffsetMax"][1]; }
+                if (json.contains("Pivot")) { comp.Pivot.x = json["Pivot"][0]; comp.Pivot.y = json["Pivot"][1]; }
+                if (json.contains("Rotation")) comp.Rotation = json["Rotation"];
+                if (json.contains("Scale")) { comp.Scale.x = json["Scale"][0]; comp.Scale.y = json["Scale"][1]; }
             });
     }
 }

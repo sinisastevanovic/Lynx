@@ -13,6 +13,7 @@
 #include "Passes/BloomPass.h"
 #include "Passes/CompositePass.h"
 #include "Passes/MipMapBlitPass.h"
+#include "Passes/UIPass.h"
 
 struct GLFWwindow;
 
@@ -65,6 +66,7 @@ namespace Lynx
         std::pair<nvrhi::BufferHandle, nvrhi::BufferHandle> CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices);
         void SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, RenderFlags flags, int entityID = -1);
         void SubmitParticles(Material* material, const std::vector<ParticleInstanceData>& particles);
+        void SubmitUI(Material* material, const glm::vec2& position, const glm::vec2& size);
 
         nvrhi::DeviceHandle GetDeviceHandle() const { return m_NvrhiDevice; }
 
@@ -130,11 +132,15 @@ namespace Lynx
         std::unordered_map<BatchKey, std::vector<GPUInstanceData>, BatchKeyHasher> m_OpaqueBatches;
         std::unordered_map<Material*, std::vector<ParticleInstanceData>> m_ParticleBatches;
         nvrhi::BufferHandle m_ParticleInstanceBuffer;
+        std::unordered_map<Material*, std::vector<GPUUIData>> m_UIBatches;
+        nvrhi::BufferHandle m_UIInstanceBuffer;
 
         RenderPipeline m_Pipeline;
+        // TODO: See if we can somehow include these in the pipeline too?
         std::unique_ptr<CompositePass> m_CompositePass;
         std::unique_ptr<BloomPass> m_BloomPass;
         std::unique_ptr<MipMapBlitPass> m_MipMapGenPass;
+        std::unique_ptr<UIPass> m_UIPass;
         RenderContext m_RenderContext;
         RenderData m_CurrentFrameData;
 

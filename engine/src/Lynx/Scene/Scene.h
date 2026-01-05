@@ -9,6 +9,7 @@
 namespace Lynx
 {
     class Entity;
+    struct RectTransformComponent;
 
     class LX_API Scene : public Asset, public std::enable_shared_from_this<Scene>
     {
@@ -24,6 +25,7 @@ namespace Lynx
 
         void OnUpdateRuntime(float deltaTime);
         void OnUpdateEditor(float deltaTime);
+        void UpdateUILayout(uint32_t viewportWidth, uint32_t viewportHeight);
 
         void AttachEntity(entt::entity child, entt::entity parent);
         void AttachEntityKeepWorld(entt::entity child, entt::entity parent);
@@ -44,6 +46,7 @@ namespace Lynx
     private:
         
         void UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform);
+        void UpdateEntityLayout(entt::entity entity, const RectTransformComponent& parentRect);
         
         entt::registry m_Registry;
 

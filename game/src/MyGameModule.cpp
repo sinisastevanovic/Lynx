@@ -22,6 +22,7 @@
 #include "Lynx/ScriptRegistry.h"
 #include "Lynx/Scene/Components/LuaScriptComponent.h"
 #include "Lynx/Scene/Components/NativeScriptComponent.h"
+#include "Lynx/Scene/Components/UIComponents.h"
 
 void MyGame::RegisterScripts()
 {
@@ -266,6 +267,24 @@ void MyGame::OnStart()
 
     auto spawnerEntity = scene->CreateEntity("Spawner");
     auto& spawner = spawnerEntity.AddComponent<EnemySpawnerComponent>();
+
+    {
+        auto canvas = scene->CreateEntity("Canvas");
+        canvas.AddComponent<Lynx::CanvasComponent>();
+        canvas.AddComponent<Lynx::RectTransformComponent>(); // Root
+
+        // Create Image
+        auto image = scene->CreateEntity("HealthBar");
+        scene->AttachEntity(image, canvas);
+
+        auto& rect = image.AddComponent<Lynx::RectTransformComponent>();
+        rect.AnchorMin = {0.5f, 0.5f}; // Center
+        rect.AnchorMax = {0.5f, 0.5f};
+        rect.OffsetMin = {-100, -20};
+        rect.OffsetMax = {100, 20}; // 200x40 pixel bar
+
+        auto& sprite = image.AddComponent<Lynx::SpriteComponent>();
+    }
 
     Lynx::Input::BindAxis("MoveLeftRight", Lynx::KeyCode::D, Lynx::KeyCode::A);
     Lynx::Input::BindAxis("MoveUpDown", Lynx::KeyCode::S, Lynx::KeyCode::W);

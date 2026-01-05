@@ -103,6 +103,20 @@ namespace Lynx
         uint32_t Count;
     };
 
+    struct GPUUIData
+    {
+        glm::vec2 Position;
+        glm::vec2 Size;
+        glm::vec4 Color;
+    };
+
+    struct UIBatch
+    {
+        Material* Material;
+        uint32_t StartOffset;
+        uint32_t Count;
+    };
+
     struct RenderData
     {
         std::vector<RenderCommand> TransparentQueue;
@@ -111,6 +125,9 @@ namespace Lynx
 
         std::vector<ParticleBatch> ParticleQueue;
         nvrhi::BufferHandle ParticleInstanceBuffer;
+
+        std::vector<UIBatch> UIQueue;
+        nvrhi::BufferHandle UIInstanceBuffer;
 
         glm::mat4 View;
         glm::mat4 Projection;
@@ -143,6 +160,7 @@ namespace Lynx
         nvrhi::CommandListHandle CommandList;
 
         nvrhi::FramebufferInfo PresentationFramebufferInfo;
+        nvrhi::FramebufferInfo FinalOutputFramebufferInfo;
 
         nvrhi::BufferHandle GlobalConstantBuffer;
         nvrhi::TextureHandle WhiteTexture;

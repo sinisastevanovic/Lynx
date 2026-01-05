@@ -15,6 +15,7 @@
 #include <glm/gtx/matrix_decompose.hpp>
 
 #include "SceneSerializer.h"
+#include "Components/UIComponents.h"
 
 namespace Lynx
 {
@@ -364,6 +365,63 @@ namespace Lynx
 
     void Scene::OnUpdateEditor(float deltaTime)
     {
+    }
+
+    void Scene::UpdateUILayout(uint32_t viewportWidth, uint32_t viewportHeight)
+    {
+        auto view = m_Registry.view<CanvasComponent, RectTransformComponent, RelationshipComponent>();
+        for (auto entity : view)
+        {
+            auto [canvas, rect, relation] = view.get<CanvasComponent, RectTransformComponent, RelationshipComponent>(entity);
+
+            if (canvas.IsScreenSpace)
+            {
+                rect.ScreenPosition = { 0.0f, 0.0f };
+                rect.ScreenSize = { (float)viewportWidth, (float)viewportHeight };
+            }
+
+            if (relation.FirstChild != entt::null)
+            {
+                UpdateEntityLayout(relation.FirstChild, rect);
+            }
+        }
+    }
+
+    void Scene::UpdateEntityLayout(entt::entity entity, const RectTransformComponent& parentRect)
+    {
+        auto& rel = m_Registry.get<RelationshipComponent>(entity);
+        
+        if (!m_Registry.all_of<RectTransformComponent>(entity))
+        {
+            if (rel.NextSibling != entt::null)
+                UpdateEntityLayout(rel.NextSibling, parentRect);
+
+            return;
+        }
+
+        auto& rect = m_Registry.get<RectTransformComponent>(entity);
+
+        glm::vec2 parentMin = parentRect.ScreenPosition;
+        glm::vec2 parentSize = parentRect.ScreenSize;
+
+        glm::vec2 anchorMinPos = parentMin + (parentSize * rect.AnchorMin);
+        glm::vec2 anchorMaxPos = parentMin + (parentSize * rect.AnchorMax);
+
+        glm::vec2 minPoint = anchorMinPos + rect.OffsetMin;
+        glm::vec2 maxPoint = anchorMaxPos + rect.OffsetMax;
+
+        glm::vec2 rawSize = maxPoint - minPoint;
+        glm::vec2 pivotPos = minPoint + (rawSize * rect.Pivot);
+        glm::vec2 newSize = rawSize * rect.Scale;
+
+        rect.ScreenPosition = pivotPos - (newSize * rect.Pivot);
+        rect.ScreenSize = newSize;
+
+        if (rel.FirstChild != entt::null)
+            UpdateEntityLayout(rel.FirstChild, rect);
+
+        if (rel.NextSibling != entt::null)
+            UpdateEntityLayout(rel.NextSibling, rect);
     }
 
     void Scene::AttachEntity(entt::entity child, entt::entity parent)

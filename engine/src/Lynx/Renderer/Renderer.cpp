@@ -131,11 +131,14 @@ namespace Lynx
         m_BloomPass.reset();
         m_CompositePass.reset();
         m_MipMapGenPass.reset();
+        m_UIPass.reset();
         m_RenderContext = RenderContext();
         m_CurrentFrameData = RenderData();
         m_OpaqueBatches.clear();
         m_StageBuffer = nullptr;
         m_ParticleInstanceBuffer = nullptr;
+        m_UIInstanceBuffer = nullptr;
+        m_UIBatches.clear();
 
         SamplerCache::Shutdown();
         m_WhiteTex = nullptr;
@@ -187,6 +190,9 @@ namespace Lynx
         if (m_ShouldCreateIDTarget) fbInfo.addColorFormat(nvrhi::Format::R32_SINT);
         fbInfo.setDepthFormat(nvrhi::Format::D32);
         m_RenderContext.PresentationFramebufferInfo = fbInfo;
+        nvrhi::FramebufferInfo finalfbInfo;
+        finalfbInfo.addColorFormat(nvrhi::Format::BGRA8_UNORM);
+        m_RenderContext.FinalOutputFramebufferInfo = finalfbInfo;
 
         SamplerCache::Init(m_NvrhiDevice, m_MaxAnisotropy);
 
@@ -213,6 +219,9 @@ namespace Lynx
 
         m_MipMapGenPass = std::make_unique<MipMapBlitPass>();
         m_MipMapGenPass->Init(m_NvrhiDevice);
+
+        m_UIPass = std::make_unique<UIPass>();
+        m_UIPass->Init(m_RenderContext);
         
         LX_CORE_INFO("Renderer initialized successfully (Pipeline loaded).");
     }
@@ -733,6 +742,32 @@ namespace Lynx
             m_CommandList->writeBuffer(m_ParticleInstanceBuffer, allParticleData.data(), requiredParticleSize);
         }
         m_CurrentFrameData.ParticleInstanceBuffer = m_ParticleInstanceBuffer;
+
+        std::vector<GPUUIData> allUIData;
+        m_CurrentFrameData.UIQueue.clear();
+        for (auto& [mat, instances] : m_UIBatches)
+        {
+            m_CurrentFrameData.UIQueue.push_back({ mat, (uint32_t)allUIData.size(), (uint32_t)instances.size() });
+            allUIData.insert(allUIData.end(), instances.begin(), instances.end());
+        }
+
+        size_t uiSize = allUIData.size() * sizeof(GPUUIData);
+        if (uiSize > 0)
+        {
+            if (!m_UIInstanceBuffer || m_UIInstanceBuffer->getDesc().byteSize < uiSize)
+            {
+                nvrhi::BufferDesc desc;
+                desc.byteSize = (uint64_t)(uiSize * 1.5);
+                desc.structStride = sizeof(GPUUIData);
+                desc.debugName = "UIInstanceBuffer";
+                desc.initialState = nvrhi::ResourceStates::ShaderResource;
+                desc.keepInitialState = true;
+                m_UIInstanceBuffer = m_NvrhiDevice->createBuffer(desc);
+            }
+            m_CommandList->writeBuffer(m_UIInstanceBuffer, allUIData.data(), uiSize);
+        }
+        m_CurrentFrameData.UIInstanceBuffer = m_UIInstanceBuffer;
+        m_UIBatches.clear();
     }
 
     void Renderer::BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, float deltaTime, bool editMode)
@@ -900,6 +935,11 @@ namespace Lynx
         batch.insert(batch.end(), particles.begin(), particles.end());
     }
 
+    void Renderer::SubmitUI(Material* material, const glm::vec2& position, const glm::vec2& size)
+    {
+        m_UIBatches[material].push_back({ position, size, material ? material->AlbedoColor : glm::vec4(1.0f) });
+    }
+
     void Renderer::EndScene()
     {
         PrepareDrawCalls();
@@ -923,6 +963,8 @@ namespace Lynx
         }
 
         m_CompositePass->Execute(m_RenderContext, m_CurrentFrameData);
+
+        m_UIPass->Execute(m_RenderContext, m_CurrentFrameData);
         
         // 1. Close recording
         m_CommandList->close();
