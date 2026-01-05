@@ -21,7 +21,7 @@ namespace Lynx
         return min + RandomFloat() * (max - min);
     }
     
-    void ParticleSystem::OnUpdate(float ts, Scene* scene)
+    void ParticleSystem::OnUpdate(float ts, Scene* scene, const glm::vec3& cameraPos)
     {
         auto view = scene->Reg().view<TransformComponent, ParticleEmitterComponent>();
         for (auto entity : view)
@@ -83,6 +83,18 @@ namespace Lynx
                 data.Size = glm::mix(particle.SizeEnd, particle.SizeBegin, life);
                 data.Life = life;
                 activeParticles.push_back(data);
+            }
+
+            // TODO: Check if we actually need this?
+            if (emitter.DepthSorting)
+            {
+                std::sort(activeParticles.begin(), activeParticles.end(),
+                [cameraPos](const ParticleInstanceData& a, const ParticleInstanceData& b)
+                {
+                    float d1 = glm::distance2(a.Position, cameraPos);
+                    float d2 = glm::distance2(b.Position, cameraPos);
+                    return d1 > d2;
+                });
             }
 
             if (!activeParticles.empty())

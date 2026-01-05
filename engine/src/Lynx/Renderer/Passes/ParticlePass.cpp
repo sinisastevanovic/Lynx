@@ -15,8 +15,9 @@ namespace Lynx
     struct ParticlePushData
     {
         glm::vec4 AlbedoColor;
+        glm::vec2 Tiling;
         float EmissiveStrength;
-        float Padding[3];
+        float Padding;
     };
     
     void ParticlePass::Init(RenderContext& ctx)
@@ -165,6 +166,7 @@ namespace Lynx
 
             ParticlePushData push;
             push.AlbedoColor = batch.Material->AlbedoColor;
+            push.Tiling = batch.Material->Tiling;
             push.EmissiveStrength = batch.Material->EmissiveStrength;
             ctx.CommandList->setPushConstants(&push, sizeof(ParticlePushData));
             

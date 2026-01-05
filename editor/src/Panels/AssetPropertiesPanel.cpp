@@ -116,6 +116,9 @@ namespace Lynx
         if (EditorUIHelpers::DrawAssetSelection("Albedo Map", material->AlbedoTexture, AssetType::Texture))
             m_IsDirty = true;
 
+        if (ImGui::DragFloat2("Tiling (Rows/Cols)", &material->Tiling.x, 1.0f, 1.0f, 64.0f))
+            m_IsDirty = true;
+
         if (ImGui::DragFloat("Metallic", &material->Metallic, 0.01f, 0.0f, 1.0f))
             m_IsDirty = true;
         if (ImGui::DragFloat("Roughness", &material->Roughness, 0.01f, 0.0f, 1.0f))

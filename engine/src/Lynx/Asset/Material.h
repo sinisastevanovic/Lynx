@@ -26,6 +26,8 @@ namespace Lynx
         AlphaMode Mode = AlphaMode::Opaque;
         float AlphaCutoff = 0.5f;
 
+        glm::vec2 Tiling = { 1.0f, 1.0f };
+
         AssetHandle AlbedoTexture = AssetHandle::Null();
         AssetHandle NormalMap = AssetHandle::Null();
         AssetHandle MetallicRoughnessTexture = AssetHandle::Null();

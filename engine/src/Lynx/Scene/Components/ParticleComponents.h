@@ -46,6 +46,7 @@ namespace Lynx
         uint32_t MaxParticles = 1000;
         float EmissionRate = 5.0f;
         bool IsLooping = true;
+        bool DepthSorting = false;
         bool BurstDone = false;
 
         std::vector<Particle> ParticlePool;

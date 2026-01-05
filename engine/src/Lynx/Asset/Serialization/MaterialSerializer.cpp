@@ -14,6 +14,7 @@ namespace Lynx
         json["EmissiveColor"] = { material->EmissiveColor.r, material->EmissiveColor.g, material->EmissiveColor.b };
         json["EmissiveStrength"] = material->EmissiveStrength;
         json["AlphaCutoff"] = material->AlphaCutoff;
+        json["Tiling"] = { material->Tiling.x, material->Tiling.y };
 
         // Serialize Enums (as int for simplicity, or string for readability)
         json["Mode"] = (int)material->Mode;
@@ -63,6 +64,7 @@ namespace Lynx
         }
 
         // Helpers
+        auto getVec2 = [](const nlohmann::json& j) { return glm::vec2(j[0], j[1]); };
         auto getVec3 = [](const nlohmann::json& j) { return glm::vec3(j[0], j[1], j[2]); };
         auto getVec4 = [](const nlohmann::json& j) { return glm::vec4(j[0], j[1], j[2], j[3]); };
 
@@ -73,6 +75,7 @@ namespace Lynx
         if (json.contains("EmissiveColor")) outMaterial.EmissiveColor = getVec3(json["EmissiveColor"]);
         if (json.contains("EmissiveStrength")) outMaterial.EmissiveStrength = json["EmissiveStrength"];
         if (json.contains("AlphaCutoff")) outMaterial.AlphaCutoff = json["AlphaCutoff"];
+        if (json.contains("Tiling")) outMaterial.Tiling = getVec2(json["Tiling"]);
 
         if (json.contains("Mode")) outMaterial.Mode = (AlphaMode)json["Mode"];
         if (json.contains("UseNormalMap")) outMaterial.UseNormalMap = json["UseNormalMap"];

@@ -196,7 +196,7 @@ namespace Lynx
 
             m_Renderer->BeginScene(cameraView, cameraProjection, cameraPos, lightDir, lightColor, lightIntensity, deltaTime, m_SceneState == SceneState::Edit);
 
-            m_ParticleSystem.OnUpdate(deltaTime, m_Scene.get());
+            m_ParticleSystem.OnUpdate(deltaTime, m_Scene.get(), cameraPos);
 
             // TODO: We should load all the textures and meshes before we run the scene!!!
             if (m_SceneState == SceneState::Play)
@@ -907,6 +907,8 @@ namespace Lynx
                         comp.BurstDone = false;
                     }
                 }
+
+                ImGui::Checkbox("Depth Sorting", &comp.DepthSorting);
                 
                 if (ImGui::TreeNode("Properties"))
                 {
@@ -933,6 +935,7 @@ namespace Lynx
                 json["MaxParticles"] = comp.MaxParticles;
                 json["EmissionRate"] = comp.EmissionRate;
                 json["IsLooping"] = comp.IsLooping;
+                json["DepthSorting"] = comp.DepthSorting;
 
                 auto props = nlohmann::json::object();
                 props["Position"] = { comp.Properties.Position.x, comp.Properties.Position.y, comp.Properties.Position.z };
@@ -957,6 +960,7 @@ namespace Lynx
                 }
                 if (json.contains("EmissionRate")) comp.EmissionRate = json["EmissionRate"];
                 if (json.contains("IsLooping")) comp.IsLooping = json["IsLooping"];
+                if (json.contains("DepthSorting")) comp.DepthSorting = json["DepthSorting"];
 
                 if (json.contains("Properties"))
                 {

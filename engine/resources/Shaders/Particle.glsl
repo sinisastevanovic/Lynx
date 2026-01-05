@@ -39,8 +39,9 @@ layout(binding = 1) readonly buffer ParticleBuffer
 layout(push_constant) uniform PushConstants
 {
     vec4 u_AlbdeoColor;
+    vec2 u_Tiling; // x=Cols, y=Rows
     float u_EmissiveStrength;
-    float u_Padding[3];
+    float u_Padding;
 } push;
 
 void main()
@@ -100,7 +101,28 @@ void main()
 
     gl_Position = u_Scene.ViewProjection * vec4(worldPos, 1.0);
 
-    v_UV = a_UV;
+    float totalFrames = push.u_Tiling.x * push.u_Tiling.y;
+    if (totalFrames > 1.0)
+    {
+        float progress = 1.0 - data.Life;
+        float frame = floor(progress * totalFrames);
+        frame = clamp(frame, 0.0, totalFrames - 1.0);
+
+        float col = mod(frame, push.u_Tiling.x);
+        float row = floor(frame / push.u_Tiling.x);
+
+        vec2 finalUV = a_UV;
+        finalUV.x = (1.0 - finalUV.x);
+        finalUV.x = (finalUV.x + col) /  push.u_Tiling.x;
+        finalUV.y = (finalUV.y + row) /  push.u_Tiling.y;
+
+        v_UV = finalUV;
+    }
+    else
+    {
+        v_UV = a_UV;
+    }
+
     v_Color = data.Color;
 }
 
@@ -118,8 +140,9 @@ layout(set = 1, binding = 1) uniform sampler u_Sampler;
 layout(push_constant) uniform PushConstants
 {
     vec4 u_AlbdeoColor;
+    vec2 u_Tiling; // x=Cols, y=Rows
     float u_EmissiveStrength;
-    float u_Padding[3];
+    float u_Padding;
 } push;
 
 void main() {

@@ -9,7 +9,7 @@ namespace Lynx
     public:
         ParticleSystem() = default;
 
-        void OnUpdate(float ts, Scene* scene);
+        void OnUpdate(float ts, Scene* scene, const glm::vec3& cameraPos);
 
     private:
         void EmitParticle(ParticleEmitterComponent& emitter, const glm::vec3& sourcePos);
