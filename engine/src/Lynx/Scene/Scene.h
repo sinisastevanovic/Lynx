@@ -46,7 +46,7 @@ namespace Lynx
     private:
         
         void UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform);
-        void UpdateEntityLayout(entt::entity entity, const RectTransformComponent& parentRect);
+        void UpdateEntityLayout(entt::entity entity, const RectTransformComponent& parentRect, float scaleFactor);
         
         entt::registry m_Registry;
 

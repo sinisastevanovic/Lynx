@@ -242,15 +242,6 @@ namespace Lynx
                 
             }
 
-            /*DebugRenderer::DrawLine({0,0,0}, {1,0,0}, {1,0,0,1}); // X - Re
-            DebugRenderer::DrawLine({0,0,0}, {0,1,0}, {0,1,0,1}); // Y - Gr
-            DebugRenderer::DrawLine({0,0,0}, {0,0,1}, {0,0,1,1}); // Z - Bl
-
-            // Draw a test box
-            DebugRenderer::DrawBox({-2, 1, -2}, {-1, 2, -1}, {1, 1, 0, 1});
-
-            DebugRenderer::DrawSphere({1, 0, 1}, 2.0f);*/
-
             if (m_Renderer->GetShowColliders()) // Render collider meshes
             {
                 glm::vec4 debugColor = { 0.0f, 1.0f, 0.0f, 1.0f };
@@ -315,7 +306,12 @@ namespace Lynx
                 });
 
                 for (const auto& el : UIElements) {
-                    m_Renderer->SubmitUI(el.Mat, el.Rect->ScreenPosition, el.Rect->ScreenSize);
+                    GPUUIData data;
+                    data.Color = el.Mat ? el.Mat->AlbedoColor : glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+                    data.Position = el.Rect->ScreenPosition;
+                    data.Size = el.Rect->ScreenSize;
+                    data.Params = { (float)el.Sprite->Type, el.Sprite->FillAmount, el.Sprite->TileScale.x, el.Sprite->TileScale.y };
+                    m_Renderer->SubmitUI(el.Mat, data);
                 }
             }
             
@@ -1026,17 +1022,35 @@ namespace Lynx
             {
                 auto& comp = reg.get<CanvasComponent>(entity);
                 ImGui::Checkbox("Is Screen Space", &comp.IsScreenSpace);
+                ImGui::Checkbox("Scale With Screen", &comp.ScaleWithScreenSize);
+                if (comp.ScaleWithScreenSize)
+                {
+                    ImGui::InputFloat2("Reference Resolution", &comp.ReferenceResolution.x);
+                    ImGui::DragFloat("Match Width or Height", &comp.MatchWidthOrHeight, 0.01f, 0.0f, 1.0f);
+                }
             },
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& comp = reg.get<CanvasComponent>(entity);
                 json["IsScreenSpace"] = comp.IsScreenSpace;
+                json["ScaleWithScreenSize"] = comp.ScaleWithScreenSize;
+                json["ReferenceResolution"] = { comp.ReferenceResolution.x, comp.ReferenceResolution.y };
+                json["MatchWidthOrHeight"] = comp.MatchWidthOrHeight;
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
                 auto& comp = reg.get<CanvasComponent>(entity);
                 if (json.contains("IsScreenSpace"))
                     comp.IsScreenSpace = json["IsScreenSpace"];
+                if (json.contains("ScaleWithScreenSize"))
+                    comp.ScaleWithScreenSize = json["ScaleWithScreenSize"];
+                if (json.contains("ReferenceResolution"))
+                {
+                    comp.ReferenceResolution.x = json["ReferenceResolution"][0];
+                    comp.ReferenceResolution.y = json["ReferenceResolution"][1];
+                }
+                if (json.contains("MatchWidthOrHeight"))
+                    comp.MatchWidthOrHeight = json["MatchWidthOrHeight"];
             });
 
         m_ComponentRegistry.RegisterComponent<SpriteComponent>("Sprite",
@@ -1045,12 +1059,35 @@ namespace Lynx
                 auto& comp = reg.get<SpriteComponent>(entity);
                 EditorUIHelpers::DrawAssetSelection("Material", comp.Material, AssetType::Material);
                 ImGui::DragInt("Sorting Layer", &comp.Layer);
+                ImGui::Separator();
+
+                const char* typeStrings[] = { "Simple", "Sliced", "Tiled", "Filled" };
+                int currentType = (int)comp.Type;
+                if (ImGui::Combo("Image Type", &currentType, typeStrings, IM_ARRAYSIZE(typeStrings)))
+                {
+                    comp.Type = (ImageType)currentType;
+                }
+
+                if (comp.Type == ImageType::Filled) {
+                    ImGui::DragFloat("Fill Amount", &comp.FillAmount, 0.01f, 0.0f, 1.0f);
+                }
+                else if (comp.Type == ImageType::Sliced) {
+                    ImGui::Text("Sliced Mode (Not Implemented yet)");
+                    // ImGui::DragFloat4("Borders", &comp.Border.x);
+                }
+                else if (comp.Type == ImageType::Tiled) {
+                    ImGui::DragFloat2("Tile Scale", &comp.TileScale.x, 0.01f);
+                }
             },
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& comp = reg.get<SpriteComponent>(entity);
                 json["Material"] = (uint64_t)comp.Material;
                 json["Layer"] = comp.Layer;
+                json["Type"] = (int)comp.Type;
+                json["Fill Amount"] = comp.FillAmount;
+                json["Tile Scale"] = { comp.TileScale.x, comp.TileScale.y };
+                json["Border"] = { comp.Border.x, comp.Border.y, comp.Border.z, comp.Border.w };
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
@@ -1059,6 +1096,22 @@ namespace Lynx
                     comp.Material = (AssetHandle)json["IsScreenSpace"].get<uint64_t>();
                 if (json.contains("Layer"))
                     comp.Layer = json["Layer"];
+                if (json.contains("Type"))
+                    comp.Type = (ImageType)json["Type"];
+                if (json.contains("Fill Amount"))
+                    comp.FillAmount = json["Fill Amount"];
+                if (json.contains("Tile Scale"))
+                {
+                    comp.TileScale.x = json["Tile Scale"][0];
+                    comp.TileScale.y = json["Tile Scale"][1];
+                }
+                if (json.contains("Border"))
+                {
+                    comp.Border.x = json["Border"][0];
+                    comp.Border.y = json["Border"][1];
+                    comp.Border.z = json["Border"][2];
+                    comp.Border.w = json["Border"][3];
+                }
             });
 
         m_ComponentRegistry.RegisterComponent<RectTransformComponent>("RectTransform",

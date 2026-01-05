@@ -374,6 +374,17 @@ namespace Lynx
         {
             auto [canvas, rect, relation] = view.get<CanvasComponent, RectTransformComponent, RelationshipComponent>(entity);
 
+            float scaleFactor = 1.0f;
+
+            if (canvas.IsScreenSpace && canvas.ScaleWithScreenSize)
+            {
+                float logWidth = glm::log2((float)viewportWidth / canvas.ReferenceResolution.x);
+                float logHeight = glm::log2((float)viewportHeight / canvas.ReferenceResolution.y);
+
+                float avgLog = glm::mix(logWidth, logHeight, canvas.MatchWidthOrHeight);
+                scaleFactor = glm::pow(2.0f, avgLog);
+            }
+            
             if (canvas.IsScreenSpace)
             {
                 rect.ScreenPosition = { 0.0f, 0.0f };
@@ -382,19 +393,19 @@ namespace Lynx
 
             if (relation.FirstChild != entt::null)
             {
-                UpdateEntityLayout(relation.FirstChild, rect);
+                UpdateEntityLayout(relation.FirstChild, rect, scaleFactor);
             }
         }
     }
 
-    void Scene::UpdateEntityLayout(entt::entity entity, const RectTransformComponent& parentRect)
+    void Scene::UpdateEntityLayout(entt::entity entity, const RectTransformComponent& parentRect, float scaleFactor)
     {
         auto& rel = m_Registry.get<RelationshipComponent>(entity);
         
         if (!m_Registry.all_of<RectTransformComponent>(entity))
         {
             if (rel.NextSibling != entt::null)
-                UpdateEntityLayout(rel.NextSibling, parentRect);
+                UpdateEntityLayout(rel.NextSibling, parentRect, scaleFactor);
 
             return;
         }
@@ -407,8 +418,8 @@ namespace Lynx
         glm::vec2 anchorMinPos = parentMin + (parentSize * rect.AnchorMin);
         glm::vec2 anchorMaxPos = parentMin + (parentSize * rect.AnchorMax);
 
-        glm::vec2 minPoint = anchorMinPos + rect.OffsetMin;
-        glm::vec2 maxPoint = anchorMaxPos + rect.OffsetMax;
+        glm::vec2 minPoint = anchorMinPos + (rect.OffsetMin * scaleFactor);
+        glm::vec2 maxPoint = anchorMaxPos + (rect.OffsetMax * scaleFactor);
 
         glm::vec2 rawSize = maxPoint - minPoint;
         glm::vec2 pivotPos = minPoint + (rawSize * rect.Pivot);
@@ -418,10 +429,10 @@ namespace Lynx
         rect.ScreenSize = newSize;
 
         if (rel.FirstChild != entt::null)
-            UpdateEntityLayout(rel.FirstChild, rect);
+            UpdateEntityLayout(rel.FirstChild, rect, scaleFactor);
 
         if (rel.NextSibling != entt::null)
-            UpdateEntityLayout(rel.NextSibling, rect);
+            UpdateEntityLayout(rel.NextSibling, rect, scaleFactor);
     }
 
     void Scene::AttachEntity(entt::entity child, entt::entity parent)

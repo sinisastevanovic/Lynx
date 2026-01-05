@@ -9,7 +9,12 @@ namespace Lynx
     struct CanvasComponent
     {
         bool IsScreenSpace = true;
-        float ScaleFactor = 1.0f;
+
+        bool ScaleWithScreenSize = true;
+        glm::vec2 ReferenceResolution = { 1920.0f, 1080.0f };
+
+        // Match Width or Height? (0 = Width, 1 = Height, 0.5 = Average)
+        float MatchWidthOrHeight = 0.5f;
 
         CanvasComponent() = default;
         CanvasComponent(const CanvasComponent&) = default;
@@ -36,11 +41,18 @@ namespace Lynx
         RectTransformComponent(const RectTransformComponent&) = default;
     };
 
+    enum class ImageType { Simple, Sliced, Tiled, Filled };
+
     struct SpriteComponent
     {
         AssetHandle Material = AssetHandle::Null();
-        
         int Layer = 0; // Sorting Order. Higher draws on top.
+
+        ImageType Type = ImageType::Simple;
+
+        float FillAmount = 1.0f;
+        glm::vec4 Border = { 0.0f, 0.0f, 0.0f, 0.0f };
+        glm::vec2 TileScale = { 1.0f, 1.0f };
 
         SpriteComponent() = default;
         SpriteComponent(const SpriteComponent&) = default;

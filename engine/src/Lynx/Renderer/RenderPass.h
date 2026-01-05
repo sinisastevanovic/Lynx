@@ -108,6 +108,12 @@ namespace Lynx
         glm::vec2 Position;
         glm::vec2 Size;
         glm::vec4 Color;
+        // Packed Flags/Data
+        // x = Type (0=Simple, 1=Sliced, 2=Tiled, 3=Filled)
+        // y = FillAmount
+        // z = TileScale.x
+        // w = TileScale.y
+        glm::vec4 Params;
     };
 
     struct UIBatch

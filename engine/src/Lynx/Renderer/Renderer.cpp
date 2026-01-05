@@ -935,9 +935,9 @@ namespace Lynx
         batch.insert(batch.end(), particles.begin(), particles.end());
     }
 
-    void Renderer::SubmitUI(Material* material, const glm::vec2& position, const glm::vec2& size)
+    void Renderer::SubmitUI(Material* material, const GPUUIData& data)
     {
-        m_UIBatches[material].push_back({ position, size, material ? material->AlbedoColor : glm::vec4(1.0f) });
+        m_UIBatches[material].push_back(data);
     }
 
     void Renderer::EndScene()

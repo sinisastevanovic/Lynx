@@ -66,7 +66,7 @@ namespace Lynx
         std::pair<nvrhi::BufferHandle, nvrhi::BufferHandle> CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices);
         void SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, RenderFlags flags, int entityID = -1);
         void SubmitParticles(Material* material, const std::vector<ParticleInstanceData>& particles);
-        void SubmitUI(Material* material, const glm::vec2& position, const glm::vec2& size);
+        void SubmitUI(Material* material, const GPUUIData& data);
 
         nvrhi::DeviceHandle GetDeviceHandle() const { return m_NvrhiDevice; }
 
