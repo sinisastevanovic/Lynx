@@ -15,6 +15,7 @@ namespace Lynx
 
         // Match Width or Height? (0 = Width, 1 = Height, 0.5 = Average)
         float MatchWidthOrHeight = 0.5f;
+        bool DistanceScaling = false;
 
         CanvasComponent() = default;
         CanvasComponent(const CanvasComponent&) = default;

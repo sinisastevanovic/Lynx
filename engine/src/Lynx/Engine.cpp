@@ -273,7 +273,7 @@ namespace Lynx
             }
 
             auto [width, height] = m_Renderer->GetViewportSize();
-            m_Scene->UpdateUILayout(width, height);
+            m_Scene->UpdateUILayout(width, height, cameraProjection * cameraView, cameraPos);
 
             {
                 struct UIElement
@@ -1022,11 +1022,18 @@ namespace Lynx
             {
                 auto& comp = reg.get<CanvasComponent>(entity);
                 ImGui::Checkbox("Is Screen Space", &comp.IsScreenSpace);
-                ImGui::Checkbox("Scale With Screen", &comp.ScaleWithScreenSize);
-                if (comp.ScaleWithScreenSize)
+                if (!comp.IsScreenSpace)
                 {
-                    ImGui::InputFloat2("Reference Resolution", &comp.ReferenceResolution.x);
-                    ImGui::DragFloat("Match Width or Height", &comp.MatchWidthOrHeight, 0.01f, 0.0f, 1.0f);
+                    ImGui::Checkbox("Distance Scaling", &comp.DistanceScaling);
+                }
+                else
+                {
+                    ImGui::Checkbox("Scale With Screen", &comp.ScaleWithScreenSize);
+                    if (comp.ScaleWithScreenSize)
+                    {
+                        ImGui::InputFloat2("Reference Resolution", &comp.ReferenceResolution.x);
+                        ImGui::DragFloat("Match Width or Height", &comp.MatchWidthOrHeight, 0.01f, 0.0f, 1.0f);
+                    }
                 }
             },
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
@@ -1085,25 +1092,25 @@ namespace Lynx
                 json["Material"] = (uint64_t)comp.Material;
                 json["Layer"] = comp.Layer;
                 json["Type"] = (int)comp.Type;
-                json["Fill Amount"] = comp.FillAmount;
-                json["Tile Scale"] = { comp.TileScale.x, comp.TileScale.y };
+                json["FillAmount"] = comp.FillAmount;
+                json["TileScale"] = { comp.TileScale.x, comp.TileScale.y };
                 json["Border"] = { comp.Border.x, comp.Border.y, comp.Border.z, comp.Border.w };
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
                 auto& comp = reg.get<SpriteComponent>(entity);
                 if (json.contains("Material"))
-                    comp.Material = (AssetHandle)json["IsScreenSpace"].get<uint64_t>();
+                    comp.Material = (AssetHandle)json["Material"].get<uint64_t>();
                 if (json.contains("Layer"))
                     comp.Layer = json["Layer"];
                 if (json.contains("Type"))
                     comp.Type = (ImageType)json["Type"];
-                if (json.contains("Fill Amount"))
-                    comp.FillAmount = json["Fill Amount"];
-                if (json.contains("Tile Scale"))
+                if (json.contains("FillAmount"))
+                    comp.FillAmount = json["FillAmount"];
+                if (json.contains("TileScale"))
                 {
-                    comp.TileScale.x = json["Tile Scale"][0];
-                    comp.TileScale.y = json["Tile Scale"][1];
+                    comp.TileScale.x = json["TileScale"][0];
+                    comp.TileScale.y = json["TileScale"][1];
                 }
                 if (json.contains("Border"))
                 {

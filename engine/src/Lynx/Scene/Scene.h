@@ -25,7 +25,7 @@ namespace Lynx
 
         void OnUpdateRuntime(float deltaTime);
         void OnUpdateEditor(float deltaTime);
-        void UpdateUILayout(uint32_t viewportWidth, uint32_t viewportHeight);
+        void UpdateUILayout(uint32_t viewportWidth, uint32_t viewportHeight, const glm::mat4& viewProj, const glm::vec3& cameraPos);
 
         void AttachEntity(entt::entity child, entt::entity parent);
         void AttachEntityKeepWorld(entt::entity child, entt::entity parent);

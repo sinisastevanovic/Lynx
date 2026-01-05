@@ -367,7 +367,7 @@ namespace Lynx
     {
     }
 
-    void Scene::UpdateUILayout(uint32_t viewportWidth, uint32_t viewportHeight)
+    void Scene::UpdateUILayout(uint32_t viewportWidth, uint32_t viewportHeight, const glm::mat4& viewProj, const glm::vec3& cameraPos)
     {
         auto view = m_Registry.view<CanvasComponent, RectTransformComponent, RelationshipComponent>();
         for (auto entity : view)
@@ -389,6 +389,33 @@ namespace Lynx
             {
                 rect.ScreenPosition = { 0.0f, 0.0f };
                 rect.ScreenSize = { (float)viewportWidth, (float)viewportHeight };
+            }
+            else
+            {
+                auto& worldTransform = m_Registry.get<TransformComponent>(entity);
+                glm::vec3 worldPos = worldTransform.WorldMatrix[3];
+
+                glm::vec4 clipPos = viewProj * glm::vec4(worldPos, 1.0f);
+
+                if (clipPos.w <= 0.0f)
+                {
+                    rect.ScreenSize = glm::vec2(0.0f);
+                    continue;
+                }
+
+                glm::vec3 ndc = glm::vec3(clipPos) / clipPos.w;
+                glm::vec2 screenPos;
+                screenPos.x = (ndc.x + 1.0f) * 0.5f * viewportWidth;
+                screenPos.y = (ndc.y + 1.0f) * 0.5f * viewportHeight;
+
+                rect.ScreenPosition = screenPos;
+                rect.ScreenSize = glm::vec2(0.0f, 0.0f);
+
+                if (canvas.DistanceScaling)
+                {
+                    float dist = glm::length(worldPos - cameraPos);
+                    scaleFactor = 10.0f / dist;
+                }
             }
 
             if (relation.FirstChild != entt::null)
