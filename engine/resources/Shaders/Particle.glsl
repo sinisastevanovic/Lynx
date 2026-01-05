@@ -36,6 +36,13 @@ layout(binding = 1) readonly buffer ParticleBuffer
     ParticleData particles[];
 };
 
+layout(push_constant) uniform PushConstants
+{
+    vec4 u_AlbdeoColor;
+    float u_EmissiveStrength;
+    float u_Padding[3];
+} push;
+
 void main()
 {
     ParticleData data = particles[gl_InstanceIndex];
@@ -108,9 +115,18 @@ layout(location = 0) out vec4 o_Color;
 layout(set = 1, binding = 0) uniform texture2D u_AlbedoMap;
 layout(set = 1, binding = 1) uniform sampler u_Sampler;
 
+layout(push_constant) uniform PushConstants
+{
+    vec4 u_AlbdeoColor;
+    float u_EmissiveStrength;
+    float u_Padding[3];
+} push;
+
 void main() {
     vec4 texColor = texture(sampler2D(u_AlbedoMap, u_Sampler), v_UV);
-    o_Color = texColor * v_Color;
+    vec4 finalColor = texColor * v_Color * push.u_AlbdeoColor;
     if (o_Color.a < 0.01)
         discard;
+    finalColor.rgb *= push.u_EmissiveStrength;
+    o_Color = finalColor;
 }

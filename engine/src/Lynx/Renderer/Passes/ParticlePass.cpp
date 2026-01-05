@@ -11,6 +11,13 @@ namespace Lynx
         glm::vec2 Pos;
         glm::vec2 UV;
     };
+
+    struct ParticlePushData
+    {
+        glm::vec4 AlbedoColor;
+        float EmissiveStrength;
+        float Padding[3];
+    };
     
     void ParticlePass::Init(RenderContext& ctx)
     {
@@ -49,6 +56,7 @@ namespace Lynx
             .setVisibility(nvrhi::ShaderType::All)
             .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
             .addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(1))
+            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(ParticlePushData)))
             .setBindingOffsets({ 0, 0, 0, 0 });
         m_GlobalBindingLayout = ctx.Device->createBindingLayout(globalLayoutDesc);
 
@@ -119,6 +127,7 @@ namespace Lynx
         m_CachedInstanceBuffer = renderData.ParticleInstanceBuffer;
         auto desc = nvrhi::BindingSetDesc()
             .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer))
+            .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(ParticlePushData)))
             .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, renderData.ParticleInstanceBuffer));
 
         m_GlobalBindingSet = ctx.Device->createBindingSet(desc, m_GlobalBindingLayout);
@@ -153,6 +162,12 @@ namespace Lynx
             state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
 
             ctx.CommandList->setGraphicsState(state);
+
+            ParticlePushData push;
+            push.AlbedoColor = batch.Material->AlbedoColor;
+            push.EmissiveStrength = batch.Material->EmissiveStrength;
+            ctx.CommandList->setPushConstants(&push, sizeof(ParticlePushData));
+            
             ctx.CommandList->drawIndexed(nvrhi::DrawArguments()
                 .setVertexCount(6)
                 .setInstanceCount(batch.Count)
