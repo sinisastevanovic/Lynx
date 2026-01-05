@@ -1,4 +1,5 @@
 #pragma once
+#include "Lynx/Renderer/BindingSetCache.h"
 #include "Lynx/Renderer/RenderPass.h"
 
 namespace Lynx
@@ -21,7 +22,7 @@ namespace Lynx
         nvrhi::BindingLayoutHandle m_MaterialBindingLayout;
 
         nvrhi::BindingSetHandle m_GlobalBindingSet;
-        std::unordered_map<Material*, MaterialCacheEntry> m_MaterialBindingSetCache;
+        BindingSetCache<Material*> m_MaterialBindingSetCache;
 
         nvrhi::GraphicsPipelineHandle m_PipelineAlpha;
         nvrhi::GraphicsPipelineHandle m_PipelineAdditive;

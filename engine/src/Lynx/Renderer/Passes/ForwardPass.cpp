@@ -122,70 +122,65 @@ namespace Lynx
 
     nvrhi::BindingSetHandle ForwardPass::GetMaterialBindingSet(RenderContext& ctx, Material* material)
     {
-        if (material && m_MaterialBindingSetCache.contains(material))
-        {
-            auto& entry = m_MaterialBindingSetCache[material];
-            if (entry.Version == material->GetVersion())
-                return entry.BindingSet;
-        }
+        uint32_t version = material ? material->GetVersion() : 0;
 
-        nvrhi::TextureHandle albedo = ctx.WhiteTexture;
-        nvrhi::TextureHandle normal = ctx.NormalTexture;
-        nvrhi::TextureHandle mr = ctx.MetallicRoughnessTexture;
-        nvrhi::TextureHandle emissive = ctx.WhiteTexture;
-        SamplerSettings samplerSettings;
-
-        if (material)
+        return m_MaterialBindingSetCache.Get(material, version, [&]() -> nvrhi::BindingSetHandle
         {
-            auto& assetManager = Engine::Get().GetAssetManager();
-            if (material->AlbedoTexture)
+            nvrhi::TextureHandle albedo = ctx.WhiteTexture;
+            nvrhi::TextureHandle normal = ctx.NormalTexture;
+            nvrhi::TextureHandle mr = ctx.MetallicRoughnessTexture;
+            nvrhi::TextureHandle emissive = ctx.WhiteTexture;
+            SamplerSettings samplerSettings;
+
+            if (material)
             {
-                if (auto tex = assetManager.GetAsset<Texture>(material->AlbedoTexture))
+                auto& assetManager = Engine::Get().GetAssetManager();
+                if (material->AlbedoTexture)
                 {
-                    if (auto handle = tex->GetTextureHandle())
+                    if (auto tex = assetManager.GetAsset<Texture>(material->AlbedoTexture))
                     {
-                        albedo = handle;
-                        samplerSettings = tex->GetSamplerSettings();
+                        if (auto handle = tex->GetTextureHandle())
+                        {
+                            albedo = handle;
+                            samplerSettings = tex->GetSamplerSettings();
+                        }
+                    }
+                }
+                if (material->NormalMap)
+                {
+                    if (auto tex = assetManager.GetAsset<Texture>(material->NormalMap))
+                    {
+                        if (auto handle = tex->GetTextureHandle())
+                            normal = handle;
+                    }
+                }
+                if (material->MetallicRoughnessTexture)
+                {
+                    if (auto tex = assetManager.GetAsset<Texture>(material->MetallicRoughnessTexture))
+                    {
+                        if (auto handle = tex->GetTextureHandle())
+                            mr = handle;
+                    }
+                }
+                if (material->EmissiveTexture)
+                {
+                    if (auto tex = assetManager.GetAsset<Texture>(material->EmissiveTexture))
+                    {
+                        if (auto handle = tex->GetTextureHandle())
+                            emissive = handle;
                     }
                 }
             }
-            if (material->NormalMap)
-            {
-                if (auto tex = assetManager.GetAsset<Texture>(material->NormalMap))
-                {
-                    if (auto handle = tex->GetTextureHandle())
-                        normal = handle;
-                }
-            }
-            if (material->MetallicRoughnessTexture)
-            {
-                if (auto tex = assetManager.GetAsset<Texture>(material->MetallicRoughnessTexture))
-                {
-                    if (auto handle = tex->GetTextureHandle())
-                        mr = handle;
-                }
-            }
-            if (material->EmissiveTexture)
-            {
-                if (auto tex = assetManager.GetAsset<Texture>(material->EmissiveTexture))
-                {
-                    if (auto handle = tex->GetTextureHandle())
-                        emissive = handle;
-                }
-            }
-        }
-        auto desc = nvrhi::BindingSetDesc()
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(0, albedo))
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(1, normal))
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(2, mr))
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(3, emissive))
-            .addItem(nvrhi::BindingSetItem::Sampler(4, SamplerCache::Get()->GetSampler(samplerSettings)));
 
-        auto newSet = ctx.Device->createBindingSet(desc, m_MaterialBindingLayout);
-        uint32_t currentVersion = material ? material->GetVersion() : 0;
-        m_MaterialBindingSetCache[material] = { newSet, currentVersion };
-        
-        return newSet;
+            auto desc = nvrhi::BindingSetDesc()
+                .addItem(nvrhi::BindingSetItem::Texture_SRV(0, albedo))
+                .addItem(nvrhi::BindingSetItem::Texture_SRV(1, normal))
+                .addItem(nvrhi::BindingSetItem::Texture_SRV(2, mr))
+                .addItem(nvrhi::BindingSetItem::Texture_SRV(3, emissive))
+                .addItem(nvrhi::BindingSetItem::Sampler(4, SamplerCache::Get()->GetSampler(samplerSettings)));
+
+            return ctx.Device->createBindingSet(desc, m_MaterialBindingLayout);
+        });
     }
 
     void ForwardPass::CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData)

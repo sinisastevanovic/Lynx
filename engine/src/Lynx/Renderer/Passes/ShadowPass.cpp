@@ -209,36 +209,31 @@ namespace Lynx
 
     nvrhi::BindingSetHandle ShadowPass::GetMaskedBindingSet(RenderContext& ctx, RenderData& renderData, Material* material)
     {
-        if (m_MaskedBindingSets.contains(material))
-        {
-            auto& entry = m_MaskedBindingSets[material];
-            if (entry.Version == material->GetVersion())
-                return entry.BindingSet;
-        }
+        uint32_t version = material ? material->GetVersion() : 0;
 
-        nvrhi::TextureHandle albedo = ctx.WhiteTexture;
-        SamplerSettings samplerSettings;
-
-        if (material->AlbedoTexture)
+        return m_MaskedBindingSets.Get(material, version, [&]() -> nvrhi::BindingSetHandle
         {
-            if (auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(material->AlbedoTexture))
+            nvrhi::TextureHandle albedo = ctx.WhiteTexture;
+            SamplerSettings samplerSettings;
+
+            if (material->AlbedoTexture)
             {
-                if (auto handle = texture->GetTextureHandle())
+                if (auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(material->AlbedoTexture))
                 {
-                    albedo = handle;
-                    samplerSettings = texture->GetSamplerSettings();
+                    if (auto handle = texture->GetTextureHandle())
+                    {
+                        albedo = handle;
+                        samplerSettings = texture->GetSamplerSettings();
+                    }
                 }
             }
-        }
 
-        auto bsDesc = nvrhi::BindingSetDesc()
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(0, albedo))
-            .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(samplerSettings)));
+            auto bsDesc = nvrhi::BindingSetDesc()
+                .addItem(nvrhi::BindingSetItem::Texture_SRV(0, albedo))
+                .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(samplerSettings)));
 
-        auto set = ctx.Device->createBindingSet(bsDesc, m_MaterialBindingLayout);
-        uint32_t version = material ? material->GetVersion() : 0;
-        m_MaskedBindingSets[material] = { set, version };
-        return set;
+            return ctx.Device->createBindingSet(bsDesc, m_MaterialBindingLayout);
+        });
     }
 
     void ShadowPass::CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData)

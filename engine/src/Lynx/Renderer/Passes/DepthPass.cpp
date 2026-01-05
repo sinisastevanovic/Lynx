@@ -150,34 +150,29 @@ namespace Lynx
 
     nvrhi::BindingSetHandle DepthPass::GetMaterialBindingSet(RenderContext& ctx, Material* material)
     {
-        if (m_MaterialBindingSetCache.contains(material))
-        {
-            auto& entry = m_MaterialBindingSetCache[material];
-            if (entry.Version == material->GetVersion())
-                return entry.BindingSet;
-        }
+        uint32_t version = material ? material->GetVersion() : 0;
 
-        nvrhi::TextureHandle albedo = ctx.WhiteTexture;
-        SamplerSettings samplerSettings;
-
-        if (material->AlbedoTexture)
+        return m_MaterialBindingSetCache.Get(material, version, [&]() -> nvrhi::BindingSetHandle
         {
-            if (auto tex = Engine::Get().GetAssetManager().GetAsset<Texture>(material->AlbedoTexture))
+            nvrhi::TextureHandle albedo = ctx.WhiteTexture;
+            SamplerSettings samplerSettings;
+
+            if (material->AlbedoTexture)
             {
-                if (auto handle = tex->GetTextureHandle())
+                if (auto tex = Engine::Get().GetAssetManager().GetAsset<Texture>(material->AlbedoTexture))
                 {
-                    albedo = handle;
-                    samplerSettings = tex->GetSamplerSettings();
+                    if (auto handle = tex->GetTextureHandle())
+                    {
+                        albedo = handle;
+                        samplerSettings = tex->GetSamplerSettings();
+                    }
                 }
             }
-        }
 
-        auto desc = nvrhi::BindingSetDesc()
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(0, albedo))
-            .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(samplerSettings)));
-        auto set = ctx.Device->createBindingSet(desc, m_MaterialBindingLayout);
-        uint32_t version = material ? material->GetVersion() : 0;
-        m_MaterialBindingSetCache[material] = { set, version };
-        return set;
+            auto desc = nvrhi::BindingSetDesc()
+                .addItem(nvrhi::BindingSetItem::Texture_SRV(0, albedo))
+                .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(samplerSettings)));
+            return ctx.Device->createBindingSet(desc, m_MaterialBindingLayout);
+        });
     }
 }
