@@ -284,6 +284,7 @@ void MyGame::OnStart()
         rect.OffsetMax = {100, 20}; // 200x40 pixel bar
 
         auto& sprite = image.AddComponent<Lynx::SpriteComponent>();
+        auto& btn = image.AddComponent<Lynx::UIButtonComponent>();
     }
 
     Lynx::Input::BindAxis("MoveLeftRight", Lynx::KeyCode::D, Lynx::KeyCode::A);

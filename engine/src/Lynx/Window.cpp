@@ -71,6 +71,8 @@ namespace Lynx
         m_Window = glfwCreateWindow(static_cast<int>(m_Data.Width), static_cast<int>(m_Data.Height), m_Data.Title.c_str(), nullptr, nullptr);
         LX_ASSERT(m_Window, "Failed to create GLFW window!");
 
+        Input::SetViewportBounds(0, 0, m_Data.Width, m_Data.Height);
+
         glfwSetWindowUserPointer(m_Window, &m_Data);
         //SetVSync(true);
 
@@ -82,6 +84,8 @@ namespace Lynx
 
             WindowResizeEvent event(width, height);
             data.EventCallback(event);
+
+            Input::SetViewportBounds(0, 0, width, height);
         });
 
         glfwSetWindowCloseCallback(m_Window, [](GLFWwindow* window)

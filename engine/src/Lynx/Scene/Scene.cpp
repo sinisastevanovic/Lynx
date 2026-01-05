@@ -369,6 +369,7 @@ namespace Lynx
 
     void Scene::UpdateUILayout(uint32_t viewportWidth, uint32_t viewportHeight, const glm::mat4& viewProj, const glm::vec3& cameraPos)
     {
+        // TODO: Do we really need to do this every frame? At least for screen space UI, we could cache it, right? 
         auto view = m_Registry.view<CanvasComponent, RectTransformComponent, RelationshipComponent>();
         for (auto entity : view)
         {
@@ -421,6 +422,94 @@ namespace Lynx
             if (relation.FirstChild != entt::null)
             {
                 UpdateEntityLayout(relation.FirstChild, rect, scaleFactor);
+            }
+        }
+    }
+
+    void Scene::UpdateUIInteraction(float mouseX, float mouseY, bool leftButtonDown)
+    {
+        // TODO: We should optimize this. In the engine loop we already collect all UI Elements and sort them. Maybe we could reuse that here
+        struct Interactable
+        {
+            entt::entity Entity;
+            RectTransformComponent* Rect;
+            SpriteComponent* Sprite;
+            UIButtonComponent* Button;
+        };
+        std::vector<Interactable> interactables;
+
+        auto view = m_Registry.view<RectTransformComponent, UIButtonComponent, SpriteComponent>();
+        for (auto entity : view)
+        {
+            auto [rect, btn, sprite] = view.get<RectTransformComponent, UIButtonComponent, SpriteComponent>(entity);
+            if (btn.Interactable)
+            {
+                interactables.push_back({ entity, &rect, &sprite, &btn });
+            }
+            else
+            {
+                sprite.ColorTint = btn.DisabledColor;
+            }
+        }
+
+        std::sort(interactables.begin(), interactables.end(), [](const auto& a, const auto& b) {
+            return a.Sprite->Layer > b.Sprite->Layer;
+        });
+
+        bool inputComsumed = false;
+
+        for (auto& item : interactables)
+        {
+            item.Button->IsClicked = false;
+
+            if (inputComsumed)
+            {
+                item.Button->State = UIInteractionState::Normal;
+                item.Sprite->ColorTint = item.Button->NormalColor;
+                continue;
+            }
+
+            bool hover = (mouseX >= item.Rect->ScreenPosition.x &&
+              mouseX <= item.Rect->ScreenPosition.x + item.Rect->ScreenSize.x &&
+              mouseY >= item.Rect->ScreenPosition.y &&
+              mouseY <= item.Rect->ScreenPosition.y + item.Rect->ScreenSize.y);
+
+            if (hover)
+            {
+                inputComsumed = true;
+
+                if (leftButtonDown)
+                {
+                    item.Button->State = UIInteractionState::Pressed;
+                    item.Sprite->ColorTint = item.Button->PressedColor;
+                }
+                else
+                {
+                    if (item.Button->State == UIInteractionState::Pressed)
+                    {
+                        item.Button->IsClicked = true;
+
+                        if (m_Registry.all_of<NativeScriptComponent>(item.Entity))
+                        {
+                            auto& nsc = m_Registry.get<NativeScriptComponent>(item.Entity);
+                            if (nsc.Instance)
+                                nsc.Instance->OnUIPressed();
+                        }
+
+                        if (m_Registry.all_of<LuaScriptComponent>(item.Entity))
+                        {
+                            Entity e = { item.Entity, this };
+                            Engine::Get().GetScriptEngine()->OnUIPressed(e);
+                        }
+                    }
+                    item.Button->State = UIInteractionState::Hovered;
+                    item.Sprite->ColorTint = item.Button->HoverColor;
+                }
+            }
+            else
+            {
+                item.Button->State = UIInteractionState::Normal;
+                item.Sprite->ColorTint = item.Button->NormalColor;
             }
         }
     }

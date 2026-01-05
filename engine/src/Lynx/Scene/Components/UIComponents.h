@@ -47,6 +47,8 @@ namespace Lynx
     struct SpriteComponent
     {
         AssetHandle Material = AssetHandle::Null();
+        glm::vec4 ColorTint = { 1.0f, 1.0f, 1.0f, 1.0f };
+        
         int Layer = 0; // Sorting Order. Higher draws on top.
 
         ImageType Type = ImageType::Simple;
@@ -57,5 +59,23 @@ namespace Lynx
 
         SpriteComponent() = default;
         SpriteComponent(const SpriteComponent&) = default;
+    };
+
+    enum class UIInteractionState { Normal, Hovered, Pressed, Disabled };
+
+    struct UIButtonComponent
+    {
+        glm::vec4 NormalColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+        glm::vec4 HoverColor = { 0.8f, 0.8f, 0.8f, 1.0f };
+        glm::vec4 PressedColor = { 0.5f, 0.5f, 0.5f, 1.0f };
+        glm::vec4 DisabledColor = { 0.3f, 0.3f, 0.3f, 0.5f };
+
+        bool Interactable = true;
+
+        UIInteractionState State = UIInteractionState::Normal;
+        bool IsClicked = false;
+
+        UIButtonComponent() = default;
+        UIButtonComponent(const UIButtonComponent&) = default;
     };
 }

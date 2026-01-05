@@ -221,6 +221,27 @@ namespace Lynx
         }
     }
 
+    void ScriptEngine::OnUIPressed(Entity entity)
+    {
+        if (!entity.HasComponent<LuaScriptComponent>())
+            return;
+
+        auto& lsc = entity.GetComponent<LuaScriptComponent>();
+        if (lsc.Self.valid())
+        {
+            sol::protected_function onPressed = lsc.Self["OnUIPressed"];
+            if (onPressed.valid())
+            {
+                sol::protected_function_result result = onPressed(lsc.Self);
+                if (!result.valid())
+                {
+                    sol::error err = result;
+                    LX_CORE_ERROR("Lua Runtime Error (OnUIPressed): {0}", err.what());
+                }
+            }
+        }
+    }
+
     void ScriptEngine::ReloadScript(AssetHandle handle)
     {
         if (!m_Data->SceneContext)

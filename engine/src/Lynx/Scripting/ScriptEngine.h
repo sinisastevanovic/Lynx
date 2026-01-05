@@ -23,6 +23,8 @@ namespace Lynx
         void OnCreateEntity(Entity entity);
         void OnDestroyEntity(Entity entity);
 
+        void OnUIPressed(Entity entity);
+
         void ReloadScript(AssetHandle handle);
 
         void LoadScript(Entity entity);

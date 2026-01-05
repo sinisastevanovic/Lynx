@@ -8,6 +8,7 @@
 #include "Lynx/ImGui/ImGuizmo.h"
 #include <glm/gtc/type_ptr.hpp>
 
+#include "Lynx/Input.h"
 #include "Lynx/Scene/Entity.h"
 #include "Lynx/Scene/Components/Components.h"
 
@@ -96,6 +97,7 @@ namespace Lynx
         glm::vec2 bounds[2];
         bounds[0] = { viewportMinRegion.x + viewportOffset.x, viewportMinRegion.y + viewportOffset.y };
         bounds[1] = { viewportMaxRegion.x + viewportOffset.x, viewportMaxRegion.y + viewportOffset.y };
+        Input::SetViewportBounds(bounds[0].x, bounds[0].y, bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y);
 
         if (isFocused && !ImGuizmo::IsUsing())
         {

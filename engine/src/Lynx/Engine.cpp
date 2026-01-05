@@ -275,6 +275,9 @@ namespace Lynx
             auto [width, height] = m_Renderer->GetViewportSize();
             m_Scene->UpdateUILayout(width, height, cameraProjection * cameraView, cameraPos);
 
+            glm::vec2 mousePos = Input::GetMousePosition();
+            bool click = Input::IsKeyPressed(KeyCode::MouseButtonLeft);
+            m_Scene->UpdateUIInteraction(mousePos.x, mousePos.y, click);
             {
                 struct UIElement
                 {
@@ -307,7 +310,7 @@ namespace Lynx
 
                 for (const auto& el : UIElements) {
                     GPUUIData data;
-                    data.Color = el.Mat ? el.Mat->AlbedoColor : glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+                    data.Color = (el.Mat ? el.Mat->AlbedoColor : glm::vec4(1.0f, 1.0f, 1.0f, 1.0f)) * el.Sprite->ColorTint;
                     data.Position = el.Rect->ScreenPosition;
                     data.Size = el.Rect->ScreenSize;
                     data.Params = { (float)el.Sprite->Type, el.Sprite->FillAmount, el.Sprite->TileScale.x, el.Sprite->TileScale.y };
@@ -1172,5 +1175,35 @@ namespace Lynx
                 if (json.contains("Rotation")) comp.Rotation = json["Rotation"];
                 if (json.contains("Scale")) { comp.Scale.x = json["Scale"][0]; comp.Scale.y = json["Scale"][1]; }
             });
+
+        m_ComponentRegistry.RegisterComponent<UIButtonComponent>("UIButton",
+            [](entt::registry& reg, entt::entity entity)
+            {
+                auto& comp = reg.get<UIButtonComponent>(entity);
+                ImGui::ColorEdit4("Normal", &comp.NormalColor.x);
+                ImGui::ColorEdit4("Hovered", &comp.HoverColor.x);
+                ImGui::ColorEdit4("Pressed", &comp.PressedColor.x);
+                ImGui::ColorEdit4("Disabled", &comp.DisabledColor.x);
+                ImGui::Checkbox("Interactable", &comp.Interactable);
+            },
+            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+            {
+                auto& comp = reg.get<UIButtonComponent>(entity);
+                json["NormalColor"] = { comp.NormalColor.r, comp.NormalColor.g, comp.NormalColor.b, comp.NormalColor.a };
+                json["HoverColor"] = { comp.HoverColor.r, comp.HoverColor.g, comp.HoverColor.b, comp.HoverColor.a };
+                json["PressedColor"] = { comp.PressedColor.r, comp.PressedColor.g, comp.PressedColor.b, comp.PressedColor.a };
+                json["DisabledColor"] = { comp.DisabledColor.r, comp.DisabledColor.g, comp.DisabledColor.b, comp.DisabledColor.a };
+                json["Interactable"] = comp.Interactable;
+            },
+            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+            {
+                auto& comp = reg.get<UIButtonComponent>(entity);
+                if (json.contains("NormalColor")) { comp.NormalColor.r = json["NormalColor"][0]; comp.NormalColor.g = json["NormalColor"][1]; comp.NormalColor.b = json["NormalColor"][2]; comp.NormalColor.a = json["NormalColor"][3] ; }
+                if (json.contains("HoverColor")) { comp.HoverColor.r = json["HoverColor"][0]; comp.HoverColor.g = json["HoverColor"][1]; comp.HoverColor.b = json["HoverColor"][2]; comp.HoverColor.a = json["HoverColor"][3] ; }
+                if (json.contains("PressedColor")) { comp.PressedColor.r = json["PressedColor"][0]; comp.PressedColor.g = json["PressedColor"][1]; comp.PressedColor.b = json["PressedColor"][2]; comp.PressedColor.a = json["PressedColor"][3] ; }
+                if (json.contains("DisabledColor")) { comp.DisabledColor.r = json["DisabledColor"][0]; comp.DisabledColor.g = json["DisabledColor"][1]; comp.DisabledColor.b = json["DisabledColor"][2]; comp.DisabledColor.a = json["DisabledColor"][3] ; }
+                if (json.contains("Interactable")) { comp.Interactable = json["Interactable"]; }    
+            });
+
     }
 }

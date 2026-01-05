@@ -32,6 +32,8 @@ namespace Lynx
         static float GetMouseX();
         static float GetMouseY();
 
+        static void SetViewportBounds(float x, float y, float width, float height);
+
     private:
         friend class Window;
         static void SetKeyState(int keycode, bool pressed);
@@ -39,6 +41,10 @@ namespace Lynx
 
         static std::unordered_map<std::string, std::vector<KeyCode>> s_ActionMappings;
         static std::unordered_map<std::string, std::vector<AxisBinding>> s_AxisBindings;
+        static float s_ViewportX;
+        static float s_ViewportY;
+        static float s_ViewportWidth;
+        static float s_ViewportHeight;
 
         friend class Engine;
         friend class EditorLayer;

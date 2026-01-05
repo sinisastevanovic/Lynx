@@ -18,6 +18,10 @@ namespace Lynx
 
     std::unordered_map<std::string, std::vector<KeyCode>> Input::s_ActionMappings;
     std::unordered_map<std::string, std::vector<AxisBinding>> Input::s_AxisBindings;
+    float Input::s_ViewportX = 0.0f;
+    float Input::s_ViewportY = 0.0f;
+    float Input::s_ViewportWidth = 0.0f;
+    float Input::s_ViewportHeight = 0.0f;
 
     static InputState s_State;
 
@@ -87,17 +91,25 @@ namespace Lynx
 
     glm::vec2 Input::GetMousePosition()
     {
-        return { s_State.MouseX, s_State.MouseY };
+        return { (float)s_State.MouseX - s_ViewportX, (float)s_State.MouseY - s_ViewportY };
     }
 
     float Input::GetMouseX()
     {
-        return s_State.MouseX;
+        return (float)s_State.MouseX - s_ViewportX;
     }
 
     float Input::GetMouseY()
     {
-        return s_State.MouseY;
+        return (float)s_State.MouseY - s_ViewportY;
+    }
+
+    void Input::SetViewportBounds(float x, float y, float width, float height)
+    {
+        s_ViewportX = x;
+        s_ViewportY = y;
+        s_ViewportWidth = width;
+        s_ViewportHeight = height;
     }
 
     void Input::SetKeyState(int keycode, bool pressed)

@@ -18,6 +18,7 @@ namespace Lynx
         virtual void OnCreate() {}
         virtual void OnDestroy() {}
         virtual void OnUpdate(float deltaTime) {}
+        virtual void OnUIPressed() {}
 
     private:
         Entity m_Entity;
