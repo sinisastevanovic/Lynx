@@ -122,19 +122,27 @@ namespace Lynx
             state.viewport.addViewport(nvrhi::Viewport(fbInfo.width, fbInfo.height));
             state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
 
-            // Default White Texture for now
-            // Later we will batch by textureID
-            state.addBindingSet(GetBindingSet(ctx, ctx.WhiteTexture));
-
-            ctx.CommandList->setGraphicsState(state);
-
             UIPushData push;
             push.ScreenSize = { (float)fbInfo.width, (float)fbInfo.height };
             ctx.CommandList->setPushConstants(&push, sizeof(push));
 
-            nvrhi::DrawArguments args;
-            args.vertexCount = m_Batcher->GetIndexCount();
-            ctx.CommandList->drawIndexed(args);
+            for (const auto& batch : m_Batcher->GetBatches())
+            {
+                nvrhi::TextureHandle tex = batch.Texture;
+                if (!tex)
+                    tex = ctx.WhiteTexture;
+
+                state.bindings = { GetBindingSet(ctx, tex) };
+                ctx.CommandList->setGraphicsState(state);
+
+                nvrhi::DrawArguments args;
+                args.vertexCount = batch.IndexCount;
+                args.startIndexLocation = batch.IndexStart;
+                ctx.CommandList->drawIndexed(args);
+
+                renderData.DrawCalls++;
+                renderData.IndexCount += batch.IndexCount;
+            }
         }
     }
 

@@ -9,6 +9,7 @@
 namespace Lynx
 {
     class Material;
+    class UIBatcher;
 
     enum class UIVisibility
     {
@@ -52,6 +53,7 @@ namespace Lynx
         virtual void OnUpdate(float deltaTime);
         virtual void OnMeasure(UISize availableSize);
         virtual void OnArrange(UIRect finalRect);
+        virtual void OnDraw(UIBatcher& batcher, const UIRect& screenRect) {}
 
         // Editor & Serialization
         virtual void OnInspect();
@@ -83,7 +85,7 @@ namespace Lynx
         float m_Opacity = 1.0f;
 
         UIRect m_CachedRect;    // Calculated in Arrange phase
-        std::shared_ptr<Material> m_Material;
+        std::shared_ptr<Material> m_Material; // TODO: Does it make sense to have this here? This is just a base class with no rendering...
 
         bool m_IsLayoutDirty = true;
     };

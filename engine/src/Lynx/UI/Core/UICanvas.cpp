@@ -106,6 +106,7 @@ namespace Lynx
     {
         UIElement::Serialize(outJson);
 
+        outJson["Type"] = "UICanvas";
         outJson["ScaleMode"] = (int)m_ScaleMode;
         outJson["RefRes"] = { m_ReferenceResolution.x, m_ReferenceResolution.y };
     }

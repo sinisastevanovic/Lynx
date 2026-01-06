@@ -7,10 +7,10 @@ namespace Lynx
     // Density-independant pixels (160 dpi = 1.0)
     using dp = float;
 
-    struct UIPoint { dp X = 0.0f; dp Y = 0.0f;};
-    struct UISize { dp Width = 0.0f; dp Height = 0.0f; };
+    struct LX_API UIPoint { dp X = 0.0f; dp Y = 0.0f;};
+    struct LX_API UISize { dp Width = 0.0f; dp Height = 0.0f; };
 
-    struct UIRect
+    struct LX_API UIRect
     {
         dp X = 0.0f;
         dp Y = 0.0f;
@@ -23,7 +23,7 @@ namespace Lynx
         }
     };
 
-    struct UIThickness
+    struct LX_API UIThickness
     {
         dp Left = 0.0f;
         dp Top = 0.0f;
@@ -36,7 +36,7 @@ namespace Lynx
         UIThickness(dp l, dp t, dp r, dp b) : Left(l), Top(t), Right(r), Bottom(b) {}
     };
 
-    struct UIAnchor
+    struct LX_API UIAnchor
     {
         float MinX = 0.5f;
         float MinY = 0.5f;

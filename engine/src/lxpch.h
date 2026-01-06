@@ -15,6 +15,7 @@
 #include <unordered_set>
 
 #include "Lynx/Log.h"
+#include "Lynx/Utils/JsonHelpers.h"
 
 //#ifdef LX_PLATFORM_WINDOWS
     #define NOMINMAX

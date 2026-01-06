@@ -2,6 +2,7 @@
 
 #include <imgui.h>
 #include <nlohmann/json.hpp>
+#include "Lynx/UI/Rendering/UIBatcher.h"
 
 namespace Lynx
 {

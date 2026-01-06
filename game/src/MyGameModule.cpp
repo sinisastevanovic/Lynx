@@ -24,6 +24,7 @@
 #include "Lynx/Scene/Components/NativeScriptComponent.h"
 #include "Lynx/Scene/Components/UIComponents.h"
 #include "Lynx/UI/Core/UIElement.h"
+#include "Lynx/UI/Widgets/UIImage.h"
 
 void MyGame::RegisterScripts()
 {
@@ -142,41 +143,43 @@ void MyGame::RegisterComponents(Lynx::ComponentRegistry* registry)
 
 void CreateMyUI(std::shared_ptr<Lynx::Scene> scene)
 {
-    // 1. Create the ECS Entity that will host the UI
-    Lynx::Entity uiEntity = scene->CreateEntity("MainMenuUI");
+    using namespace Lynx;
+    // 1. Create the UI Root Entity
+    Entity uiEntity = scene->CreateEntity("MainMenu");
+    auto& canvasComp = uiEntity.AddComponent<UICanvasComponent>();
+    auto root = canvasComp.Canvas;
 
-    // 2. Add the Canvas Component
-    auto& canvasComp = uiEntity.AddComponent<Lynx::UICanvasComponent>();
-    auto rootCanvas = canvasComp.Canvas;
+    // 2. Background Panel (Dark Grey Overlay)
+    auto bg = std::make_shared<UIImage>();
+    bg->SetName("Background");
+    bg->SetAnchor(UIAnchor::StretchAll); // Full Screen
+    bg->SetOffset({ 0, 0 });
+    bg->SetSize({ 0, 0 });
+    bg->SetColor({ 0.1f, 0.1f, 0.1f, 0.8f }); // Dark Grey, 80% opacity
+    root->AddChild(bg);
 
-    // 3. Create a "Background Panel"
-    // This element will stretch to fill the whole screen
-    auto background = std::make_shared<Lynx::UIElement>();
-    background->SetName("BackgroundPanel");
-    background->SetAnchor({ 0.0f, 0.0f, 1.0f, 1.0f }); // Stretch: Min(0,0) to Max(1,1)
-    background->SetOffset({ 0.0f, 0.0f });            // No margin
-    background->SetSize({ 0.0f, 0.0f });              // No size delta (full stretch)
-    rootCanvas->AddChild(background);
+    // 3. Texture Image (Using Default Checkerboard)
+    auto icon = std::make_shared<UIImage>();
+    icon->SetName("CheckerIcon");
+    icon->SetAnchor(UIAnchor::Center); // Center of screen
+    icon->SetSize({ 128.0f, 128.0f }); // 128x128 dp
+    icon->SetOffset({ 0.0f, -50.0f }); // Move up 50dp
 
-    // 4. Create a "Side Bar" on the left
-    auto sideBar = std::make_shared<Lynx::UIElement>();
-    sideBar->SetName("SideBar");
-    // Anchor to the left side, stretch vertically
-    sideBar->SetAnchor({ 0.0f, 0.0f, 0.0f, 1.0f });
-    sideBar->SetPivot({ 0.0f, 0.5f });                // Pivot on the left edge
-    sideBar->SetOffset({ 20.0f, 0.0f });              // 20dp margin from left
-    sideBar->SetSize({ 300.0f, 0.0f });               // 300dp wide, fills height
-    background->AddChild(sideBar);
+    // Load a texture (Lynx usually has T_DefaultChecker)
+    // You can also try "assets/Textures/T_SmokeFlip.png" from your file list!
+    auto tex = Engine::Get().GetAssetManager().GetAsset<Texture>("assets/Models/Fox/Texture.png");
+    if (tex) icon->SetTexture(tex);
 
-    // 5. Create a "Center Button"
-    auto centerButton = std::make_shared<Lynx::UIElement>();
-    centerButton->SetName("StartButton");
-    // Pin to the center of the screen
-    centerButton->SetAnchor({ 0.5f, 0.5f, 0.5f, 0.5f });
-    centerButton->SetPivot({ 0.5f, 0.5f });           // Pivot at button center
-    centerButton->SetOffset({ 0.0f, 0.0f });          // Dead center
-    centerButton->SetSize({ 200.0f, 80.0f });         // 200x80 dp
-    background->AddChild(centerButton);
+    bg->AddChild(icon);
+
+    // 4. Tinted Image (Red Box)
+    auto redBox = std::make_shared<UIImage>();
+    redBox->SetName("RedBox");
+    redBox->SetAnchor(UIAnchor::Center);
+    redBox->SetSize({ 200.0f, 50.0f });
+    redBox->SetOffset({ 0.0f, 50.0f }); // Move down 50dp
+    redBox->SetColor({ 1.0f, 0.2f, 0.2f, 1.0f }); // Red
+    bg->AddChild(redBox);
 }
 
 void MyGame::OnStart()
