@@ -61,21 +61,21 @@ namespace Lynx
 
     void UIBatcher::DrawRect(const UIRect& rect, const glm::vec4& color, std::shared_ptr<Material> material, std::shared_ptr<Texture> textureOverride)
     {
-        nvrhi::TextureHandle resolvedTexture = nullptr;
+        std::shared_ptr<Texture> resolvedTexture = nullptr;
         if (textureOverride && textureOverride->GetTextureHandle())
         {
-            resolvedTexture = textureOverride->GetTextureHandle();
+            resolvedTexture = textureOverride;
         }
         else if (material && material->AlbedoTexture)
         {
             auto texAsset = Engine::Get().GetAssetManager().GetAsset<Texture>(material->AlbedoTexture);
-            if (texAsset)
-                resolvedTexture = texAsset->GetTextureHandle();
+            if (texAsset && texAsset->GetTextureHandle())
+                resolvedTexture = texAsset;
         }
 
         if (!resolvedTexture)
         {
-            resolvedTexture = Engine::Get().GetAssetManager().GetWhiteTexture()->GetTextureHandle();
+            resolvedTexture = Engine::Get().GetAssetManager().GetWhiteTexture();
         }
 
         if (resolvedTexture != m_CurrentTexture || material != m_CurrentMaterial || m_Batches.empty())
@@ -93,6 +93,77 @@ namespace Lynx
 
         AddQuad(rect, color);
         m_Batches.back().IndexCount += 6;
+    }
+
+    void UIBatcher::DrawNineSlice(const UIRect& rect, const UIThickness& border, const glm::vec4& color, std::shared_ptr<Material> material,
+        std::shared_ptr<Texture> textureOverride)
+    {
+        std::shared_ptr<Texture> resolvedTexture = nullptr;
+        if (textureOverride && textureOverride->GetTextureHandle())
+        {
+            resolvedTexture = textureOverride;
+        }
+        else if (material && material->AlbedoTexture)
+        {
+            auto texAsset = Engine::Get().GetAssetManager().GetAsset<Texture>(material->AlbedoTexture);
+            if (texAsset && texAsset->GetTextureHandle())
+                resolvedTexture = texAsset;
+        }
+
+        if (!resolvedTexture)
+        {
+            resolvedTexture = Engine::Get().GetAssetManager().GetWhiteTexture();
+        }
+
+        if (resolvedTexture != m_CurrentTexture || material != m_CurrentMaterial || m_Batches.empty())
+        {
+            m_CurrentTexture = resolvedTexture;
+            m_CurrentMaterial = material;
+
+            UIBatch newBatch;
+            newBatch.Material = material;
+            newBatch.Texture = resolvedTexture;
+            newBatch.IndexStart = (uint32_t)m_Indices.size();
+            newBatch.IndexCount = 0;
+            m_Batches.push_back(newBatch);
+        }
+
+        // TODO:
+        // BETTER: The user provides border in PIXELS (or DP). We convert to UVs.
+        
+        float x[4] = { rect.X, rect.X + border.Left, rect.X + rect.Width - border.Right, rect.X + rect.Width };
+        float y[4] = { rect.Y, rect.Y + border.Top, rect.Y + rect.Height - border.Bottom, rect.Y + rect.Height };
+
+        uint32_t texW = 1, texH = 1;
+        if (resolvedTexture) {
+            texW = resolvedTexture->GetWidth();
+            texH = resolvedTexture->GetHeight();
+        }
+
+        float u[4] = { 0.0f, border.Left / texW, (texW - border.Right) / texW, 1.0f };
+        float v[4] = { 0.0f, border.Top / texH, (texH - border.Bottom) / texH, 1.0f };
+
+        uint32_t startIndex = (uint32_t)m_Vertices.size();
+        for (int j = 0; j < 4; j++) {
+            for (int i = 0; i < 4; i++) {
+                m_Vertices.push_back({ { x[i], y[j], 0.0f }, { u[i], v[j] }, color });
+            }
+        }
+
+        for (int j = 0; j < 3; j++) {
+            for (int i = 0; i < 3; i++) {
+                // Row j, Col i
+                uint32_t i0 = startIndex + (j * 4) + i;
+                uint32_t i1 = i0 + 1;
+                uint32_t i2 = i0 + 4;
+                uint32_t i3 = i2 + 1;
+
+                m_Indices.push_back(i0); m_Indices.push_back(i2); m_Indices.push_back(i1);
+                m_Indices.push_back(i1); m_Indices.push_back(i2); m_Indices.push_back(i3);
+
+                m_Batches.back().IndexCount += 6;
+            }
+        }
     }
 
     void UIBatcher::TraverseAndCollect(std::shared_ptr<UIElement> element, const glm::vec2& parentAbsPos, float scale)

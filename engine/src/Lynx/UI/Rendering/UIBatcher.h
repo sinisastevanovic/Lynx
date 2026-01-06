@@ -20,7 +20,7 @@ namespace Lynx
     struct UIBatch
     {
         std::shared_ptr<Material> Material;
-        nvrhi::TextureHandle Texture;
+        std::shared_ptr<Texture> Texture;
 
         uint32_t IndexStart;
         uint32_t IndexCount;
@@ -42,6 +42,7 @@ namespace Lynx
         bool HasData() const { return !m_Batches.empty(); }
 
         void DrawRect(const UIRect& rect, const glm::vec4& color, std::shared_ptr<Material> material, std::shared_ptr<Texture> textureOverride);
+        void DrawNineSlice(const UIRect& rect, const UIThickness& border, const glm::vec4& color, std::shared_ptr<Material> material, std::shared_ptr<Texture> textureOverride);
 
     private:
         void TraverseAndCollect(std::shared_ptr<UIElement> element, const glm::vec2& parentAbsPos, float scale);
@@ -61,6 +62,6 @@ namespace Lynx
         size_t m_IndexBufferSize = 0;
 
         std::shared_ptr<Material> m_CurrentMaterial = nullptr;
-        nvrhi::TextureHandle m_CurrentTexture = nullptr;
+        std::shared_ptr<Texture> m_CurrentTexture = nullptr;
     };
 }

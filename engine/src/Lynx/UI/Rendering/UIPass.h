@@ -16,7 +16,7 @@ namespace Lynx
 
     private:
         void CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader);
-        nvrhi::BindingSetHandle GetBindingSet(RenderContext& ctx, nvrhi::TextureHandle texture);
+        nvrhi::BindingSetHandle GetBindingSet(RenderContext& ctx, Texture* texture);
 
     private:
         std::unique_ptr<UIBatcher> m_Batcher;
@@ -24,7 +24,7 @@ namespace Lynx
         nvrhi::BindingLayoutHandle m_BindingLayout;
         nvrhi::GraphicsPipelineHandle m_Pipeline;
 
-        BindingSetCache<nvrhi::TextureHandle> m_BindingSetCache;
+        BindingSetCache<Texture*> m_BindingSetCache;
 
         PipelineState m_PipelineState;
     };

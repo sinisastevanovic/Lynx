@@ -18,7 +18,14 @@ namespace Lynx
         if (m_Visibility != UIVisibility::Visible)
             return;
 
-        batcher.DrawRect(screenRect, m_Color, m_Material, m_Texture);
+        if (m_ImageType == ImageType::Sliced)
+        {
+            batcher.DrawNineSlice(screenRect, m_Border, m_Color, m_Material, m_Texture);
+        }
+        else if (m_ImageType == ImageType::Simple)
+        {
+            batcher.DrawRect(screenRect, m_Color, m_Material, m_Texture);
+        }
     }
 
     void UIImage::SetTexture(std::shared_ptr<Texture> texture)
@@ -48,6 +55,22 @@ namespace Lynx
         {
             SetMaterialInternal(matHandle);
         }
+
+        const char* types[] = { "Simple", "Sliced" };
+        int currentType = (int)m_ImageType;
+        if (ImGui::Combo("Draw As", &currentType, types, 2))
+        {
+            SetImageType((ImageType)currentType);
+        }
+
+        if (m_ImageType == ImageType::Sliced)
+        {
+            float borders[4] = { m_Border.Left, m_Border.Top, m_Border.Right, m_Border.Bottom };
+            if (ImGui::DragFloat4("Borders (L,T,R,B)", borders))
+            {
+                SetBorder({ borders[0], borders[1], borders[2], borders[3] });
+            }
+        }
     }
 
     void UIImage::Serialize(nlohmann::json& outJson) const
@@ -57,6 +80,8 @@ namespace Lynx
         outJson["Color"] = m_Color;
         outJson["Texture"] = (m_Texture ? m_Texture->GetHandle() : AssetHandle::Null());
         outJson["Material"] = (m_Material ? m_Material->GetHandle() : AssetHandle::Null());
+        outJson["ImageType"] = (int)m_ImageType;
+        outJson["Border"] = { m_Border.Left, m_Border.Top, m_Border.Right, m_Border.Bottom };
     }
 
     void UIImage::Deserialize(const nlohmann::json& json)
@@ -73,6 +98,15 @@ namespace Lynx
         if (json.contains("Material"))
         {
             SetMaterialInternal(json["Material"].get<UUID>());
+        }
+        if (json.contains("ImageType"))
+        {
+            m_ImageType = (ImageType)json["ImageType"];
+        }
+        if (json.contains("Border"))
+        {
+            auto& b = json["Border"];
+            m_Border = { b[0], b[1], b[2], b[3] };
         }
     }
 

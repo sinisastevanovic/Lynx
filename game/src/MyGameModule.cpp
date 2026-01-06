@@ -165,12 +165,21 @@ void CreateMyUI(std::shared_ptr<Lynx::Scene> scene)
     icon->SetSize({ 128.0f, 128.0f }); // 128x128 dp
     icon->SetOffset({ 0.0f, -50.0f }); // Move up 50dp
 
-    // Load a texture (Lynx usually has T_DefaultChecker)
-    // You can also try "assets/Textures/T_SmokeFlip.png" from your file list!
     auto tex = Engine::Get().GetAssetManager().GetAsset<Texture>("assets/Models/Fox/Texture.png");
     if (tex) icon->SetTexture(tex);
 
     bg->AddChild(icon);
+
+    auto btn = std::make_shared<UIImage>();
+    btn->SetName("MyButton");
+    btn->SetAnchor(UIAnchor::Center);
+    btn->SetSize({ 800.0f, 700.0f });
+    auto slicedTex = Engine::Get().GetAssetManager().GetAsset<Texture>("assets/Textures/T_SliceTest.png");
+    if (slicedTex) btn->SetTexture(slicedTex);
+    btn->SetImageType(ImageType::Sliced);
+    btn->SetBorder({ 12.0f, 12.0f, 12.0f, 12.0f });
+    btn->SetColor({ 0.2f, 0.8f, 0.2f, 1.0f });
+    bg->AddChild(btn);
 
     // 4. Tinted Image (Red Box)
     auto redBox = std::make_shared<UIImage>();

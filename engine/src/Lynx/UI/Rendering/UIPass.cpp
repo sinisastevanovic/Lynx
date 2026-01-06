@@ -128,11 +128,9 @@ namespace Lynx
 
             for (const auto& batch : m_Batcher->GetBatches())
             {
-                nvrhi::TextureHandle tex = batch.Texture;
-                if (!tex)
-                    tex = ctx.WhiteTexture;
+                auto tex = batch.Texture;
 
-                state.bindings = { GetBindingSet(ctx, tex) };
+                state.bindings = { GetBindingSet(ctx, tex.get()) };
                 ctx.CommandList->setGraphicsState(state);
 
                 nvrhi::DrawArguments args;
@@ -146,15 +144,15 @@ namespace Lynx
         }
     }
 
-    nvrhi::BindingSetHandle UIPass::GetBindingSet(RenderContext& ctx, nvrhi::TextureHandle texture)
+    nvrhi::BindingSetHandle UIPass::GetBindingSet(RenderContext& ctx, Texture* texture)
     {
-        return m_BindingSetCache.Get(texture, 0, [&]() -> nvrhi::BindingSetHandle
+        uint32_t version = texture ? texture->GetVersion() : 0;
+        return m_BindingSetCache.Get(texture, version, [&]() -> nvrhi::BindingSetHandle
         {
             // TODO: What sampler do we need? 
-            SamplerSettings samplerSettings;
             auto desc = nvrhi::BindingSetDesc()
-                .addItem(nvrhi::BindingSetItem::Texture_SRV(0, texture))
-                .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(samplerSettings)));
+                .addItem(nvrhi::BindingSetItem::Texture_SRV(0, texture->GetTextureHandle()))
+                .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(texture->GetSamplerSettings())));
 
             return ctx.Device->createBindingSet(desc, m_BindingLayout);
         });
