@@ -1,6 +1,8 @@
 #include "UICanvas.h"
 
 #include <imgui.h>
+#include <glm/ext/scalar_constants.hpp>
+#include <glm/gtc/epsilon.hpp>
 #include <nlohmann/json.hpp>
 
 namespace Lynx
@@ -15,21 +17,32 @@ namespace Lynx
 
     void UICanvas::Update(float deltaTime, float screenWidth, float screenHeight)
     {
-        m_ScaleFactor = CalculateScaleFactor(screenWidth, screenHeight);
+        float scale = CalculateScaleFactor(screenWidth, screenHeight);
+        bool sizeChanged = glm::abs(m_LastScreenWidth - screenWidth) > 0.5f ||
+                            glm::abs(m_LastScreenHeight - screenHeight) > 0.5f;
+        bool scaleChanged = glm::epsilonNotEqual(m_ScaleFactor, scale, glm::epsilon<float>());
+        
+        if (m_IsLayoutDirty || sizeChanged || scaleChanged)
+        {
+            m_ScaleFactor = scale;
+            m_LastScreenWidth = screenWidth;
+            m_LastScreenHeight = screenHeight;
 
-        UISize logicalSize;
-        logicalSize.Width = screenWidth / m_ScaleFactor;
-        logicalSize.Height = screenHeight / m_ScaleFactor;
+            UISize logicalSize;
+            logicalSize.Width = screenWidth / m_ScaleFactor;
+            logicalSize.Height = screenHeight / m_ScaleFactor;
+            
+            UIRect rootRect;
+            rootRect.X = 0;
+            rootRect.Y = 0;
+            rootRect.Width = logicalSize.Width;
+            rootRect.Height = logicalSize.Height;
 
-        UIRect rootRect;
-        rootRect.X = 0;
-        rootRect.Y = 0;
-        rootRect.Width = logicalSize.Width;
-        rootRect.Height = logicalSize.Height;
-
+            OnMeasure(logicalSize);
+            OnArrange(rootRect);
+            m_IsLayoutDirty = false;
+        }
         OnUpdate(deltaTime);
-        OnMeasure(logicalSize);
-        OnArrange(rootRect);
     }
 
     float UICanvas::CalculateScaleFactor(float screenW, float screenH) const

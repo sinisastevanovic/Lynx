@@ -37,6 +37,8 @@ namespace Lynx
         UIScaleMode m_ScaleMode = UIScaleMode::ScaleWithScreenSize;
         glm::vec2 m_ReferenceResolution = { 1920.0f, 1080.0f };
         float m_ScaleFactor = 1.0f;
+        float m_LastScreenWidth = 0.0f;
+        float m_LastScreenHeight = 0.0f;
     };
 }
 
