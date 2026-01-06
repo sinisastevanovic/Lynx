@@ -131,6 +131,7 @@ namespace Lynx
         m_BloomPass.reset();
         m_CompositePass.reset();
         m_MipMapGenPass.reset();
+        m_UIPass.reset();
         m_RenderContext = RenderContext();
         m_CurrentFrameData = RenderData();
         m_OpaqueBatches.clear();
@@ -187,6 +188,9 @@ namespace Lynx
         if (m_ShouldCreateIDTarget) fbInfo.addColorFormat(nvrhi::Format::R32_SINT);
         fbInfo.setDepthFormat(nvrhi::Format::D32);
         m_RenderContext.PresentationFramebufferInfo = fbInfo;
+        nvrhi::FramebufferInfo finalfbInfo;
+        finalfbInfo.addColorFormat(nvrhi::Format::BGRA8_UNORM);
+        m_RenderContext.FinalFramebufferInfo = finalfbInfo;
 
         SamplerCache::Init(m_NvrhiDevice, m_MaxAnisotropy);
 
@@ -213,6 +217,9 @@ namespace Lynx
 
         m_MipMapGenPass = std::make_unique<MipMapBlitPass>();
         m_MipMapGenPass->Init(m_NvrhiDevice);
+
+        m_UIPass = std::make_unique<UIPass>();
+        m_UIPass->Init(m_RenderContext);
         
         LX_CORE_INFO("Renderer initialized successfully (Pipeline loaded).");
     }
@@ -923,6 +930,8 @@ namespace Lynx
         }
 
         m_CompositePass->Execute(m_RenderContext, m_CurrentFrameData);
+
+        m_UIPass->Execute(m_RenderContext, m_CurrentFrameData);
         
         // 1. Close recording
         m_CommandList->close();

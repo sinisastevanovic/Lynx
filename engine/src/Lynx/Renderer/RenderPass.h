@@ -143,6 +143,7 @@ namespace Lynx
         nvrhi::CommandListHandle CommandList;
 
         nvrhi::FramebufferInfo PresentationFramebufferInfo;
+        nvrhi::FramebufferInfo FinalFramebufferInfo;
 
         nvrhi::BufferHandle GlobalConstantBuffer;
         nvrhi::TextureHandle WhiteTexture;

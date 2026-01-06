@@ -22,6 +22,8 @@
 #include "Lynx/ScriptRegistry.h"
 #include "Lynx/Scene/Components/LuaScriptComponent.h"
 #include "Lynx/Scene/Components/NativeScriptComponent.h"
+#include "Lynx/Scene/Components/UIComponents.h"
+#include "Lynx/UI/Core/UIElement.h"
 
 void MyGame::RegisterScripts()
 {
@@ -136,6 +138,45 @@ void MyGame::RegisterComponents(Lynx::ComponentRegistry* registry)
         comp.Lifetime = json["Lifetime"];
         comp.Radius = json["Radius"];
     });
+}
+
+void CreateMyUI(std::shared_ptr<Lynx::Scene> scene)
+{
+    // 1. Create the ECS Entity that will host the UI
+    Lynx::Entity uiEntity = scene->CreateEntity("MainMenuUI");
+
+    // 2. Add the Canvas Component
+    auto& canvasComp = uiEntity.AddComponent<Lynx::UICanvasComponent>();
+    auto rootCanvas = canvasComp.Canvas;
+
+    // 3. Create a "Background Panel"
+    // This element will stretch to fill the whole screen
+    auto background = std::make_shared<Lynx::UIElement>();
+    background->SetName("BackgroundPanel");
+    background->SetAnchor({ 0.0f, 0.0f, 1.0f, 1.0f }); // Stretch: Min(0,0) to Max(1,1)
+    background->SetOffset({ 0.0f, 0.0f });            // No margin
+    background->SetSize({ 0.0f, 0.0f });              // No size delta (full stretch)
+    rootCanvas->AddChild(background);
+
+    // 4. Create a "Side Bar" on the left
+    auto sideBar = std::make_shared<Lynx::UIElement>();
+    sideBar->SetName("SideBar");
+    // Anchor to the left side, stretch vertically
+    sideBar->SetAnchor({ 0.0f, 0.0f, 0.0f, 1.0f });
+    sideBar->SetPivot({ 0.0f, 0.5f });                // Pivot on the left edge
+    sideBar->SetOffset({ 20.0f, 0.0f });              // 20dp margin from left
+    sideBar->SetSize({ 300.0f, 0.0f });               // 300dp wide, fills height
+    background->AddChild(sideBar);
+
+    // 5. Create a "Center Button"
+    auto centerButton = std::make_shared<Lynx::UIElement>();
+    centerButton->SetName("StartButton");
+    // Pin to the center of the screen
+    centerButton->SetAnchor({ 0.5f, 0.5f, 0.5f, 0.5f });
+    centerButton->SetPivot({ 0.5f, 0.5f });           // Pivot at button center
+    centerButton->SetOffset({ 0.0f, 0.0f });          // Dead center
+    centerButton->SetSize({ 200.0f, 80.0f });         // 200x80 dp
+    background->AddChild(centerButton);
 }
 
 void MyGame::OnStart()
@@ -266,6 +307,8 @@ void MyGame::OnStart()
 
     auto spawnerEntity = scene->CreateEntity("Spawner");
     auto& spawner = spawnerEntity.AddComponent<EnemySpawnerComponent>();
+
+    CreateMyUI(scene);
 
     Lynx::Input::BindAxis("MoveLeftRight", Lynx::KeyCode::D, Lynx::KeyCode::A);
     Lynx::Input::BindAxis("MoveUpDown", Lynx::KeyCode::S, Lynx::KeyCode::W);

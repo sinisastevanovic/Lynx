@@ -15,6 +15,7 @@
 #include <glm/gtx/matrix_decompose.hpp>
 
 #include "SceneSerializer.h"
+#include "Components/UIComponents.h"
 
 namespace Lynx
 {
@@ -360,10 +361,38 @@ namespace Lynx
                 }
             }
         }
+
+        auto& window = Engine::Get().GetWindow();
+        float width = (float)window.GetWidth();
+        float height = (float)window.GetHeight();
+
+        auto uiView = m_Registry.view<UICanvasComponent>();
+        for (auto entity : uiView)
+        {
+            auto& component = uiView.get<UICanvasComponent>(entity);
+            if (component.Canvas)
+            {
+                component.Canvas->Update(deltaTime, width, height);
+            }
+        }
     }
 
     void Scene::OnUpdateEditor(float deltaTime)
     {
+        auto& renderer = Engine::Get().GetRenderer();
+        auto viewportSize = renderer.GetViewportSize();
+        float width = (float)viewportSize.first;
+        float height = (float)viewportSize.second;
+
+        auto uiView = m_Registry.view<UICanvasComponent>();
+        for (auto entity : uiView)
+        {
+            auto& component = uiView.get<UICanvasComponent>(entity);
+            if (component.Canvas)
+            {
+                component.Canvas->Update(deltaTime, width, height);
+            }
+        }
     }
 
     void Scene::AttachEntity(entt::entity child, entt::entity parent)

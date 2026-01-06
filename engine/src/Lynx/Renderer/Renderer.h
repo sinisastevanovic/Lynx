@@ -10,6 +10,7 @@
 
 #include "RenderPipeline.h"
 #include "RenderPass.h"
+#include "Lynx/UI/Rendering/UIPass.h"
 #include "Passes/BloomPass.h"
 #include "Passes/CompositePass.h"
 #include "Passes/MipMapBlitPass.h"
@@ -135,6 +136,7 @@ namespace Lynx
         std::unique_ptr<CompositePass> m_CompositePass;
         std::unique_ptr<BloomPass> m_BloomPass;
         std::unique_ptr<MipMapBlitPass> m_MipMapGenPass;
+        std::unique_ptr<UIPass> m_UIPass;
         RenderContext m_RenderContext;
         RenderData m_CurrentFrameData;
 
