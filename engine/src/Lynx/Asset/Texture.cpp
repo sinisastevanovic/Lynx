@@ -42,18 +42,33 @@ namespace Lynx
         }
 
         int width, height, channels;
-        m_PixelData = stbi_load(m_FilePath.c_str(), &width, &height, &channels, 4);
+        m_PixelData = stbi_load(m_FilePath.c_str(), &width, &height, &channels, 0);
 
         if (!m_PixelData)
         {
             LX_CORE_ERROR("Failed to load texture: {0}", m_FilePath);
-            // TODO: Load "Missing Texture" texture here
             return false;
         }
 
         m_Specification.Width = width;
         m_Specification.Height = height;
         m_Specification.DebugName = m_FilePath;
+
+        if (channels == 4)
+        {
+            m_Specification.Format = TextureFormat::RGBA8;
+        }
+        else if (channels == 1)
+        {
+            m_Specification.Format = TextureFormat::R8;
+        }
+        else
+        {
+            LX_CORE_WARN("Unsupported number of channels '{0}'. Forcing 4 channels...", channels);
+            stbi_image_free(m_PixelData);
+            m_PixelData = stbi_load(m_FilePath.c_str(), &width, &height, &channels, 4);
+            m_Specification.Format = TextureFormat::RGBA8;
+        }
 
         return true;
     }

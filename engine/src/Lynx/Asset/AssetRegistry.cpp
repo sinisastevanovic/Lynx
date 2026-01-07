@@ -76,6 +76,12 @@ namespace Lynx
             if (event.Path.extension() == ".lxmeta")
                 continue;
 
+            if (event.Path == m_IgnoreFileChanges)
+            {
+                m_IgnoreFileChanges = std::filesystem::path();
+                continue;
+            }
+
             switch (event.Action)
             {
                 case FileAction::Added:
@@ -208,7 +214,7 @@ namespace Lynx
         }
     }
 
-    void AssetRegistry::ProcessFile(const std::filesystem::path& path)
+    void AssetRegistry::ProcessFile(const std::filesystem::path& path, std::shared_ptr<AssetSpecification> specification)
     {
         // TODO: ensure the path is either inside the engines resources folder or games asset folder
         // Also, we probably shouldn't work with absolute paths? Maybe like unreal ("GAME/Meshes/..." and "ENGINE/Meshes/...")?
@@ -230,7 +236,11 @@ namespace Lynx
             metadata.Handle = AssetHandle();
             metadata.FilePath = path;
             metadata.Type = AssetUtils::GetAssetTypeFromExtension(path);
-            if (metadata.Type == AssetType::Texture)
+            if (specification)
+            {
+                metadata.Specification = specification;
+            }
+            else if (metadata.Type == AssetType::Texture)
             {
                 metadata.Specification = std::make_shared<TextureSpecification>();
             }
@@ -380,5 +390,18 @@ namespace Lynx
         return AssetHandle::Null();
     }
 
- 
+    AssetHandle AssetRegistry::ImportAssetFromTemp(const std::filesystem::path& tempPath, const std::filesystem::path& destinationPath, std::shared_ptr<AssetSpecification> specification)
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        if (AssetUtils::IsAssetExtensionSupported(tempPath))
+        {
+            // TODO: Tell filewatchers to ignore events
+            m_IgnoreFileChanges = destinationPath;
+            std::filesystem::rename(tempPath, destinationPath);
+            ProcessFile(destinationPath, specification);
+            return m_PathToHandle[destinationPath];
+            
+        }
+        return AssetHandle::Null();
+    }
 }

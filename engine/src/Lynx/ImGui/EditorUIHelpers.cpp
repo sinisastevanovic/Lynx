@@ -56,6 +56,7 @@ namespace Lynx
             std::string searchQuery = searchBuffer;
             std::ranges::transform(searchQuery, searchQuery.begin(), ::tolower);
             const auto& allAssets = Engine::Get().GetAssetRegistry().GetMetadata();
+            int assetIndex = 0;
             for (const auto& [handle, meta] : allAssets)
             {
                 bool typeAllowed = false;
@@ -71,6 +72,8 @@ namespace Lynx
                 if (!typeAllowed)
                     continue;
 
+                ImGui::PushID(assetIndex);
+
                 std::string assetName = meta.FilePath.filename().string();
                 std::string assetNameLower = assetName;
                 std::ranges::transform(assetNameLower, assetNameLower.begin(), ::tolower);
@@ -85,6 +88,8 @@ namespace Lynx
                     changed = true;
                     ImGui::CloseCurrentPopup();
                 }
+                assetIndex++;
+                ImGui::PopID();
             }
             ImGui::EndPopup();
         }

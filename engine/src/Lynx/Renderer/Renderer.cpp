@@ -71,6 +71,8 @@ namespace Lynx
                     return nvrhi::Format::RG32_FLOAT;
                 case TextureFormat::R32I:
                     return sRGB ? nvrhi::Format::R32_SINT : nvrhi::Format::R32_UINT;
+                case TextureFormat::R8:
+                    return nvrhi::Format::R8_UNORM;
                 case TextureFormat::Depth32:
                     return nvrhi::Format::D32;
                 case TextureFormat::Depth24Stencil8:
@@ -80,7 +82,21 @@ namespace Lynx
             return nvrhi::Format::UNKNOWN;
         }
 
-        
+        static uint32_t GetTextureFormatByteSize(TextureFormat format)
+        {
+            switch (format)
+            {
+                case TextureFormat::RGBA8:          return 4;
+                case TextureFormat::RG16F:          return 4; // 2 * 2 bytes (half float)
+                case TextureFormat::RG32F:          return 8; // 2 * 4 bytes (float)
+                case TextureFormat::R32I:           return 4; // 1 * 4 bytes (int)
+                case TextureFormat::Depth32:        return 4;
+                case TextureFormat::Depth24Stencil8:return 4;
+                case TextureFormat::R8:             return 1;
+            }
+            LX_CORE_WARN("Unknown Texture Format byte size, defaulting to 4");
+            return 4;
+        }
     }
     
     struct Renderer::VulkanState
@@ -252,13 +268,12 @@ namespace Lynx
 
         if (data)
         {
-            uint32_t bytesPerPixel = 4; // TODO: Get this from format
+            uint32_t bytesPerPixel = Helpers::GetTextureFormatByteSize(specification.Format);
 
             size_t rowPitch = specification.Width * bytesPerPixel;
             size_t depthPitch = 0;
 
             // TODO: Batch this!
-            // TODO: Generate mips!
             auto cmdList = m_NvrhiDevice->createCommandList();
             cmdList->open();
             cmdList->writeTexture(result, 0, 0, data, rowPitch, depthPitch);

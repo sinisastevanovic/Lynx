@@ -17,6 +17,7 @@ set_target_properties(editor PROPERTIES
 
 target_link_libraries(editor PRIVATE 
     engine
+    msdf-atlas-gen
 )
 
 target_include_directories(editor PRIVATE

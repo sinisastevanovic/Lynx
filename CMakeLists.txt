@@ -10,6 +10,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    add_compile_options(/MP)
 endif()
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
@@ -32,8 +33,23 @@ FetchContent_Declare(
     GIT_TAG v1.92.5-docking
 )
 
+FetchContent_Declare(
+    msdf-atlas-gen
+    GIT_REPOSITORY https://github.com/Chlumsky/msdf-atlas-gen.git
+    GIT_TAG v1.3
+)
+
 FetchContent_MakeAvailable(nvrhi)
 FetchContent_MakeAvailable(imgui)
+
+set(MSDF_ATLAS_GEN_BUILD_STANDALONE OFF CACHE BOOL "" FORCE)
+set(MSDF_ATLAS_DYNAMIC_RUNTIME ON CACHE BOOL "" FORCE)
+set(MSDF_ATLAS_GEN_USE_VCPKG ON CACHE BOOL "" FORCE)
+set(MSDF_ATLAS_USE_SKIA OFF CACHE BOOL "" FORCE)
+set(MSDFGEN_BUILD_STANDALONE OFF CACHE BOOL "" FORCE)
+set(MSDFGEN_DYNAMIC_RUNTIME ON CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(msdf-atlas-gen)
 
 # This enables vcpkg's manifest mode. It will automatically download
 # and build the libraries listed in vcpkg.json.

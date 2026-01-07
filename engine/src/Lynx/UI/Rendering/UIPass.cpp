@@ -10,6 +10,7 @@ namespace Lynx
     struct UIPushData
     {
         glm::vec2 ScreenSize;
+        float PixelRange;
     };
 
     UIPass::UIPass()
@@ -30,14 +31,20 @@ namespace Lynx
           
         m_BindingLayout = ctx.Device->createBindingLayout(layoutDesc);
 
-        m_PipelineState.SetPath("engine/resources/Shaders/UI_Standard.glsl");
-        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        m_StandardPipelineState.SetPath("engine/resources/Shaders/UI_Standard.glsl");
+        m_StandardPipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
-            this->CreatePipeline(ctx, shader);
+            m_StandardPipeline = this->CreatePipeline(ctx, shader);
+        });
+
+        m_TextPipelineState.SetPath("engine/resources/Shaders/UI_Text.glsl");
+        m_TextPipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            m_TextPipeline = this->CreatePipeline(ctx, shader);
         });
     }
 
-    void UIPass::CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader)
+    nvrhi::GraphicsPipelineHandle UIPass::CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader)
     {
         auto pipeDesc = nvrhi::GraphicsPipelineDesc()
             .addBindingLayout(m_BindingLayout)
@@ -82,15 +89,19 @@ namespace Lynx
         pipeDesc.renderState.depthStencilState.depthTestEnable = false;
         pipeDesc.renderState.depthStencilState.depthWriteEnable = false;
 
-        m_Pipeline = ctx.Device->createGraphicsPipeline(pipeDesc, ctx.FinalFramebufferInfo);
+        return ctx.Device->createGraphicsPipeline(pipeDesc, ctx.FinalFramebufferInfo);
     }
-
+    
     void UIPass::Execute(RenderContext& ctx, RenderData& renderData)
     {
         // 1. Update Shader if hot-reloaded
-        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        m_StandardPipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
-            this->CreatePipeline(ctx, shader);
+            m_StandardPipeline = this->CreatePipeline(ctx, shader);
+        });
+        m_TextPipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        {
+            m_TextPipeline = this->CreatePipeline(ctx, shader);
         });
 
         // 2. Collect UI Data
@@ -113,7 +124,7 @@ namespace Lynx
             m_Batcher->Upload(ctx.CommandList);
 
             auto state = nvrhi::GraphicsState()
-                .setPipeline(m_Pipeline)
+                .setPipeline(m_StandardPipeline)
                 .setFramebuffer(renderData.TargetFramebuffer)
                 .addVertexBuffer(nvrhi::VertexBufferBinding(m_Batcher->GetVertexBuffer(), 0, 0))
                 .setIndexBuffer(nvrhi::IndexBufferBinding(m_Batcher->GetIndexBuffer(), nvrhi::Format::R32_UINT, 0));
@@ -124,14 +135,21 @@ namespace Lynx
 
             UIPushData push;
             push.ScreenSize = { (float)fbInfo.width, (float)fbInfo.height };
-            ctx.CommandList->setPushConstants(&push, sizeof(push));
 
             for (const auto& batch : m_Batcher->GetBatches())
             {
+                auto pipeline = (batch.Type == UIBatchType::Text) ? m_TextPipeline : m_StandardPipeline;
+                state.setPipeline(pipeline);
                 auto tex = batch.Texture;
+                if (!tex || !tex->GetTextureHandle())
+                    continue;
 
                 state.bindings = { GetBindingSet(ctx, tex.get()) };
                 ctx.CommandList->setGraphicsState(state);
+
+                push.PixelRange = batch.PixelRange;
+                ctx.CommandList->setPushConstants(&push, sizeof(push));
+                
 
                 nvrhi::DrawArguments args;
                 args.vertexCount = batch.IndexCount;

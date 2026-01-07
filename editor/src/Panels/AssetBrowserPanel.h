@@ -44,6 +44,11 @@ namespace Lynx
         
         std::filesystem::path m_DeletePath;
         bool m_IsDeleting = false;
+
+        bool m_ShowFontModal = false;
+        std::filesystem::path m_FontImportPath;
+        float m_ImportPixelRange = 3.0f;
+        float m_ImportScale = 48.0f;
     };
 }
 

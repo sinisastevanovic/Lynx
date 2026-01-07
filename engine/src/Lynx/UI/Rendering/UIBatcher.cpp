@@ -3,6 +3,7 @@
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Material.h"
 #include "Lynx/Asset/Texture.h"
+#include "Lynx/Utils/TextUtils.h"
 
 namespace Lynx
 {
@@ -183,6 +184,47 @@ namespace Lynx
         }
     }
 
+    void UIBatcher::DrawString(const std::string& text, std::shared_ptr<Font> font, float fontSize, glm::vec2 position, const glm::vec4& color)
+    {
+        auto atlas = font->GetTexture();
+        if (!atlas)
+            return;
+
+        if (m_CurrentTexture != atlas || m_Batches.empty() || m_Batches.back().Type != UIBatchType::Text)
+        {
+            m_CurrentTexture = atlas;
+            UIBatch newBatch;
+            newBatch.Type = UIBatchType::Text;
+            newBatch.Texture = atlas;
+            newBatch.IndexStart = (uint32_t)m_Indices.size();
+            newBatch.IndexCount = 0;
+            newBatch.PixelRange = font->GetPixelRange();
+            m_Batches.push_back(newBatch);
+        }
+
+        float x = position.x;
+        float y = position.y;
+        float scale = fontSize;
+
+        size_t i = 0;
+        while (i < text.size())
+        {
+            uint32_t codepoint = TextUtils::DecodeNextCodepoint(text, i);
+            const auto* glyph = font->GetGlyph(codepoint);
+            if (!glyph)
+                continue;
+
+            UIRect gr;
+            gr.X = x + glyph->PlaneLeft * scale;
+            gr.Y = y - glyph->PlaneTop * scale;
+            gr.Width = (glyph->PlaneRight - glyph->PlaneLeft) * scale;
+            gr.Height = (glyph->PlaneTop - glyph->PlaneBottom) * scale;
+            AddQuad(gr, color, {glyph->AtlasLeft, glyph->AtlasTop}, {glyph->AtlasRight, glyph->AtlasBottom});
+            m_Batches.back().IndexCount += 6;
+            x += glyph->Advance * scale;
+        }
+    }
+
     void UIBatcher::TraverseAndCollect(std::shared_ptr<UIElement> element, float scale, float parentOpacity)
     {
         // TODO: Should we only upload if ui is dirty??
@@ -213,7 +255,7 @@ namespace Lynx
             AddQuad(pixelRect, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), {0.0f, 0.0f}, {1.0f, 1.0f}); // 50% opacity
         }*/
 
-        element->OnDraw(*this, pixelRect);
+        element->OnDraw(*this, pixelRect, scale);
 
         for (const auto& child : element->GetChildren())
         {

@@ -12,6 +12,8 @@
         "shaderc",
         "tinygltf",
         "stb",
-        "nlohmann-json"
+        "nlohmann-json",
+        "freetype",
+        "libpng"
     ]
 }

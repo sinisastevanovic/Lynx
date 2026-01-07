@@ -4,6 +4,7 @@
 
 #include <algorithm>
 
+#include "../Utils/FontImporter.h"
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Sprite.h"
 #include "Lynx/Asset/Serialization/MaterialSerializer.h"
@@ -81,7 +82,8 @@ namespace Lynx
             {
                 const auto& path = directoryEntry.path();
                 bool isDirectory = directoryEntry.is_directory();
-                if (!isDirectory && !AssetUtils::IsAssetExtensionSupported(path))
+                bool isFontFile = path.extension() == ".ttf" || path.extension() == ".otf" || path.extension() == ".TTF" || path.extension() == ".OTF";
+                if (!isDirectory && !AssetUtils::IsAssetExtensionSupported(path) && !isFontFile)
                     continue;
                 
                 auto relativePath = std::filesystem::relative(path, m_BaseDirectory);
@@ -224,6 +226,16 @@ namespace Lynx
 
                 if (!isDirectory && ImGui::BeginPopupContextItem())
                 {
+                    if (isFontFile)
+                    {
+                        if (ImGui::MenuItem("Generate Font Atlas"))
+                        {
+                            m_FontImportPath = path;
+                            m_ShowFontModal = true;
+                        }
+                        ImGui::Separator();
+                    }
+                    
                     if (ImGui::MenuItem("Rename"))
                     {
                         m_RenamingPath = path;
@@ -303,6 +315,41 @@ namespace Lynx
             }
             ImGui::EndTable();
         }
+
+        if (m_ShowFontModal)
+        {
+            ImGui::OpenPopup("Font Import Settings");
+            m_ShowFontModal = false;
+        }
+
+        if (ImGui::BeginPopupModal("Font Import Settings", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            std::string importStr = m_FontImportPath.filename().string();
+            ImGui::Text("Import Settings for: %s", importStr.c_str());
+            ImGui::Separator();
+
+            ImGui::InputFloat("Pixel Range", &m_ImportPixelRange);
+            ImGui::InputFloat("Font Scale", &m_ImportScale);
+
+            ImGui::Separator();
+            if (ImGui::Button("Generate", ImVec2(120, 0)))
+            {
+                FontImportOptions options;
+                options.PixelRange = m_ImportPixelRange;
+                options.Scale = m_ImportScale;
+
+                FontImporter::ImportFont(m_FontImportPath, options);
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SetItemDefaultFocus();
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+        
         ImGui::End();
     }
 }

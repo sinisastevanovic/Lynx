@@ -27,6 +27,7 @@ namespace Lynx
         RG16F,              // High precision 16-bit
         RG32F,              // High precision 32-bit    
         R32I,               // Integer (ID buffer for example)
+        R8,
         Depth32,            // Depth Buffer
         Depth24Stencil8,    // Depth Buffer + Stencil
     };

@@ -31,6 +31,7 @@ namespace Lynx
         bool Contains(const std::filesystem::path& assetPath) const;
 
         AssetHandle ImportAsset(const std::filesystem::path& assetPath);
+        AssetHandle ImportAssetFromTemp(const std::filesystem::path& tempPath, const std::filesystem::path& destinationPath, std::shared_ptr<AssetSpecification> specification = nullptr);
 
         const std::unordered_map<AssetHandle, AssetMetadata>& GetMetadata() const { return m_AssetMetadata; }
 
@@ -42,7 +43,7 @@ namespace Lynx
         
     private:
         void ScanDirectory(const std::filesystem::path& directory);
-        void ProcessFile(const std::filesystem::path& path);
+        void ProcessFile(const std::filesystem::path& path, std::shared_ptr<AssetSpecification> specification = nullptr);
         void WriteMetadata(const AssetMetadata& metadata);
         AssetMetadata ReadMetadata(const std::filesystem::path& metadataPath);
 
@@ -59,6 +60,8 @@ namespace Lynx
         std::vector<std::unique_ptr<FileWatcher>> m_FileWatchers;
         std::vector<FileEvent> m_FileEvents;
         std::vector<AssetHandle> m_ProcessedChangedAssets;
+
+        std::filesystem::path m_IgnoreFileChanges;
 
         mutable std::recursive_mutex m_Mutex;
     };

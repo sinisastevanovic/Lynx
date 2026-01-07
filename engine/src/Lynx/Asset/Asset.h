@@ -36,6 +36,7 @@ namespace Lynx
         AssetState GetState() const { return m_State; }
         uint32_t GetVersion() const { return m_Version; }
 
+
     protected:
         virtual bool Reload() { LX_CORE_ERROR("AssetType does not support hot reloading yet!"); return false; }
 

@@ -57,7 +57,7 @@ namespace Lynx
         virtual void OnUpdate(float deltaTime);
         virtual void OnMeasure(UISize availableSize);
         virtual void OnArrange(UIRect finalRect);
-        virtual void OnDraw(UIBatcher& batcher, const UIRect& screenRect);
+        virtual void OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale);
 
         // Editor & Serialization
         virtual void OnInspect();

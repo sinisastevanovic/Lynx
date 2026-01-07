@@ -27,6 +27,7 @@
 #include "Lynx/UI/Core/UIElement.h"
 #include "Lynx/UI/Widgets/StackPanel.h"
 #include "Lynx/UI/Widgets/UIImage.h"
+#include "Lynx/UI/Widgets/UIText.h"
 
 void MyGame::RegisterScripts()
 {
@@ -204,6 +205,10 @@ void CreateMyUI(std::shared_ptr<Lynx::Scene> scene)
     btnStretch->SetColor({ 0.2f, 0.6f, 0.2f, 1.0f }); // Green
     btnStretch->SetHorizontalAlignment(UIAlignment::Stretch);
     stack->AddChild(btnStretch);
+
+    auto btnText = std::make_shared<UIText>();
+    btnText->SetName("Btn_Text");
+    btnStretch->AddChild(btnText);
     
     // B. Left/Start Button
     auto btnLeft = std::make_shared<UIImage>();

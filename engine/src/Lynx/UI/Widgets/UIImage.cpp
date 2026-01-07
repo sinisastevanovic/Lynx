@@ -14,7 +14,7 @@ namespace Lynx
         m_Name = "Image";
     }
 
-    void UIImage::OnDraw(UIBatcher& batcher, const UIRect& screenRect)
+    void UIImage::OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale)
     {
         if (m_Visibility != UIVisibility::Visible)
             return;

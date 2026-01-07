@@ -4,7 +4,13 @@
 #include "Asset.h"
 #include "Texture.h"
 #include "StaticMesh.h"
+#include "Lynx/Utils/PathUtils.h"
 #include <queue>
+
+namespace Lynx
+{
+    class Font;
+}
 
 namespace Lynx
 {
@@ -56,6 +62,7 @@ namespace Lynx
         std::shared_ptr<Texture> GetWhiteTexture();
         std::shared_ptr<Texture> GetErrorTexture();
         std::shared_ptr<StaticMesh> GetDefaultCube();
+        std::shared_ptr<Font> GetDefaultFont();
 
         void Update();
         void ReloadAsset(AssetHandle handle);

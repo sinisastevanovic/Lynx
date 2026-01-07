@@ -5,6 +5,7 @@
 #include "Lynx/UI/Rendering/UIBatcher.h"
 #include "Lynx/UI/Widgets/StackPanel.h"
 #include "Lynx/UI/Widgets/UIImage.h"
+#include "Lynx/UI/Widgets/UIText.h"
 
 namespace Lynx
 {
@@ -195,7 +196,7 @@ namespace Lynx
         }
     }
 
-    void UIElement::OnDraw(UIBatcher& batcher, const UIRect& screenRect)
+    void UIElement::OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale)
     {
         
     }
@@ -355,6 +356,8 @@ namespace Lynx
                     child = std::make_shared<UIImage>();
                 else if (type == "StackPanel")
                     child = std::make_shared<StackPanel>();
+                else if (type == "UIText")
+                    child = std::make_shared<UIText>();
                 else
                     child = std::make_shared<UIElement>();
 

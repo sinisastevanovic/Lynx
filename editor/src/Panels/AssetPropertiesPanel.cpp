@@ -41,6 +41,10 @@ namespace Lynx
         ImGui::Text("Texture: %s", m_EditingSpec.DebugName.c_str());
         ImGui::Separator();
 
+        const char* formatStrings[] = { "None", "RGBA8", "RG16F", "RG32F", "R32I", "R8", "Depth32", "Depth24Stencil8" };
+        int currFormat = (int)m_EditingSpec.Format;
+        
+        ImGui::Text("Format: %s", formatStrings[currFormat]);
         if (ImGui::Checkbox("Generate Mips", &m_EditingSpec.GenerateMips)) m_IsDirty = true;
         if (ImGui::Checkbox("Is sRGB", &m_EditingSpec.IsSRGB)) m_IsDirty = true;
 

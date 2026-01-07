@@ -3,6 +3,7 @@
 #include <tiny_gltf.h>
 
 #include "Asset.h"
+#include "Font.h"
 #include "Material.h"
 #include "Script.h"
 #include "Shader.h"
@@ -142,6 +143,9 @@ namespace Lynx
             case AssetType::Sprite:
                 newAsset = std::make_shared<Sprite>(metadata.FilePath.string());
                 break;
+            case AssetType::Font:
+                newAsset = std::make_shared<Font>(metadata.FilePath.string());
+                break;
             case AssetType::None:
             case AssetType::SkeletalMesh:
             default: LX_CORE_ERROR("AssetType not supported yet ({0})!", static_cast<int>(metadata.Type)); return nullptr;
@@ -266,6 +270,12 @@ namespace Lynx
     {
         auto asset = GetAsset("engine/resources/SM_DefaultCube.gltf", AssetLoadMode::Blocking);
         return std::static_pointer_cast<StaticMesh>(asset);
+    }
+
+    std::shared_ptr<Font> AssetManager::GetDefaultFont()
+    {
+        auto asset = GetAsset("engine/resources/Fonts/OpenSans/OpenSans-Regular.lxfont", AssetLoadMode::Blocking);
+        return std::static_pointer_cast<Font>(asset);
     }
 
     void AssetManager::Update()
