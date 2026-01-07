@@ -294,6 +294,8 @@ namespace Lynx
         outJson["Anchor"] = { m_Anchor.MinX, m_Anchor.MinY, m_Anchor.MaxX, m_Anchor.MaxY };
         outJson["Offset"] = { m_Offset.X, m_Offset.Y };
         outJson["Size"] = { m_Size.Width, m_Size.Height };
+        outJson["HorizontalAlignment"] = (int)m_HorizontalAlignment;
+        outJson["VerticalAlignment"] = (int)m_VerticalAlignment;
 
         // Recursively serialize children
         std::vector<nlohmann::json> childrenArray;
@@ -331,6 +333,14 @@ namespace Lynx
         if (json.contains("Size")) {
             auto& s = json["Size"];
             m_Size = { s[0], s[1] };
+        }
+        if (json.contains("HorizontalAlignment"))
+        {
+            m_HorizontalAlignment = (UIAlignment)json["HorizontalAlignment"];
+        }
+        if (json.contains("VerticalAlignment"))
+        {
+            m_VerticalAlignment = (UIAlignment)json["VerticalAlignment"];
         }
 
         if (json.contains("Children"))

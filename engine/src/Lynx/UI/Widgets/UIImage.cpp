@@ -157,7 +157,7 @@ namespace Lynx
     {
         // TODO check if image or sprite
         m_ImageResource = handle.IsValid() ? Engine::Get().GetAssetManager().GetAsset<Asset>(handle) : nullptr;
-        m_LastImageVersion = m_ImageResource->GetVersion();
+        m_LastImageVersion = m_ImageResource ? m_ImageResource->GetVersion() : 0;
     }
 
     void UIImage::SetMaterialInternal(AssetHandle handle)

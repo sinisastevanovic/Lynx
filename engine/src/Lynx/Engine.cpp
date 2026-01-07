@@ -25,6 +25,7 @@
 #include "Renderer/DebugRenderer.h"
 #include "Scene/Components/LuaScriptComponent.h"
 #include "Scene/Components/NativeScriptComponent.h"
+#include "Scene/Components/UIComponents.h"
 
 
 namespace Lynx
@@ -980,5 +981,29 @@ namespace Lynx
                     comp.Properties.LifeTime = props["LifeTime"];
                 }
             });
+        m_ComponentRegistry.RegisterComponent<UICanvasComponent>("UICanvas",
+            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+            {
+                auto& comp = reg.get<UICanvasComponent>(entity);
+                if (comp.Canvas)
+                {
+                    nlohmann::json canvasJson;
+                    // Recursively save the entire UI Tree
+                    comp.Canvas->Serialize(canvasJson);
+                    json["Canvas"] = canvasJson;
+                }
+            },
+            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+            {
+                auto& comp = reg.get_or_emplace<UICanvasComponent>(entity);
+                if (json.contains("Canvas"))
+                {
+                    // Create a new Canvas (which is also the root UIElement)
+                    comp.Canvas = std::make_shared<UICanvas>();
+                    // Recursively load the tree
+                    comp.Canvas->Deserialize(json["Canvas"]);
+                }
+            }
+        );
     }
 }
