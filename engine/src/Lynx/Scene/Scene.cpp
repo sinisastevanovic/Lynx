@@ -362,9 +362,10 @@ namespace Lynx
             }
         }
 
-        auto& window = Engine::Get().GetWindow();
-        float width = (float)window.GetWidth();
-        float height = (float)window.GetHeight();
+        auto& renderer = Engine::Get().GetRenderer();
+        auto viewportSize = renderer.GetViewportSize();
+        float width = (float)viewportSize.first;
+        float height = (float)viewportSize.second;
 
         auto uiView = m_Registry.view<UICanvasComponent>();
         for (auto entity : uiView)

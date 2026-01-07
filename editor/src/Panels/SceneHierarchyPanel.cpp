@@ -103,7 +103,7 @@ namespace Lynx
         flags |= ImGuiTreeNodeFlags_OpenOnDoubleClick;
         flags |= ImGuiTreeNodeFlags_SpanAvailWidth;
 
-        bool hasChildren = (m_Context->Reg().get<RelationshipComponent>(entity).ChildrenCount > 0);
+        bool hasChildren = (m_Context->Reg().get<RelationshipComponent>(entity).ChildrenCount > 0) || m_Context->Reg().all_of<UICanvasComponent>(entity);
         if (!hasChildren)
             flags |= ImGuiTreeNodeFlags_Leaf;
 

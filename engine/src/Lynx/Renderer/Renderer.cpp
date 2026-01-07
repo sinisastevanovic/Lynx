@@ -1064,6 +1064,8 @@ namespace Lynx
             fbDesc.addColorAttachment(texture);
             m_SwapchainFramebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
         }
+
+        EnsureEditorViewport(width, height);
     }
 
     void Renderer::EnsureEditorViewport(uint32_t width, uint32_t height)
