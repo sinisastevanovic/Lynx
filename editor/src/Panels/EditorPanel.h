@@ -4,6 +4,11 @@
 
 namespace Lynx
 {
+    class UIElement;
+}
+
+namespace Lynx
+{
     class Scene;
 
     class EditorPanel
@@ -15,5 +20,6 @@ namespace Lynx
         virtual void OnSceneContextChanged(Scene* context) {}
         virtual void OnSelectedEntityChanged(entt::entity selectedEntity) {}
         virtual void OnSelectedAssetChanged(AssetHandle handle) {}
+        virtual void OnSelectedUIElementChanged(std::shared_ptr<UIElement> uiElement) {}
     };
 }

@@ -569,7 +569,7 @@ namespace Lynx
             {
                 auto& meshComp = reg.get<MeshComponent>(entity);
                
-                EditorUIHelpers::DrawAssetSelection("Static Mesh", meshComp.Mesh, AssetType::StaticMesh);
+                EditorUIHelpers::DrawAssetSelection("Static Mesh", meshComp.Mesh, {AssetType::StaticMesh});
                 if (meshComp.Mesh)
                 {
                     auto mesh = Engine::Get().GetAssetManager().GetAsset<StaticMesh>(meshComp.Mesh);
@@ -752,7 +752,7 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& lscComp = reg.get<LuaScriptComponent>(entity);
-                EditorUIHelpers::DrawAssetSelection("Script", lscComp.ScriptHandle, AssetType::Script);
+                EditorUIHelpers::DrawAssetSelection("Script", lscComp.ScriptHandle, {AssetType::Script});
                 EditorUIHelpers::DrawLuaScriptSection(&lscComp);
             },
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
@@ -885,7 +885,7 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& comp = reg.get<ParticleEmitterComponent>(entity);
-                EditorUIHelpers::DrawAssetSelection("Material", comp.Material, AssetType::Material);
+                EditorUIHelpers::DrawAssetSelection("Material", comp.Material, {AssetType::Material});
 
                 int maxP = (int)comp.MaxParticles;
                 if (ImGui::DragInt("Max Particles", &maxP, 1.0f, 1, 100000))

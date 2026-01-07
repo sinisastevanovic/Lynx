@@ -23,7 +23,8 @@ namespace Lynx::AssetUtils
         { AssetType::Shader, { "Shader File", { "*.glsl" },"ASSET_SHADER" } },
         //{ AssetType::Mesh, { "3D Model",      { "*.fbx", "*.obj", "*.gltf" } } }
         { AssetType::StaticMesh, { "3D Model",      { "*.gltf" },"ASSET_STATICMESH" } },
-        { AssetType::Script , { "Lua Script", { "*.lua" }, "ASSET_SCRIPT" } }
+        { AssetType::Script , { "Lua Script", { "*.lua" }, "ASSET_SCRIPT" } },
+        { AssetType::Sprite , { "Sprite Asset", { "*.lxsprite" }, "ASSET_SPRITE" } }
     };
 
     

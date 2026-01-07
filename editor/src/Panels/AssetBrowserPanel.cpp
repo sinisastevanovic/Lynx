@@ -5,15 +5,34 @@
 #include <algorithm>
 
 #include "Lynx/Engine.h"
+#include "Lynx/Asset/Sprite.h"
 #include "Lynx/Asset/Serialization/MaterialSerializer.h"
+#include "Lynx/Asset/Serialization/SpriteSerializer.h"
 
 namespace Lynx
 {
+    namespace Utils
+    {
+        std::filesystem::path GetNewAssetFilePath(const std::filesystem::path& basePath, const std::string& baseName, const std::string& extension)
+        {
+            std::filesystem::path newPath = basePath / (baseName + extension);
+
+            int counter = 1;
+            while (std::filesystem::exists(newPath))
+            {
+                newPath = basePath / (baseName + " (" + std::to_string(counter) + ")" + extension);
+                counter++;
+            }
+
+            return newPath;
+        }
+    }
+    
     AssetBrowserPanel::AssetBrowserPanel(const std::function<void(AssetHandle)>& selectionChangedCallback)
         : OnSelectedAssetChangedCallback(selectionChangedCallback), m_BaseDirectory("assets"), m_CurrentDirectory(m_BaseDirectory)
     {
-        m_DirectoryIcon = Engine::Get().GetAssetManager().GetAsset<Texture>("engine/resources/Icons/DirectoryIcon_128px.png");
-        m_FileIcon = Engine::Get().GetAssetManager().GetAsset<Texture>("engine/resources/Icons/FileIcon_128px.png");
+        m_DirectoryIcon = Engine::Get().GetAssetManager().GetAsset<Texture>("engine/resources/Icons/DirectoryIcon_128px.png", AssetLoadMode::Blocking);
+        m_FileIcon = Engine::Get().GetAssetManager().GetAsset<Texture>("engine/resources/Icons/FileIcon_128px.png", AssetLoadMode::Blocking);
     }
 
     void AssetBrowserPanel::OnImGuiRender()
@@ -46,24 +65,17 @@ namespace Lynx
             {
                 if (ImGui::MenuItem("Create Material"))
                 {
-                    std::string baseName = "NewMaterial";
-                    std::string extension = ".lxmat";
-                    std::filesystem::path newPath = m_CurrentDirectory / (baseName + extension);
-
-                    int counter = 1;
-                    while (std::filesystem::exists(newPath))
-                    {
-                        newPath = m_CurrentDirectory / (baseName + " (" + std::to_string(counter) + ")" + extension);
-                        counter++;
-                    }
-
                     auto mat = std::make_shared<Material>();
-                    MaterialSerializer::Serialize(newPath, mat);
+                    MaterialSerializer::Serialize(Utils::GetNewAssetFilePath(m_CurrentDirectory, "NewMaterial", ".lxmat"), mat);
+                }
+                if (ImGui::MenuItem("Create Sprite"))
+                {
+                    auto sprite = std::make_shared<Sprite>();
+                    SpriteSerializer::Serialize(Utils::GetNewAssetFilePath(m_CurrentDirectory, "NewSprite", ".lxsprite"), sprite);
                 }
 
                 ImGui::EndPopup();
             }
-            
             
             for (auto& directoryEntry : std::filesystem::directory_iterator(m_CurrentDirectory))
             {
@@ -80,6 +92,8 @@ namespace Lynx
                 ImGui::PushID(filenameString.c_str());
 
                 auto icon = m_FileIcon;
+                glm::vec2 minUV = glm::vec2(0, 0);
+                glm::vec2 maxUV = glm::vec2(1.0f, 1.0f);
                 AssetMetadata metadata;
                 if (isDirectory)
                 {
@@ -90,22 +104,54 @@ namespace Lynx
                     if (Engine::Get().GetAssetRegistry().Contains(path))
                     {
                         metadata = Engine::Get().GetAssetRegistry().Get(path);
-                        if (metadata.Type == AssetType::Texture)
+                        if (metadata.Type == AssetType::Texture || metadata.Type == AssetType::Sprite)
                         {
+                            bool found = false;
                             if (m_ThumbnailCache.contains(metadata.Handle))
                             {
-                                icon = m_ThumbnailCache[metadata.Handle];
+                                auto asset = Engine::Get().GetAssetManager().GetAsset(metadata.Handle);
+                                const auto& thumbnail = m_ThumbnailCache[metadata.Handle];
+                                if (thumbnail.Version == asset->GetVersion())
+                                {
+                                    icon = thumbnail.Texture;
+                                    minUV = thumbnail.MinUV;
+                                    maxUV = thumbnail.MaxUV;
+                                    found = true;
+                                }
                             }
-                            else
+                            if (!found)
                             {
                                 // TODO: This should not be blocking, instead do it async! Probably something for the AssetManager anyways.
-                                auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(metadata.Handle);
-                                if (texture)
+                                if (metadata.Type == AssetType::Texture)
                                 {
-                                    if (texture->GetTextureHandle())
+                                    auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(metadata.Handle);
+                                    if (texture)
                                     {
-                                        m_ThumbnailCache[metadata.Handle] = texture;
-                                        icon = texture;
+                                        if (texture->GetTextureHandle())
+                                        {
+                                            ThumbnailData thumbnailData;
+                                            thumbnailData.Texture = texture;
+                                            thumbnailData.Version = texture->GetVersion();
+                                            m_ThumbnailCache[metadata.Handle] = thumbnailData;
+                                            icon = texture;
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    auto sprite = Engine::Get().GetAssetManager().GetAsset<Sprite>(metadata.Handle);
+                                    if (sprite)
+                                    {
+                                        if (sprite->GetTexture())
+                                        {
+                                            ThumbnailData thumbnailData;
+                                            thumbnailData.Texture = sprite->GetTexture();
+                                            thumbnailData.MinUV = sprite->GetUVMin();
+                                            thumbnailData.MaxUV = sprite->GetUVMax();
+                                            thumbnailData.Version = sprite->GetVersion();
+                                            m_ThumbnailCache[metadata.Handle] = thumbnailData;
+                                            icon = sprite->GetTexture();
+                                        }
                                     }
                                 }
                             }
@@ -125,12 +171,16 @@ namespace Lynx
 
 
                 ImTextureID texID = (ImTextureID)0;
-                if (icon && icon->GetHandle())
+                if (icon && icon->GetHandle() && icon->GetTextureHandle())
                 {
                     texID = (ImTextureID)icon->GetTextureHandle().Get();
                 }
+                else
+                {
+                    texID = (ImTextureID)m_FileIcon->GetTextureHandle().Get();
+                }
 
-                bool clicked = ImGui::ImageButton("btn", texID, { m_ThumbnailSize, m_ThumbnailSize }, { 0, 0 }, { 1, 1 });
+                bool clicked = ImGui::ImageButton("btn", texID, { m_ThumbnailSize, m_ThumbnailSize }, { minUV.x, minUV.y }, { maxUV.x, maxUV.y });
 
                 ImGui::PopStyleColor();
 

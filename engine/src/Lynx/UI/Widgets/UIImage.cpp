@@ -3,6 +3,7 @@
 #include <imgui.h>
 
 #include "Lynx/Engine.h"
+#include "Lynx/Asset/Sprite.h"
 #include "Lynx/Asset/Texture.h"
 #include "Lynx/ImGui/EditorUIHelpers.h"
 
@@ -18,23 +19,65 @@ namespace Lynx
         if (m_Visibility != UIVisibility::Visible)
             return;
 
-        if (m_ImageType == ImageType::Sliced)
+        std::shared_ptr<Texture> textureToDraw = nullptr;
+        glm::vec2 uvMin = { 0.0f, 0.0f };
+        glm::vec2 uvMax = { 1.0f, 1.0f };
+
+        if (m_ImageResource)
         {
-            batcher.DrawNineSlice(screenRect, m_Border, m_Color, m_Material, m_Texture);
+            if (m_ImageResource->GetType() == AssetType::Texture)
+            {
+                auto tex = std::static_pointer_cast<Texture>(m_ImageResource);
+                textureToDraw = tex;
+            }
+            else if (m_ImageResource->GetType() == AssetType::Sprite)
+            {
+                auto sprite = std::static_pointer_cast<Sprite>(m_ImageResource);
+                textureToDraw = sprite->GetTexture();
+                uvMin = sprite->GetUVMin();
+                uvMax = sprite->GetUVMax();
+                if (m_LastImageVersion != m_ImageResource->GetVersion())
+                {
+                    m_LastImageVersion = m_ImageResource->GetVersion();
+                    if (sprite->GetBorder().Left > 0 || sprite->GetBorder().Top > 0 || sprite->GetBorder().Right > 0 || sprite->GetBorder().Bottom > 0)
+                    {
+                        m_Border = sprite->GetBorder();
+                    }
+                }
+            }
         }
-        else if (m_ImageType == ImageType::Simple)
+
+        if (m_ImageType == ImageType::Simple)
         {
-            batcher.DrawRect(screenRect, m_Color, m_Material, m_Texture);
+            batcher.DrawRect(screenRect, m_Color, m_Material, textureToDraw, uvMin, uvMax);
+        }
+        else if (m_ImageType == ImageType::Sliced)
+        {
+            batcher.DrawNineSlice(screenRect, m_Border, m_Color, m_Material, textureToDraw, uvMin, uvMax);
         }
     }
 
-    void UIImage::SetTexture(std::shared_ptr<Texture> texture)
+    void UIImage::SetImage(std::shared_ptr<Asset> image)
     {
-        if (m_Texture != texture)
+        if (image->GetType() != AssetType::Texture && image->GetType() != AssetType::Sprite)
         {
-            m_Texture = texture;
-            MarkDirty();
+            LX_CORE_WARN("UIImage::SetImage called with an asset that is not a Texture or Sprite! Ignoring...");
+            return;
         }
+        
+        m_ImageResource = image;
+        m_LastImageVersion = m_ImageResource->GetVersion();
+
+        if (image && image->GetType() == AssetType::Sprite)
+        {
+            auto sprite = std::static_pointer_cast<Sprite>(image);
+            if (sprite->GetBorder().Left > 0 || sprite->GetBorder().Top > 0 || sprite->GetBorder().Right > 0 || sprite->GetBorder().Bottom > 0)
+            {
+                m_Border = sprite->GetBorder();
+                m_ImageType = ImageType::Sliced;
+            }
+        }
+        MarkDirty();
     }
 
     void UIImage::OnInspect()
@@ -44,14 +87,14 @@ namespace Lynx
         ImGui::Text("Image");
         ImGui::ColorEdit4("Tint", &m_Color.x);
 
-        AssetHandle texHandle = m_Texture ? m_Texture->GetHandle() : AssetHandle::Null();
-        if (EditorUIHelpers::DrawAssetSelection("Texture", texHandle, AssetType::Texture))
+        AssetHandle texHandle = m_ImageResource ? m_ImageResource->GetHandle() : AssetHandle::Null();
+        if (EditorUIHelpers::DrawAssetSelection("Texture", texHandle, { AssetType::Texture, AssetType::Sprite }))
         {
             SetTextureInternal(texHandle);
         }
 
         AssetHandle matHandle = m_Material ? m_Material->GetHandle() : AssetHandle::Null();
-        if (EditorUIHelpers::DrawAssetSelection("Material", matHandle, AssetType::Material))
+        if (EditorUIHelpers::DrawAssetSelection("Material", matHandle, { AssetType::Material }))
         {
             SetMaterialInternal(matHandle);
         }
@@ -78,7 +121,7 @@ namespace Lynx
         UIElement::Serialize(outJson);
         outJson["Type"] = "UIImage";
         outJson["Color"] = m_Color;
-        outJson["Texture"] = (m_Texture ? m_Texture->GetHandle() : AssetHandle::Null());
+        outJson["Texture"] = (m_ImageResource ? m_ImageResource->GetHandle() : AssetHandle::Null());
         outJson["Material"] = (m_Material ? m_Material->GetHandle() : AssetHandle::Null());
         outJson["ImageType"] = (int)m_ImageType;
         outJson["Border"] = { m_Border.Left, m_Border.Top, m_Border.Right, m_Border.Bottom };
@@ -112,7 +155,9 @@ namespace Lynx
 
     void UIImage::SetTextureInternal(AssetHandle handle)
     {
-        m_Texture = handle.IsValid() ? Engine::Get().GetAssetManager().GetAsset<Texture>(handle) : nullptr;
+        // TODO check if image or sprite
+        m_ImageResource = handle.IsValid() ? Engine::Get().GetAssetManager().GetAsset<Asset>(handle) : nullptr;
+        m_LastImageVersion = m_ImageResource->GetVersion();
     }
 
     void UIImage::SetMaterialInternal(AssetHandle handle)

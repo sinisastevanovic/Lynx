@@ -20,10 +20,12 @@
 
 #include "Components/TestNativeScript.h"
 #include "Lynx/ScriptRegistry.h"
+#include "Lynx/Asset/Sprite.h"
 #include "Lynx/Scene/Components/LuaScriptComponent.h"
 #include "Lynx/Scene/Components/NativeScriptComponent.h"
 #include "Lynx/Scene/Components/UIComponents.h"
 #include "Lynx/UI/Core/UIElement.h"
+#include "Lynx/UI/Widgets/StackPanel.h"
 #include "Lynx/UI/Widgets/UIImage.h"
 
 void MyGame::RegisterScripts()
@@ -144,51 +146,88 @@ void MyGame::RegisterComponents(Lynx::ComponentRegistry* registry)
 void CreateMyUI(std::shared_ptr<Lynx::Scene> scene)
 {
     using namespace Lynx;
-    // 1. Create the UI Root Entity
     Entity uiEntity = scene->CreateEntity("MainMenu");
     auto& canvasComp = uiEntity.AddComponent<UICanvasComponent>();
     auto root = canvasComp.Canvas;
-
-    // 2. Background Panel (Dark Grey Overlay)
+    
+    // 1. Fullscreen Background
     auto bg = std::make_shared<UIImage>();
     bg->SetName("Background");
-    bg->SetAnchor(UIAnchor::StretchAll); // Full Screen
-    bg->SetOffset({ 0, 0 });
-    bg->SetSize({ 0, 0 });
-    bg->SetColor({ 0.1f, 0.1f, 0.1f, 0.8f }); // Dark Grey, 80% opacity
+    bg->SetAnchor(UIAnchor::StretchAll);
+    bg->SetColor({ 0.1f, 0.1f, 0.2f, 1.0f }); // Dark Blue
     root->AddChild(bg);
-
-    // 3. Texture Image (Using Default Checkerboard)
-    auto icon = std::make_shared<UIImage>();
-    icon->SetName("CheckerIcon");
-    icon->SetAnchor(UIAnchor::Center); // Center of screen
-    icon->SetSize({ 128.0f, 128.0f }); // 128x128 dp
-    icon->SetOffset({ 0.0f, -50.0f }); // Move up 50dp
-
-    auto tex = Engine::Get().GetAssetManager().GetAsset<Texture>("assets/Models/Fox/Texture.png");
-    if (tex) icon->SetTexture(tex);
-
-    bg->AddChild(icon);
-
-    auto btn = std::make_shared<UIImage>();
-    btn->SetName("MyButton");
-    btn->SetAnchor(UIAnchor::Center);
-    btn->SetSize({ 800.0f, 700.0f });
-    auto slicedTex = Engine::Get().GetAssetManager().GetAsset<Texture>("assets/Textures/T_SliceTest.png");
-    if (slicedTex) btn->SetTexture(slicedTex);
-    btn->SetImageType(ImageType::Sliced);
-    btn->SetBorder({ 12.0f, 12.0f, 12.0f, 12.0f });
-    btn->SetColor({ 0.2f, 0.8f, 0.2f, 1.0f });
-    bg->AddChild(btn);
-
-    // 4. Tinted Image (Red Box)
-    auto redBox = std::make_shared<UIImage>();
-    redBox->SetName("RedBox");
-    redBox->SetAnchor(UIAnchor::Center);
-    redBox->SetSize({ 200.0f, 50.0f });
-    redBox->SetOffset({ 0.0f, 50.0f }); // Move down 50dp
-    redBox->SetColor({ 1.0f, 0.2f, 0.2f, 1.0f }); // Red
-    bg->AddChild(redBox);
+    
+    // 2. Center Panel (The Menu Window)
+    auto window = std::make_shared<UIImage>();
+    window->SetName("MenuWindow");
+    window->SetAnchor(UIAnchor::Center);
+    window->SetSize({ 400.0f, 500.0f }); // Fixed size window
+    window->SetColor({ 0.2f, 0.2f, 0.2f, 0.9f }); // Dark Grey
+    
+    // Optional: Give it a border if you have a 9-slice sprite
+    // window->SetType(ImageType::Sliced);
+    // window->SetBorder({5,5,5,5});
+    
+    bg->AddChild(window);
+    
+    // 3. StackPanel (The Layout Manager)
+    auto stack = std::make_shared<StackPanel>();
+    stack->SetName("ButtonStack");
+    stack->SetAnchor(UIAnchor::StretchAll); // Fill the window
+    stack->SetOffset({ 0.0f, 0.0f }); // Padding 20dp
+    stack->SetSize({ 0.0f, 0.0f }); // Negative size delta = margins from Right/Bottom
+    // Note: If your Stretch logic uses Size as Delta, use negative.
+    // If your logic adds Size to Width, you need CalculateBounds to handle "Margin via Size".
+    // Alternatively: Set Anchor Stretch and Offset 20, 20 and Size 0?
+    // Usually: Left=20, Top=20, Right=20, Bottom=20 requires offsets on all sides.
+    // Let's assume standard behavior: Size is ignored in Stretch? Or Size is Delta.
+    
+    // Simpler V1 approach for padding:
+    // Anchor Stretch, Offset 0, Size 0 -> Full fill.
+    // We rely on StackPanel's content centering?
+    // Let's just pin the stack to Top-Center with a width.
+    //stack->SetAnchor(UIAnchor::TopLeft); // Top Left of Window
+    //stack->SetSize({ 360.0f, 460.0f }); // 400 - 40 padding
+    //stack->SetOffset({ 20.0f, 20.0f });
+    //stack->SetPivot({0, 0});
+    
+    stack->SetOrientation(Orientation::Vertical);
+    stack->SetSpacing(15.0f); // 15dp gap between buttons
+    window->AddChild(stack);
+    
+    // 4. Test Buttons
+    
+    // A. Stretch Button (Default)
+    auto btnStretch = std::make_shared<UIImage>();
+    btnStretch->SetName("Btn_Stretch");
+    btnStretch->SetSize({ 0.0f, 50.0f }); // Width ignored in stretch, Height 50
+    btnStretch->SetColor({ 0.2f, 0.6f, 0.2f, 1.0f }); // Green
+    btnStretch->SetHorizontalAlignment(UIAlignment::Stretch);
+    stack->AddChild(btnStretch);
+    
+    // B. Left/Start Button
+    auto btnLeft = std::make_shared<UIImage>();
+    btnLeft->SetName("Btn_Left");
+    btnLeft->SetSize({ 150.0f, 50.0f }); // Fixed width
+    btnLeft->SetColor({ 0.6f, 0.2f, 0.2f, 1.0f }); // Red
+    btnLeft->SetHorizontalAlignment(UIAlignment::Start);
+    stack->AddChild(btnLeft);
+    
+    // C. Center Button
+    auto btnCenter = std::make_shared<UIImage>();
+    btnCenter->SetName("Btn_Center");
+    btnCenter->SetSize({ 150.0f, 50.0f });
+    btnCenter->SetColor({ 0.2f, 0.2f, 0.6f, 1.0f }); // Blue
+    btnCenter->SetHorizontalAlignment(UIAlignment::Center);
+    stack->AddChild(btnCenter);
+    
+    // D. Right/End Button
+    auto btnRight = std::make_shared<UIImage>();
+    btnRight->SetName("Btn_Right");
+    btnRight->SetSize({ 150.0f, 50.0f });
+    btnRight->SetColor({ 0.6f, 0.6f, 0.2f, 1.0f }); // Yellow
+    btnRight->SetHorizontalAlignment(UIAlignment::End);
+    stack->AddChild(btnRight);
 }
 
 void MyGame::OnStart()

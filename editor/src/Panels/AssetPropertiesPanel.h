@@ -18,6 +18,7 @@ namespace Lynx
     private:
         void DrawTextureProperties();
         void DrawMaterialProperties();
+        void DrawSpriteProperties();
 
     private:
         AssetHandle m_SelectedAssetHandle = AssetHandle::Null();

@@ -56,10 +56,11 @@ namespace Lynx
             return;
 
         float scale = canvas->GetScaleFactor();
-        TraverseAndCollect(canvas, { 0.0f, 0.0f }, scale);
+        TraverseAndCollect(canvas, scale, canvas->GetOpacity());
     }
 
-    void UIBatcher::DrawRect(const UIRect& rect, const glm::vec4& color, std::shared_ptr<Material> material, std::shared_ptr<Texture> textureOverride)
+    void UIBatcher::DrawRect(const UIRect& rect, const glm::vec4& color, std::shared_ptr<Material> material, std::shared_ptr<Texture> textureOverride,
+        glm::vec2 uvMin, glm::vec2 uvMax)
     {
         std::shared_ptr<Texture> resolvedTexture = nullptr;
         if (textureOverride && textureOverride->GetTextureHandle())
@@ -91,12 +92,12 @@ namespace Lynx
             m_Batches.push_back(newBatch);
         }
 
-        AddQuad(rect, color);
+        AddQuad(rect, color, uvMin, uvMax);
         m_Batches.back().IndexCount += 6;
     }
 
     void UIBatcher::DrawNineSlice(const UIRect& rect, const UIThickness& border, const glm::vec4& color, std::shared_ptr<Material> material,
-        std::shared_ptr<Texture> textureOverride)
+        std::shared_ptr<Texture> textureOverride, glm::vec2 uvMin, glm::vec2 uvMax)
     {
         std::shared_ptr<Texture> resolvedTexture = nullptr;
         if (textureOverride && textureOverride->GetTextureHandle())
@@ -140,8 +141,24 @@ namespace Lynx
             texH = resolvedTexture->GetHeight();
         }
 
-        float u[4] = { 0.0f, border.Left / texW, (texW - border.Right) / texW, 1.0f };
-        float v[4] = { 0.0f, border.Top / texH, (texH - border.Bottom) / texH, 1.0f };
+        float borderU_Left   = border.Left / texW;
+        float borderU_Right  = border.Right / texW;
+        float borderV_Top    = border.Top / texH;
+        float borderV_Bottom = border.Bottom / texH;
+
+        float u[4] = {
+            uvMin.x,
+            uvMin.x + borderU_Left,
+            uvMax.x - borderU_Right,
+            uvMax.x
+        };
+
+        float v[4] = {
+            uvMin.y,
+            uvMin.y + borderV_Top,
+            uvMax.y - borderV_Bottom,
+            uvMax.y
+        };
 
         uint32_t startIndex = (uint32_t)m_Vertices.size();
         for (int j = 0; j < 4; j++) {
@@ -166,47 +183,50 @@ namespace Lynx
         }
     }
 
-    void UIBatcher::TraverseAndCollect(std::shared_ptr<UIElement> element, const glm::vec2& parentAbsPos, float scale)
+    void UIBatcher::TraverseAndCollect(std::shared_ptr<UIElement> element, float scale, float parentOpacity)
     {
         // TODO: Should we only upload if ui is dirty??
         if (element->GetVisibility() != UIVisibility::Visible)
             return;
 
-        UIRect relRect = element->GetCachedRect();
-        UIRect absRect;
-        absRect.X = parentAbsPos.x + relRect.X;
-        absRect.Y = parentAbsPos.y + relRect.Y;
-        absRect.Width = relRect.Width;
-        absRect.Height = relRect.Height;
+        float finalOpacity = parentOpacity * element->GetOpacity();
+        m_CurrentOpacity = finalOpacity;
+        if (finalOpacity <= 0.01f)
+            return;
+
+        UIRect cachedRect = element->GetCachedRect();
 
         UIRect pixelRect;
-        pixelRect.X = absRect.X * scale;
-        pixelRect.Y = absRect.Y * scale;
-        pixelRect.Width = absRect.Width * scale;
-        pixelRect.Height = absRect.Height * scale;
+        pixelRect.X = cachedRect.X * scale;
+        pixelRect.Y = cachedRect.Y * scale;
+        pixelRect.Width = cachedRect.Width * scale;
+        pixelRect.Height = cachedRect.Height * scale;
 
         // DEBUG VISUALIZATION
-        /*if (element->GetName() != "Canvas")
+        /*if (element->GetName() == "ButtonStack")
         {
             size_t hash = (size_t)element.get();
             float r = ((hash & 0xFF0000) >> 16) / 255.0f;
             float g = ((hash & 0x00FF00) >> 8) / 255.0f;
             float b = (hash & 0x0000FF) / 255.0f;
 
-            AddQuad(pixelRect, glm::vec4(r, g, b, 0.5f)); // 50% opacity
+            AddQuad(pixelRect, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), {0.0f, 0.0f}, {1.0f, 1.0f}); // 50% opacity
         }*/
 
         element->OnDraw(*this, pixelRect);
 
         for (const auto& child : element->GetChildren())
         {
-            TraverseAndCollect(child, { absRect.X, absRect.Y }, scale);
+            TraverseAndCollect(child, scale, finalOpacity);
         }
     }
     
-    void UIBatcher::AddQuad(const UIRect& rect, const glm::vec4& color)
+    void UIBatcher::AddQuad(const UIRect& rect, const glm::vec4& color, glm::vec2 uvMin, glm::vec2 uvMax)
     {
         uint32_t startIndex = (uint32_t)m_Vertices.size();
+
+        glm::vec4 finalColor = color;
+        finalColor.a *= m_CurrentOpacity;
 
         // 0 -- 1
         // |    |
@@ -215,29 +235,29 @@ namespace Lynx
         // Top Left
         m_Vertices.push_back({
             { rect.X, rect.Y, 0.0f },
-            { 0.0f, 0.0f },
-            color
+            { uvMin.x, uvMin.y },
+            finalColor
         });
 
         // Top Right
         m_Vertices.push_back({
             { rect.X + rect.Width, rect.Y, 0.0f },
-            { 1.0f, 0.0f },
-            color
+            { uvMax.x, uvMin.y  },
+            finalColor
         });
 
         // Bottom Left
         m_Vertices.push_back({
             { rect.X, rect.Y + rect.Height, 0.0f },
-            { 0.0f, 1.0f },
-            color
+            { uvMin.x, uvMax.y },
+            finalColor
         });
 
         // Bottom Right
         m_Vertices.push_back({
             { rect.X + rect.Width, rect.Y + rect.Height, 0.0f },
-            { 1.0f, 1.0f },
-            color
+            { uvMax.x, uvMax.y },
+            finalColor
         });
 
         // CCW winding (0-2-1, 1-2-3) or similar depending on cull mode.

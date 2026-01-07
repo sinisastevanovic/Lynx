@@ -42,6 +42,103 @@ namespace Lynx
             ImGui::Image((ImTextureID)texture.Get(), viewportSize);
         }
 
+        // UI GIZMOS
+        if (m_SelectedUIElement)
+        {
+            ImVec2 viewStart = ImGui::GetItemRectMin();
+            ImVec2 viewSize = ImGui::GetItemRectSize();
+
+            if (viewportSize.x > 0 && viewportSize.y > 0)
+            {
+                float uiScale = 1.0f;
+                if (auto canvas = std::dynamic_pointer_cast<UICanvas>(m_SelectedUIElement)) {
+                    uiScale = canvas->GetScaleFactor();
+                }
+                else {
+                    // Walk up tree to find canvas
+                    auto parent = m_SelectedUIElement->GetParent();
+                    while (parent) {
+                        if (auto c = std::dynamic_pointer_cast<UICanvas>(parent)) {
+                            uiScale = c->GetScaleFactor();
+                            break;
+                        }
+                        parent = parent->GetParent();
+                    }
+                }
+                
+                UIRect uiRect = m_SelectedUIElement->GetCachedRect();
+
+                ImVec2 pMin = {
+                    viewStart.x + (uiRect.X * uiScale),
+                    viewStart.y + (uiRect.Y * uiScale)
+                };
+                ImVec2 pMax = {
+                    pMin.x + (uiRect.Width * uiScale),
+                    pMin.y + (uiRect.Height * uiScale)
+                };
+
+                auto* drawList = ImGui::GetWindowDrawList();
+
+                drawList->AddRect(pMin, pMax, IM_COL32(255, 255, 0, 255), 0.0f, 0, 2.0f);
+
+                UIRect parentRect = {0,0, viewportSize.x, viewportSize.y};
+                if (auto parent = m_SelectedUIElement->GetParent())
+                {
+                    parentRect = parent->GetCachedRect();
+                }
+                else
+                {
+                    if (auto canvas = std::dynamic_pointer_cast<UICanvas>(m_SelectedUIElement))
+                    {
+                        parentRect = canvas->GetCachedRect();
+                    }
+                }
+
+                UIAnchor anchor = m_SelectedUIElement->GetAnchor();
+
+                float axMin = parentRect.X + parentRect.Width * anchor.MinX;
+                float axMax = parentRect.X + parentRect.Width * anchor.MaxX;
+                float ayMin = parentRect.Y + parentRect.Height * anchor.MinY;
+                float ayMax = parentRect.Y + parentRect.Height * anchor.MaxY;
+                ImVec2 anchorMin = {
+                    viewStart.x + (axMin * uiScale),
+                    viewStart.y + (ayMin * uiScale)
+                };
+                ImVec2 anchorMax = {
+                    viewStart.x + (axMax * uiScale),
+                    viewStart.y + (ayMax * uiScale)
+                };
+
+                float size = 6.0f;
+                auto col = IM_COL32(255, 50, 50, 255);
+
+                auto DrawCross = [&](ImVec2 center) {
+                    drawList->AddLine({center.x - size, center.y - size}, {center.x + size, center.y + size}, col, 2.0f);
+                    drawList->AddLine({center.x - size, center.y + size}, {center.x + size, center.y - size}, col, 2.0f);
+                };
+
+                DrawCross(anchorMin);
+                if (glm::epsilonNotEqual(anchorMin.x, anchorMax.x, glm::epsilon<float>()) || glm::epsilonNotEqual(anchorMin.y, anchorMax.y, glm::epsilon<float>()))
+                {
+                    DrawCross(anchorMax);
+                    // Draw Anchor Box (Dashed line?)
+                    drawList->AddRect(anchorMin, anchorMax, IM_COL32(255, 50, 50, 100));
+                }
+
+                glm::vec2 pivot = m_SelectedUIElement->GetPivot();
+                float px = uiRect.X + (uiRect.Width * pivot.x);
+                float py = uiRect.Y + (uiRect.Height * pivot.y);
+                ImVec2 pivotPos = {
+                    viewStart.x + (px * uiScale),
+                    viewStart.y + (py * uiScale)
+                };
+
+                auto pivotCol = IM_COL32(50, 150, 255, 255); // Blue
+                drawList->AddCircleFilled(pivotPos, 4.0f, pivotCol);
+                drawList->AddCircle(pivotPos, 6.0f, pivotCol, 0, 1.5f);
+            }
+        }
+
         if (m_Selection != entt::null && m_CurrentGizmoOperation != -1 && Engine().Get().GetSceneState() != SceneState::Play)
         {
             ImGuizmo::BeginFrame();
@@ -148,5 +245,10 @@ namespace Lynx
     void Viewport::OnSelectedEntityChanged(entt::entity selectedEntity)
     {
         m_Selection = selectedEntity;
+    }
+
+    void Viewport::OnSelectedUIElementChanged(std::shared_ptr<UIElement> uiElement)
+    {
+        m_SelectedUIElement = uiElement;
     }
 }

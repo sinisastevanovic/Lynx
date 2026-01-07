@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Lynx/UUID.h"
+#include "Lynx/Asset/Asset.h"
 #include "Lynx/UI/Core/UIElement.h"
 
 namespace Lynx
@@ -21,8 +22,8 @@ namespace Lynx
 
         void OnDraw(UIBatcher& batcher, const UIRect& screenRect) override;
 
-        void SetTexture(std::shared_ptr<Texture> texture);
-        std::shared_ptr<Texture> GetTexture() const { return m_Texture; }
+        void SetImage(std::shared_ptr<Asset> image);
+        std::shared_ptr<Asset> GetImage() const { return m_ImageResource; }
 
         void SetColor(const glm::vec4& color) { m_Color = color; }
         glm::vec4 GetColor() const { return m_Color; }
@@ -42,7 +43,8 @@ namespace Lynx
         void SetMaterialInternal(AssetHandle handle);
 
     private:
-        std::shared_ptr<Texture> m_Texture;
+        std::shared_ptr<Asset> m_ImageResource;
+        uint32_t m_LastImageVersion = 0;
         glm::vec4 m_Color = { 1.0f, 1.0f, 1.0f, 1.0f };
         ImageType m_ImageType = ImageType::Simple;
         UIThickness m_Border; // For sliced type

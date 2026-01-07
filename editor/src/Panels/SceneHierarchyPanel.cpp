@@ -4,6 +4,7 @@
 
 #include "Lynx/Scene/Entity.h"
 #include "Lynx/Scene/Components/Components.h"
+#include "Lynx/Scene/Components/UIComponents.h"
 
 namespace Lynx
 {
@@ -43,7 +44,11 @@ namespace Lynx
             }
 
             if (ImGui::IsMouseDown(0) && ImGui::IsWindowHovered() && OnSelectionChangedCallback)
+            {
                 OnSelectionChangedCallback(entt::null);
+                OnSelectedUIElementChangedCallback(nullptr);
+                m_SelectedUIElement = nullptr;
+            }
 
             ImGui::Dummy(ImGui::GetContentRegionAvail());
             if (ImGui::BeginDragDropTarget())
@@ -136,6 +141,8 @@ namespace Lynx
         
         if (ImGui::IsItemClicked() && OnSelectionChangedCallback)
         {
+            OnSelectedUIElementChangedCallback(nullptr);
+            m_SelectedUIElement = nullptr;
             OnSelectionChangedCallback(entity);
         }
 
@@ -152,7 +159,49 @@ namespace Lynx
                     currentChild = m_Context->Reg().get<RelationshipComponent>(currentChild).NextSibling;
                 }
             }
+
+            if (m_Context->Reg().all_of<UICanvasComponent>(entity))
+            {
+                auto& canvas = m_Context->Reg().get<UICanvasComponent>(entity).Canvas;
+                if (canvas)
+                {
+                    DrawUINode(canvas);
+                }
+            }
            
+            ImGui::TreePop();
+        }
+    }
+
+    void SceneHierarchyPanel::DrawUINode(std::shared_ptr<UIElement> element)
+    {
+        if (!element)
+            return;
+
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+
+        if (m_SelectedUIElement == element)
+            flags |= ImGuiTreeNodeFlags_Selected;
+
+        if (element->GetChildren().empty())
+            flags |= ImGuiTreeNodeFlags_Leaf;
+
+        bool opened = ImGui::TreeNodeEx((void*)element.get(), flags, element->GetName().c_str());
+
+        if (ImGui::IsItemClicked() && OnSelectedUIElementChangedCallback)
+        {
+            if (OnSelectionChangedCallback)
+                OnSelectionChangedCallback(entt::null);
+            m_SelectedUIElement = element;
+            OnSelectedUIElementChangedCallback(element);
+        }
+
+        if (opened)
+        {
+            for (auto& child : element->GetChildren())
+            {
+                DrawUINode(child);
+            }
             ImGui::TreePop();
         }
     }

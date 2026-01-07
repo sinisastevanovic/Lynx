@@ -8,7 +8,7 @@ namespace Lynx
     class LX_API EditorUIHelpers
     {
     public:
-        static bool DrawAssetSelection(const char* label, AssetHandle& currentHandle, AssetType typeFilter);
+        static bool DrawAssetSelection(const char* label, AssetHandle& currentHandle, std::initializer_list<AssetType> allowedTypes);
         static void DrawLuaScriptSection(LuaScriptComponent* lsc);
     };
 }

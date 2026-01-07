@@ -30,7 +30,11 @@ namespace Lynx
         {
             this->OnSelectedAssetChanged(handle);
         };
-        m_Panels.push_back(std::make_unique<SceneHierarchyPanel>(entityCallack));
+        auto uiCallback = [this](std::shared_ptr<UIElement> uiElement)
+        {
+            this->OnSelectedUIElementChanged(uiElement);
+        };
+        m_Panels.push_back(std::make_unique<SceneHierarchyPanel>(entityCallack, uiCallback));
         m_Panels.push_back(std::make_unique<InspectorPanel>());
         m_Panels.push_back(std::make_unique<Viewport>(entityCallack));
         m_Panels.push_back(std::make_unique<AssetBrowserPanel>(assetCallack));
@@ -255,5 +259,12 @@ namespace Lynx
                 OpenScene(metadata.Handle);
             }
         }
+    }
+
+    void EditorLayer::OnSelectedUIElementChanged(std::shared_ptr<UIElement> uiElement)
+    {
+        m_SelectedUIElement = uiElement;
+        for (auto& panel : m_Panels)
+            panel->OnSelectedUIElementChanged(uiElement);
     }
 }

@@ -5,6 +5,7 @@
 #include <glm/detail/type_quat.hpp>
 
 #include "Lynx/UUID.h"
+#include "Lynx/UI/Core/UIGeometry.h"
 
 namespace glm
 {
@@ -62,5 +63,17 @@ namespace Lynx
 
     inline void from_json(const nlohmann::json& j, UUID& id) {                         
         id = UUID(j.get<uint64_t>());                                                  
-    }                                                                                  
+    }
+
+    inline void to_json(nlohmann::json& j, const UIThickness& thickness)
+    {
+        j = nlohmann::json{thickness.Left, thickness.Top, thickness.Right, thickness.Bottom };
+    }
+
+    inline void from_json(const nlohmann::json& j, UIThickness& thickness) {                         
+        thickness.Left = j.at(0).get<float>();
+        thickness.Top = j.at(1).get<float>();
+        thickness.Right = j.at(2).get<float>();
+        thickness.Bottom = j.at(3).get<float>();
+    }
 }

@@ -14,7 +14,8 @@ namespace Lynx
         Material,
         Shader,
         Scene,
-        Script
+        Script,
+        Sprite
     };
     
     namespace AssetUtils

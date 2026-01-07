@@ -41,12 +41,14 @@ namespace Lynx
         const std::vector<UIBatch>& GetBatches() const { return m_Batches; }
         bool HasData() const { return !m_Batches.empty(); }
 
-        void DrawRect(const UIRect& rect, const glm::vec4& color, std::shared_ptr<Material> material, std::shared_ptr<Texture> textureOverride);
-        void DrawNineSlice(const UIRect& rect, const UIThickness& border, const glm::vec4& color, std::shared_ptr<Material> material, std::shared_ptr<Texture> textureOverride);
+        void DrawRect(const UIRect& rect, const glm::vec4& color, std::shared_ptr<Material> material, std::shared_ptr<Texture> textureOverride,
+            glm::vec2 uvMin = {0.0f, 0.0f}, glm::vec2 uvMax = {1.0f, 1.0f});
+        void DrawNineSlice(const UIRect& rect, const UIThickness& border, const glm::vec4& color, std::shared_ptr<Material> material, std::shared_ptr<Texture> textureOverride,
+            glm::vec2 uvMin = {0.0f, 0.0f}, glm::vec2 uvMax = {1.0f, 1.0f});
 
     private:
-        void TraverseAndCollect(std::shared_ptr<UIElement> element, const glm::vec2& parentAbsPos, float scale);
-        void AddQuad(const UIRect& rect, const glm::vec4& color);
+        void TraverseAndCollect(std::shared_ptr<UIElement> element, float scale, float parentOpacity);
+        void AddQuad(const UIRect& rect, const glm::vec4& color, glm::vec2 uvMin, glm::vec2 uvMax);
         void ResizeBuffers(size_t numVerts, size_t numIndices);
 
     private:
@@ -63,5 +65,6 @@ namespace Lynx
 
         std::shared_ptr<Material> m_CurrentMaterial = nullptr;
         std::shared_ptr<Texture> m_CurrentTexture = nullptr;
+        float m_CurrentOpacity = 1.0f;
     };
 }

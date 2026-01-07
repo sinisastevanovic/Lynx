@@ -50,4 +50,12 @@ namespace Lynx
         static const UIAnchor BottomRight;
         static const UIAnchor StretchAll;
     };
+
+    enum class UIAlignment
+    {
+        Start,  // Left/Top
+        Center,
+        End,    // Right/Bottom
+        Stretch
+    };
 }

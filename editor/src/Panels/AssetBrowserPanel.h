@@ -3,6 +3,7 @@
 #include "Lynx/Asset/Texture.h"
 
 #include <filesystem>
+#include <glm/vec2.hpp>
 
 #include "EditorPanel.h"
 
@@ -25,8 +26,15 @@ namespace Lynx
         std::shared_ptr<Texture> m_DirectoryIcon;
         std::shared_ptr<Texture> m_FileIcon;
 
+        struct ThumbnailData
+        {
+            std::shared_ptr<Texture> Texture = nullptr;
+            glm::vec2 MinUV = glm::vec2(0.0f);
+            glm::vec2 MaxUV = glm::vec2(1.0f);
+            uint32_t Version = 0;
+        };
         // TODO: Setting to disable this!
-        std::unordered_map<AssetHandle, std::shared_ptr<Texture>> m_ThumbnailCache;
+        std::unordered_map<AssetHandle, ThumbnailData> m_ThumbnailCache;
 
         float m_ThumbnailSize = 128.0f;
 

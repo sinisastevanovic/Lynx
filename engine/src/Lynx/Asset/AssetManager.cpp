@@ -6,6 +6,7 @@
 #include "Material.h"
 #include "Script.h"
 #include "Shader.h"
+#include "Sprite.h"
 #include "Lynx/Scene/Scene.h"
 
 namespace Lynx
@@ -137,6 +138,9 @@ namespace Lynx
                 break;
             case AssetType::Scene:
                 newAsset = std::make_shared<Scene>(metadata.FilePath.string());
+                break;
+            case AssetType::Sprite:
+                newAsset = std::make_shared<Sprite>(metadata.FilePath.string());
                 break;
             case AssetType::None:
             case AssetType::SkeletalMesh:

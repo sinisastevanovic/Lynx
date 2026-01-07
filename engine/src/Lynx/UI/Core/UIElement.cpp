@@ -3,6 +3,8 @@
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include "Lynx/UI/Rendering/UIBatcher.h"
+#include "Lynx/UI/Widgets/StackPanel.h"
+#include "Lynx/UI/Widgets/UIImage.h"
 
 namespace Lynx
 {
@@ -71,6 +73,24 @@ namespace Lynx
         MarkDirty();
     }
 
+    void UIElement::SetHorizontalAlignment(UIAlignment alignment)
+    {
+        if (alignment != m_HorizontalAlignment)
+        {
+            m_HorizontalAlignment = alignment;
+            MarkDirty();
+        }
+    }
+
+    void UIElement::SetVerticalAlignment(UIAlignment alignment)
+    {
+        if (alignment != m_VerticalAlignment)
+        {
+            m_VerticalAlignment = alignment;
+            MarkDirty();
+        }
+    }
+
     void UIElement::SetVisibility(UIVisibility visibility)
     {
         if (m_Visibility == visibility)
@@ -128,23 +148,26 @@ namespace Lynx
         if (glm::abs(m_Anchor.MinX - m_Anchor.MaxX) < 0.0001f)
         {
             // Pinned (e.g. Center): Size is explicit
-            rect.Width = m_Size.Width;
-            // Position is AnchorPoint + Offset - (Pivot * Size)
+            float width = m_Size.Width;
+            if (glm::abs(width) < 0.001f)
+                width = m_DesiredSize.Width;
+            rect.Width = width;
             rect.X = anchorMinX + m_Offset.X - (rect.Width * m_Pivot.x);
         }
         else
         {
             // Stretched: Size is AnchorBox + SizeDelta (margins)
-            // m_Offset.X is Left Margin, m_Size.Width is Right Margin
             rect.Width = (anchorMaxX - anchorMinX) + m_Size.Width;
-            // X is centered on the anchor box, then offset
             float center = anchorMinX + (anchorMaxX - anchorMinX) * 0.5f;
             rect.X = center + m_Offset.X - (rect.Width * m_Pivot.x);
         }
 
         if (glm::abs(m_Anchor.MinY - m_Anchor.MaxY) < 0.0001f)
         {
-            rect.Height = m_Size.Height;
+            float height = m_Size.Height;
+            if (glm::abs(height) < 0.001f)
+                height = m_DesiredSize.Height;
+            rect.Height = height;
             rect.Y = anchorMinY + m_Offset.Y - (rect.Height * m_Pivot.y);
         }
         else
@@ -171,7 +194,12 @@ namespace Lynx
             }
         }
     }
-    
+
+    void UIElement::OnDraw(UIBatcher& batcher, const UIRect& screenRect)
+    {
+        
+    }
+
     void UIElement::OnInspect()
     {
         char buffer[256];
@@ -184,30 +212,58 @@ namespace Lynx
 
         ImGui::Separator();
         ImGui::Text("Transform");
-
-        float anchors[4] = { m_Anchor.MinX, m_Anchor.MinY, m_Anchor.MaxX, m_Anchor.MaxY };
-        if (ImGui::DragFloat4("Anchors (Min/Max)", anchors, 0.01f, 0.0f, 1.0f))
+        
+        bool isControlledByLayout = false;
+        if (auto parent = GetParent())
         {
-            m_Anchor = { anchors[0], anchors[1], anchors[2], anchors[3] };
-            MarkDirty();
+            if (auto stack = std::dynamic_pointer_cast<StackPanel>(parent))
+            {
+                isControlledByLayout = true;
+                ImGui::TextDisabled("Layout controlled by Parent (StackPanel)");
+                ImGui::Separator();
+            }
         }
 
-        float offsets[2] = { m_Offset.X, m_Offset.Y };
-        if (ImGui::DragFloat2("Pos / Offset", offsets))
+        if (!isControlledByLayout)
         {
-            m_Offset = { offsets[0], offsets[1] };
-            MarkDirty();
+            float anchors[4] = { m_Anchor.MinX, m_Anchor.MinY, m_Anchor.MaxX, m_Anchor.MaxY };
+            if (ImGui::DragFloat4("Anchors (Min/Max)", anchors, 0.01f, 0.0f, 1.0f))
+            {
+                m_Anchor = { anchors[0], anchors[1], anchors[2], anchors[3] };
+                MarkDirty();
+            }
+            
+            if (ImGui::DragFloat2("Pivot", &m_Pivot.x, 0.01f, 0.0f, 1.0f))
+            {
+                MarkDirty();
+            }
+
+            float offsets[2] = { m_Offset.X, m_Offset.Y };
+            if (ImGui::DragFloat2("Pos / Offset", offsets))
+            {
+                m_Offset = { offsets[0], offsets[1] };
+                MarkDirty();
+            }
+
+            const char* hAlignItems[] = { "Left", "Center", "Right", "Stretch" };
+            int currentHAlign = (int)m_HorizontalAlignment;
+            if (ImGui::Combo("Horizontal Alignment", &currentHAlign, hAlignItems, 4))
+            {
+                SetHorizontalAlignment((UIAlignment)currentHAlign);
+            }
+
+            const char* vAlignItems[] = { "Top", "Center", "Bottom", "Stretch" };
+            int currentVAlign = (int)m_VerticalAlignment;
+            if (ImGui::Combo("Vertical Alignment", &currentVAlign, vAlignItems, 4))
+            {
+                SetVerticalAlignment((UIAlignment)currentVAlign);
+            }
         }
 
         float size[2] = { m_Size.Width, m_Size.Height };
         if (ImGui::DragFloat2("Size / Delta", size))
         {
             m_Size = { size[0], size[1] };
-            MarkDirty();
-        }
-
-        if (ImGui::DragFloat2("Pivot", &m_Pivot.x, 0.01f, 0.0f, 1.0f))
-        {
             MarkDirty();
         }
 
@@ -283,7 +339,15 @@ namespace Lynx
             {
                 // TODO: we will check childJson["Type"] to creating "UIImage" or "UIText"
                 // For now, we just create base UIElements
-                auto child = std::make_shared<UIElement>();
+                std::shared_ptr<UIElement> child;
+                std::string type = childJson.value("Type", "UIElement");
+                if (type == "UIImage")
+                    child = std::make_shared<UIImage>();
+                else if (type == "StackPanel")
+                    child = std::make_shared<StackPanel>();
+                else
+                    child = std::make_shared<UIElement>();
+
                 child->Deserialize(childJson);
                 AddChild(child);
             }

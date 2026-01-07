@@ -11,9 +11,11 @@ namespace Lynx
         
         virtual void OnImGuiRender() override;
         virtual void OnSelectedEntityChanged(entt::entity selectedEntity) override;
+        virtual void OnSelectedUIElementChanged(std::shared_ptr<UIElement> uiElement) override;
 
     private:
         entt::entity m_Selection{ entt::null };
+        std::shared_ptr<UIElement> m_SelectedUIElement = nullptr;
         std::function<void(entt::entity)> OnSelectionChangedCallback = nullptr;
         int m_CurrentGizmoOperation = 7;
     };

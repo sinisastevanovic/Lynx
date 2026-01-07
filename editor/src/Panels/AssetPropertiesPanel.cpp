@@ -3,7 +3,9 @@
 #include <imgui.h>
 
 #include "Lynx/Engine.h"
+#include "Lynx/Asset/Sprite.h"
 #include "Lynx/Asset/Serialization/MaterialSerializer.h"
+#include "Lynx/Asset/Serialization/SpriteSerializer.h"
 #include "Lynx/ImGui/EditorUIHelpers.h"
 
 namespace Lynx
@@ -18,17 +20,16 @@ namespace Lynx
             return;
         }
 
-        if (m_SelectedAsset->GetType() == AssetType::Texture)
+        switch (m_SelectedAsset->GetType())
         {
-            DrawTextureProperties();
-        }
-        else if (m_SelectedAsset->GetType() == AssetType::Material)
-        {
-            DrawMaterialProperties();
-        }
-        else
-        {
-            ImGui::Text("Properties not available for this asset type.");
+            case AssetType::Texture:
+                DrawTextureProperties(); break;
+            case AssetType::Material:
+                DrawMaterialProperties(); break;
+            case AssetType::Sprite:
+                DrawSpriteProperties(); break;
+            default:
+                ImGui::Text("Properties not available for this asset type.");
         }
 
         ImGui::End();
@@ -113,7 +114,7 @@ namespace Lynx
         if (ImGui::ColorEdit4("Albedo Color", &material->AlbedoColor.r))
             m_IsDirty = true;
 
-        if (EditorUIHelpers::DrawAssetSelection("Albedo Map", material->AlbedoTexture, AssetType::Texture))
+        if (EditorUIHelpers::DrawAssetSelection("Albedo Map", material->AlbedoTexture, { AssetType::Texture }))
             m_IsDirty = true;
 
         if (ImGui::DragFloat2("Tiling (Rows/Cols)", &material->Tiling.x, 1.0f, 1.0f, 64.0f))
@@ -123,16 +124,16 @@ namespace Lynx
             m_IsDirty = true;
         if (ImGui::DragFloat("Roughness", &material->Roughness, 0.01f, 0.0f, 1.0f))
             m_IsDirty = true;
-        if (EditorUIHelpers::DrawAssetSelection("Normal Map", material->NormalMap, AssetType::Texture))
+        if (EditorUIHelpers::DrawAssetSelection("Normal Map", material->NormalMap, {AssetType::Texture}))
             m_IsDirty = true;
-        if (EditorUIHelpers::DrawAssetSelection("ORM Map", material->MetallicRoughnessTexture, AssetType::Texture))
+        if (EditorUIHelpers::DrawAssetSelection("ORM Map", material->MetallicRoughnessTexture, {AssetType::Texture}))
             m_IsDirty = true;
 
         if (ImGui::ColorEdit3("Emissive Color", &material->EmissiveColor.r))
             m_IsDirty = true;
         if (ImGui::DragFloat("Emissive Strength", &material->EmissiveStrength, 0.1f, 0.0f, 100.0f))
             m_IsDirty = true;
-        if (EditorUIHelpers::DrawAssetSelection("Emissive Map", material->EmissiveTexture, AssetType::Texture))
+        if (EditorUIHelpers::DrawAssetSelection("Emissive Map", material->EmissiveTexture, {AssetType::Texture}))
             m_IsDirty = true;
 
         bool canApply = m_IsDirty;
@@ -142,6 +143,61 @@ namespace Lynx
         if (ImGui::Button("Apply Changes"))
         {
             MaterialSerializer::Serialize(material->GetFilePath(), material);
+            Engine::Get().GetAssetManager().ReloadAsset(m_SelectedAssetHandle);
+            m_IsDirty = false;
+        }
+
+        if (!canApply)
+            ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        if (ImGui::Button("Revert"))
+        {
+            Engine::Get().GetAssetManager().ReloadAsset(m_SelectedAssetHandle);
+            m_IsDirty = false;
+        }
+    }
+
+    void AssetPropertiesPanel::DrawSpriteProperties()
+    {
+        auto sprite = std::static_pointer_cast<Sprite>(m_SelectedAsset);
+        ImGui::Text("Sprite Editor");
+        ImGui::Separator();
+
+        AssetHandle texHandle = sprite->GetTexture() ? sprite->GetTexture()->GetHandle() : AssetHandle::Null();
+        if (EditorUIHelpers::DrawAssetSelection("Texture", texHandle, {AssetType::Texture}))
+        {
+            if (texHandle.IsValid())
+            {
+                sprite->SetTexture(Engine::Get().GetAssetManager().GetAsset<Texture>(texHandle));
+                m_IsDirty = true;
+            }
+        }
+
+        if (ImGui::DragFloat2("UV Min", &sprite->m_UVMin.x, 0.1f, 0.0f, 1.0f))
+        {
+            m_IsDirty = true;
+        }
+
+        if (ImGui::DragFloat2("UV Max", &sprite->m_UVMax.x, 0.1f, 0.0f, 1.0f))
+        {
+            m_IsDirty = true;
+        }
+
+        float thickness[4] = { sprite->m_Border.Left, sprite->m_Border.Top, sprite->m_Border.Right, sprite->m_Border.Bottom };
+        if (ImGui::DragFloat4("Borders (L,T,R,B)", thickness, 1.0f))
+        {
+            sprite->m_Border = { thickness[0], thickness[1], thickness[2], thickness[3] };
+            m_IsDirty = true;
+        }
+
+        bool canApply = m_IsDirty;
+        if (!canApply)
+            ImGui::BeginDisabled();
+
+        if (ImGui::Button("Apply Changes"))
+        {
+            SpriteSerializer::Serialize(sprite->GetFilePath(), sprite);
             Engine::Get().GetAssetManager().ReloadAsset(m_SelectedAssetHandle);
             m_IsDirty = false;
         }

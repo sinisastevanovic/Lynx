@@ -1,12 +1,11 @@
 #include "EditorUIHelpers.h"
 
 #include <imgui.h>
-
 #include "Lynx/Engine.h"
 
 namespace Lynx
 {
-    bool EditorUIHelpers::DrawAssetSelection(const char* label, AssetHandle& currentHandle, AssetType typeFilter)
+    bool EditorUIHelpers::DrawAssetSelection(const char* label, AssetHandle& currentHandle, std::initializer_list<AssetType> allowedTypes)
     {
         bool changed = false;
 
@@ -24,11 +23,15 @@ namespace Lynx
 
         if (ImGui::BeginDragDropTarget())
         {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(AssetUtils::GetDragDropPayload(typeFilter)))
+            for (AssetType type : allowedTypes)
             {
-                uint64_t data = *(const uint64_t*)payload->Data;
-                currentHandle = AssetHandle(data);
-                changed = true;
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(AssetUtils::GetDragDropPayload(type)))
+                {
+                    uint64_t data = *(const uint64_t*)payload->Data;
+                    currentHandle = AssetHandle(data);
+                    changed = true;
+                    break;
+                }
             }
             ImGui::EndDragDropTarget();
         }
@@ -55,7 +58,17 @@ namespace Lynx
             const auto& allAssets = Engine::Get().GetAssetRegistry().GetMetadata();
             for (const auto& [handle, meta] : allAssets)
             {
-                if (meta.Type != typeFilter)
+                bool typeAllowed = false;
+                for (AssetType t : allowedTypes)
+                {
+                    if (meta.Type == t)
+                    {
+                        typeAllowed = true;
+                        break;
+                    }
+                }
+                
+                if (!typeAllowed)
                     continue;
 
                 std::string assetName = meta.FilePath.filename().string();

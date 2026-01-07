@@ -40,6 +40,10 @@ namespace Lynx
         UIAnchor GetAnchor() const { return m_Anchor; }
         void SetPivot(glm::vec2 pivot);
         glm::vec2 GetPivot() const { return m_Pivot; }
+        void SetHorizontalAlignment(UIAlignment alignment);
+        UIAlignment GetHorizontalAlignment() const { return m_HorizontalAlignment; }
+        void SetVerticalAlignment(UIAlignment alignment);
+        UIAlignment GetVerticalAlignment() const { return m_VerticalAlignment; }
 
         // Visual Props
         void SetVisibility(UIVisibility visibility);
@@ -53,7 +57,7 @@ namespace Lynx
         virtual void OnUpdate(float deltaTime);
         virtual void OnMeasure(UISize availableSize);
         virtual void OnArrange(UIRect finalRect);
-        virtual void OnDraw(UIBatcher& batcher, const UIRect& screenRect) {}
+        virtual void OnDraw(UIBatcher& batcher, const UIRect& screenRect);
 
         // Editor & Serialization
         virtual void OnInspect();
@@ -80,6 +84,9 @@ namespace Lynx
         glm::vec2 m_Pivot = {0.5f, 0.5f };              // 0-1 range relative to self
         UIPoint m_Offset = {0.0f, 0.0f };             // Positional offset in DP
         UISize m_Size = { 100.0f, 100.0f };    // Size in DP
+        UISize m_DesiredSize = { 0, 0 };
+        UIAlignment m_HorizontalAlignment = UIAlignment::Stretch;
+        UIAlignment m_VerticalAlignment = UIAlignment::Stretch;
 
         UIVisibility m_Visibility = UIVisibility::Visible;
         float m_Opacity = 1.0f;
