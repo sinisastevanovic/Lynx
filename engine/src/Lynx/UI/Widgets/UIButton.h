@@ -13,6 +13,7 @@ namespace Lynx
         void SetHoveredColor(const glm::vec4& hoveredColor);
         void SetPressedColor(const glm::vec4& pressedColor);
         void SetDisabledColor(const glm::vec4& disabledColor);
+        void SetInteractable(bool interactable);
         glm::vec4 GetTint() const override;
 
         std::function<void()> OnClickEvent;
@@ -32,6 +33,7 @@ namespace Lynx
         glm::vec4 m_HoveredColor = { 0.8f, 0.8f, 0.8f, 1.0f };
         glm::vec4 m_PressedColor = { 0.6f, 0.6f, 0.6f, 1.0f };
         glm::vec4 m_DisabledColor = { 0.4f, 0.4f, 0.4f, 1.0f };
+        bool m_Interactable = true;
     };
 
 }

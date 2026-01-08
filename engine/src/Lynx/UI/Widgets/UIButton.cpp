@@ -32,8 +32,16 @@ namespace Lynx
         m_DisabledColor = disabledColor;
     }
 
+    void UIButton::SetInteractable(bool interactable)
+    {
+        // TODO: Propagate to children! (Text should be greyed out etc..)
+        m_Interactable = interactable;
+    }
+
     glm::vec4 UIButton::GetTint() const
     {
+        if (!m_Interactable)
+            return m_DisabledColor * m_Tint;
         if (IsPressed())
             return m_PressedColor * m_Tint;
         if (IsMouseOver())
@@ -60,7 +68,7 @@ namespace Lynx
 
     void UIButton::OnClick()
     {
-        if (OnClickEvent)
+        if (m_Interactable && OnClickEvent)
             OnClickEvent();
     }
 
@@ -75,6 +83,7 @@ namespace Lynx
         ImGui::ColorEdit4("Hover Color", &m_HoveredColor.r);
         ImGui::ColorEdit4("Pressed Color", &m_PressedColor.r);
         ImGui::ColorEdit4("Disabled Color", &m_DisabledColor.r);
+        ImGui::Checkbox("Interactable", &m_Interactable);
     }
 
     void UIButton::Serialize(nlohmann::json& outJson) const
@@ -85,6 +94,7 @@ namespace Lynx
         outJson["BtnHovered"] = m_HoveredColor;
         outJson["BtnPressed"] = m_PressedColor;
         outJson["BtnDisabled"] = m_DisabledColor;
+        outJson["Interactable"] = m_Interactable;
     }
 
     void UIButton::Deserialize(const nlohmann::json& inJson)
@@ -94,6 +104,7 @@ namespace Lynx
         m_HoveredColor = inJson["BtnHovered"].get<glm::vec4>();
         m_PressedColor = inJson["BtnPressed"].get<glm::vec4>();
         m_DisabledColor = inJson["BtnDisabled"].get<glm::vec4>();
+        m_Interactable = inJson["Interactable"].get<bool>();
     }
 
     
