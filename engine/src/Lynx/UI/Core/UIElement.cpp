@@ -93,6 +93,12 @@ namespace Lynx
         }
     }
 
+    void UIElement::SetPadding(UIThickness padding)
+    {
+        m_Padding = padding;
+        MarkDirty();
+    }
+
     void UIElement::SetVisibility(UIVisibility visibility)
     {
         if (m_Visibility == visibility)
@@ -124,13 +130,32 @@ namespace Lynx
 
     void UIElement::OnMeasure(UISize availableSize)
     {
+        float maxWidth = 0.0f;
+        float maxHeight = 0.0f;
+        
         for (auto& child : m_Children)
         {
-            if (child->GetVisibility() != UIVisibility::Collapsed)
-            {
-                child->OnMeasure(availableSize);
-            }
+            if (child->GetVisibility() == UIVisibility::Collapsed)
+                continue;
+            
+            child->OnMeasure(availableSize);
+            
+            UISize explicitSize = child->GetSize();
+            UISize desiredSize = child->GetDesiredSize();
+            UISize effectiveSize = {
+                glm::abs(explicitSize.Width > 0.001f) ? explicitSize.Width : desiredSize.Width,
+                glm::abs(explicitSize.Height > 0.001f) ? explicitSize.Height : desiredSize.Height,
+            };
+            
+            float right = child->GetOffset().X + effectiveSize.Width;
+            float bottom = child->GetOffset().Y + effectiveSize.Height;
+            
+            if (right > maxWidth) maxWidth = right;
+            if (bottom > maxHeight) maxHeight = bottom;
         }
+        
+        m_DesiredSize.Width = maxWidth + m_Padding.Left + m_Padding.Right;
+        m_DesiredSize.Height = maxHeight + m_Padding.Top + m_Padding.Bottom;
     }
 
     UIRect UIElement::CalculateBounds(UIRect parentRect) const
@@ -186,12 +211,20 @@ namespace Lynx
     {
         m_CachedRect = finalRect;
         m_IsLayoutDirty = false;
+        
+        UIRect contentRect = finalRect;
+        contentRect.X += m_Padding.Left;
+        contentRect.Y += m_Padding.Top;
+        contentRect.Width -= (m_Padding.Left + m_Padding.Right);
+        contentRect.Height -= (m_Padding.Top + m_Padding.Bottom);
+        contentRect.Width = std::max(0.0f, contentRect.Width);
+        contentRect.Height = std::max(0.0f, contentRect.Height);
 
         for (auto& child : m_Children)
         {
             if (child->GetVisibility() != UIVisibility::Collapsed)
             {
-                UIRect childRect = child->CalculateBounds(finalRect);
+                UIRect childRect = child->CalculateBounds(contentRect);
                 child->OnArrange(childRect);
             }
         }
@@ -283,6 +316,13 @@ namespace Lynx
             m_Size = { size[0], size[1] };
             MarkDirty();
         }
+        
+        float padding[4] = { m_Padding.Left, m_Padding.Top, m_Padding.Right, m_Padding.Bottom };
+        if (ImGui::DragFloat4("Padding", padding))
+        {
+            m_Padding = { padding[0], padding[1], padding[2], padding[3] };
+            MarkDirty();
+        }
 
         ImGui::Separator();
         ImGui::Text("Appearance");
@@ -322,6 +362,7 @@ namespace Lynx
         outJson["Size"] = { m_Size.Width, m_Size.Height };
         outJson["HorizontalAlignment"] = (int)m_HorizontalAlignment;
         outJson["VerticalAlignment"] = (int)m_VerticalAlignment;
+        outJson["Padding"] = { m_Padding.Left, m_Padding.Top, m_Padding.Right, m_Padding.Bottom };
         outJson["HitTestVisible"] = m_IsHitTestVisible;
         outJson["Enabled"] = m_IsEnabled;
 
@@ -366,6 +407,11 @@ namespace Lynx
             m_HorizontalAlignment = (UIAlignment)json["HorizontalAlignment"];
         if (json.contains("VerticalAlignment"))
             m_VerticalAlignment = (UIAlignment)json["VerticalAlignment"];
+        if (json.contains("Padding"))
+        {
+            auto& p = json["Padding"];
+            m_Padding = { p[0], p[1], p[2], p[3] };
+        }
         if (json.contains("HitTestVisible"))
             m_IsHitTestVisible = (bool)json["HitTestVisible"];
         if (json.contains("Enabled"))

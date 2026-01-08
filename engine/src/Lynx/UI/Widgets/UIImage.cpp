@@ -22,6 +22,8 @@ namespace Lynx
         std::shared_ptr<Texture> textureToDraw = nullptr;
         glm::vec2 uvMin = { 0.0f, 0.0f };
         glm::vec2 uvMax = { 1.0f, 1.0f };
+        
+        glm::vec4 finalColor = GetTint() * parentTint;
 
         if (m_ImageResource)
         {
@@ -49,11 +51,37 @@ namespace Lynx
 
         if (m_ImageType == ImageType::Simple)
         {
-            batcher.DrawRect(screenRect, GetTint() * parentTint, m_Material, textureToDraw, uvMin, uvMax);
+            batcher.DrawRect(screenRect, finalColor, m_Material, textureToDraw, uvMin, uvMax);
         }
         else if (m_ImageType == ImageType::Sliced)
         {
-            batcher.DrawNineSlice(screenRect, m_Border, GetTint() * parentTint, m_Material, textureToDraw, uvMin, uvMax);
+            batcher.DrawNineSlice(screenRect, m_Border, finalColor, m_Material, textureToDraw, uvMin, uvMax);
+        }
+        else if (m_ImageType == ImageType::Filled)
+        {
+            UIRect filledRect = screenRect;
+            glm::vec2 filledUVMin = uvMin;
+            glm::vec2 filledUVMax = uvMax;
+            
+            float fill = glm::clamp(m_FillAmount, 0.0f, 1.0f);
+            
+            if (m_FillMethod == FillMethod::Horizontal)
+            {
+                filledRect.Width *= fill;
+                filledUVMax.x = glm::mix(uvMin.x, uvMax.x, fill);
+            }
+            else if (m_FillMethod == FillMethod::Vertical)
+            {
+                float visibleHeight = filledRect.Height * fill;
+                float hiddenHeight = filledRect.Height * (1.0f - fill);
+
+                filledRect.Y += hiddenHeight;
+                filledRect.Height = visibleHeight;
+                
+                filledUVMin.y = glm::mix(uvMax.y, uvMin.y, fill);
+            }
+            
+            batcher.DrawRect(filledRect, finalColor, m_Material, textureToDraw, filledUVMin, filledUVMax);
         }
     }
 
@@ -99,9 +127,9 @@ namespace Lynx
             SetMaterialInternal(matHandle);
         }
 
-        const char* types[] = { "Simple", "Sliced" };
+        const char* types[] = { "Simple", "Sliced", "Filled" };
         int currentType = (int)m_ImageType;
-        if (ImGui::Combo("Draw As", &currentType, types, 2))
+        if (ImGui::Combo("Draw As", &currentType, types, 3))
         {
             SetImageType((ImageType)currentType);
         }
@@ -112,6 +140,16 @@ namespace Lynx
             if (ImGui::DragFloat4("Borders (L,T,R,B)", borders))
             {
                 SetBorder({ borders[0], borders[1], borders[2], borders[3] });
+            }
+        }
+        else if (m_ImageType == ImageType::Filled)
+        {
+            ImGui::SliderFloat("Fill Amount", &m_FillAmount, 0.0f, 1.0f);
+            const char* fillTypes[] = { "Horizontal", "Vertical" };
+            int currentFillType = (int)m_FillMethod;
+            if (ImGui::Combo("Fill Method", &currentFillType, fillTypes, 2))
+            {
+                SetFillMethod((FillMethod)currentFillType);
             }
         }
     }
@@ -125,6 +163,8 @@ namespace Lynx
         outJson["Material"] = (m_Material ? m_Material->GetHandle() : AssetHandle::Null());
         outJson["ImageType"] = (int)m_ImageType;
         outJson["Border"] = { m_Border.Left, m_Border.Top, m_Border.Right, m_Border.Bottom };
+        outJson["FillAmount"] = m_FillAmount;
+        outJson["FillMethod"] = (int)m_FillMethod;
     }
 
     void UIImage::Deserialize(const nlohmann::json& json)
@@ -150,6 +190,14 @@ namespace Lynx
         {
             auto& b = json["Border"];
             m_Border = { b[0], b[1], b[2], b[3] };
+        }
+        if (json.contains("FillAmount"))
+        {
+            m_FillAmount = json["FillAmount"];
+        }
+        if (json.contains("FillMethod"))
+        {
+            m_FillMethod = (FillMethod)json["FillMethod"];
         }
     }
 

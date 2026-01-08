@@ -36,6 +36,7 @@ namespace Lynx
         UIPoint GetOffset() const { return m_Offset; }
         void SetSize(UISize size);
         UISize GetSize() const { return m_Size; }
+        UISize GetDesiredSize() const { return m_DesiredSize; }
         void SetAnchor(UIAnchor anchor);
         UIAnchor GetAnchor() const { return m_Anchor; }
         void SetPivot(glm::vec2 pivot);
@@ -44,6 +45,8 @@ namespace Lynx
         UIAlignment GetHorizontalAlignment() const { return m_HorizontalAlignment; }
         void SetVerticalAlignment(UIAlignment alignment);
         UIAlignment GetVerticalAlignment() const { return m_VerticalAlignment; }
+        void SetPadding(UIThickness padding);
+        UIThickness GetPadding() const { return m_Padding; }
 
         // Visual Props
         void SetVisibility(UIVisibility visibility);
@@ -103,6 +106,7 @@ namespace Lynx
         UISize m_DesiredSize = { 0, 0 };
         UIAlignment m_HorizontalAlignment = UIAlignment::Stretch;
         UIAlignment m_VerticalAlignment = UIAlignment::Stretch;
+        UIThickness m_Padding = { 0.0f, 0.0f, 0.0f, 0.0f };
 
         UIVisibility m_Visibility = UIVisibility::Visible;
         float m_Opacity = 1.0f;

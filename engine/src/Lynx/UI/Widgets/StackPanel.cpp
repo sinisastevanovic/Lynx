@@ -12,8 +12,6 @@ namespace Lynx
 
     void StackPanel::OnMeasure(UISize availableSize)
     {
-        //m_Size = { 0.0f, 0.0f };
-
         float currentMainAxis = 0.0f;
         float maxCrossAxis = 0.0f;
 
@@ -35,24 +33,35 @@ namespace Lynx
 
             child->OnMeasure(childAvailable);
 
-            UISize childSize = child->GetSize();
+            UISize explicitChildSize = child->GetSize();
+            UISize desiredChildSize = child->GetDesiredSize();
+            
+            float childW = (glm::abs(explicitChildSize.Width) > 0.001f) ? explicitChildSize.Width : desiredChildSize.Width;
+            float childH = (glm::abs(explicitChildSize.Height) > 0.001f) ? explicitChildSize.Height : desiredChildSize.Height;
 
             if (m_Orientation == Orientation::Vertical)
             {
-                currentMainAxis += childSize.Height;
-                maxCrossAxis = std::max(maxCrossAxis, childSize.Width);
+                currentMainAxis += childH;
+                maxCrossAxis = std::max(maxCrossAxis, childW);
             }
             else
             {
-                currentMainAxis += childSize.Width;
-                maxCrossAxis = std::max(maxCrossAxis, childSize.Height);
+                currentMainAxis += childW;
+                maxCrossAxis = std::max(maxCrossAxis, childH);
             }
         }
 
         if (m_Orientation == Orientation::Vertical)
-            m_DesiredSize = { maxCrossAxis, currentMainAxis };
+        {
+            m_DesiredSize.Width = maxCrossAxis + m_Padding.Left + m_Padding.Right;
+            m_DesiredSize.Height = currentMainAxis + m_Padding.Top + m_Padding.Bottom;
+        }
         else
-            m_DesiredSize = { currentMainAxis, maxCrossAxis };
+        {
+            
+            m_DesiredSize.Width = currentMainAxis + m_Padding.Left + m_Padding.Right;
+            m_DesiredSize.Height = maxCrossAxis + m_Padding.Top + m_Padding.Bottom;
+        }
     }
 
     void StackPanel::OnArrange(UIRect finalRect)
@@ -60,7 +69,7 @@ namespace Lynx
         m_CachedRect = finalRect;
         m_IsLayoutDirty = false;
 
-        float currentPos = 0.0f;
+        float currentPos = (m_Orientation == Orientation::Vertical) ? m_Padding.Top : m_Padding.Left;
         bool first = true;
         
         for (auto& child : m_Children)
@@ -73,32 +82,38 @@ namespace Lynx
             first = false;
 
             UISize childSize = child->GetSize();
+            UISize childDesiredSize = child->GetDesiredSize();
+            UISize effectiveSize = {
+                glm::abs(childSize.Width) > 0.001f ? childSize.Width : childDesiredSize.Width,
+                glm::abs(childSize.Height) > 0.001f ? childSize.Height : childDesiredSize.Height,
+            };
+            
             UIRect childRect;
-
 
             if (m_Orientation == Orientation::Vertical)
             {
                 childRect.Y = finalRect.Y + currentPos;
-                childRect.Height = childSize.Height;
+                childRect.Height = effectiveSize.Height;
 
-                float availableWidth = finalRect.Width;
+                float availableWidth = finalRect.Width - (m_Padding.Left + m_Padding.Right);
+                float startX = finalRect.X + m_Padding.Left;
 
                 switch (child->GetHorizontalAlignment())
                 {
                     case UIAlignment::Start:
-                        childRect.X = finalRect.X;
-                        childRect.Width = childSize.Width;
+                        childRect.X = startX;
+                        childRect.Width = effectiveSize.Width;
                         break;
                     case UIAlignment::Center:
-                        childRect.X = finalRect.X + (availableWidth - childSize.Width) * 0.5f;
-                        childRect.Width = childSize.Width;
+                        childRect.X = startX + (availableWidth - effectiveSize.Width) * 0.5f;
+                        childRect.Width = effectiveSize.Width;
                         break;
                     case UIAlignment::End:
-                        childRect.X = finalRect.X + (availableWidth - childSize.Width);
-                        childRect.Width = childSize.Width;
+                        childRect.X = startX + (availableWidth - effectiveSize.Width);
+                        childRect.Width = effectiveSize.Width;
                         break;
                     case UIAlignment::Stretch:
-                        childRect.X = finalRect.X;
+                        childRect.X = startX;
                         childRect.Width = availableWidth;
                         break;
                 }
@@ -108,26 +123,27 @@ namespace Lynx
             else
             {
                 childRect.X = finalRect.X + currentPos;
-                childRect.Width = childSize.Width;
+                childRect.Width = effectiveSize.Width;
 
-                float availableHeight = finalRect.Height;
+                float availableHeight = finalRect.Height - (m_Padding.Top + m_Padding.Bottom);
+                float startY = finalRect.Y + m_Padding.Top;
 
                 switch (child->GetVerticalAlignment())
                 {
                     case UIAlignment::Start:
-                        childRect.Y = finalRect.Y;
-                        childRect.Height = childSize.Height;
+                        childRect.Y = startY;
+                        childRect.Height = effectiveSize.Height;
                         break;
                     case UIAlignment::Center:
-                        childRect.Y = finalRect.Y + (availableHeight - childSize.Height) * 0.5f;
-                        childRect.Height = childSize.Height;
+                        childRect.Y = startY + (availableHeight - effectiveSize.Height) * 0.5f;
+                        childRect.Height = effectiveSize.Height;
                         break;
                     case UIAlignment::End:
-                        childRect.Y = finalRect.Y + (availableHeight - childSize.Height);
-                        childRect.Height = childSize.Height;
+                        childRect.Y = startY + (availableHeight - effectiveSize.Height);
+                        childRect.Height = effectiveSize.Height;
                         break;
                     case UIAlignment::Stretch:
-                        childRect.Y = finalRect.Y;
+                        childRect.Y = startY;
                         childRect.Height = availableHeight;
                         break;
                 }

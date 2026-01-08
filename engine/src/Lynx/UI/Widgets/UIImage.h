@@ -11,7 +11,14 @@ namespace Lynx
     enum class ImageType
     {
         Simple,
-        Sliced
+        Sliced,
+        Filled
+    };
+    
+    enum class FillMethod
+    {
+        Horizontal,
+        Vertical
     };
 
     class LX_API UIImage : public UIElement
@@ -34,6 +41,12 @@ namespace Lynx
 
         void SetBorder(UIThickness border) { m_Border = border; MarkDirty(); }
         UIThickness GetBorder() const { return m_Border; }
+        
+        void SetFillAmount(float amount) { m_FillAmount = amount; }
+        float GetFillAmount() const { return m_FillAmount; }
+        
+        void SetFillMethod(FillMethod method) { m_FillMethod = method; }
+        FillMethod GetFillMethod() const { return m_FillMethod; }
 
         void OnInspect() override;
         void Serialize(nlohmann::json& outJson) const override;
@@ -51,5 +64,7 @@ namespace Lynx
         uint32_t m_LastImageVersion = 0;
         ImageType m_ImageType = ImageType::Simple;
         UIThickness m_Border; // For sliced type
+        FillMethod m_FillMethod = FillMethod::Horizontal; // For filled image type
+        float m_FillAmount = 1.0f; // For Filled image type
     };
 }

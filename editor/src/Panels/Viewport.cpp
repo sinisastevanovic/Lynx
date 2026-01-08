@@ -82,17 +82,25 @@ namespace Lynx
                 drawList->AddRect(pMin, pMax, IM_COL32(255, 255, 0, 255), 0.0f, 0, 2.0f);
 
                 UIRect parentRect = {0,0, viewportSize.x, viewportSize.y};
+                UIThickness parentPadding = {0,0,0,0};
                 if (auto parent = m_SelectedUIElement->GetParent())
                 {
                     parentRect = parent->GetCachedRect();
+                    parentPadding = parent->GetPadding();
                 }
                 else
                 {
                     if (auto canvas = std::dynamic_pointer_cast<UICanvas>(m_SelectedUIElement))
                     {
                         parentRect = canvas->GetCachedRect();
+                        parentPadding = canvas->GetPadding();
                     }
                 }
+                
+                parentRect.X += parentPadding.Left;
+                parentRect.Y += parentPadding.Top;
+                parentRect.Width -= (parentPadding.Left + parentPadding.Right);
+                parentRect.Height -= (parentPadding.Top + parentPadding.Bottom);
 
                 UIAnchor anchor = m_SelectedUIElement->GetAnchor();
 
@@ -123,6 +131,27 @@ namespace Lynx
                     DrawCross(anchorMax);
                     // Draw Anchor Box (Dashed line?)
                     drawList->AddRect(anchorMin, anchorMax, IM_COL32(255, 50, 50, 100));
+                }
+                
+                UIThickness padding = m_SelectedUIElement->GetPadding();
+                if (padding.Left != 0 || padding.Top != 0 || padding.Right != 0 || padding.Bottom != 0)
+                {
+                    ImVec2 padMin = {
+                        pMin.x + (padding.Left * uiScale),
+                        pMin.y + (padding.Top * uiScale)
+                    };
+                    ImVec2 padMax = {
+                        pMax.x - (padding.Right * uiScale),
+                        pMax.y - (padding.Bottom * uiScale)
+                    };
+
+                    // Visual check to ensure we don't draw inverted rects if padding > size
+                    if (padMax.x > padMin.x && padMax.y > padMin.y)
+                    {
+                        // Draw Padding Box
+                        auto padCol = IM_COL32(100, 200, 255, 180);
+                        drawList->AddRect(padMin, padMax, padCol, 0.0f, 0, 1.5f);
+                    }
                 }
 
                 glm::vec2 pivot = m_SelectedUIElement->GetPivot();
