@@ -25,8 +25,9 @@ namespace Lynx
         void SetImage(std::shared_ptr<Asset> image);
         std::shared_ptr<Asset> GetImage() const { return m_ImageResource; }
 
-        void SetColor(const glm::vec4& color) { m_Color = color; }
-        glm::vec4 GetColor() const { return m_Color; }
+        void SetTint(const glm::vec4& color) { m_Tint = color; }
+        glm::vec4 GetDefaultTint() const { return m_Tint; }
+        virtual glm::vec4 GetTint() const { return m_Tint; }
 
         void SetImageType(ImageType type) { m_ImageType = type; MarkDirty(); }
         ImageType GetImageType() const { return m_ImageType; }
@@ -42,10 +43,12 @@ namespace Lynx
         void SetTextureInternal(AssetHandle handle);
         void SetMaterialInternal(AssetHandle handle);
 
+    protected:
+        glm::vec4 m_Tint = { 1.0f, 1.0f, 1.0f, 1.0f };
+
     private:
         std::shared_ptr<Asset> m_ImageResource;
         uint32_t m_LastImageVersion = 0;
-        glm::vec4 m_Color = { 1.0f, 1.0f, 1.0f, 1.0f };
         ImageType m_ImageType = ImageType::Simple;
         UIThickness m_Border; // For sliced type
     };

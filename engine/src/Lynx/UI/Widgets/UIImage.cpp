@@ -49,11 +49,11 @@ namespace Lynx
 
         if (m_ImageType == ImageType::Simple)
         {
-            batcher.DrawRect(screenRect, m_Color, m_Material, textureToDraw, uvMin, uvMax);
+            batcher.DrawRect(screenRect, GetTint(), m_Material, textureToDraw, uvMin, uvMax);
         }
         else if (m_ImageType == ImageType::Sliced)
         {
-            batcher.DrawNineSlice(screenRect, m_Border, m_Color, m_Material, textureToDraw, uvMin, uvMax);
+            batcher.DrawNineSlice(screenRect, m_Border, GetTint(), m_Material, textureToDraw, uvMin, uvMax);
         }
     }
 
@@ -85,7 +85,7 @@ namespace Lynx
         UIElement::OnInspect();
         ImGui::Separator();
         ImGui::Text("Image");
-        ImGui::ColorEdit4("Tint", &m_Color.x);
+        ImGui::ColorEdit4("Tint", &m_Tint.x);
 
         AssetHandle texHandle = m_ImageResource ? m_ImageResource->GetHandle() : AssetHandle::Null();
         if (EditorUIHelpers::DrawAssetSelection("Texture", texHandle, { AssetType::Texture, AssetType::Sprite }))
@@ -120,7 +120,7 @@ namespace Lynx
     {
         UIElement::Serialize(outJson);
         outJson["Type"] = "UIImage";
-        outJson["Color"] = m_Color;
+        outJson["Tint"] = m_Tint;
         outJson["Texture"] = (m_ImageResource ? m_ImageResource->GetHandle() : AssetHandle::Null());
         outJson["Material"] = (m_Material ? m_Material->GetHandle() : AssetHandle::Null());
         outJson["ImageType"] = (int)m_ImageType;
@@ -130,9 +130,9 @@ namespace Lynx
     void UIImage::Deserialize(const nlohmann::json& json)
     {
         UIElement::Deserialize(json);
-        if (json.contains("Color"))
+        if (json.contains("Tint"))
         {
-            m_Color = json["Color"].get<glm::vec4>();
+            m_Tint = json["Tint"].get<glm::vec4>();
         }
         if (json.contains("Texture"))
         {

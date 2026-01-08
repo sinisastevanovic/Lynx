@@ -5,6 +5,7 @@
 #include <glm/fwd.hpp>
 
 #include "Lynx/Asset/Asset.h"
+#include "Lynx/Event/Event.h"
 
 namespace Lynx
 {
@@ -24,6 +25,8 @@ namespace Lynx
 
         void OnUpdateRuntime(float deltaTime);
         void OnUpdateEditor(float deltaTime);
+
+        void OnEvent(Event& event);
 
         void AttachEntity(entt::entity child, entt::entity parent);
         void AttachEntityKeepWorld(entt::entity child, entt::entity parent);

@@ -18,13 +18,13 @@ namespace Lynx
         auto& renderer = Lynx::Engine::Get().GetRenderer();
         ImGui::Begin("Viewport");
 
-        bool isFocused = ImGui::IsWindowFocused();
-        bool isHovered = ImGui::IsWindowHovered();
+        m_IsFocused = ImGui::IsWindowFocused();
+        m_IsHovered = ImGui::IsWindowHovered();
 
-        Engine::Get().SetBlockEvents(!isFocused);
-        Engine::Get().GetEditorCamera().SetViewportFocused(isHovered && isFocused);
+        Engine::Get().SetBlockEvents(!m_IsFocused);
+        Engine::Get().GetEditorCamera().SetViewportFocused(m_IsHovered && m_IsFocused);
 
-        if (isFocused && Engine().Get().GetSceneState() != SceneState::Play)
+        if (m_IsFocused && Engine().Get().GetSceneState() != SceneState::Play)
         {
             if (ImGui::IsKeyPressed(ImGuiKey_Q)) m_CurrentGizmoOperation = -1;
             if (ImGui::IsKeyPressed(ImGuiKey_W)) m_CurrentGizmoOperation = ImGuizmo::TRANSLATE;
@@ -43,7 +43,7 @@ namespace Lynx
         }
 
         // UI GIZMOS
-        if (m_SelectedUIElement)
+        if (m_SelectedUIElement && Engine::Get().GetRenderer().GetShowUI())
         {
             ImVec2 viewStart = ImGui::GetItemRectMin();
             ImVec2 viewSize = ImGui::GetItemRectSize();
@@ -190,19 +190,18 @@ namespace Lynx
         auto viewportMaxRegion = ImGui::GetWindowContentRegionMax();
         auto viewportOffset = ImGui::GetWindowPos();
 
-        glm::vec2 bounds[2];
-        bounds[0] = { viewportMinRegion.x + viewportOffset.x, viewportMinRegion.y + viewportOffset.y };
-        bounds[1] = { viewportMaxRegion.x + viewportOffset.x, viewportMaxRegion.y + viewportOffset.y };
+        m_Bounds[0] = { viewportMinRegion.x + viewportOffset.x, viewportMinRegion.y + viewportOffset.y };
+        m_Bounds[1] = { viewportMaxRegion.x + viewportOffset.x, viewportMaxRegion.y + viewportOffset.y };
 
-        if (isFocused && !ImGuizmo::IsUsing())
+        if (m_IsFocused && !ImGuizmo::IsUsing())
         {
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
                 auto mousePos = ImGui::GetMousePos();
-                mousePos.x -= bounds[0].x;
-                mousePos.y -= bounds[0].y;
+                mousePos.x -= m_Bounds[0].x;
+                mousePos.y -= m_Bounds[0].y;
 
-                glm::vec2 viewportSize2 = { bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y };
+                glm::vec2 viewportSize2 = { m_Bounds[1].x - m_Bounds[0].x, m_Bounds[1].y - m_Bounds[0].y };
 
                 int mouseX = (int)mousePos.x;
                 int mouseY = (int)mousePos.y;

@@ -18,6 +18,8 @@ namespace Lynx
         void OnScenePlay();
         void OnSceneStop();
 
+        void OnEvent(Event& e);
+        
         entt::entity GetSelectedEntity() const { return m_SelectedEntity; }
 
     private:
@@ -35,6 +37,7 @@ namespace Lynx
         Engine* m_Engine;
 
         std::vector<std::unique_ptr<EditorPanel>> m_Panels;
+        class Viewport* m_ViewportPanel = nullptr;
 
         std::shared_ptr<Scene> m_EditorScene;
         std::shared_ptr<Scene> m_RuntimeScene;
@@ -42,6 +45,8 @@ namespace Lynx
         entt::entity m_SelectedEntity = entt::null;
         std::shared_ptr<UIElement> m_SelectedUIElement = nullptr;
         AssetHandle m_SelectedAsset = AssetHandle::Null();
+
+        bool m_ShowUI = true;
     };
 }
 

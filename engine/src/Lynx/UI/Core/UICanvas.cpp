@@ -5,6 +5,10 @@
 #include <glm/gtc/epsilon.hpp>
 #include <nlohmann/json.hpp>
 
+#include "Lynx/Event/Event.h"
+#include "Lynx/Event/KeyEvent.h"
+#include "Lynx/Event/MouseEvent.h"
+
 namespace Lynx
 {
     UICanvas::UICanvas()
@@ -56,6 +60,7 @@ namespace Lynx
         return screenW / m_ReferenceResolution.x;
     }
 
+
     void UICanvas::SetScaleMode(UIScaleMode mode)
     {
         if (m_ScaleMode == mode)
@@ -72,6 +77,98 @@ namespace Lynx
         
         m_ReferenceResolution = resolution;
         MarkDirty();
+    }
+
+    void UICanvas::OnEvent(Event& e)
+    {
+        EventDispatcher dispatcher(e);
+        dispatcher.Dispatch<MouseMovedEvent>([this](MouseMovedEvent& e)
+        {
+            glm::vec2 mousePos = { e.GetX(), e.GetY() }; // TODO: convert to viewport relative
+            glm::vec2 canvasPos = mousePos / m_ScaleFactor;
+            
+            // Find what we are hovering over
+            auto target = FindElementAt(canvasPos);
+            auto current = m_HoveredElement.lock();
+            
+            // State Change: Mouse moved from A to B
+            if (target != current)
+            {
+                if (current)
+                {
+                    current->m_IsMouseOver = false;
+                    current->OnMouseLeave();
+                }
+                if (target)
+                {
+                    target->m_IsMouseOver = true;
+                    target->OnMouseEnter();
+                }
+                m_HoveredElement = target;
+            }
+            return false;
+        });
+        dispatcher.Dispatch<KeyPressedEvent>([this](KeyPressedEvent& e)
+        {
+            if (e.GetKeyCode() != KeyCode::MouseButtonLeft)
+                return false;
+
+            auto target = m_HoveredElement.lock();
+            if (target)
+            {
+                target->m_IsPressed = true;
+                target->OnMouseDown();
+                m_PressedElement = target;
+                return true;
+            }
+            return false;
+        });
+        dispatcher.Dispatch<KeyReleasedEvent>([this](KeyReleasedEvent& e)
+        {
+            if (e.GetKeyCode() != KeyCode::MouseButtonLeft)
+                return false;
+
+            auto pressed = m_PressedElement.lock();
+            if (pressed)
+            {
+                pressed->m_IsPressed = false;
+                pressed->OnMouseUp();
+
+                auto hovered = m_HoveredElement.lock();
+                if (pressed == hovered)
+                {
+                    pressed->OnClick();
+                }
+                m_PressedElement.reset();
+                return true;
+            }
+            return false;
+        });
+    }
+
+    std::shared_ptr<UIElement> UICanvas::FindElementAt(const glm::vec2& point)
+    {
+        return FindElementRecursive(shared_from_this(), point);
+    }
+
+    std::shared_ptr<UIElement> UICanvas::FindElementRecursive(std::shared_ptr<UIElement> current, const glm::vec2& point)
+    {
+        if (current->GetVisibility() != UIVisibility::Visible)
+            return nullptr;
+
+        const auto& children = current->GetChildren();
+        for (auto it = children.rbegin(); it != children.rend(); ++it)
+        {
+            auto child = *it;
+            auto result = FindElementRecursive(child, point);
+            if (result)
+                return result;
+        }
+
+        if (current->HitTest(point))
+            return current;
+
+        return nullptr;
     }
 
     void UICanvas::OnInspect()

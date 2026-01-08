@@ -59,6 +59,19 @@ namespace Lynx
         virtual void OnArrange(UIRect finalRect);
         virtual void OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale);
 
+        // Interaction
+        virtual bool HitTest(const glm::vec2& point);
+        virtual void OnMouseEnter() {}
+        virtual void OnMouseLeave() {}
+        virtual void OnMouseDown() {}
+        virtual void OnMouseUp() {}
+        virtual void OnClick() {}
+
+        bool IsMouseOver() const { return m_IsMouseOver; }
+        bool IsPressed() const { return m_IsPressed; }
+        void SetHitTestVisible(bool visible) { m_IsHitTestVisible = visible; }
+        bool GetHitTestVisible() const { return m_IsHitTestVisible; }
+
         // Editor & Serialization
         virtual void OnInspect();
         virtual void Serialize(nlohmann::json& outJson) const;
@@ -94,6 +107,12 @@ namespace Lynx
         UIRect m_CachedRect;    // Calculated in Arrange phase
         std::shared_ptr<Material> m_Material; // TODO: Does it make sense to have this here? This is just a base class with no rendering...
 
+        bool m_IsMouseOver = false;
+        bool m_IsPressed = false;
+        bool m_IsHitTestVisible = false;
+
         bool m_IsLayoutDirty = true;
+
+        friend class UICanvas;
     };
 }

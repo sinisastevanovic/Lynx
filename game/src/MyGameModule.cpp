@@ -26,6 +26,7 @@
 #include "Lynx/Scene/Components/UIComponents.h"
 #include "Lynx/UI/Core/UIElement.h"
 #include "Lynx/UI/Widgets/StackPanel.h"
+#include "Lynx/UI/Widgets/UIButton.h"
 #include "Lynx/UI/Widgets/UIImage.h"
 #include "Lynx/UI/Widgets/UIText.h"
 
@@ -155,7 +156,7 @@ void CreateMyUI(std::shared_ptr<Lynx::Scene> scene)
     auto bg = std::make_shared<UIImage>();
     bg->SetName("Background");
     bg->SetAnchor(UIAnchor::StretchAll);
-    bg->SetColor({ 0.1f, 0.1f, 0.2f, 1.0f }); // Dark Blue
+    bg->SetTint({ 0.1f, 0.1f, 0.2f, 1.0f }); // Dark Blue
     root->AddChild(bg);
     
     // 2. Center Panel (The Menu Window)
@@ -163,7 +164,7 @@ void CreateMyUI(std::shared_ptr<Lynx::Scene> scene)
     window->SetName("MenuWindow");
     window->SetAnchor(UIAnchor::Center);
     window->SetSize({ 400.0f, 500.0f }); // Fixed size window
-    window->SetColor({ 0.2f, 0.2f, 0.2f, 0.9f }); // Dark Grey
+    window->SetTint({ 0.2f, 0.2f, 0.2f, 0.9f }); // Dark Grey
     
     // Optional: Give it a border if you have a 9-slice sprite
     // window->SetType(ImageType::Sliced);
@@ -199,38 +200,40 @@ void CreateMyUI(std::shared_ptr<Lynx::Scene> scene)
     // 4. Test Buttons
     
     // A. Stretch Button (Default)
-    auto btnStretch = std::make_shared<UIImage>();
+    auto btnStretch = std::make_shared<UIButton>();
     btnStretch->SetName("Btn_Stretch");
     btnStretch->SetSize({ 0.0f, 50.0f }); // Width ignored in stretch, Height 50
-    btnStretch->SetColor({ 0.2f, 0.6f, 0.2f, 1.0f }); // Green
+    btnStretch->SetTint({ 0.2f, 0.6f, 0.2f, 1.0f }); // Green
     btnStretch->SetHorizontalAlignment(UIAlignment::Stretch);
     stack->AddChild(btnStretch);
 
     auto btnText = std::make_shared<UIText>();
     btnText->SetName("Btn_Text");
+    btnText->SetSize({ 0.0f, 0.0f });
+    btnText->SetAnchor(UIAnchor::StretchAll);
     btnStretch->AddChild(btnText);
     
     // B. Left/Start Button
-    auto btnLeft = std::make_shared<UIImage>();
+    auto btnLeft = std::make_shared<UIButton>();
     btnLeft->SetName("Btn_Left");
     btnLeft->SetSize({ 150.0f, 50.0f }); // Fixed width
-    btnLeft->SetColor({ 0.6f, 0.2f, 0.2f, 1.0f }); // Red
+    btnLeft->SetTint({ 0.6f, 0.2f, 0.2f, 1.0f }); // Red
     btnLeft->SetHorizontalAlignment(UIAlignment::Start);
     stack->AddChild(btnLeft);
     
     // C. Center Button
-    auto btnCenter = std::make_shared<UIImage>();
+    auto btnCenter = std::make_shared<UIButton>();
     btnCenter->SetName("Btn_Center");
     btnCenter->SetSize({ 150.0f, 50.0f });
-    btnCenter->SetColor({ 0.2f, 0.2f, 0.6f, 1.0f }); // Blue
+    btnCenter->SetTint({ 0.2f, 0.2f, 0.6f, 1.0f }); // Blue
     btnCenter->SetHorizontalAlignment(UIAlignment::Center);
     stack->AddChild(btnCenter);
     
     // D. Right/End Button
-    auto btnRight = std::make_shared<UIImage>();
+    auto btnRight = std::make_shared<UIButton>();
     btnRight->SetName("Btn_Right");
     btnRight->SetSize({ 150.0f, 50.0f });
-    btnRight->SetColor({ 0.6f, 0.6f, 0.2f, 1.0f }); // Yellow
+    btnRight->SetTint({ 0.6f, 0.6f, 0.2f, 1.0f }); // Yellow
     btnRight->SetHorizontalAlignment(UIAlignment::End);
     stack->AddChild(btnRight);
 }

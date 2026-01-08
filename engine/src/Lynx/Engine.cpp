@@ -376,6 +376,17 @@ namespace Lynx
             m_EditorCamera.SetViewportSize(viewportSize.first, viewportSize.second);*/
             return false;
         });
+
+        if (m_AppEventCallback)
+        {
+            m_AppEventCallback(e);
+            if (e.Handled)
+                return;
+        }
+        else if (m_Scene)
+        {
+            m_Scene->OnEvent(e);
+        }
     }
 
     void Engine::RegisterScripts()

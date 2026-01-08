@@ -946,7 +946,8 @@ namespace Lynx
 
         m_CompositePass->Execute(m_RenderContext, m_CurrentFrameData);
 
-        m_UIPass->Execute(m_RenderContext, m_CurrentFrameData);
+        if (m_ShowUI)
+            m_UIPass->Execute(m_RenderContext, m_CurrentFrameData);
         
         // 1. Close recording
         m_CommandList->close();

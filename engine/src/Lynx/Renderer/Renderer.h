@@ -79,6 +79,9 @@ namespace Lynx
         void SetShowColliders(bool show) { m_ShowColliders = show; }
         bool GetShowColliders() const { return m_ShowColliders; }
 
+        void SetShowUI(bool show) { m_ShowUI = show; }
+        bool GetShowUI() const { return m_ShowUI; }
+
         const RenderStats& GetRenderStats() const { return m_Stats; }
         void ResetStats();
 
@@ -144,6 +147,7 @@ namespace Lynx
 
         bool m_ShowGrid = true;
         bool m_ShowColliders = false;
+        bool m_ShowUI = true;
         bool m_FXAAEnabled = true;
         float m_MaxAnisotropy = 16.0f;
 

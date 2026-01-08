@@ -121,6 +121,7 @@ namespace Lynx
 
     void Scene::OnRuntimeStart()
     {
+        Engine::Get().GetRenderer().SetShowUI(true);
         UpdateGlobalTransforms();
         
         Engine::Get().GetScriptEngine()->OnRuntimeStart(this);
@@ -363,17 +364,20 @@ namespace Lynx
         }
 
         auto& renderer = Engine::Get().GetRenderer();
-        auto viewportSize = renderer.GetViewportSize();
-        float width = (float)viewportSize.first;
-        float height = (float)viewportSize.second;
-
-        auto uiView = m_Registry.view<UICanvasComponent>();
-        for (auto entity : uiView)
+        if (renderer.GetShowUI())
         {
-            auto& component = uiView.get<UICanvasComponent>(entity);
-            if (component.Canvas)
+            auto viewportSize = renderer.GetViewportSize();
+            float width = (float)viewportSize.first;
+            float height = (float)viewportSize.second;
+
+            auto uiView = m_Registry.view<UICanvasComponent>();
+            for (auto entity : uiView)
             {
-                component.Canvas->Update(deltaTime, width, height);
+                auto& component = uiView.get<UICanvasComponent>(entity);
+                if (component.Canvas)
+                {
+                    component.Canvas->Update(deltaTime, width, height);
+                }
             }
         }
     }
@@ -381,17 +385,35 @@ namespace Lynx
     void Scene::OnUpdateEditor(float deltaTime)
     {
         auto& renderer = Engine::Get().GetRenderer();
-        auto viewportSize = renderer.GetViewportSize();
-        float width = (float)viewportSize.first;
-        float height = (float)viewportSize.second;
-
-        auto uiView = m_Registry.view<UICanvasComponent>();
-        for (auto entity : uiView)
+        if (renderer.GetShowUI())
         {
-            auto& component = uiView.get<UICanvasComponent>(entity);
-            if (component.Canvas)
+            auto viewportSize = renderer.GetViewportSize();
+            float width = (float)viewportSize.first;
+            float height = (float)viewportSize.second;
+
+            auto uiView = m_Registry.view<UICanvasComponent>();
+            for (auto entity : uiView)
             {
-                component.Canvas->Update(deltaTime, width, height);
+                auto& component = uiView.get<UICanvasComponent>(entity);
+                if (component.Canvas)
+                {
+                    component.Canvas->Update(deltaTime, width, height);
+                }
+            }
+        }
+    }
+
+    void Scene::OnEvent(Event& event)
+    {
+        auto& renderer = Engine::Get().GetRenderer();
+        if (renderer.GetShowUI())
+        {
+            auto view = m_Registry.view<UICanvasComponent>();
+            for (auto entity : view)
+            {
+                auto& comp = view.get<UICanvasComponent>(entity);
+                if (comp.Canvas)
+                    comp.Canvas->OnEvent(event);
             }
         }
     }

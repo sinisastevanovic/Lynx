@@ -12,6 +12,9 @@
 #include "Panels/Viewport.h"
 #include "Utils/PlatformUtils.h"
 
+#include "Lynx/Event/KeyEvent.h"
+#include "Lynx/Event/MouseEvent.h"
+
 namespace Lynx
 {
     EditorLayer::EditorLayer(Engine* engine)
@@ -36,11 +39,16 @@ namespace Lynx
         };
         m_Panels.push_back(std::make_unique<SceneHierarchyPanel>(entityCallack, uiCallback));
         m_Panels.push_back(std::make_unique<InspectorPanel>());
-        m_Panels.push_back(std::make_unique<Viewport>(entityCallack));
+
+        auto viewport = std::make_unique<Viewport>(entityCallack);
+        m_ViewportPanel = viewport.get();
+        m_Panels.push_back(std::move(viewport));
         m_Panels.push_back(std::make_unique<AssetBrowserPanel>(assetCallack));
         m_Panels.push_back(std::make_unique<StatsPanel>());
         m_Panels.push_back(std::make_unique<RenderSettings>());
         m_Panels.push_back(std::make_unique<AssetPropertiesPanel>());
+
+        m_Engine->SetAppEventCallback([this](Event& e) { OnEvent(e); });
 
         OnSceneContextChanged(m_EditorScene.get());
     }
@@ -127,6 +135,11 @@ namespace Lynx
                 m_Engine->GetRenderer().SetShowColliders(showColliders);
             }
 
+            if (ImGui::MenuItem("Show UI", nullptr, &m_ShowUI))
+            {
+                m_Engine->GetRenderer().SetShowUI(m_ShowUI);
+            }
+
             ImGui::PopItemFlag();
             ImGui::EndPopup();
         }
@@ -171,7 +184,57 @@ namespace Lynx
         OnSceneContextChanged(m_EditorScene.get());
         m_RuntimeScene = nullptr;
 
+        m_Engine->GetRenderer().SetShowUI(m_ShowUI);
         m_Engine->GetScriptEngine()->OnEditorStart(m_Engine->GetActiveScene().get());
+    }
+
+    void EditorLayer::OnEvent(Event& e)
+    {
+        if (!m_ViewportPanel)
+            return;
+
+        EventDispatcher dispatcher(e);
+
+        dispatcher.Dispatch<MouseMovedEvent>([this](MouseMovedEvent& e)
+        {
+            glm::vec2 viewportPos = m_ViewportPanel->GetPos();
+            glm::vec2 viewportSize = m_ViewportPanel->GetSize();
+            float mouseX = e.GetX();
+            float mouseY = e.GetY();
+
+            if (mouseX >= viewportPos.x && mouseX <= viewportPos.x + viewportSize.x &&
+                mouseY >= viewportPos.y && mouseY <= viewportPos.y + viewportSize.y)
+            {
+                float localX = mouseX - viewportPos.x;
+                float localY = mouseY - viewportPos.y;
+
+                MouseMovedEvent localE(localX, localY);
+                if (m_Engine->GetActiveScene())
+                    m_Engine->GetActiveScene()->OnEvent(localE);
+
+            }
+            return false;
+        });
+
+        dispatcher.Dispatch<KeyPressedEvent>([this](KeyPressedEvent& e)
+        {
+            if (m_ViewportPanel->IsHovered())
+            {
+                if (m_Engine->GetActiveScene())
+                    m_Engine->GetActiveScene()->OnEvent(e);
+            }
+            return false;
+        });
+
+        dispatcher.Dispatch<KeyReleasedEvent>([this](KeyReleasedEvent& e)
+        {
+            if (m_ViewportPanel->IsHovered())
+            {
+                if (m_Engine->GetActiveScene())
+                    m_Engine->GetActiveScene()->OnEvent(e);
+            }
+            return false;
+        });
     }
 
     void EditorLayer::NewScene()

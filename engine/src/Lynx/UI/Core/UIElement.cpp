@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 #include "Lynx/UI/Rendering/UIBatcher.h"
 #include "Lynx/UI/Widgets/StackPanel.h"
+#include "Lynx/UI/Widgets/UIButton.h"
 #include "Lynx/UI/Widgets/UIImage.h"
 #include "Lynx/UI/Widgets/UIText.h"
 
@@ -201,6 +202,15 @@ namespace Lynx
         
     }
 
+    bool UIElement::HitTest(const glm::vec2& point)
+    {
+        if (m_Visibility != UIVisibility::Visible || !m_IsHitTestVisible)
+            return false;
+
+        return (point.x >= m_CachedRect.X && point.x <= m_CachedRect.X + m_CachedRect.Width &&
+                point.y >= m_CachedRect.Y && point.y <= m_CachedRect.Y + m_CachedRect.Height);
+    }
+
     void UIElement::OnInspect()
     {
         char buffer[256];
@@ -283,6 +293,10 @@ namespace Lynx
         {
             SetVisibility((UIVisibility)currentVis);
         }
+
+        ImGui::Separator();
+        ImGui::Text("Misc");
+        ImGui::Checkbox("Hit Test Visible", &m_IsHitTestVisible);
     }
 
     void UIElement::Serialize(nlohmann::json& outJson) const
@@ -297,6 +311,7 @@ namespace Lynx
         outJson["Size"] = { m_Size.Width, m_Size.Height };
         outJson["HorizontalAlignment"] = (int)m_HorizontalAlignment;
         outJson["VerticalAlignment"] = (int)m_VerticalAlignment;
+        outJson["HitTestVisible"] = m_IsHitTestVisible;
 
         // Recursively serialize children
         std::vector<nlohmann::json> childrenArray;
@@ -336,13 +351,11 @@ namespace Lynx
             m_Size = { s[0], s[1] };
         }
         if (json.contains("HorizontalAlignment"))
-        {
             m_HorizontalAlignment = (UIAlignment)json["HorizontalAlignment"];
-        }
         if (json.contains("VerticalAlignment"))
-        {
             m_VerticalAlignment = (UIAlignment)json["VerticalAlignment"];
-        }
+        if (json.contains("HitTestVisible"))
+            m_IsHitTestVisible = (bool)json["HitTestVisible"];
 
         if (json.contains("Children"))
         {
@@ -358,6 +371,8 @@ namespace Lynx
                     child = std::make_shared<StackPanel>();
                 else if (type == "UIText")
                     child = std::make_shared<UIText>();
+                else if (type == "UIButton")
+                    child = std::make_shared<UIButton>();
                 else
                     child = std::make_shared<UIElement>();
 

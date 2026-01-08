@@ -52,6 +52,8 @@ namespace Lynx
         void SetBlockEvents(bool block) { m_BlockEvents = block; }
         bool AreEventsBlocked() const { return m_BlockEvents; }
 
+        using EventCallbackFn = std::function<void(Event&)>;
+        void SetAppEventCallback(const EventCallbackFn& callback) { m_AppEventCallback = callback; }
 
     private:
         void OnEvent(Event& e);
@@ -80,6 +82,7 @@ namespace Lynx
         SceneState m_SceneState = SceneState::Play;
 
         bool m_BlockEvents = false;
+        EventCallbackFn m_AppEventCallback;
     };
 }
 

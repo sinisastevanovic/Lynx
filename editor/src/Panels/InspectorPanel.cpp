@@ -2,7 +2,6 @@
 #include <imgui.h>
 
 #include "Lynx/Scene/Components/Components.h"
-#include "Lynx/UI/Widgets/UIImage.h"
 
 namespace Lynx
 {
@@ -91,14 +90,6 @@ namespace Lynx
         else if (m_Context && m_SelectedUIElement)
         {
             m_SelectedUIElement->OnInspect();
-
-            // TODO: For testing
-            if (ImGui::Button("Add Child Image"))
-            {
-                auto child = std::make_shared<UIImage>();
-                child->SetName("New Image");
-                m_SelectedUIElement->AddChild(child);
-            }
         }
         ImGui::End();
     }

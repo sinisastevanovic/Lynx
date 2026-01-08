@@ -5,6 +5,10 @@
 #include "Lynx/Scene/Entity.h"
 #include "Lynx/Scene/Components/Components.h"
 #include "Lynx/Scene/Components/UIComponents.h"
+#include "Lynx/UI/Widgets/StackPanel.h"
+#include "Lynx/UI/Widgets/UIButton.h"
+#include "Lynx/UI/Widgets/UIImage.h"
+#include "Lynx/UI/Widgets/UIText.h"
 
 namespace Lynx
 {
@@ -92,6 +96,7 @@ namespace Lynx
 
     void SceneHierarchyPanel::OnSelectedEntityChanged(entt::entity selectedEntity)
     {
+        m_SelectedUIElement = nullptr;
         m_Selection = selectedEntity;
     }
 
@@ -187,6 +192,76 @@ namespace Lynx
             flags |= ImGuiTreeNodeFlags_Leaf;
 
         bool opened = ImGui::TreeNodeEx((void*)element.get(), flags, element->GetName().c_str());
+
+        if (ImGui::BeginPopupContextItem())
+        {
+            if (ImGui::BeginMenu("Create"))
+            {
+                if (ImGui::MenuItem("Image"))
+                {
+                    auto child = std::make_shared<UIImage>();
+                    child->SetName("Image");
+                    element->AddChild(child);
+                }
+                if (ImGui::MenuItem("Text"))
+                {
+                    auto child = std::make_shared<UIText>();
+                    child->SetName("Text");
+                    element->AddChild(child);
+                }
+                if (ImGui::MenuItem("Button"))
+                {
+                    auto child = std::make_shared<UIButton>();
+                    child->SetName("Button");
+                    element->AddChild(child);
+                }
+                if (ImGui::MenuItem("Text Button"))
+                {
+                    auto child = std::make_shared<UIButton>();
+                    child->SetName("TextButton");
+                    element->AddChild(child);
+
+                    auto label = std::make_shared<UIText>();
+                    label->SetName("Text");
+                    label->SetSize({ 0.0, 0.0 });
+                    label->SetAnchor(UIAnchor::StretchAll);
+                    label->SetTextAlignment(TextAlignment::Center);
+                    label->SetVerticalAlignment(TextVerticalAlignment::Center);
+                    child->AddChild(label);
+                }
+                if (ImGui::MenuItem("Stack Panel"))
+                {
+                    auto child = std::make_shared<StackPanel>();
+                    child->SetName("Stack Panel");
+                    element->AddChild(child);
+                }
+                if (ImGui::MenuItem("Empty"))
+                {
+                    auto child = std::make_shared<UIElement>();
+                    child->SetName("Element");
+                    element->AddChild(child);
+                }
+                ImGui::EndMenu();
+            }
+
+            bool hasParent = element->GetParent() != nullptr;
+            if (!hasParent)
+                ImGui::BeginDisabled(true);
+            if (ImGui::MenuItem("Delete"))
+            {
+                // TODO: reparent children?
+                element->GetParent()->RemoveChild(element);
+                if (m_SelectedUIElement == element)
+                {
+                    m_SelectedUIElement = nullptr;
+                    OnSelectedUIElementChangedCallback(nullptr);
+                }
+            }
+            if (!hasParent)
+                ImGui::EndDisabled();
+
+            ImGui::EndPopup();
+        }
 
         if (ImGui::IsItemClicked() && OnSelectedUIElementChangedCallback)
         {
