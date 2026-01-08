@@ -14,7 +14,7 @@ namespace Lynx
         m_Name = "Image";
     }
 
-    void UIImage::OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale)
+    void UIImage::OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale, glm::vec4 parentTint)
     {
         if (m_Visibility != UIVisibility::Visible)
             return;
@@ -49,11 +49,11 @@ namespace Lynx
 
         if (m_ImageType == ImageType::Simple)
         {
-            batcher.DrawRect(screenRect, GetTint(), m_Material, textureToDraw, uvMin, uvMax);
+            batcher.DrawRect(screenRect, GetTint() * parentTint, m_Material, textureToDraw, uvMin, uvMax);
         }
         else if (m_ImageType == ImageType::Sliced)
         {
-            batcher.DrawNineSlice(screenRect, m_Border, GetTint(), m_Material, textureToDraw, uvMin, uvMax);
+            batcher.DrawNineSlice(screenRect, m_Border, GetTint() * parentTint, m_Material, textureToDraw, uvMin, uvMax);
         }
     }
 

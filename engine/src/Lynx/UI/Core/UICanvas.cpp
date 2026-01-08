@@ -135,7 +135,7 @@ namespace Lynx
                 pressed->OnMouseUp();
 
                 auto hovered = m_HoveredElement.lock();
-                if (pressed == hovered)
+                if (pressed == hovered && pressed->IsEnabled())
                 {
                     pressed->OnClick();
                 }

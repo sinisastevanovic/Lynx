@@ -43,7 +43,7 @@ namespace Lynx
         TextVerticalAlignment GetTextVerticalAlignment() const { return m_VAlignment; }
 
         void OnMeasure(UISize availableSize) override;
-        void OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale) override;
+        void OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale, glm::vec4 parentTint) override;
 
         void OnInspect() override;
         void Serialize(nlohmann::json& outJson) const override;

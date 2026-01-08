@@ -54,7 +54,7 @@ namespace Lynx
         void DrawString(const std::string& text, std::shared_ptr<Font> font, float fontSize, glm::vec2 position, const glm::vec4& color);
 
     private:
-        void TraverseAndCollect(std::shared_ptr<UIElement> element, float scale, float parentOpacity);
+        void TraverseAndCollect(std::shared_ptr<UIElement> element, float scale, float parentOpacity, glm::vec4 parentTint);
         void AddQuad(const UIRect& rect, const glm::vec4& color, glm::vec2 uvMin, glm::vec2 uvMax);
         void ResizeBuffers(size_t numVerts, size_t numIndices);
 

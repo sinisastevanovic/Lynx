@@ -94,7 +94,7 @@ namespace Lynx
         RecalculateDesiredSize();
     }
 
-    void UIText::OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale)
+    void UIText::OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale, glm::vec4 parentTint)
     {
         if (!m_Font || m_Text.empty())
             return;
@@ -124,7 +124,7 @@ namespace Lynx
                 y += screenRect.Height + descender;
         }
 
-        batcher.DrawString(m_Text, m_Font, finalFontSize, { x, y }, m_Color);
+        batcher.DrawString(m_Text, m_Font, finalFontSize, { x, y }, m_Color * parentTint);
     }
 
     void UIText::OnInspect()

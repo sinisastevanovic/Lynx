@@ -52,15 +52,18 @@ namespace Lynx
         float GetOpacity() const { return m_Opacity; }
         void SetMaterial(std::shared_ptr<Material> material) { m_Material = material; }
         std::shared_ptr<Material> GetMaterial() const { return m_Material; }
+        glm::vec4 GetContentColor() const { return m_ContentColor; }
 
         // Logic
         virtual void OnUpdate(float deltaTime);
         virtual void OnMeasure(UISize availableSize);
         virtual void OnArrange(UIRect finalRect);
-        virtual void OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale);
+        virtual void OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale, glm::vec4 parentTint);
 
         // Interaction
         virtual bool HitTest(const glm::vec2& point);
+        void SetEnabled(bool enabled);
+        bool IsEnabled() const { return m_IsEnabled; }
         virtual void OnMouseEnter() {}
         virtual void OnMouseLeave() {}
         virtual void OnMouseDown() {}
@@ -103,6 +106,7 @@ namespace Lynx
 
         UIVisibility m_Visibility = UIVisibility::Visible;
         float m_Opacity = 1.0f;
+        glm::vec4 m_ContentColor = { 1.0f, 1.0f, 1.0f, 1.0f };
 
         UIRect m_CachedRect;    // Calculated in Arrange phase
         std::shared_ptr<Material> m_Material; // TODO: Does it make sense to have this here? This is just a base class with no rendering...
@@ -110,6 +114,7 @@ namespace Lynx
         bool m_IsMouseOver = false;
         bool m_IsPressed = false;
         bool m_IsHitTestVisible = false;
+        bool m_IsEnabled = true;
 
         bool m_IsLayoutDirty = true;
 

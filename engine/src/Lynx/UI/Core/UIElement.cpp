@@ -197,7 +197,7 @@ namespace Lynx
         }
     }
 
-    void UIElement::OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale)
+    void UIElement::OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale, glm::vec4 parentTint)
     {
         
     }
@@ -209,6 +209,12 @@ namespace Lynx
 
         return (point.x >= m_CachedRect.X && point.x <= m_CachedRect.X + m_CachedRect.Width &&
                 point.y >= m_CachedRect.Y && point.y <= m_CachedRect.Y + m_CachedRect.Height);
+    }
+
+    void UIElement::SetEnabled(bool enabled)
+    {
+        m_IsEnabled = enabled;
+        m_ContentColor = m_IsEnabled ? glm::vec4(1.0f) : glm::vec4(0.7f, 0.7f, 0.7f, 1.0f);
     }
 
     void UIElement::OnInspect()
@@ -297,6 +303,11 @@ namespace Lynx
         ImGui::Separator();
         ImGui::Text("Misc");
         ImGui::Checkbox("Hit Test Visible", &m_IsHitTestVisible);
+        bool enabled = m_IsEnabled;
+        if (ImGui::Checkbox("Enabled", &enabled))
+        {
+            SetEnabled(enabled);
+        }
     }
 
     void UIElement::Serialize(nlohmann::json& outJson) const
@@ -312,6 +323,7 @@ namespace Lynx
         outJson["HorizontalAlignment"] = (int)m_HorizontalAlignment;
         outJson["VerticalAlignment"] = (int)m_VerticalAlignment;
         outJson["HitTestVisible"] = m_IsHitTestVisible;
+        outJson["Enabled"] = m_IsEnabled;
 
         // Recursively serialize children
         std::vector<nlohmann::json> childrenArray;
@@ -356,6 +368,8 @@ namespace Lynx
             m_VerticalAlignment = (UIAlignment)json["VerticalAlignment"];
         if (json.contains("HitTestVisible"))
             m_IsHitTestVisible = (bool)json["HitTestVisible"];
+        if (json.contains("Enabled"))
+            m_IsEnabled = (bool)json["Enabled"];
 
         if (json.contains("Children"))
         {

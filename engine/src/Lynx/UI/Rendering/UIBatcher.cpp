@@ -57,7 +57,7 @@ namespace Lynx
             return;
 
         float scale = canvas->GetScaleFactor();
-        TraverseAndCollect(canvas, scale, canvas->GetOpacity());
+        TraverseAndCollect(canvas, scale, canvas->GetOpacity(), canvas->GetContentColor());
     }
 
     void UIBatcher::DrawRect(const UIRect& rect, const glm::vec4& color, std::shared_ptr<Material> material, std::shared_ptr<Texture> textureOverride,
@@ -225,7 +225,7 @@ namespace Lynx
         }
     }
 
-    void UIBatcher::TraverseAndCollect(std::shared_ptr<UIElement> element, float scale, float parentOpacity)
+    void UIBatcher::TraverseAndCollect(std::shared_ptr<UIElement> element, float scale, float parentOpacity, glm::vec4 parentTint)
     {
         // TODO: Should we only upload if ui is dirty??
         if (element->GetVisibility() != UIVisibility::Visible)
@@ -235,6 +235,8 @@ namespace Lynx
         m_CurrentOpacity = finalOpacity;
         if (finalOpacity <= 0.01f)
             return;
+        
+        glm::vec4 currentTint = parentTint * element->GetContentColor();
 
         UIRect cachedRect = element->GetCachedRect();
 
@@ -255,11 +257,11 @@ namespace Lynx
             AddQuad(pixelRect, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), {0.0f, 0.0f}, {1.0f, 1.0f}); // 50% opacity
         }*/
 
-        element->OnDraw(*this, pixelRect, scale);
+        element->OnDraw(*this, pixelRect, scale, parentTint);
 
         for (const auto& child : element->GetChildren())
         {
-            TraverseAndCollect(child, scale, finalOpacity);
+            TraverseAndCollect(child, scale, finalOpacity, currentTint);
         }
     }
     

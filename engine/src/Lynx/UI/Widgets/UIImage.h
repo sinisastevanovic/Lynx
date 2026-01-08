@@ -20,7 +20,7 @@ namespace Lynx
         UIImage();
         ~UIImage() override = default;
 
-        void OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale) override;
+        void OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale, glm::vec4 parentTint) override;
 
         void SetImage(std::shared_ptr<Asset> image);
         std::shared_ptr<Asset> GetImage() const { return m_ImageResource; }
