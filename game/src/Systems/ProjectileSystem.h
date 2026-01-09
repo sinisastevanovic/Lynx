@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 
+#include "DamageSystem.h"
 #include "Components/GameComponents.h"
 #include "Lynx/Scene/Scene.h"
 #include "Lynx/Scene/Components/Components.h"
@@ -42,6 +43,8 @@ public:
                     {
                         scene->DestroyEntity(targetEntity);
                     }
+                    
+                    DamageTextSystem::Spawn(targetTransform.Translation, (int)(projectile.Damage));
 
                     bulletsToDestroy.push_back(entity);
                     break;

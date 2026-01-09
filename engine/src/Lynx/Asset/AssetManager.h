@@ -66,6 +66,7 @@ namespace Lynx
 
         void Update();
         void ReloadAsset(AssetHandle handle);
+        void UnloadAsset(AssetHandle handle);
   
     private:
         std::shared_ptr<Asset> LoadAsset(const AssetMetadata& metadata, AssetLoadMode mode, std::function<void(AssetHandle)> onLoaded);
@@ -74,7 +75,6 @@ namespace Lynx
         template<typename T>
         std::shared_ptr<T> GetErrorAsset() { return nullptr; }
 
-        void UnloadAsset(AssetHandle handle);
   
     private:
         AssetRegistry* m_AssetRegistry = nullptr;

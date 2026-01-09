@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "ComponentRegistry.h"
+#include "TypeRegistry.h"
 #include "Window.h"
 #include "Asset/AssetManager.h"
 #include "Renderer/Renderer.h"
@@ -39,7 +39,9 @@ namespace Lynx
         Renderer& GetRenderer() { return *m_Renderer; }
         ScriptEngine* GetScriptEngine() { return m_ScriptEngine.get(); }
         EditorCamera& GetEditorCamera() { return m_EditorCamera; }
-        ComponentRegistry& GetComponentRegistry() { return m_ComponentRegistry;}
+        TypeRegistry& GetComponentRegistry() { return m_ComponentRegistry;}
+        
+        void ClearGameTypes();
         
         std::shared_ptr<Scene> GetActiveScene() const { return m_Scene; }
         void SetActiveScene(std::shared_ptr<Scene> scene) { m_Scene = scene; }
@@ -57,8 +59,8 @@ namespace Lynx
 
     private:
         void OnEvent(Event& e);
-        void RegisterScripts();
-        void RegisterComponents();
+        void RegisterCoreScripts();
+        void RegisterCoreComponents();
 
     private:
         static Engine* s_Instance;
@@ -70,7 +72,7 @@ namespace Lynx
         std::unique_ptr<PhysicsSystem> m_PhysicsSystem;
         std::unique_ptr<ScriptEngine> m_ScriptEngine;
         std::shared_ptr<Scene> m_Scene;
-        ComponentRegistry m_ComponentRegistry;
+        TypeRegistry m_ComponentRegistry;
         ParticleSystem m_ParticleSystem;
         
         EditorCamera m_EditorCamera;
@@ -83,6 +85,8 @@ namespace Lynx
 
         bool m_BlockEvents = false;
         EventCallbackFn m_AppEventCallback;
+        
+        IGameModule* m_GameModule = nullptr;
     };
 }
 

@@ -1,6 +1,6 @@
 #include "MyGameModule.h"
 
-#include <Lynx/ComponentRegistry.h>
+#include <Lynx/TypeRegistry.h>
 #include <Lynx/Scene/Scene.h>
 #include <Lynx/Scene/Components/Components.h>
 #include <Lynx/Scene/Entity.h>
@@ -19,7 +19,6 @@
 #include <nlohmann/json.hpp>
 
 #include "Components/TestNativeScript.h"
-#include "Lynx/ScriptRegistry.h"
 #include "Lynx/Asset/Sprite.h"
 #include "Lynx/Scene/Components/LuaScriptComponent.h"
 #include "Lynx/Scene/Components/NativeScriptComponent.h"
@@ -30,20 +29,15 @@
 #include "Lynx/UI/Widgets/UIImage.h"
 #include "Lynx/UI/Widgets/UIText.h"
 
-void MyGame::RegisterScripts()
+void MyGame::RegisterScripts(Lynx::GameTypeRegistry* registry)
 {
-    Lynx::ScriptRegistry::RegisterScript<TestNativeScript>("TestNativeScript");
+    registry->RegisterScript<TestNativeScript>("TestNativeScript");
 }
 
-void MyGame::RegisterComponents(Lynx::ComponentRegistry* registry)
+void MyGame::RegisterComponents(Lynx::GameTypeRegistry* registry)
 {
     LX_INFO("Registering custom types...");
     registry->RegisterComponent<PlayerComponent>("Player Component",
-    [](entt::registry& reg, entt::entity entity)
-    {
-        auto& player = reg.get<PlayerComponent>(entity);
-        ImGui::DragFloat("Move Speed", &player.MoveSpeed, 0.1f);
-    },
     [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
     {
         auto& playerComponent = reg.get<PlayerComponent>(entity);
@@ -53,15 +47,14 @@ void MyGame::RegisterComponents(Lynx::ComponentRegistry* registry)
     {
         auto& playerComponent = reg.get_or_emplace<PlayerComponent>(entity);
         playerComponent.MoveSpeed = json["MoveSpeed"];
+    },
+    [](entt::registry& reg, entt::entity entity)
+    {
+        auto& player = reg.get<PlayerComponent>(entity);
+        ImGui::DragFloat("Move Speed", &player.MoveSpeed, 0.1f);
     });
 
     registry->RegisterComponent<EnemyComponent>("Enemy Component",
-    [](entt::registry& reg, entt::entity entity)
-    {
-        auto& comp = reg.get<EnemyComponent>(entity);
-        ImGui::DragFloat("Move Speed", &comp.MoveSpeed, 0.1f);
-        ImGui::DragFloat("Health", &comp.Health, 0.1f);
-    },
     [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
     {
         auto& comp = reg.get<EnemyComponent>(entity);
@@ -73,15 +66,15 @@ void MyGame::RegisterComponents(Lynx::ComponentRegistry* registry)
         auto& comp = reg.get_or_emplace<EnemyComponent>(entity);
         comp.MoveSpeed = json["MoveSpeed"];
         comp.Health = json["Health"];
+    },
+    [](entt::registry& reg, entt::entity entity)
+    {
+        auto& comp = reg.get<EnemyComponent>(entity);
+        ImGui::DragFloat("Move Speed", &comp.MoveSpeed, 0.1f);
+        ImGui::DragFloat("Health", &comp.Health, 0.1f);
     });
 
     registry->RegisterComponent<EnemySpawnerComponent>("EnemySpawnerComponent",
-    [](entt::registry& reg, entt::entity entity)
-    {
-        auto& comp = reg.get<EnemySpawnerComponent>(entity);
-        ImGui::DragFloat("SpawnRate", &comp.SpawnRate, 0.1f);
-        ImGui::DragInt("MaxEnemies", &comp.MaxEnemies, 1);
-    },
     [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
     {
         auto& comp = reg.get<EnemySpawnerComponent>(entity);
@@ -93,17 +86,15 @@ void MyGame::RegisterComponents(Lynx::ComponentRegistry* registry)
         auto& comp = reg.get_or_emplace<EnemySpawnerComponent>(entity);
         comp.SpawnRate = json["SpawnRate"];
         comp.MaxEnemies = json["MaxEnemies"];
+    },
+    [](entt::registry& reg, entt::entity entity)
+    {
+        auto& comp = reg.get<EnemySpawnerComponent>(entity);
+        ImGui::DragFloat("SpawnRate", &comp.SpawnRate, 0.1f);
+        ImGui::DragInt("MaxEnemies", &comp.MaxEnemies, 1);
     });
 
     registry->RegisterComponent<WeaponComponent>("Weapon Component",
-    [](entt::registry& reg, entt::entity entity)
-    {
-        auto& comp = reg.get<WeaponComponent>(entity);
-        ImGui::DragFloat("Fire Rate", &comp.FireRate, 0.1f);
-        ImGui::DragFloat("Range", &comp.Range, 0.1f);
-        ImGui::DragFloat("Damage", &comp.Damage, 0.1f);
-        ImGui::DragFloat("Projectile Speed", &comp.ProjectileSpeed, 0.1f);
-    },
     [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
     {
         auto& comp = reg.get<WeaponComponent>(entity);
@@ -119,16 +110,17 @@ void MyGame::RegisterComponents(Lynx::ComponentRegistry* registry)
         comp.Range = json["Range"];
         comp.Damage = json["Damage"];
         comp.ProjectileSpeed = json["ProjectileSpeed"];
+    },
+    [](entt::registry& reg, entt::entity entity)
+    {
+        auto& comp = reg.get<WeaponComponent>(entity);
+        ImGui::DragFloat("Fire Rate", &comp.FireRate, 0.1f);
+        ImGui::DragFloat("Range", &comp.Range, 0.1f);
+        ImGui::DragFloat("Damage", &comp.Damage, 0.1f);
+        ImGui::DragFloat("Projectile Speed", &comp.ProjectileSpeed, 0.1f);
     });
 
     registry->RegisterComponent<ProjectileComponent>("Projectile Component",
-    [](entt::registry& reg, entt::entity entity)
-    {
-        auto& comp = reg.get<ProjectileComponent>(entity);
-        ImGui::DragFloat("Damage", &comp.Damage, 0.1f);
-        ImGui::DragFloat("Lifetime", &comp.Lifetime, 0.1f);
-        ImGui::DragFloat("Radius", &comp.Radius, 0.1f);
-    },
     [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
     {
         auto& comp = reg.get<ProjectileComponent>(entity);
@@ -142,6 +134,13 @@ void MyGame::RegisterComponents(Lynx::ComponentRegistry* registry)
         comp.Damage = json["Damage"];
         comp.Lifetime = json["Lifetime"];
         comp.Radius = json["Radius"];
+    },
+    [](entt::registry& reg, entt::entity entity)
+    {
+        auto& comp = reg.get<ProjectileComponent>(entity);
+        ImGui::DragFloat("Damage", &comp.Damage, 0.1f);
+        ImGui::DragFloat("Lifetime", &comp.Lifetime, 0.1f);
+        ImGui::DragFloat("Radius", &comp.Radius, 0.1f);
     });
 }
 
@@ -150,6 +149,7 @@ void CreateMyUI(std::shared_ptr<Lynx::Scene> scene)
     using namespace Lynx;
     Entity uiEntity = scene->CreateEntity("MainMenu");
     auto& canvasComp = uiEntity.AddComponent<UICanvasComponent>();
+    return;
     auto root = canvasComp.Canvas;
     
     // 1. Fullscreen Background
@@ -166,7 +166,6 @@ void CreateMyUI(std::shared_ptr<Lynx::Scene> scene)
     window->SetSize({ 400.0f, 500.0f }); // Fixed size window
     window->SetTint({ 0.2f, 0.2f, 0.2f, 0.9f }); // Dark Grey
     
-    // Optional: Give it a border if you have a 9-slice sprite
     // window->SetType(ImageType::Sliced);
     // window->SetBorder({5,5,5,5});
     
@@ -178,20 +177,6 @@ void CreateMyUI(std::shared_ptr<Lynx::Scene> scene)
     stack->SetAnchor(UIAnchor::StretchAll); // Fill the window
     stack->SetOffset({ 0.0f, 0.0f }); // Padding 20dp
     stack->SetSize({ 0.0f, 0.0f }); // Negative size delta = margins from Right/Bottom
-    // Note: If your Stretch logic uses Size as Delta, use negative.
-    // If your logic adds Size to Width, you need CalculateBounds to handle "Margin via Size".
-    // Alternatively: Set Anchor Stretch and Offset 20, 20 and Size 0?
-    // Usually: Left=20, Top=20, Right=20, Bottom=20 requires offsets on all sides.
-    // Let's assume standard behavior: Size is ignored in Stretch? Or Size is Delta.
-    
-    // Simpler V1 approach for padding:
-    // Anchor Stretch, Offset 0, Size 0 -> Full fill.
-    // We rely on StackPanel's content centering?
-    // Let's just pin the stack to Top-Center with a width.
-    //stack->SetAnchor(UIAnchor::TopLeft); // Top Left of Window
-    //stack->SetSize({ 360.0f, 460.0f }); // 400 - 40 padding
-    //stack->SetOffset({ 20.0f, 20.0f });
-    //stack->SetPivot({0, 0});
     
     stack->SetOrientation(Orientation::Vertical);
     stack->SetSpacing(15.0f); // 15dp gap between buttons
@@ -354,20 +339,22 @@ void MyGame::OnStart()
         emitter.Properties.SizeEnd = 0.1f;
         emitter.Properties.SizeVariation = 0.2f;
 
-        auto particleMat = std::make_shared<Lynx::Material>();
-        particleMat->AlbedoColor = { 1.0f, 1.0f, 1.0f, 1.0f }; 
-        particleMat->Mode = Lynx::AlphaMode::Additive;
-        particleMat->UseNormalMap = false;
+        m_ParticleMat = std::make_shared<Lynx::Material>();
+        m_ParticleMat->AlbedoColor = { 1.0f, 1.0f, 1.0f, 1.0f }; 
+        m_ParticleMat->Mode = Lynx::AlphaMode::Additive;
+        m_ParticleMat->UseNormalMap = false;
 
-        Lynx::Engine::Get().GetAssetManager().AddRuntimeAsset(particleMat);
+        Lynx::Engine::Get().GetAssetManager().AddRuntimeAsset(m_ParticleMat);
 
-        emitter.Material = particleMat->GetHandle();
+        emitter.Material = m_ParticleMat->GetHandle();
     }
 
     auto spawnerEntity = scene->CreateEntity("Spawner");
     auto& spawner = spawnerEntity.AddComponent<EnemySpawnerComponent>();
 
     CreateMyUI(scene);
+    
+    DamageTextSystem::Init(scene);
 
     Lynx::Input::BindAxis("MoveLeftRight", Lynx::KeyCode::D, Lynx::KeyCode::A);
     Lynx::Input::BindAxis("MoveUpDown", Lynx::KeyCode::S, Lynx::KeyCode::W);
@@ -383,9 +370,12 @@ void MyGame::OnUpdate(float deltaTime)
 
     ProjectileSystem::Update(scene, deltaTime);
     WeaponSystem::Update(scene, deltaTime);
+    DamageTextSystem::Update(deltaTime, scene);
 }
 
 void MyGame::OnShutdown()
 {
     LX_INFO("OnShutdown called.");
+    DamageTextSystem::Shutdown();
+    Lynx::Engine::Get().GetAssetManager().UnloadAsset(m_ParticleMat->GetHandle()); // TODO: This is temporary!! We need a way to clear all runtime game assets. 
 }

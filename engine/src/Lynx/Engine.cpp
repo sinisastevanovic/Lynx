@@ -19,7 +19,6 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <nlohmann/json.hpp>
 
-#include "ScriptRegistry.h"
 #include "Event/ActionEvent.h"
 #include "ImGui/EditorUIHelpers.h"
 #include "Renderer/DebugRenderer.h"
@@ -38,8 +37,8 @@ namespace Lynx
         Log::Init();
         LX_CORE_INFO("Initializing...");
 
-        RegisterScripts();
-        RegisterComponents();
+        RegisterCoreScripts();
+        RegisterCoreComponents();
 
         m_Window = Window::Create();
         m_Window->SetEventCallback([this](Event& event){ this->OnEvent(event); });
@@ -77,9 +76,10 @@ namespace Lynx
 
         if (gameModule)
         {
-            gameModule->RegisterScripts();
-            gameModule->RegisterComponents(&m_ComponentRegistry);
-            gameModule->OnStart();
+            m_GameModule = gameModule;
+            GameTypeRegistry gameReg(m_ComponentRegistry);
+            gameModule->RegisterScripts(&gameReg);
+            gameModule->RegisterComponents(&gameReg);
         }
         auto cubeMesh = m_AssetManager->GetDefaultCube();
 
@@ -285,11 +285,10 @@ namespace Lynx
         }
 
         if (m_Scene && m_SceneState == SceneState::Play)
-            m_Scene->OnRuntimeStop();
-
-        if (gameModule)
         {
-            gameModule->OnShutdown();
+            m_Scene->OnRuntimeStop();
+            if (gameModule)
+                gameModule->OnShutdown();
         }
     }
 
@@ -310,13 +309,28 @@ namespace Lynx
         Log::Shutdown();
     }
 
+    void Engine::ClearGameTypes()
+    {
+        m_ComponentRegistry.ClearGameComponents();
+        m_ComponentRegistry.ClearGameScripts();
+    }
+
     void Engine::SetSceneState(SceneState state)
     {
         m_SceneState = state;
         if (m_SceneState == SceneState::Play)
+        {
             m_Scene->OnRuntimeStart();
+            if (m_GameModule)
+                m_GameModule->OnStart();
+        }
         else if (m_SceneState == SceneState::Edit)
+        {
             m_Scene->OnRuntimeStop();
+            if (m_GameModule)
+                m_GameModule->OnShutdown();
+        }
+        
     }
 
     void Engine::OnEvent(Event& e)
@@ -389,29 +403,14 @@ namespace Lynx
         }
     }
 
-    void Engine::RegisterScripts()
+    void Engine::RegisterCoreScripts()
     {
         
     }
 
-    void Engine::RegisterComponents()
+    void Engine::RegisterCoreComponents()
     {
-        m_ComponentRegistry.RegisterComponent<TransformComponent>("Transform",
-            [](entt::registry& reg, entt::entity entity)
-            {
-                auto& transform = reg.get<TransformComponent>(entity);
-                ImGui::DragFloat3("Translation", &transform.Translation.x, 0.1f);
-
-                glm::vec3 rotation = transform.GetRotationEuler();
-                glm::vec3 rotationDegrees = glm::degrees(rotation);
-                if (ImGui::DragFloat3("Rotation", &rotationDegrees.x, 0.1f))
-                {
-                    glm::vec3 newRotation = glm::radians(rotationDegrees);
-                    transform.SetRotationEuler(newRotation);
-                }
-
-                ImGui::DragFloat3("Scale", &transform.Scale.x, 0.1f);
-            },
+        m_ComponentRegistry.RegisterCoreComponent<TransformComponent>("Transform",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& transform = reg.get<TransformComponent>(entity);
@@ -428,9 +427,24 @@ namespace Lynx
                 transform.Rotation = glm::quat(rot[0], rot[1], rot[2], rot[3]);
                 auto scale = json["Scale"];
                 transform.Scale = glm::vec3(scale[0], scale[1], scale[2]);
+            },
+            [](entt::registry& reg, entt::entity entity)
+            {
+                auto& transform = reg.get<TransformComponent>(entity);
+                ImGui::DragFloat3("Translation", &transform.Translation.x, 0.1f);
+
+                glm::vec3 rotation = transform.GetRotationEuler();
+                glm::vec3 rotationDegrees = glm::degrees(rotation);
+                if (ImGui::DragFloat3("Rotation", &rotationDegrees.x, 0.1f))
+                {
+                    glm::vec3 newRotation = glm::radians(rotationDegrees);
+                    transform.SetRotationEuler(newRotation);
+                }
+
+                ImGui::DragFloat3("Scale", &transform.Scale.x, 0.1f);
             });
 
-        m_ComponentRegistry.RegisterComponent<RelationshipComponent>("Relationship",
+        m_ComponentRegistry.RegisterCoreComponent<RelationshipComponent>("Relationship",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& comp = reg.get<RelationshipComponent>(entity);
@@ -447,18 +461,7 @@ namespace Lynx
                 
             });
 
-        m_ComponentRegistry.RegisterComponent<TagComponent>("Tag",
-            [](entt::registry& reg, entt::entity entity)
-            {
-                auto& tag = reg.get<TagComponent>(entity).Tag;
-                char buffer[256];
-                memset(buffer, 0, sizeof(buffer));
-                strcpy_s(buffer, sizeof(buffer), tag.c_str());
-                if (ImGui::InputText("Tag", buffer, sizeof(buffer)))
-                {
-                    tag = std::string(buffer);
-                }
-            },
+        m_ComponentRegistry.RegisterCoreComponent<TagComponent>("Tag",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& tagComponent = reg.get<TagComponent>(entity);
@@ -469,9 +472,60 @@ namespace Lynx
                 auto& tagComponent = reg.get_or_emplace<TagComponent>(entity);
                 auto tag = json["Tag"];
                 tagComponent.Tag = tag;
+            },
+            [](entt::registry& reg, entt::entity entity)
+            {
+                auto& tag = reg.get<TagComponent>(entity).Tag;
+                char buffer[256];
+                memset(buffer, 0, sizeof(buffer));
+                strcpy_s(buffer, sizeof(buffer), tag.c_str());
+                if (ImGui::InputText("Tag", buffer, sizeof(buffer)))
+                {
+                    tag = std::string(buffer);
+                }
             });
 
-        m_ComponentRegistry.RegisterComponent<CameraComponent>("Camera",
+        m_ComponentRegistry.RegisterCoreComponent<CameraComponent>("Camera",
+            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+            {
+                auto& camComp = reg.get<CameraComponent>(entity);
+
+                auto sceneCamObj = nlohmann::json::object();
+                sceneCamObj["ProjectionType"] = camComp.Camera.GetProjectionType();
+                sceneCamObj["PerspectiveFOV"] = camComp.Camera.GetPerspectiveVerticalFOV();
+                sceneCamObj["PerspectiveNear"] = camComp.Camera.GetPerspectiveNearClip();
+                sceneCamObj["PerspectiveFar"] = camComp.Camera.GetPerspectiveFarClip();
+                sceneCamObj["OrthographicSize"] = camComp.Camera.GetOrthographicSize();
+                sceneCamObj["OrthographicNear"] = camComp.Camera.GetOrthographicNearClip();
+                sceneCamObj["OrthographicFar"] = camComp.Camera.GetOrthographicFarClip();
+                json["SceneCamera"] = sceneCamObj;
+                json["Primary"] = camComp.Primary;
+                json["FixedAspectRatio"] = camComp.FixedAspectRatio;
+            },
+            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+            {
+                auto& camComp = reg.get_or_emplace<CameraComponent>(entity);
+                camComp.Primary = json["Primary"];
+                camComp.FixedAspectRatio = json["FixedAspectRatio"];
+                const auto& sceneCamObj = json["SceneCamera"];
+                const auto& projectionType = sceneCamObj["ProjectionType"];
+                if (projectionType == SceneCamera::ProjectionType::Perspective)
+                {
+                    camComp.Camera.SetPerspective(
+                        sceneCamObj["PerspectiveFOV"],
+                        sceneCamObj["PerspectiveNear"],
+                        sceneCamObj["PerspectiveFar"]
+                    );
+                }
+                else
+                {
+                    camComp.Camera.SetOrthographic(
+                        sceneCamObj["OrthographicSize"],
+                        sceneCamObj["OrthographicNear"],
+                        sceneCamObj["OrthographicFar"]
+                    );
+                }
+            },
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& cameraComp = reg.get<CameraComponent>(entity);
@@ -534,49 +588,19 @@ namespace Lynx
                         cameraComp.Camera.SetOrthographicFarClip(currFar);
                     }
                 }
-            },
+            });
+
+        m_ComponentRegistry.RegisterCoreComponent<MeshComponent>("Mesh",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
-                auto& camComp = reg.get<CameraComponent>(entity);
-
-                auto sceneCamObj = nlohmann::json::object();
-                sceneCamObj["ProjectionType"] = camComp.Camera.GetProjectionType();
-                sceneCamObj["PerspectiveFOV"] = camComp.Camera.GetPerspectiveVerticalFOV();
-                sceneCamObj["PerspectiveNear"] = camComp.Camera.GetPerspectiveNearClip();
-                sceneCamObj["PerspectiveFar"] = camComp.Camera.GetPerspectiveFarClip();
-                sceneCamObj["OrthographicSize"] = camComp.Camera.GetOrthographicSize();
-                sceneCamObj["OrthographicNear"] = camComp.Camera.GetOrthographicNearClip();
-                sceneCamObj["OrthographicFar"] = camComp.Camera.GetOrthographicFarClip();
-                json["SceneCamera"] = sceneCamObj;
-                json["Primary"] = camComp.Primary;
-                json["FixedAspectRatio"] = camComp.FixedAspectRatio;
+                auto& meshComp = reg.get<MeshComponent>(entity);
+                json["Mesh"] = (uint64_t)meshComp.Mesh;
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
-                auto& camComp = reg.get_or_emplace<CameraComponent>(entity);
-                camComp.Primary = json["Primary"];
-                camComp.FixedAspectRatio = json["FixedAspectRatio"];
-                const auto& sceneCamObj = json["SceneCamera"];
-                const auto& projectionType = sceneCamObj["ProjectionType"];
-                if (projectionType == SceneCamera::ProjectionType::Perspective)
-                {
-                    camComp.Camera.SetPerspective(
-                        sceneCamObj["PerspectiveFOV"],
-                        sceneCamObj["PerspectiveNear"],
-                        sceneCamObj["PerspectiveFar"]
-                    );
-                }
-                else
-                {
-                    camComp.Camera.SetOrthographic(
-                        sceneCamObj["OrthographicSize"],
-                        sceneCamObj["OrthographicNear"],
-                        sceneCamObj["OrthographicFar"]
-                    );
-                }
-            });
-
-        m_ComponentRegistry.RegisterComponent<MeshComponent>("Mesh",
+                auto& meshComp = reg.get_or_emplace<MeshComponent>(entity);
+                meshComp.Mesh = AssetHandle(json["Mesh"]);
+            },
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& meshComp = reg.get<MeshComponent>(entity);
@@ -610,19 +634,25 @@ namespace Lynx
                         }
                     }
                 }
-            },
+            });
+
+        m_ComponentRegistry.RegisterCoreComponent<RigidBodyComponent>("RigidBody",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
-                auto& meshComp = reg.get<MeshComponent>(entity);
-                json["Mesh"] = (uint64_t)meshComp.Mesh;
+                auto& rbComp = reg.get<RigidBodyComponent>(entity);
+                json["Type"] = rbComp.Type;
+                json["LockRotationX"] = rbComp.LockRotationX;
+                json["LockRotationY"] = rbComp.LockRotationY;
+                json["LockRotationZ"] = rbComp.LockRotationZ;
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
-                auto& meshComp = reg.get_or_emplace<MeshComponent>(entity);
-                meshComp.Mesh = AssetHandle(json["Mesh"]);
-            });
-
-        m_ComponentRegistry.RegisterComponent<RigidBodyComponent>("RigidBody",
+                auto& rbComp = reg.get_or_emplace<RigidBodyComponent>(entity);
+                rbComp.Type = json["Type"];
+                rbComp.LockRotationX = json["LockRotationX"];
+                rbComp.LockRotationY = json["LockRotationY"];
+                rbComp.LockRotationZ = json["LockRotationZ"];
+            },
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& rbComp = reg.get<RigidBodyComponent>(entity);
@@ -650,30 +680,9 @@ namespace Lynx
                 ImGui::Checkbox("LockRotationX", &rbComp.LockRotationX);
                 ImGui::Checkbox("LockRotationY", &rbComp.LockRotationY);
                 ImGui::Checkbox("LockRotationZ", &rbComp.LockRotationZ);
-            },
-            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
-            {
-                auto& rbComp = reg.get<RigidBodyComponent>(entity);
-                json["Type"] = rbComp.Type;
-                json["LockRotationX"] = rbComp.LockRotationX;
-                json["LockRotationY"] = rbComp.LockRotationY;
-                json["LockRotationZ"] = rbComp.LockRotationZ;
-            },
-            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
-            {
-                auto& rbComp = reg.get_or_emplace<RigidBodyComponent>(entity);
-                rbComp.Type = json["Type"];
-                rbComp.LockRotationX = json["LockRotationX"];
-                rbComp.LockRotationY = json["LockRotationY"];
-                rbComp.LockRotationZ = json["LockRotationZ"];
             });
 
-        m_ComponentRegistry.RegisterComponent<BoxColliderComponent>("BoxCollider",
-            [](entt::registry& reg, entt::entity entity)
-            {
-                auto& bcComp = reg.get<BoxColliderComponent>(entity);
-                ImGui::DragFloat3("Half Size", &bcComp.HalfSize.x);
-            },
+        m_ComponentRegistry.RegisterCoreComponent<BoxColliderComponent>("BoxCollider",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& bcComp = reg.get<BoxColliderComponent>(entity);
@@ -684,14 +693,14 @@ namespace Lynx
                 auto& bcComp = reg.get_or_emplace<BoxColliderComponent>(entity);
                 const auto& halfSize = json["HalfSize"];
                 bcComp.HalfSize = glm::vec3(halfSize[0], halfSize[1], halfSize[2]);
-            });
-
-        m_ComponentRegistry.RegisterComponent<SphereColliderComponent>("SphereCollider",
+            },
             [](entt::registry& reg, entt::entity entity)
             {
-                auto& scComp = reg.get<SphereColliderComponent>(entity);
-                ImGui::DragFloat("Radius", &scComp.Radius);
-            },
+                auto& bcComp = reg.get<BoxColliderComponent>(entity);
+                ImGui::DragFloat3("Half Size", &bcComp.HalfSize.x);
+            });
+
+        m_ComponentRegistry.RegisterCoreComponent<SphereColliderComponent>("SphereCollider",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& scComp = reg.get<SphereColliderComponent>(entity);
@@ -701,15 +710,14 @@ namespace Lynx
             {
                 auto& scComp = reg.get_or_emplace<SphereColliderComponent>(entity);
                 scComp.Radius = json["Radius"];
-            });
-
-        m_ComponentRegistry.RegisterComponent<CapsuleColliderComponent>("CapsuleCollider",
+            },
             [](entt::registry& reg, entt::entity entity)
             {
-                auto& ccComp = reg.get<CapsuleColliderComponent>(entity);
-                ImGui::DragFloat("Radius", &ccComp.Radius);
-                ImGui::DragFloat("HalfHeight", &ccComp.HalfHeight);
-            },
+                auto& scComp = reg.get<SphereColliderComponent>(entity);
+                ImGui::DragFloat("Radius", &scComp.Radius);
+            });
+
+        m_ComponentRegistry.RegisterCoreComponent<CapsuleColliderComponent>("CapsuleCollider",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& ccComp = reg.get<CapsuleColliderComponent>(entity);
@@ -721,30 +729,15 @@ namespace Lynx
                 auto& ccComp = reg.get_or_emplace<CapsuleColliderComponent>(entity);
                 ccComp.Radius = json["Radius"];
                 ccComp.HalfHeight = json["HalfHeight"];
-            });
-
-        m_ComponentRegistry.RegisterComponent<NativeScriptComponent>("NativeScript",
+            },
             [](entt::registry& reg, entt::entity entity)
             {
-                auto& nscComp = reg.get<NativeScriptComponent>(entity);
+                auto& ccComp = reg.get<CapsuleColliderComponent>(entity);
+                ImGui::DragFloat("Radius", &ccComp.Radius);
+                ImGui::DragFloat("HalfHeight", &ccComp.HalfHeight);
+            });
 
-                std::string current = nscComp.ScriptName.empty() ? "None" : nscComp.ScriptName;
-                if (ImGui::BeginCombo("Script Class", current.c_str()))
-                {
-                    for (const auto& [name, bindFunc] : ScriptRegistry::GetRegisteredScripts())
-                    {
-                        bool isSelected = current == name;
-                        if (ImGui::Selectable(name.c_str(), isSelected))
-                        {
-                            nscComp.ScriptName = name;
-                            ScriptRegistry::Bind(name, nscComp);
-                        }
-                        if (isSelected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-            },
+        m_ComponentRegistry.RegisterCoreComponent<NativeScriptComponent>("NativeScript",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& nscComp = reg.get<NativeScriptComponent>(entity);
@@ -756,17 +749,32 @@ namespace Lynx
                 if (json.contains("ScriptName"))
                 {
                     std::string scriptName = json["ScriptName"];
-                    ScriptRegistry::Bind(scriptName, nscComp);
+                    Engine::Get().GetComponentRegistry().BindScript(scriptName, nscComp);
+                }
+            },
+            [](entt::registry& reg, entt::entity entity)
+            {
+                auto& nscComp = reg.get<NativeScriptComponent>(entity);
+
+                std::string current = nscComp.ScriptName.empty() ? "None" : nscComp.ScriptName;
+                if (ImGui::BeginCombo("Script Class", current.c_str()))
+                {
+                    for (const auto& [name, bindFunc] : Engine::Get().GetComponentRegistry().GetRegisteredScripts())
+                    {
+                        bool isSelected = current == name;
+                        if (ImGui::Selectable(name.c_str(), isSelected))
+                        {
+                            nscComp.ScriptName = name;
+                            Engine::Get().GetComponentRegistry().BindScript(name, nscComp);
+                        }
+                        if (isSelected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
                 }
             });
 
-        m_ComponentRegistry.RegisterComponent<LuaScriptComponent>("LuaScript",
-            [](entt::registry& reg, entt::entity entity)
-            {
-                auto& lscComp = reg.get<LuaScriptComponent>(entity);
-                EditorUIHelpers::DrawAssetSelection("Script", lscComp.ScriptHandle, {AssetType::Script});
-                EditorUIHelpers::DrawLuaScriptSection(&lscComp);
-            },
+        m_ComponentRegistry.RegisterCoreComponent<LuaScriptComponent>("LuaScript",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& lscComp = reg.get<LuaScriptComponent>(entity);
@@ -867,16 +875,15 @@ namespace Lynx
                         }
                     }
                 }
-            });
-
-        m_ComponentRegistry.RegisterComponent<DirectionalLightComponent>("DirectionalLight",
+            },
             [](entt::registry& reg, entt::entity entity)
             {
-                auto& light = reg.get<DirectionalLightComponent>(entity);
-                ImGui::ColorEdit3("Color", &light.Color.x);
-                ImGui::DragFloat("Intensity", &light.Intensity, 0.1f, 0.0f, 100.0f);
-                ImGui::Checkbox("Cast Shadows", &light.CastShadows);
-            },
+                auto& lscComp = reg.get<LuaScriptComponent>(entity);
+                EditorUIHelpers::DrawAssetSelection("Script", lscComp.ScriptHandle, {AssetType::Script});
+                EditorUIHelpers::DrawLuaScriptSection(&lscComp);
+            });
+
+        m_ComponentRegistry.RegisterCoreComponent<DirectionalLightComponent>("DirectionalLight",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& light = reg.get<DirectionalLightComponent>(entity);
@@ -891,55 +898,16 @@ namespace Lynx
                 light.Color = glm::vec3(color[0], color[1], color[2]);
                 light.Intensity = json["Intensity"];
                 light.CastShadows = json["CastShadows"];
-            });
-
-        m_ComponentRegistry.RegisterComponent<ParticleEmitterComponent>("ParticleEmitter",
+            },
             [](entt::registry& reg, entt::entity entity)
             {
-                auto& comp = reg.get<ParticleEmitterComponent>(entity);
-                EditorUIHelpers::DrawAssetSelection("Material", comp.Material, {AssetType::Material});
+                auto& light = reg.get<DirectionalLightComponent>(entity);
+                ImGui::ColorEdit3("Color", &light.Color.x);
+                ImGui::DragFloat("Intensity", &light.Intensity, 0.1f, 0.0f, 100.0f);
+                ImGui::Checkbox("Cast Shadows", &light.CastShadows);
+            });
 
-                int maxP = (int)comp.MaxParticles;
-                if (ImGui::DragInt("Max Particles", &maxP, 1.0f, 1, 100000))
-                {
-                    comp.SetMaxParticles(maxP);
-                }
-                
-                ImGui::DragFloat("Emission Rate", &comp.EmissionRate, 0.1f, 0.0f, 1000.0f);
-                if (ImGui::Checkbox("Looping", &comp.IsLooping))
-                {
-                    comp.BurstDone = false;
-                }
-
-                if (!comp.IsLooping)
-                {
-                    ImGui::SameLine();
-                    if (ImGui::Button("Play Burst"))
-                    {
-                        comp.BurstDone = false;
-                    }
-                }
-
-                ImGui::Checkbox("Depth Sorting", &comp.DepthSorting);
-                
-                if (ImGui::TreeNode("Properties"))
-                {
-                    ImGui::DragFloat3("Position Offset", &comp.Properties.Position.x, 0.1f);
-                    ImGui::DragFloat3("Velocity", &comp.Properties.Velocity.x, 0.1f);
-                    ImGui::DragFloat3("Velocity Variation", &comp.Properties.VelocityVariation.x, 0.1f);
-                
-                    ImGui::ColorEdit4("Color Begin", &comp.Properties.ColorBegin.r);
-                    ImGui::ColorEdit4("Color End", &comp.Properties.ColorEnd.r);
-                
-                    ImGui::DragFloat("Size Begin", &comp.Properties.SizeBegin, 0.1f);
-                    ImGui::DragFloat("Size End", &comp.Properties.SizeEnd, 0.1f);
-                    ImGui::DragFloat("Size Variation", &comp.Properties.SizeVariation, 0.1f);
-                
-                    ImGui::DragFloat("Life Time", &comp.Properties.LifeTime, 0.1f, 0.0f, 100.0f);
-                
-                    ImGui::TreePop();
-                }
-            },
+        m_ComponentRegistry.RegisterCoreComponent<ParticleEmitterComponent>("ParticleEmitter",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& comp = reg.get<ParticleEmitterComponent>(entity);
@@ -991,8 +959,54 @@ namespace Lynx
                     comp.Properties.SizeVariation = props["SizeVariation"];
                     comp.Properties.LifeTime = props["LifeTime"];
                 }
+            },
+            [](entt::registry& reg, entt::entity entity)
+            {
+                auto& comp = reg.get<ParticleEmitterComponent>(entity);
+                EditorUIHelpers::DrawAssetSelection("Material", comp.Material, {AssetType::Material});
+
+                int maxP = (int)comp.MaxParticles;
+                if (ImGui::DragInt("Max Particles", &maxP, 1.0f, 1, 100000))
+                {
+                    comp.SetMaxParticles(maxP);
+                }
+                
+                ImGui::DragFloat("Emission Rate", &comp.EmissionRate, 0.1f, 0.0f, 1000.0f);
+                if (ImGui::Checkbox("Looping", &comp.IsLooping))
+                {
+                    comp.BurstDone = false;
+                }
+
+                if (!comp.IsLooping)
+                {
+                    ImGui::SameLine();
+                    if (ImGui::Button("Play Burst"))
+                    {
+                        comp.BurstDone = false;
+                    }
+                }
+
+                ImGui::Checkbox("Depth Sorting", &comp.DepthSorting);
+                
+                if (ImGui::TreeNode("Properties"))
+                {
+                    ImGui::DragFloat3("Position Offset", &comp.Properties.Position.x, 0.1f);
+                    ImGui::DragFloat3("Velocity", &comp.Properties.Velocity.x, 0.1f);
+                    ImGui::DragFloat3("Velocity Variation", &comp.Properties.VelocityVariation.x, 0.1f);
+                
+                    ImGui::ColorEdit4("Color Begin", &comp.Properties.ColorBegin.r);
+                    ImGui::ColorEdit4("Color End", &comp.Properties.ColorEnd.r);
+                
+                    ImGui::DragFloat("Size Begin", &comp.Properties.SizeBegin, 0.1f);
+                    ImGui::DragFloat("Size End", &comp.Properties.SizeEnd, 0.1f);
+                    ImGui::DragFloat("Size Variation", &comp.Properties.SizeVariation, 0.1f);
+                
+                    ImGui::DragFloat("Life Time", &comp.Properties.LifeTime, 0.1f, 0.0f, 100.0f);
+                
+                    ImGui::TreePop();
+                }
             });
-        m_ComponentRegistry.RegisterComponent<UICanvasComponent>("UICanvas",
+        m_ComponentRegistry.RegisterCoreComponent<UICanvasComponent>("UICanvas",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& comp = reg.get<UICanvasComponent>(entity);

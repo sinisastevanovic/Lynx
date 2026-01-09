@@ -86,6 +86,7 @@ namespace Lynx
         void ResetStats();
 
         glm::mat4 GetLightViewProjMatrix() const { return m_CurrentFrameData.LightViewProj; }
+        glm::mat4 GetCameraViewProjMatrix() const { return m_CurrentFrameData.ViewProjection; }
 
         BloomSettings& GetBloomSettings() { return m_BloomPass->GetSettings(); }
         const BloomSettings& GetBloomSettings() const { return m_BloomPass->GetSettings(); }

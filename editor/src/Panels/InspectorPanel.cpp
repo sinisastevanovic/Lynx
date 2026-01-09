@@ -60,7 +60,16 @@ namespace Lynx
 
                     if (open)
                     {
-                        info.drawUI(m_Context->Reg(), m_Selection);
+                        if (info.drawUI)
+                        {
+                            info.drawUI(m_Context->Reg(), m_Selection);
+                        }
+                        else
+                        {
+                            ImGui::BeginDisabled(true);
+                            ImGui::Text("No Editor UI implemented.");
+                            ImGui::EndDisabled();
+                        }
                     }
                     
                     ImGui::PopID();

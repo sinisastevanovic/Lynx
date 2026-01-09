@@ -78,9 +78,19 @@ int main(int argc, char** argv)
 
     if (gameModule && destroyFunc)
     {
+        engine.ClearGameTypes();
         destroyFunc(gameModule);
+        gameModule = nullptr;
         LX_CORE_INFO("Game module destroyed.");
     }
+    
+#if defined(_WIN32)
+    if (gameDLL)
+    {
+        FreeLibrary(gameDLL);
+        LX_CORE_INFO("Game DLL unloaded.");
+    }
+#endif
 
     engine.Shutdown();
     std::cout << "--- Editor Finished ---" << std::endl;
