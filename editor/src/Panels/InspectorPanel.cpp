@@ -23,6 +23,17 @@ namespace Lynx
                 {
                     tag = std::string(buffer);
                 }
+                
+                ImGui::SameLine();
+                
+                bool isEnabled = !(m_Context->Reg().all_of<DisabledComponent>(m_Selection));
+                if (ImGui::Checkbox("##Disabled", &isEnabled))
+                {
+                    if (isEnabled)
+                        m_Context->Reg().remove<DisabledComponent>(m_Selection);
+                    else
+                        m_Context->Reg().emplace<DisabledComponent>(m_Selection);
+                }
             }
 
             if (m_Context->Reg().all_of<TransformComponent>(m_Selection))

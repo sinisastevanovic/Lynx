@@ -80,6 +80,8 @@ namespace Lynx
         RelationshipComponent() = default;
         RelationshipComponent(const RelationshipComponent&) = default;
     };
+    
+    struct DisabledComponent {}; // TODO: We need to check where to actually exclude entities with this component. Should this be visibility only? Or fully disabled?
 
     struct MeshComponent
     {

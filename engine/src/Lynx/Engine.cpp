@@ -162,6 +162,7 @@ namespace Lynx
                 if (gameModule)
                     gameModule->OnUpdate(deltaTime);
                 
+                m_Scene->UpdateGlobalTransforms();
                 m_SceneRenderer->RenderRuntime(deltaTime);
             }
         }
@@ -221,6 +222,9 @@ namespace Lynx
 
     void Engine::SetSceneState(SceneState state)
     {
+        if (m_SceneState == SceneState::Play && state == SceneState::Edit && m_GameModule)
+            m_GameModule->OnShutdown();
+        
         m_SceneState = state;
         if (m_SceneRenderer)
             m_SceneRenderer->SetViewportDirty(true);
@@ -234,8 +238,6 @@ namespace Lynx
         {
             m_Scene->OnRuntimeStop();
             m_ScriptEngine->OnEditorStart(m_Scene.get());
-            if (m_GameModule)
-                m_GameModule->OnShutdown();
         }
         
     }

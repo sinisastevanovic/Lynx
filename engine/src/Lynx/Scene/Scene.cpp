@@ -125,7 +125,6 @@ namespace Lynx
     void Scene::OnRuntimeStart()
     {
         Engine::Get().GetRenderer().SetShowUI(true);
-        UpdateGlobalTransforms();
         
         Engine::Get().GetScriptEngine()->OnRuntimeStart(this);
     
@@ -229,6 +228,8 @@ namespace Lynx
             Entity e = { entity, this };
             Engine::Get().GetScriptEngine()->OnCreateEntity(e);
         }
+        
+        UpdateGlobalTransforms();
     }
 
     void Scene::OnRuntimeStop()
@@ -270,7 +271,6 @@ namespace Lynx
 
     void Scene::OnUpdateRuntime(float deltaTime)
     {
-        UpdateGlobalTransforms();
         m_PhysicsSystem->Simulate(deltaTime);
         
         auto luaView = m_Registry.view<LuaScriptComponent>();
@@ -373,7 +373,7 @@ namespace Lynx
             float width = (float)viewportSize.first;
             float height = (float)viewportSize.second;
 
-            auto uiView = m_Registry.view<UICanvasComponent>();
+            auto uiView = m_Registry.view<UICanvasComponent>(entt::exclude<DisabledComponent>);
             for (auto entity : uiView)
             {
                 auto& component = uiView.get<UICanvasComponent>(entity);
@@ -401,7 +401,6 @@ namespace Lynx
 
     void Scene::OnUpdateEditor(float deltaTime, glm::vec3 cameraPos)
     {
-        UpdateGlobalTransforms();
         auto& renderer = Engine::Get().GetRenderer();
         if (renderer.GetShowUI())
         {
@@ -421,12 +420,11 @@ namespace Lynx
         }
         
         m_ParticleSystem.OnUpdate(deltaTime, this, cameraPos);
+        UpdateGlobalTransforms();
     }
 
     void Scene::OnEvent(Event& event)
     {
-        
-        
         auto& renderer = Engine::Get().GetRenderer();
         if (renderer.GetShowUI())
         {

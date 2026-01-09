@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Scene.h"
+#include "Components/Components.h"
 #include "entt/entt.hpp"
 #include "Lynx/Log.h"
 #include "Lynx/Scene/Components/IDComponent.h"
@@ -68,6 +69,15 @@ namespace Lynx
                 m_Scene->DetachEntityKeepWorld(m_EntityHandle);
             else
                 m_Scene->DetachEntity(m_EntityHandle);
+        }
+        
+        void SetVisibility(bool visible)
+        {
+            if (visible && HasComponent<DisabledComponent>())
+                m_Scene->m_Registry.remove<DisabledComponent>(m_EntityHandle);
+            else if (!visible && !HasComponent<DisabledComponent>())
+                m_Scene->m_Registry.emplace<DisabledComponent>(m_EntityHandle);
+                
         }
 
         UUID GetUUID()

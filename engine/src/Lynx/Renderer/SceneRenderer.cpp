@@ -71,7 +71,7 @@ namespace Lynx
         glm::vec3 lightColor = { 1.0f, 1.0f, 1.0f };
         float lightIntensity = 1.0f;
 
-        auto sunView = m_Scene->Reg().view<TransformComponent, DirectionalLightComponent>();
+        auto sunView = m_Scene->Reg().view<TransformComponent, DirectionalLightComponent>(entt::exclude<DisabledComponent>);
         for (auto entity : sunView)
         {
             auto [transform, light] = sunView.get<TransformComponent, DirectionalLightComponent>(entity);
@@ -87,7 +87,7 @@ namespace Lynx
         camFrustum.FromViewProjection(projection * view);
         Frustum lightFrustum;
         lightFrustum.FromViewProjection(renderer.GetLightViewProjMatrix());
-        auto meshView = m_Scene->Reg().view<TransformComponent, MeshComponent>();
+        auto meshView = m_Scene->Reg().view<TransformComponent, MeshComponent>(entt::exclude<DisabledComponent>);
         for (auto entity : meshView)
         {
             auto [transform, meshComp] = meshView.get<TransformComponent, MeshComponent>(entity);
