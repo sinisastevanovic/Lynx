@@ -75,6 +75,8 @@ int main(int argc, char** argv)
 
         editorLayer.OnDetach();
     }
+    
+    engine.ClearActiveScene();
 
     if (gameModule && destroyFunc)
     {

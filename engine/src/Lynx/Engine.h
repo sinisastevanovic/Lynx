@@ -6,6 +6,7 @@
 #include "Physics/PhysicsSystem.h"
 #include "Event/Event.h"
 #include "Lynx/Renderer/EditorCamera.h"
+#include "Renderer/SceneRenderer.h"
 #include "Scene/Systems/ParticleSystem.h"
 #include "Scripting/ScriptEngine.h"
 
@@ -35,16 +36,17 @@ namespace Lynx
         inline Window& GetWindow() { return *m_Window; }
         AssetManager& GetAssetManager() { return *m_AssetManager; }
         AssetRegistry& GetAssetRegistry() { return *m_AssetRegistry; }
-        PhysicsSystem& GetPhysicsSystem() { return *m_PhysicsSystem; }
         Renderer& GetRenderer() { return *m_Renderer; }
         ScriptEngine* GetScriptEngine() { return m_ScriptEngine.get(); }
         EditorCamera& GetEditorCamera() { return m_EditorCamera; }
         TypeRegistry& GetComponentRegistry() { return m_ComponentRegistry;}
+        GameTypeRegistry GetGameRegistry() { return GameTypeRegistry(m_ComponentRegistry); }
         
         void ClearGameTypes();
         
         std::shared_ptr<Scene> GetActiveScene() const { return m_Scene; }
-        void SetActiveScene(std::shared_ptr<Scene> scene) { m_Scene = scene; }
+        void SetActiveScene(std::shared_ptr<Scene> scene);
+        void ClearActiveScene();
 
         SceneState GetSceneState() const { return m_SceneState; }
         void SetSceneState(SceneState state);
@@ -69,11 +71,10 @@ namespace Lynx
         std::unique_ptr<Renderer> m_Renderer;
         std::unique_ptr<AssetManager> m_AssetManager;
         std::unique_ptr<AssetRegistry> m_AssetRegistry;
-        std::unique_ptr<PhysicsSystem> m_PhysicsSystem;
         std::unique_ptr<ScriptEngine> m_ScriptEngine;
         std::shared_ptr<Scene> m_Scene;
+        std::unique_ptr<SceneRenderer> m_SceneRenderer;
         TypeRegistry m_ComponentRegistry;
-        ParticleSystem m_ParticleSystem;
         
         EditorCamera m_EditorCamera;
         
@@ -87,6 +88,9 @@ namespace Lynx
         EventCallbackFn m_AppEventCallback;
         
         IGameModule* m_GameModule = nullptr;
+        bool m_IsEditor = false;
+        
+        friend class EditorLayer;
     };
 }
 

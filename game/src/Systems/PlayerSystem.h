@@ -2,7 +2,6 @@
 #include <memory>
 
 #include "Components/GameComponents.h"
-#include "Lynx/Engine.h"
 #include "Lynx/Input.h"
 #include "Lynx/Scene/Scene.h"
 #include "Lynx/Scene/Components/Components.h"
@@ -13,8 +12,7 @@ class PlayerSystem
 public:
     static void Update(std::shared_ptr<Lynx::Scene> scene, float dt)
     {
-        auto& engine = Lynx::Engine::Get();
-        auto& bodyInterface = engine.GetPhysicsSystem().GetBodyInterface();
+        auto& bodyInterface = scene->GetPhysicsSystem().GetBodyInterface();
         auto view = scene->Reg().view<Lynx::TransformComponent, PlayerComponent, Lynx::RigidBodyComponent>();
         for (auto entity : view)
         {

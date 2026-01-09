@@ -32,4 +32,24 @@ namespace Lynx
         WindowCloseEvent() {}
         EVENT_CLASS_TYPE(WindowCloseEvent)
     };
+    
+    class LX_API ViewportResizeEvent : public Event
+    {
+    public:
+        ViewportResizeEvent(unsigned int width, unsigned int height)
+            : m_Width(width), m_Height(height) {}
+        uint32_t GetWidth() const { return m_Width; }
+        uint32_t GetHeight() const { return m_Height; }
+        
+        std::string ToString() const override
+        {
+            std::stringstream ss;
+            ss << "ViewportResizeEvent: " << m_Width << ", " << m_Height;
+            return ss.str();
+        }
+        
+        EVENT_CLASS_TYPE(ViewportResizeEvent)
+    private:
+        uint32_t m_Width, m_Height;
+    };
 }

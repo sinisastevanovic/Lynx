@@ -1081,7 +1081,7 @@ namespace Lynx
             m_SwapchainFramebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
         }
 
-        EnsureEditorViewport(width, height);
+        //EnsureEditorViewport(width, height);
     }
 
     void Renderer::EnsureEditorViewport(uint32_t width, uint32_t height)

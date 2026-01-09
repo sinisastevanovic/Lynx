@@ -2,7 +2,6 @@
 #include <memory>
 
 #include "Components/GameComponents.h"
-#include "Lynx/Engine.h"
 #include "Lynx/Asset/AssetManager.h"
 #include "Lynx/Scene/Entity.h"
 #include "Lynx/Scene/Scene.h"
@@ -40,7 +39,7 @@ public:
             break;
         }
 
-        auto& bodyInterface = engine.GetPhysicsSystem().GetBodyInterface();
+        auto& bodyInterface = scene->GetPhysicsSystem().GetBodyInterface();
         auto enemyView = scene->Reg().view<Lynx::TransformComponent, EnemyComponent, Lynx::RigidBodyComponent>();
         for (auto eEntity : enemyView)
         {

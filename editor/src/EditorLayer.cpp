@@ -1,6 +1,8 @@
 #include "EditorLayer.h"
 
 #include <imgui.h>
+#include <glm/ext/scalar_constants.hpp>
+#include <glm/gtc/epsilon.hpp>
 
 #include "Lynx/Scene/SceneSerializer.h"
 #include "Panels/AssetBrowserPanel.h"
@@ -14,6 +16,8 @@
 
 #include "Lynx/Event/KeyEvent.h"
 #include "Lynx/Event/MouseEvent.h"
+#include "Lynx/Event/SceneEvents.h"
+#include "Lynx/Event/WindowEvent.h"
 
 namespace Lynx
 {
@@ -156,6 +160,21 @@ namespace Lynx
         {
             panel->OnImGuiRender();
         }
+        
+        if (m_ViewportPanel)
+        {
+            glm::vec2 size = m_ViewportPanel->GetSize();
+            if (size.x > 0 && size.y > 0 && 
+                (glm::epsilonNotEqual(size.x, (float)m_LastViewportWidth, glm::epsilon<float>()) 
+                || glm::epsilonNotEqual(size.y, (float)m_LastViewportHeight, glm::epsilon<float>())))
+            {
+                m_LastViewportWidth = (uint32_t)size.x;
+                m_LastViewportHeight = (uint32_t)size.y;
+                
+                ViewportResizeEvent e(m_LastViewportWidth, m_LastViewportHeight);
+                m_Engine->OnEvent(e);
+            }
+        }
     }
 
     void EditorLayer::OnScenePlay()
@@ -171,8 +190,6 @@ namespace Lynx
         SceneSerializer runtimeSerializer(m_RuntimeScene);
         runtimeSerializer.DeserializeFromString(data);
 
-        OnSceneContextChanged(m_RuntimeScene.get());
-
         m_Engine->SetSceneState(SceneState::Play);
     }
 
@@ -181,11 +198,9 @@ namespace Lynx
         m_SelectedEntity = entt::null;
         m_Engine->SetSceneState(SceneState::Edit);
         m_Engine->SetActiveScene(m_EditorScene);
-        OnSceneContextChanged(m_EditorScene.get());
         m_RuntimeScene = nullptr;
 
         m_Engine->GetRenderer().SetShowUI(m_ShowUI);
-        m_Engine->GetScriptEngine()->OnEditorStart(m_Engine->GetActiveScene().get());
     }
 
     void EditorLayer::OnEvent(Event& e)
@@ -235,16 +250,19 @@ namespace Lynx
             }
             return false;
         });
+        
+        dispatcher.Dispatch<ActiveSceneChangedEvent>([this](ActiveSceneChangedEvent& e)
+        {
+            this->OnSceneContextChanged(e.GetScene().get());
+            return false;
+        });
     }
 
     void EditorLayer::NewScene()
     {
         m_EditorScene = std::make_shared<Scene>();
-        m_EditorScene->OnRuntimeStop();
         m_Engine->SetActiveScene(m_EditorScene);
-        m_Engine->GetScriptEngine()->OnEditorStart(m_Engine->GetActiveScene().get());
         m_SelectedEntity = entt::null;
-        OnSceneContextChanged(m_Engine->GetActiveScene().get());
     }
 
     void EditorLayer::SaveSceneAs()
@@ -277,26 +295,22 @@ namespace Lynx
         if (!filepath.empty())
         {
             m_EditorScene = Engine::Get().GetAssetManager().GetAsset<Scene>(filepath, AssetLoadMode::Blocking);
-            m_EditorScene->OnRuntimeStop();
             m_Engine->SetActiveScene(m_EditorScene);
-            m_Engine->GetScriptEngine()->OnEditorStart(m_Engine->GetActiveScene().get());
             m_SelectedEntity = entt::null;
-            OnSceneContextChanged(m_Engine->GetActiveScene().get());
         }
     }
 
     void EditorLayer::OpenScene(AssetHandle handle)
     {
         m_EditorScene = Engine::Get().GetAssetManager().GetAsset<Scene>(handle, AssetLoadMode::Blocking);
-        m_EditorScene->OnRuntimeStop();
         m_Engine->SetActiveScene(m_EditorScene);
-        m_Engine->GetScriptEngine()->OnEditorStart(m_Engine->GetActiveScene().get());
         m_SelectedEntity = entt::null;
-        OnSceneContextChanged(m_Engine->GetActiveScene().get());
     }
 
     void EditorLayer::OnSceneContextChanged(Scene* scene)
     {
+        OnSelectedEntityChanged(entt::null);
+        OnSelectedUIElementChanged(nullptr);
         for (auto& panel : m_Panels)
             panel->OnSceneContextChanged(scene);
     }

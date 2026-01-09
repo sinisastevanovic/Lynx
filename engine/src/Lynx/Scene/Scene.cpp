@@ -38,8 +38,8 @@ namespace Lynx
         auto& rb = registry.get<RigidBodyComponent>(entity);
         if (rb.RuntimeBodyCreated)
         {
-            auto& physicsSystem = Engine::Get().GetPhysicsSystem();
-            auto& bodyInterface = physicsSystem.GetBodyInterface();
+            Scene* scene = registry.ctx().get<Scene*>();
+            auto& bodyInterface = scene->GetPhysicsSystem().GetBodyInterface();
 
             bodyInterface.RemoveBody(rb.BodyId);
             bodyInterface.DestroyBody(rb.BodyId);
@@ -77,10 +77,13 @@ namespace Lynx
         m_Registry.on_destroy<RigidBodyComponent>().connect<&OnRigidBodyComponentDestroyed>();
         m_Registry.on_destroy<NativeScriptComponent>().connect<&OnNativeScriptComponentDestroyed>();
         m_Registry.on_destroy<LuaScriptComponent>().connect<&OnLuaScriptComponentDestroyed>();
+        
+        m_PhysicsSystem = std::make_unique<PhysicsSystem>();
     }
 
     Scene::~Scene()
     {
+        m_PhysicsSystem.reset();
     }
 
     Entity Scene::CreateEntity(const std::string& name)
@@ -126,8 +129,7 @@ namespace Lynx
         
         Engine::Get().GetScriptEngine()->OnRuntimeStart(this);
     
-        auto& physicsSystem = Engine::Get().GetPhysicsSystem();
-        JPH::BodyInterface& bodyInterface = physicsSystem.GetBodyInterface();
+        JPH::BodyInterface& bodyInterface = m_PhysicsSystem->GetBodyInterface();
 
         {
             auto view = m_Registry.view<TransformComponent, RigidBodyComponent, RelationshipComponent>();
@@ -251,8 +253,7 @@ namespace Lynx
             }
         }
         
-        auto& physicsSystem = Engine::Get().GetPhysicsSystem();
-        JPH::BodyInterface& bodyInterface = physicsSystem.GetBodyInterface();
+        JPH::BodyInterface& bodyInterface = m_PhysicsSystem->GetBodyInterface();
 
         auto view = m_Registry.view<RigidBodyComponent>();
         for (auto entity : view)
@@ -269,6 +270,9 @@ namespace Lynx
 
     void Scene::OnUpdateRuntime(float deltaTime)
     {
+        UpdateGlobalTransforms();
+        m_PhysicsSystem->Simulate(deltaTime);
+        
         auto luaView = m_Registry.view<LuaScriptComponent>();
         for (auto entity : luaView)
         {
@@ -286,8 +290,7 @@ namespace Lynx
             }
         }
         
-        auto& physicsSystem = Engine::Get().GetPhysicsSystem();
-        JPH::BodyInterface& bodyInterface = physicsSystem.GetBodyInterface();
+        JPH::BodyInterface& bodyInterface = m_PhysicsSystem->GetBodyInterface();
 
         // Sync physics -> transforms
         auto view = m_Registry.view<TransformComponent, RigidBodyComponent, RelationshipComponent>();
@@ -380,10 +383,25 @@ namespace Lynx
                 }
             }
         }
+        
+        glm::vec3 cameraPos;
+        auto camView = m_Registry.view<TransformComponent, CameraComponent>();
+        for (auto entity : camView)
+        {
+            auto [transform, camera] = camView.get<TransformComponent, CameraComponent>(entity);
+            if (camera.Primary)
+            {
+                cameraPos = transform.Translation; // TODO: This is wrong if the camera entity is attached to an entity 
+                break;
+            }
+        }
+        
+        m_ParticleSystem.OnUpdate(deltaTime, this, cameraPos);
     }
 
-    void Scene::OnUpdateEditor(float deltaTime)
+    void Scene::OnUpdateEditor(float deltaTime, glm::vec3 cameraPos)
     {
+        UpdateGlobalTransforms();
         auto& renderer = Engine::Get().GetRenderer();
         if (renderer.GetShowUI())
         {
@@ -401,10 +419,14 @@ namespace Lynx
                 }
             }
         }
+        
+        m_ParticleSystem.OnUpdate(deltaTime, this, cameraPos);
     }
 
     void Scene::OnEvent(Event& event)
     {
+        
+        
         auto& renderer = Engine::Get().GetRenderer();
         if (renderer.GetShowUI())
         {

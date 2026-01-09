@@ -4,6 +4,7 @@
 
 #include "Lynx/Engine.h"
 #include "Lynx/Scene/Components/Components.h"
+#include "Lynx/Scene/Scene.h"
 
 namespace Lynx
 {

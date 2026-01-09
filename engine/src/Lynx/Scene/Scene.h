@@ -6,9 +6,11 @@
 
 #include "Lynx/Asset/Asset.h"
 #include "Lynx/Event/Event.h"
+#include "Systems/ParticleSystem.h"
 
 namespace Lynx
 {
+    class PhysicsSystem;
     class Entity;
 
     class LX_API Scene : public Asset, public std::enable_shared_from_this<Scene>
@@ -24,7 +26,7 @@ namespace Lynx
         void OnRuntimeStop();
 
         void OnUpdateRuntime(float deltaTime);
-        void OnUpdateEditor(float deltaTime);
+        void OnUpdateEditor(float deltaTime, glm::vec3 cameraPos);
 
         void OnEvent(Event& event);
 
@@ -34,6 +36,8 @@ namespace Lynx
         void DetachEntityKeepWorld(entt::entity child);
 
         void UpdateGlobalTransforms();
+        
+        PhysicsSystem& GetPhysicsSystem() { return *m_PhysicsSystem; }
 
         static AssetType GetAssetType() { return AssetType::Scene; }
         virtual AssetType GetType() const override { return Scene::GetAssetType(); }
@@ -45,10 +49,12 @@ namespace Lynx
         virtual bool LoadSourceData() override;
 
     private:
-        
         void UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform);
         
+    private:
         entt::registry m_Registry;
+        std::unique_ptr<PhysicsSystem> m_PhysicsSystem;
+        ParticleSystem m_ParticleSystem;
 
         friend class Entity;
         friend class SceneHierarchyPanel; // For editor later

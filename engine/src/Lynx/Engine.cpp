@@ -20,6 +20,7 @@
 #include <nlohmann/json.hpp>
 
 #include "Event/ActionEvent.h"
+#include "Event/SceneEvents.h"
 #include "ImGui/EditorUIHelpers.h"
 #include "Renderer/DebugRenderer.h"
 #include "Scene/Components/LuaScriptComponent.h"
@@ -34,6 +35,7 @@ namespace Lynx
     void Engine::Initialize(bool editorMode)
     {
         s_Instance = this;
+        m_IsEditor = editorMode;
         Log::Init();
         LX_CORE_INFO("Initializing...");
 
@@ -49,8 +51,6 @@ namespace Lynx
         
         m_EditorCamera = EditorCamera(45.0f, (float)m_Window->GetWidth() / (float)m_Window->GetHeight(), 0.1f, 1000.0f);
 
-        m_PhysicsSystem = std::make_unique<PhysicsSystem>();
-        
         m_Renderer = std::make_unique<Renderer>(m_Window->GetNativeWindow(), editorMode);
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -65,6 +65,7 @@ namespace Lynx
         m_ScriptEngine = std::make_unique<ScriptEngine>();
         
         m_Scene = std::make_shared<Scene>();
+        m_SceneRenderer = std::make_unique<SceneRenderer>(m_Scene);
         
         m_Window->SetVSync(true);
 
@@ -73,6 +74,9 @@ namespace Lynx
     void Engine::Run(IGameModule* gameModule)
     {
         LX_CORE_INFO("Starting main loop...");
+        
+        ViewportResizeEvent e(m_Window->GetWidth(), m_Window->GetHeight());
+        OnEvent(e);
 
         if (gameModule)
         {
@@ -84,10 +88,12 @@ namespace Lynx
         auto cubeMesh = m_AssetManager->GetDefaultCube();
 
         if (m_Scene && m_SceneState == SceneState::Play)
-            m_Scene->OnRuntimeStart();
+            SetSceneState(SceneState::Play);
 
         if (m_Scene && m_SceneState == SceneState::Edit)
+        {
             m_ScriptEngine->OnEditorStart(m_Scene.get(), true);
+        }
 
         // Load all textures and meshes
         // TODO: This is temporary code, replace with real scene loading logic
@@ -97,19 +103,19 @@ namespace Lynx
             auto& mesh = view.get<MeshComponent>(entity);
             if (mesh.Mesh)
             {
-                auto meshasset = m_AssetManager->GetAsset<StaticMesh>(mesh.Mesh);
+                auto meshasset = m_AssetManager->GetAsset<StaticMesh>(mesh.Mesh, AssetLoadMode::Blocking);
                 if (meshasset)
                 {
                     for (const auto& subMesh : meshasset->GetSubmeshes())
                     {
                         if (subMesh.Material->AlbedoTexture)
-                            m_AssetManager->GetAsset<Texture>(subMesh.Material->AlbedoTexture);
+                            m_AssetManager->GetAsset<Texture>(subMesh.Material->AlbedoTexture, AssetLoadMode::Blocking);
                         if (subMesh.Material->NormalMap)
-                            m_AssetManager->GetAsset<Texture>(subMesh.Material->NormalMap);
+                            m_AssetManager->GetAsset<Texture>(subMesh.Material->NormalMap, AssetLoadMode::Blocking);
                         if (subMesh.Material->MetallicRoughnessTexture)
-                            m_AssetManager->GetAsset<Texture>(subMesh.Material->MetallicRoughnessTexture);
+                            m_AssetManager->GetAsset<Texture>(subMesh.Material->MetallicRoughnessTexture, AssetLoadMode::Blocking);
                         if (subMesh.Material->EmissiveTexture)
-                            m_AssetManager->GetAsset<Texture>(subMesh.Material->EmissiveTexture);
+                            m_AssetManager->GetAsset<Texture>(subMesh.Material->EmissiveTexture, AssetLoadMode::Blocking);
                     }
                 }
             }
@@ -128,7 +134,8 @@ namespace Lynx
             
             m_Window->OnUpdate();
 
-            if (m_Window->GetWidth() == 0 || m_Window->GetHeight() == 0)
+            auto viewportSize = m_Renderer->GetViewportSize();
+            if (m_Window->GetWidth() == 0 || m_Window->GetHeight() == 0 || viewportSize.first == 0 || viewportSize.second == 0)
                 continue;
 
             m_AssetManager->Update();
@@ -141,147 +148,22 @@ namespace Lynx
 
             ImGui::Render();
 
-            glm::mat4 cameraView;
-            glm::mat4 cameraProjection;
-            glm::vec3 cameraPos;
-
-            auto viewportSize = m_Renderer->GetViewportSize();
-
-            m_Scene->UpdateGlobalTransforms();
-            
-            bool foundCamera = false;
-            {
-                auto view = m_Scene->Reg().view<TransformComponent, CameraComponent>();
-                for (auto entity : view)
-                {
-                    auto [transform, camera] = view.get<TransformComponent, CameraComponent>(entity);
-                    if (camera.Primary)
-                    {
-                        // TODO: Maybe not do this every frame?
-                        if (!camera.FixedAspectRatio)
-                            camera.Camera.SetViewportSize(viewportSize.first, viewportSize.second);
-                        
-                        cameraView = glm::inverse(transform.WorldMatrix);
-                        cameraProjection = camera.Camera.GetProjection();
-
-                        cameraPos = transform.Translation;
-
-                        foundCamera = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!foundCamera || m_SceneState == SceneState::Edit)
-            {
-                m_EditorCamera.SetViewportSize((float)viewportSize.first, (float)viewportSize.second);
-                m_EditorCamera.OnUpdate(deltaTime);
-                cameraView = m_EditorCamera.GetView();
-                cameraProjection = m_EditorCamera.GetProjection();
-                cameraPos = m_EditorCamera.GetPosition();
-            }
-
-            glm::vec3 lightDir = { -0.5f, -0.7f, 1.0f };
-            glm::vec3 lightColor = { 1.0f, 1.0f, 1.0f };
-            float lightIntensity = 1.0f;
-
-            auto sunView = m_Scene->Reg().view<TransformComponent, DirectionalLightComponent>();
-            for (auto entity : sunView)
-            {
-                auto [transform, light] = sunView.get<TransformComponent, DirectionalLightComponent>(entity);
-                lightDir = glm::rotate(transform.Rotation, glm::vec3(0.0f, 0.0f, -1.0f));
-                lightColor = light.Color;
-                lightIntensity = light.Intensity;
-                break;
-            }
-
-            m_Renderer->BeginScene(cameraView, cameraProjection, cameraPos, lightDir, lightColor, lightIntensity, deltaTime, m_SceneState == SceneState::Edit);
-
-            m_ParticleSystem.OnUpdate(deltaTime, m_Scene.get(), cameraPos);
-
             // TODO: We should load all the textures and meshes before we run the scene!!!
-            if (m_SceneState == SceneState::Play)
+            if (m_SceneState == SceneState::Edit)
             {
-                m_PhysicsSystem->Simulate(deltaTime);
+                m_EditorCamera.OnUpdate(deltaTime);
+                m_Scene->OnUpdateEditor(deltaTime, m_EditorCamera.GetPosition());
+                
+                m_SceneRenderer->RenderEditor(m_EditorCamera, deltaTime);
+            }
+            else if (m_SceneState == SceneState::Play)
+            {
                 m_Scene->OnUpdateRuntime(deltaTime);
                 if (gameModule)
-                {
                     gameModule->OnUpdate(deltaTime);
-                }
-            }
-            else
-            {
-                m_Scene->OnUpdateEditor(deltaTime);
-            }
-
-            Frustum camFrustum;
-            camFrustum.FromViewProjection(cameraProjection * cameraView);
-
-            Frustum lightFrustum;
-            lightFrustum.FromViewProjection(m_Renderer->GetLightViewProjMatrix());
-            auto view = m_Scene->Reg().view<TransformComponent, MeshComponent>();
-            for (auto entity : view)
-            {
-                auto [transform, meshComp] = view.get<TransformComponent, MeshComponent>(entity);
-                auto mesh = m_AssetManager->GetAsset<StaticMesh>(meshComp.Mesh);
-                if (mesh)
-                {
-                    AABB worldBounds = TransformAABB(mesh->GetBounds(), transform.WorldMatrix);
-                    // TODO: Check if this is worth it. Using these flags splits the batches up, so more draw calls, but less geometry drawn...
-                    RenderFlags flags = RenderFlags::None;
-                    if (camFrustum.IsOnFrustum(worldBounds))
-                        flags = flags | RenderFlags::MainPass;
-                    if (lightFrustum.IsOnFrustum(worldBounds))
-                        flags = flags | RenderFlags::ShadowPass;
-
-                    if (flags != RenderFlags::None)
-                    {
-                        m_Renderer->SubmitMesh(mesh, transform.WorldMatrix, flags, (int)entity);
-                    }
-                }
                 
+                m_SceneRenderer->RenderRuntime(deltaTime);
             }
-
-            /*DebugRenderer::DrawLine({0,0,0}, {1,0,0}, {1,0,0,1}); // X - Re
-            DebugRenderer::DrawLine({0,0,0}, {0,1,0}, {0,1,0,1}); // Y - Gr
-            DebugRenderer::DrawLine({0,0,0}, {0,0,1}, {0,0,1,1}); // Z - Bl
-
-            // Draw a test box
-            DebugRenderer::DrawBox({-2, 1, -2}, {-1, 2, -1}, {1, 1, 0, 1});
-
-            DebugRenderer::DrawSphere({1, 0, 1}, 2.0f);*/
-
-            if (m_Renderer->GetShowColliders()) // Render collider meshes
-            {
-                glm::vec4 debugColor = { 0.0f, 1.0f, 0.0f, 1.0f };
-                
-                auto boxView = m_Scene->Reg().view<TransformComponent, BoxColliderComponent>();
-                for (auto entity : boxView)
-                {
-                    auto [transform, collider] = boxView.get<TransformComponent, BoxColliderComponent>(entity);
-                    glm::mat4 colliderTransform = glm::translate(glm::mat4(1.0f), transform.Translation)
-                        * glm::toMat4(transform.Rotation)
-                        * glm::scale(glm::mat4(1.0f), collider.HalfSize * 2.0f);
-
-                    DebugRenderer::DrawBox(colliderTransform, debugColor);
-                }
-
-                auto sphereView = m_Scene->Reg().view<TransformComponent, SphereColliderComponent>();
-                for (auto entity : sphereView)
-                {
-                    auto [transform, collider] = sphereView.get<TransformComponent, SphereColliderComponent>(entity);
-                    DebugRenderer::DrawSphere(transform.Translation, collider.Radius, debugColor);
-                }
-
-                auto capsuleView = m_Scene->Reg().view<TransformComponent, CapsuleColliderComponent>();
-                for (auto entity : capsuleView)
-                {
-                    auto [transform, collider] = capsuleView.get<TransformComponent, CapsuleColliderComponent>(entity);
-                    DebugRenderer::DrawCapsule(transform.Translation, collider.Radius, collider.HalfHeight, transform.Rotation, debugColor);
-                }
-            }
-
-            m_Renderer->EndScene();
         }
 
         if (m_Scene && m_SceneState == SceneState::Play)
@@ -298,6 +180,7 @@ namespace Lynx
         if (m_SceneState == SceneState::Play && m_Scene)
             m_Scene->OnRuntimeStop();
 
+        m_SceneRenderer.reset();
         m_Scene.reset();
         
         m_ScriptEngine.reset();
@@ -305,7 +188,6 @@ namespace Lynx
         ImGui::DestroyContext();
         m_AssetManager.reset();
         m_Renderer.reset();
-        m_PhysicsSystem.reset();
         Log::Shutdown();
     }
 
@@ -315,9 +197,33 @@ namespace Lynx
         m_ComponentRegistry.ClearGameScripts();
     }
 
+    void Engine::SetActiveScene(std::shared_ptr<Scene> scene)
+    {
+        if (m_Scene && m_SceneState == SceneState::Play)
+        {
+            m_Scene->OnRuntimeStop();
+        }
+        m_Scene = scene;
+        if (m_SceneRenderer)
+            m_SceneRenderer->SetScene(m_Scene);
+        
+        SetSceneState(m_SceneState);
+        ActiveSceneChangedEvent e(m_Scene);
+        OnEvent(e);
+    }
+
+    void Engine::ClearActiveScene()
+    {
+        m_Scene.reset();
+        m_Scene = std::make_shared<Scene>();
+        SetActiveScene(m_Scene);
+    }
+
     void Engine::SetSceneState(SceneState state)
     {
         m_SceneState = state;
+        if (m_SceneRenderer)
+            m_SceneRenderer->SetViewportDirty(true);
         if (m_SceneState == SceneState::Play)
         {
             m_Scene->OnRuntimeStart();
@@ -327,6 +233,7 @@ namespace Lynx
         else if (m_SceneState == SceneState::Edit)
         {
             m_Scene->OnRuntimeStop();
+            m_ScriptEngine->OnEditorStart(m_Scene.get());
             if (m_GameModule)
                 m_GameModule->OnShutdown();
         }
@@ -386,8 +293,18 @@ namespace Lynx
         dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& event)
         {
             m_Renderer->OnResize(event.GetWidth(), event.GetHeight());
-            /*auto viewportSize = m_Renderer->GetViewportSize();
-            m_EditorCamera.SetViewportSize(viewportSize.first, viewportSize.second);*/
+            if (!m_IsEditor)
+            {
+                ViewportResizeEvent e(event.GetWidth(), event.GetHeight());
+                OnEvent(e);
+            }
+            return false;
+        });
+        
+        dispatcher.Dispatch<ViewportResizeEvent>([this](ViewportResizeEvent& event)
+        {
+            //m_Renderer->EnsureEditorViewport(event.GetWidth(), event.GetHeight());
+            m_SceneRenderer->SetViewportSize(event.GetWidth(), event.GetHeight());
             return false;
         });
 

@@ -45,6 +45,8 @@ namespace Lynx
         entt::entity m_SelectedEntity = entt::null;
         std::shared_ptr<UIElement> m_SelectedUIElement = nullptr;
         AssetHandle m_SelectedAsset = AssetHandle::Null();
+        
+        uint32_t m_LastViewportWidth = 0, m_LastViewportHeight = 0;
 
         bool m_ShowUI = true;
     };
