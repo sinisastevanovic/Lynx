@@ -19,6 +19,7 @@ namespace Lynx
         bool OnMouseScroll(float offsetX, float offsetY) override;
         void OnMeasure(UISize availableSize) override;
         void OnArrange(UIRect finalRect) override;
+        void OnPostLoad() override;
         
         void OnInspect() override;
         void Serialize(nlohmann::json& outJson) const override;
@@ -34,6 +35,7 @@ namespace Lynx
         UISize m_ContentSize = { 0, 0 };
         
         std::shared_ptr<UIElement> m_VerticalScrollbar;
+        UUID m_VScrollbarID = UUID::Null();
     };
 
 }

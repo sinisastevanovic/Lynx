@@ -946,6 +946,7 @@ namespace Lynx
                     comp.Canvas = std::make_shared<UICanvas>();
                     // Recursively load the tree
                     comp.Canvas->Deserialize(json["Canvas"]);
+                    comp.Canvas->OnPostLoad();
                 }
             }
         );

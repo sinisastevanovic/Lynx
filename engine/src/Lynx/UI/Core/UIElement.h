@@ -33,8 +33,10 @@ namespace Lynx
         void MoveChild(std::shared_ptr<UIElement> child, size_t newIndex);
         void ClearChildren();
         bool IsDescendantOf(std::shared_ptr<UIElement> other) const;
+        std::shared_ptr<UIElement> GetRoot() const;
         
         UUID GetUUID() const { return m_UUID; }
+        std::shared_ptr<UIElement> FindElementByID(UUID id);
 
         // Layout Props
         void SetOffset(UIPoint offset);
@@ -69,6 +71,7 @@ namespace Lynx
         virtual void OnMeasure(UISize availableSize);
         virtual void OnArrange(UIRect finalRect);
         virtual void OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale, glm::vec4 parentTint);
+        virtual void OnPostLoad();
 
         // Interaction
         virtual bool HitTest(const glm::vec2& point, bool ignoreHitTestVisible = false);

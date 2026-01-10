@@ -34,6 +34,8 @@ namespace Lynx
         void AttachEntityKeepWorld(entt::entity child, entt::entity parent);
         void DetachEntity(entt::entity child);
         void DetachEntityKeepWorld(entt::entity child);
+        
+        std::shared_ptr<class UIElement> FindUIElementByID(UUID id);
 
         void UpdateGlobalTransforms();
         

@@ -318,7 +318,8 @@ namespace Lynx
             ImGui::EndPopup();
         }
 
-        if (ImGui::IsItemClicked() && OnSelectedUIElementChangedCallback)
+       // if (ImGui::IsItemClicked() && OnSelectedUIElementChangedCallback)
+        if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Left) && OnSelectedUIElementChangedCallback)
         {
             if (OnSelectionChangedCallback)
                 OnSelectionChangedCallback(entt::null);

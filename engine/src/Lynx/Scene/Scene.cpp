@@ -541,6 +541,22 @@ namespace Lynx
         childTransform.WorldMatrix = childTransform.GetTransform();
     }
 
+    std::shared_ptr<class UIElement> Scene::FindUIElementByID(UUID id)
+    {
+        auto view = m_Registry.view<UICanvasComponent>();
+        for (auto entity : view)
+        {
+            auto& comp = view.get<UICanvasComponent>(entity);
+            if (comp.Canvas)
+            {
+                auto found = comp.Canvas->FindElementByID(id);
+                if (found)
+                    return found;
+            }
+        }
+        return nullptr;
+    }
+
     void Scene::UpdateGlobalTransforms()
     {
         auto view = m_Registry.view<TransformComponent, RelationshipComponent>();

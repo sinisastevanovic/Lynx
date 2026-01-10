@@ -91,6 +91,27 @@ namespace Lynx
         return false;
     }
 
+    std::shared_ptr<UIElement> UIElement::GetRoot() const
+    {
+        auto root = GetParent();
+        while(root && root->GetParent()) 
+            root = root->GetParent();
+        return root;
+    }
+
+    std::shared_ptr<UIElement> UIElement::FindElementByID(UUID id)
+    {
+        if (m_UUID == id)
+            return shared_from_this();
+        for (auto& child : m_Children)
+        {
+            auto found = child->FindElementByID(id);
+            if (found)
+                return found;
+        }
+        return nullptr;
+    }
+
     void UIElement::SetOffset(UIPoint offset)
     {
         if (m_Offset.X != offset.X || m_Offset.Y != offset.Y)
@@ -280,6 +301,12 @@ namespace Lynx
     void UIElement::OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale, glm::vec4 parentTint)
     {
         
+    }
+
+    void UIElement::OnPostLoad()
+    {
+        for (auto& child : m_Children)
+            child->OnPostLoad();
     }
 
     bool UIElement::HitTest(const glm::vec2& point, bool ignoreHitTestVisible)

@@ -98,6 +98,47 @@ namespace Lynx
         return changed;
     }
 
+    bool EditorUIHelpers::DrawUIElementSelection(const char* label, UUID& id, Scene* context)
+    {
+        ImGui::PushID(label);
+        ImGui::Text("%s", label);
+        ImGui::SameLine();
+        
+        std::string name = "None";
+        if (id.IsValid() && context)
+        {
+            auto element = context->FindUIElementByID(id);
+            if (element)
+                name = element->GetName();
+            else
+                name = "Invalid (" + std::to_string((uint64_t)id) + ")";
+        }
+        
+        bool changed = false;
+        ImGui::Button(name.c_str(), ImVec2(100.0f, 0.0f));
+        
+        if (ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HIERARCHY_UI_ELEMENT"))
+            {
+                UIElement* ptr = *(UIElement**)payload->Data;
+                id = ptr->GetUUID();
+                changed = true;
+            }
+            ImGui::EndDragDropTarget();
+        }
+        
+        ImGui::SameLine();
+        if (ImGui::Button("X"))
+        {
+            id = UUID::Null();
+            changed = true;
+        }
+
+        ImGui::PopID();
+        return changed;
+    }
+
     void EditorUIHelpers::DrawLuaScriptSection(LuaScriptComponent* lsc)
     {
         if (!lsc)

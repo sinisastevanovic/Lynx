@@ -2,6 +2,9 @@
 
 #include <imgui.h>
 
+#include "Lynx/Engine.h"
+#include "Lynx/ImGui/EditorUIHelpers.h"
+
 namespace Lynx
 {
     UIScrollView::UIScrollView()
@@ -22,11 +25,18 @@ namespace Lynx
 
     void UIScrollView::SetVerticalScrollbar(std::shared_ptr<UIElement> verticalScrollbar)
     {
+        if (verticalScrollbar)
+        {
+            if (!verticalScrollbar->IsDescendantOf(shared_from_this()))
+            {
+                LX_CORE_ERROR("Scrollbar needs to be a child of this ScrollView!");
+                return;
+            }
+            verticalScrollbar->SetAnchor(UIAnchor::TopRight);
+        }
         m_VerticalScrollbar = verticalScrollbar;
-        if (m_VerticalScrollbar)
-            m_VerticalScrollbar->SetAnchor(UIAnchor::TopRight);
-        // TODO: Set standard settings? 
         UpdateScrollBarState();
+        MarkDirty();
     }
 
     bool UIScrollView::OnMouseScroll(float offsetX, float offsetY)
@@ -119,7 +129,19 @@ namespace Lynx
                 }
             }
         }
-        
+    }
+    
+    void UIScrollView::OnPostLoad()
+    {
+        UIElement::OnPostLoad();
+        if (m_VScrollbarID.IsValid())
+        {
+            if (auto root = GetRoot())
+            {
+                auto bar = root->FindElementByID(m_VScrollbarID);
+                SetVerticalScrollbar(bar);
+            }
+        }
     }
 
     void UIScrollView::OnInspect()
@@ -129,19 +151,34 @@ namespace Lynx
         ImGui::Separator();
         ImGui::Text("Scroll Viewer");
         ImGui::DragFloat("ScrollSensitivity", &m_ScrollSensitivity, 0.5f, 0.01f);
+        UUID scrollbarID = m_VerticalScrollbar ? m_VerticalScrollbar->GetUUID() : UUID::Null();
+        Scene* scene = Engine::Get().GetActiveScene().get();
+        if (EditorUIHelpers::DrawUIElementSelection("Vertical Scrollbar", scrollbarID, scene))
+        {
+            if (scrollbarID.IsValid())
+            {
+                SetVerticalScrollbar(scene->FindUIElementByID(scrollbarID));
+            }
+            else
+            {
+                SetVerticalScrollbar(nullptr);
+            }
+        }
     }
 
     void UIScrollView::Serialize(nlohmann::json& outJson) const
     {
         UIElement::Serialize(outJson);
-        outJson["type"] = "UIScrollView";
-        outJson["scrollPosition"] = m_ScrollPosition;
+        outJson["Type"] = "UIScrollView";
+        outJson["ScrollPosition"] = m_ScrollPosition;
+        outJson["VerticalScrollbar"] = m_VerticalScrollbar ? m_VerticalScrollbar->GetUUID() : UUID::Null();
     }
 
     void UIScrollView::Deserialize(const nlohmann::json& json)
     {
         UIElement::Deserialize(json);
-        m_ScrollPosition = json["scrollPosition"];
+        m_ScrollPosition = json["ScrollPosition"];
+        m_VScrollbarID = json["VerticalScrollbar"].get<UUID>();
     }
 
     void UIScrollView::UpdateScrollBarState()
