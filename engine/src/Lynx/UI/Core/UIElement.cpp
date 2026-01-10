@@ -14,8 +14,8 @@ namespace Lynx
 {
     UIElement::UIElement()
     {
-        m_Anchor = { 0.5f, 0.5f, 0.5f, 0.5f };
-        m_Pivot = { 0.5f, 0.5f };
+        m_Anchor = {0.5f, 0.5f, 0.5f, 0.5f};
+        m_Pivot = {0.5f, 0.5f};
     }
 
     void UIElement::AddChild(std::shared_ptr<UIElement> child)
@@ -32,7 +32,7 @@ namespace Lynx
     {
         if (child->GetParent())
             child->GetParent()->RemoveChild(child);
-        
+
         child->m_Parent = shared_from_this();
         if (index >= m_Children.size())
             m_Children.push_back(child);
@@ -59,7 +59,7 @@ namespace Lynx
 
         size_t oldIndex = std::distance(children.begin(), it);
 
-        if (oldIndex < newIndex) 
+        if (oldIndex < newIndex)
             newIndex--;
 
         children.erase(it);
@@ -95,7 +95,7 @@ namespace Lynx
     std::shared_ptr<UIElement> UIElement::GetRoot() const
     {
         auto root = GetParent();
-        while(root && root->GetParent()) 
+        while (root && root->GetParent())
             root = root->GetParent();
         return root;
     }
@@ -201,28 +201,28 @@ namespace Lynx
     {
         float maxWidth = 0.0f;
         float maxHeight = 0.0f;
-        
+
         for (auto& child : m_Children)
         {
             if (child->GetVisibility() == UIVisibility::Collapsed)
                 continue;
-            
+
             child->OnMeasure(availableSize);
-            
+
             UISize explicitSize = child->GetSize();
             UISize desiredSize = child->GetDesiredSize();
             UISize effectiveSize = {
                 glm::abs(explicitSize.Width > 0.001f) ? explicitSize.Width : desiredSize.Width,
                 glm::abs(explicitSize.Height > 0.001f) ? explicitSize.Height : desiredSize.Height,
             };
-            
+
             float right = child->GetOffset().X + effectiveSize.Width;
             float bottom = child->GetOffset().Y + effectiveSize.Height;
-            
+
             if (right > maxWidth) maxWidth = right;
             if (bottom > maxHeight) maxHeight = bottom;
         }
-        
+
         m_DesiredSize.Width = maxWidth + m_Padding.Left + m_Padding.Right;
         m_DesiredSize.Height = maxHeight + m_Padding.Top + m_Padding.Bottom;
     }
@@ -280,7 +280,7 @@ namespace Lynx
     {
         m_CachedRect = finalRect;
         m_IsLayoutDirty = false;
-        
+
         UIRect contentRect = finalRect;
         contentRect.X += m_Padding.Left;
         contentRect.Y += m_Padding.Top;
@@ -301,7 +301,6 @@ namespace Lynx
 
     void UIElement::OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale, glm::vec4 parentTint)
     {
-        
     }
 
     void UIElement::OnPostLoad()
@@ -316,7 +315,7 @@ namespace Lynx
             return false;
 
         return (point.x >= m_CachedRect.X && point.x <= m_CachedRect.X + m_CachedRect.Width &&
-                point.y >= m_CachedRect.Y && point.y <= m_CachedRect.Y + m_CachedRect.Height);
+            point.y >= m_CachedRect.Y && point.y <= m_CachedRect.Y + m_CachedRect.Height);
     }
 
     void UIElement::SetEnabled(bool enabled)
@@ -337,7 +336,7 @@ namespace Lynx
 
         ImGui::Separator();
         ImGui::Text("Transform");
-        
+
         bool isControlledByLayout = false;
         if (auto parent = GetParent())
         {
@@ -351,33 +350,39 @@ namespace Lynx
 
         if (!isControlledByLayout)
         {
-            float anchors[4] = { m_Anchor.MinX, m_Anchor.MinY, m_Anchor.MaxX, m_Anchor.MaxY };
+            float anchors[4] = {m_Anchor.MinX, m_Anchor.MinY, m_Anchor.MaxX, m_Anchor.MaxY};
             if (ImGui::DragFloat4("Anchors (Min/Max)", anchors, 0.01f, 0.0f, 1.0f))
             {
-                m_Anchor = { anchors[0], anchors[1], anchors[2], anchors[3] };
+                m_Anchor = {anchors[0], anchors[1], anchors[2], anchors[3]};
                 MarkDirty();
             }
-            
+
+            if (ImGui::Button("Stretch All"))
+            {
+                m_Anchor = UIAnchor::StretchAll;
+                MarkDirty();
+            }
+
             if (ImGui::DragFloat2("Pivot", &m_Pivot.x, 0.01f, 0.0f, 1.0f))
             {
                 MarkDirty();
             }
 
-            float offsets[2] = { m_Offset.X, m_Offset.Y };
+            float offsets[2] = {m_Offset.X, m_Offset.Y};
             if (ImGui::DragFloat2("Pos / Offset", offsets))
             {
-                m_Offset = { offsets[0], offsets[1] };
+                m_Offset = {offsets[0], offsets[1]};
                 MarkDirty();
             }
 
-            const char* hAlignItems[] = { "Left", "Center", "Right", "Stretch" };
+            const char* hAlignItems[] = {"Left", "Center", "Right", "Stretch"};
             int currentHAlign = (int)m_HorizontalAlignment;
             if (ImGui::Combo("Horizontal Alignment", &currentHAlign, hAlignItems, 4))
             {
                 SetHorizontalAlignment((UIAlignment)currentHAlign);
             }
 
-            const char* vAlignItems[] = { "Top", "Center", "Bottom", "Stretch" };
+            const char* vAlignItems[] = {"Top", "Center", "Bottom", "Stretch"};
             int currentVAlign = (int)m_VerticalAlignment;
             if (ImGui::Combo("Vertical Alignment", &currentVAlign, vAlignItems, 4))
             {
@@ -385,17 +390,23 @@ namespace Lynx
             }
         }
 
-        float size[2] = { m_Size.Width, m_Size.Height };
+        float size[2] = {m_Size.Width, m_Size.Height};
         if (ImGui::DragFloat2("Size / Delta", size))
         {
-            m_Size = { size[0], size[1] };
+            m_Size = {size[0], size[1]};
             MarkDirty();
         }
         
-        float padding[4] = { m_Padding.Left, m_Padding.Top, m_Padding.Right, m_Padding.Bottom };
+        if (ImGui::Button("Auto Size"))
+        {
+            m_Size = { 0, 0 };
+            MarkDirty();
+        }
+
+        float padding[4] = {m_Padding.Left, m_Padding.Top, m_Padding.Right, m_Padding.Bottom};
         if (ImGui::DragFloat4("Padding", padding))
         {
-            m_Padding = { padding[0], padding[1], padding[2], padding[3] };
+            m_Padding = {padding[0], padding[1], padding[2], padding[3]};
             MarkDirty();
         }
 
@@ -408,7 +419,7 @@ namespace Lynx
             SetOpacity(opacity);
         }
 
-        const char* visItems[] = { "Visible", "Hidden", "Collapsed" };
+        const char* visItems[] = {"Visible", "Hidden", "Collapsed"};
         int currentVis = (int)m_Visibility;
         if (ImGui::Combo("Visibility", &currentVis, visItems, 3))
         {
@@ -433,13 +444,13 @@ namespace Lynx
         outJson["Visibility"] = (int)m_Visibility;
         outJson["Opacity"] = m_Opacity;
 
-        outJson["Pivot"] = { m_Pivot.x, m_Pivot.y };
-        outJson["Anchor"] = { m_Anchor.MinX, m_Anchor.MinY, m_Anchor.MaxX, m_Anchor.MaxY };
-        outJson["Offset"] = { m_Offset.X, m_Offset.Y };
-        outJson["Size"] = { m_Size.Width, m_Size.Height };
+        outJson["Pivot"] = {m_Pivot.x, m_Pivot.y};
+        outJson["Anchor"] = {m_Anchor.MinX, m_Anchor.MinY, m_Anchor.MaxX, m_Anchor.MaxY};
+        outJson["Offset"] = {m_Offset.X, m_Offset.Y};
+        outJson["Size"] = {m_Size.Width, m_Size.Height};
         outJson["HorizontalAlignment"] = (int)m_HorizontalAlignment;
         outJson["VerticalAlignment"] = (int)m_VerticalAlignment;
-        outJson["Padding"] = { m_Padding.Left, m_Padding.Top, m_Padding.Right, m_Padding.Bottom };
+        outJson["Padding"] = {m_Padding.Left, m_Padding.Top, m_Padding.Right, m_Padding.Bottom};
         outJson["HitTestVisible"] = m_IsHitTestVisible;
         outJson["Enabled"] = m_IsEnabled;
         outJson["ClipChildren"] = m_ClipChildren;
@@ -466,21 +477,25 @@ namespace Lynx
         if (json.contains("Visibility")) m_Visibility = (UIVisibility)json["Visibility"];
         if (json.contains("Opacity")) m_Opacity = json["Opacity"];
 
-        if (json.contains("Pivot")) {
+        if (json.contains("Pivot"))
+        {
             auto& p = json["Pivot"];
-            m_Pivot = { p[0], p[1] };
+            m_Pivot = {p[0], p[1]};
         }
-        if (json.contains("Anchor")) {
+        if (json.contains("Anchor"))
+        {
             auto& a = json["Anchor"];
-            m_Anchor = { a[0], a[1], a[2], a[3] };
+            m_Anchor = {a[0], a[1], a[2], a[3]};
         }
-        if (json.contains("Offset")) {
+        if (json.contains("Offset"))
+        {
             auto& o = json["Offset"];
-            m_Offset = { o[0], o[1] };
+            m_Offset = {o[0], o[1]};
         }
-        if (json.contains("Size")) {
+        if (json.contains("Size"))
+        {
             auto& s = json["Size"];
-            m_Size = { s[0], s[1] };
+            m_Size = {s[0], s[1]};
         }
         if (json.contains("HorizontalAlignment"))
             m_HorizontalAlignment = (UIAlignment)json["HorizontalAlignment"];
@@ -489,7 +504,7 @@ namespace Lynx
         if (json.contains("Padding"))
         {
             auto& p = json["Padding"];
-            m_Padding = { p[0], p[1], p[2], p[3] };
+            m_Padding = {p[0], p[1], p[2], p[3]};
         }
         if (json.contains("HitTestVisible"))
             m_IsHitTestVisible = (bool)json["HitTestVisible"];
@@ -513,7 +528,7 @@ namespace Lynx
 
         MarkDirty();
     }
-    
+
     std::shared_ptr<UIElement> UIElement::CreateFromType(std::string type)
     {
         if (type == "UIImage")
@@ -531,5 +546,4 @@ namespace Lynx
         else
             return std::make_shared<UIElement>();
     }
-    
 }
