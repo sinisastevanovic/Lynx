@@ -244,10 +244,20 @@ namespace Lynx
         UIRect cachedRect = element->GetCachedRect();
 
         UIRect pixelRect;
-        pixelRect.X = cachedRect.X * scale;
-        pixelRect.Y = cachedRect.Y * scale;
-        pixelRect.Width = cachedRect.Width * scale;
-        pixelRect.Height = cachedRect.Height * scale;
+        
+        float pX = cachedRect.X * scale;
+        float pY = cachedRect.Y * scale;
+        float pW = cachedRect.Width * scale;
+        float pH = cachedRect.Height * scale;
+        
+        // Pixel snap
+        pixelRect.X = std::round(pX);
+        pixelRect.Y = std::round(pY);
+        
+        float pRight = pX + pW;
+        float pBottom = pY + pH;
+        pixelRect.Width = std::round(pRight) - pixelRect.X;
+        pixelRect.Height = std::round(pBottom) - pixelRect.Y;
 
         element->OnDraw(*this, pixelRect, scale, parentTint);
         
