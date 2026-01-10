@@ -77,6 +77,7 @@ int main(int argc, char** argv)
     }
     
     engine.ClearActiveScene();
+    engine.GetAssetManager().UnloadAllGameAssets();
 
     if (gameModule && destroyFunc)
     {

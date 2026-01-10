@@ -67,64 +67,176 @@ namespace Lynx
         }
     }
 
+    void UIText::SetAutoWrap(bool autoWrap)
+    {
+        m_AutoWrap = autoWrap;
+        RecalculateDesiredSize();
+    }
+
     void UIText::RecalculateDesiredSize()
     {
-        if (!m_Font)
+        MarkDirty();
+        /*UpdateLines();
+        
+        if (!m_Font || m_Lines.empty())
         {
             m_DesiredSize = { 0.0f, 0.0f };
             return;
         }
 
-        float width = 0.0f;
-        size_t i = 0;
-        while (i < m_Text.size())
-        {
-            uint32_t cp = TextUtils::DecodeNextCodepoint(m_Text, i);
-            auto g = m_Font->GetGlyph(cp);
-            if (g)
-                width += g->Advance;
-        }
+        float maxW = 0.0f;
+        for (const auto& line : m_Lines)
+            maxW = std::max(maxW, line.Width);
 
-        m_DesiredSize.Width = width * m_FontSize;
-        m_DesiredSize.Height = m_Font->GetMetrics().LineHeight * m_FontSize;
+        float lineHeight = m_Font->GetMetrics().LineHeight * m_FontSize;
+        m_DesiredSize = { maxW, m_Lines.size() * lineHeight };*/
+    }
+
+    void UIText::UpdateLines(float wrapWidth)
+    {
+        m_Lines.clear();
+        if (!m_Font || m_Text.empty())
+            return;
+
+        if (!m_AutoWrap || wrapWidth <= 0.0f)
+            wrapWidth = 1e9f;
+
+        std::stringstream ss(m_Text);
+        std::string segment;
+
+        while (std::getline(ss, segment, '\n'))
+        {
+            // Now wrap 'segment' to fit wrapWidth
+            std::string currentLine;
+            float currentW = 0.0f;
+
+            // Tokenize by space to preserve words?
+            // Simple: Iterate words.
+            std::stringstream wordStream(segment);
+            std::string word;
+            bool firstWord = true;
+            auto spaceGlyph = m_Font->GetGlyph(' ');
+
+            while (std::getline(wordStream, word, ' ')) // Split by space
+            {
+                float wordW = 0.0f;
+                // Measure word
+                for (size_t k = 0; k < word.size();)
+                {
+                    uint32_t cp = TextUtils::DecodeNextCodepoint(word, k);
+                    if (auto g = m_Font->GetGlyph(cp)) wordW += g->Advance * m_FontSize;
+                }
+
+                float spaceW = 0.0f;
+                if (!firstWord && spaceGlyph)
+                    spaceW = spaceGlyph->Advance * m_FontSize;
+
+                // Check fit
+                if (!firstWord && (currentW + spaceW + wordW) <= wrapWidth)
+                {
+                    // Fits
+                    currentLine += " " + word;
+                    currentW += spaceW + wordW;
+                }
+                else
+                {
+                    // Doesn't fit (or first word)
+                    if (!firstWord)
+                    {
+                        // Flush current line
+                        m_Lines.push_back({currentLine, currentW});
+                        currentLine = word;
+                        currentW = wordW;
+                    }
+                    else
+                    {
+                        // First word determines start
+                        currentLine = word;
+                        currentW = wordW;
+                    }
+                }
+                firstWord = false;
+            }
+            // Flush last part
+            m_Lines.push_back({currentLine, currentW});
+        }
     }
 
     void UIText::OnMeasure(UISize availableSize)
     {
-        RecalculateDesiredSize();
+        // If wrapping is ON, use available width. Else infinite.
+        float targetWidth = 0.0f;
+
+        if (m_AutoWrap)
+        {
+            if (m_Size.Width > 0.0f)
+                targetWidth = m_Size.Width;
+            else
+                targetWidth = availableSize.Width;
+        }
+
+        // Re-calculate lines based on constraint
+        UpdateLines(targetWidth);
+
+        // Calculate Desired Size (Bounding Box of wrapped text)
+        float maxW = 0.0f;
+        for (const auto& line : m_Lines) maxW = std::max(maxW, line.Width);
+        float h = m_Lines.size() * m_Font->GetMetrics().LineHeight * m_FontSize;
+
+        m_DesiredSize = {maxW, h};
+    }
+
+    void UIText::OnArrange(UIRect finalRect)
+    {
+        if (m_AutoWrap && std::abs(finalRect.Width - m_LastMeasureWidth) > 1.0f)
+        {
+            // Width changed! Re-wrap to actual width.
+            UpdateLines(finalRect.Width);
+        }
+        m_LastMeasureWidth = finalRect.Width;
+
+        UIElement::OnArrange(finalRect);
     }
 
     void UIText::OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale, glm::vec4 parentTint)
     {
-        if (!m_Font || m_Text.empty())
+        if (!m_Font || m_Text.empty() || m_Lines.empty())
             return;
 
         float finalFontSize = m_FontSize * scale;
         float width = m_DesiredSize.Width * scale;
+        float lineHeight = m_Font->GetMetrics().LineHeight * finalFontSize;
         float ascender = m_Font->GetMetrics().Ascender * finalFontSize;
         float descender = m_Font->GetMetrics().Descender * finalFontSize;
         float textHeight = (m_Font->GetMetrics().Ascender - m_Font->GetMetrics().Descender) * finalFontSize;
 
-        float x = screenRect.X;
-        if (m_TextAlignment == TextAlignment::Center)
-            x = screenRect.X + (screenRect.Width - width) * 0.5f;
-        else if (m_TextAlignment == TextAlignment::Right)
-            x = screenRect.X + (screenRect.Width - width);
+        // 1. Vertical Alignment
+        float totalH = m_Lines.size() * lineHeight;
+        float startY = screenRect.Y;
+        if (m_VAlignment == TextVerticalAlignment::Center)
+            startY += (screenRect.Height - totalH) * 0.5f;
+        else if (m_VAlignment == TextVerticalAlignment::Bottom)
+            startY += (screenRect.Height - totalH);
 
-        float y = screenRect.Y;
-        switch (m_VAlignment)
+        // 2. Render Loop
+        for (size_t i = 0; i < m_Lines.size(); i++)
         {
-            case TextVerticalAlignment::Top:
-                y += ascender;
-                break;
-            case TextVerticalAlignment::Center:
-                y += (screenRect.Height - textHeight) * 0.5f + ascender;
-                break;
-            case TextVerticalAlignment::Bottom:
-                y += screenRect.Height + descender;
-        }
+            const auto& line = m_Lines[i];
 
-        batcher.DrawString(m_Text, m_Font, finalFontSize, { x, y }, m_Color * parentTint);
+            // Horizontal Alignment (Per Line)
+            float x = screenRect.X;
+            float linePixelWidth = line.Width * scale; // Scaled width
+
+            if (m_TextAlignment == TextAlignment::Center)
+                x += (screenRect.Width - linePixelWidth) * 0.5f;
+            else if (m_TextAlignment == TextAlignment::Right)
+                x += (screenRect.Width - linePixelWidth);
+
+            // Calculate baseline Y for this line
+            float y = startY + (i * lineHeight) + ascender;
+
+            batcher.DrawString(line.Content, m_Font, finalFontSize, {x, y}, m_Color * parentTint);
+        }
     }
 
     void UIText::OnInspect()
@@ -147,14 +259,14 @@ namespace Lynx
             SetFontSize(size);
         }
 
-        const char* alignments[] = { "Left", "Center", "Right" };
+        const char* alignments[] = {"Left", "Center", "Right"};
         int current = (int)m_TextAlignment;
         if (ImGui::Combo("Orientation", &current, alignments, 3))
         {
             SetTextAlignment((TextAlignment)current);
         }
 
-        const char* vAlignments[] = { "Top", "Center", "Bottom" };
+        const char* vAlignments[] = {"Top", "Center", "Bottom"};
         int currentV = (int)m_VAlignment;
         if (ImGui::Combo("Vertical Text Alignment", &currentV, vAlignments, 3))
         {
@@ -164,7 +276,7 @@ namespace Lynx
         ImGui::ColorEdit4("Color", &m_Color.r);
 
         AssetHandle fontHandle = m_Font ? m_Font->GetHandle() : AssetHandle::Null();
-        if (EditorUIHelpers::DrawAssetSelection("Font", fontHandle, { AssetType::Font }))
+        if (EditorUIHelpers::DrawAssetSelection("Font", fontHandle, {AssetType::Font}))
         {
             if (fontHandle)
             {
@@ -174,6 +286,12 @@ namespace Lynx
             {
                 m_Font = nullptr;
             }
+        }
+
+        bool autoWrap = m_AutoWrap;
+        if (ImGui::Checkbox("Auto Wrap", &autoWrap))
+        {
+            SetAutoWrap(autoWrap);
         }
     }
 
@@ -187,6 +305,7 @@ namespace Lynx
         outJson["Alignment"] = (int)m_TextAlignment;
         outJson["VAlignment"] = (int)m_VAlignment;
         outJson["Font"] = m_Font ? m_Font->GetHandle() : AssetHandle::Null();
+        outJson["AutoWrap"] = m_AutoWrap;
     }
 
     void UIText::Deserialize(const nlohmann::json& json)
@@ -205,9 +324,8 @@ namespace Lynx
             else
                 m_Font = nullptr;
         }
+        if (json.contains("AutoWrap")) m_AutoWrap = json["AutoWrap"];
 
         RecalculateDesiredSize();
     }
-
-    
 }

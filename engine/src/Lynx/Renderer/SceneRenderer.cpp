@@ -137,6 +137,8 @@ namespace Lynx
                 DebugRenderer::DrawCapsule(transform.Translation, collider.Radius, collider.HalfHeight, transform.Rotation, debugColor);
             }
         }
+        
+        m_Scene->GetParticleSystem()->OnUpdate(deltaTime, m_Scene.get(), cameraPos);
 
         renderer.EndScene();
     }

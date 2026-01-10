@@ -109,7 +109,6 @@ namespace Lynx
         }
     }
 
-
     void ParticleSystem::EmitParticle(ParticleEmitterComponent& emitter, const glm::vec3& sourcePos)
     {
         Particle& particle = emitter.ParticlePool[emitter.PoolIndex];

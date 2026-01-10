@@ -18,6 +18,12 @@ namespace Lynx
         Bottom
     };
     
+    struct TextLine
+    {
+        std::string Content;
+        float Width;
+    };
+    
     class LX_API UIText : public UIElement
     {
     public:
@@ -41,8 +47,12 @@ namespace Lynx
 
         void SetVerticalAlignment(TextVerticalAlignment alignment);
         TextVerticalAlignment GetTextVerticalAlignment() const { return m_VAlignment; }
+        
+        void SetAutoWrap(bool autoWrap);
+        bool GetAutoWrap() const { return m_AutoWrap; }
 
         void OnMeasure(UISize availableSize) override;
+        void OnArrange(UIRect finalRect) override;
         void OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale, glm::vec4 parentTint) override;
 
         void OnInspect() override;
@@ -51,6 +61,7 @@ namespace Lynx
 
     private:
         void RecalculateDesiredSize();
+        void UpdateLines(float wrapWidth);
         
     private:
         std::string m_Text = "New Text";
@@ -59,6 +70,10 @@ namespace Lynx
         glm::vec4 m_Color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
         TextAlignment m_TextAlignment = TextAlignment::Left;
         TextVerticalAlignment m_VAlignment = TextVerticalAlignment::Top;
+        
+        bool m_AutoWrap = false;
+        float m_LastMeasureWidth = 0.0f;
+        std::vector<TextLine> m_Lines;
     };
 }
 

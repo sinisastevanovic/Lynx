@@ -199,6 +199,16 @@ namespace Lynx
 
     void UIElement::OnMeasure(UISize availableSize)
     {
+        UISize childAvailable = availableSize;
+        
+        if (m_Size.Width > 0.0f) childAvailable.Width = m_Size.Width;
+        if (m_Size.Height > 0.0f) childAvailable.Height = m_Size.Height;
+        
+        childAvailable.Width -= (m_Padding.Left + m_Padding.Right);
+        childAvailable.Height -= (m_Padding.Top + m_Padding.Bottom);
+        childAvailable.Width = std::max(0.0f, childAvailable.Width);
+        childAvailable.Height = std::max(0.0f, childAvailable.Height);
+        
         float maxWidth = 0.0f;
         float maxHeight = 0.0f;
 
@@ -207,7 +217,7 @@ namespace Lynx
             if (child->GetVisibility() == UIVisibility::Collapsed)
                 continue;
 
-            child->OnMeasure(availableSize);
+            child->OnMeasure(childAvailable);
 
             UISize explicitSize = child->GetSize();
             UISize desiredSize = child->GetDesiredSize();

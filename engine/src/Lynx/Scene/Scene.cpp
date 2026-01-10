@@ -395,8 +395,6 @@ namespace Lynx
                 break;
             }
         }
-        
-        m_ParticleSystem.OnUpdate(deltaTime, this, cameraPos);
     }
 
     void Scene::OnUpdateEditor(float deltaTime, glm::vec3 cameraPos)
@@ -419,7 +417,6 @@ namespace Lynx
             }
         }
         
-        m_ParticleSystem.OnUpdate(deltaTime, this, cameraPos);
         UpdateGlobalTransforms();
     }
 

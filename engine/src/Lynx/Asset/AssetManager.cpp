@@ -188,6 +188,30 @@ namespace Lynx
         }
     }
 
+    void AssetManager::UnloadAllGameAssets()
+    {
+        std::lock_guard<std::mutex> lock(m_AssetsMutex);
+        
+        for (auto it = m_LoadedAssets.begin(); it != m_LoadedAssets.end();)
+        {
+            auto asset = it->second;
+            bool isEngine = false;
+            
+            std::string path = asset->GetFilePath();
+            if (path.find("engine/resources") != std::string::npos)
+                isEngine = true;
+            
+            if (!isEngine)
+            {
+                it = m_LoadedAssets.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
+
     std::shared_ptr<Asset> AssetManager::GetAsset(const std::filesystem::path& path, AssetLoadMode mode, std::function<void(AssetHandle)> onLoaded)
     {
         if (!std::filesystem::exists(path))

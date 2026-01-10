@@ -67,6 +67,8 @@ namespace Lynx
         void Update();
         void ReloadAsset(AssetHandle handle);
         void UnloadAsset(AssetHandle handle);
+        
+        void UnloadAllGameAssets();
   
     private:
         std::shared_ptr<Asset> LoadAsset(const AssetMetadata& metadata, AssetLoadMode mode, std::function<void(AssetHandle)> onLoaded);

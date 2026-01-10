@@ -40,6 +40,7 @@ namespace Lynx
         void UpdateGlobalTransforms();
         
         PhysicsSystem& GetPhysicsSystem() { return *m_PhysicsSystem; }
+        ParticleSystem* GetParticleSystem() { return &m_ParticleSystem; }
 
         static AssetType GetAssetType() { return AssetType::Scene; }
         virtual AssetType GetType() const override { return Scene::GetAssetType(); }
