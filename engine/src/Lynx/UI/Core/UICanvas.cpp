@@ -108,6 +108,20 @@ namespace Lynx
             }
             return false;
         });
+        dispatcher.Dispatch<MouseScrolledEvent>([this](MouseScrolledEvent& e)
+        {
+            auto target = m_HoveredElement.lock();
+            while (target)
+            {
+                if (target->m_IsHitTestVisible && target->GetVisibility() == UIVisibility::Visible)
+                {
+                    if (target->OnMouseScroll(e.GetXOffset(), e.GetYOffset()))
+                        return true;
+                }
+                target = target->GetParent();
+            }
+            return false;
+        });
         dispatcher.Dispatch<KeyPressedEvent>([this](KeyPressedEvent& e)
         {
             if (e.GetKeyCode() != KeyCode::MouseButtonLeft)
@@ -155,6 +169,12 @@ namespace Lynx
     {
         if (current->GetVisibility() != UIVisibility::Visible)
             return nullptr;
+        
+        if (current->GetClipChildren())
+        {
+            if (!current->HitTest(point, true))
+                return nullptr;
+        }
 
         const auto& children = current->GetChildren();
         for (auto it = children.rbegin(); it != children.rend(); ++it)

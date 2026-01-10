@@ -73,9 +73,15 @@ namespace Lynx
                 .setFormat(nvrhi::Format::RGBA32_FLOAT)
                 .setBufferIndex(0)
                 .setOffset(offsetof(UIVertex, Color))
+                .setElementStride(sizeof(UIVertex)),
+            nvrhi::VertexAttributeDesc()
+                .setName("CLIPRECT")
+                .setFormat(nvrhi::Format::RGBA32_FLOAT)
+                .setBufferIndex(0)
+                .setOffset(offsetof(UIVertex, ClipRect))
                 .setElementStride(sizeof(UIVertex))
         };
-        pipeDesc.inputLayout = ctx.Device->createInputLayout(attributes, 3, shader->GetVertexShader());
+        pipeDesc.inputLayout = ctx.Device->createInputLayout(attributes, 4, shader->GetVertexShader());
 
         // Alpha Blending
         pipeDesc.renderState.blendState.targets[0]

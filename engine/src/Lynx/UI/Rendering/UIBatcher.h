@@ -17,6 +17,7 @@ namespace Lynx
         glm::vec3 Position;
         glm::vec2 UV;
         glm::vec4 Color;
+        glm::vec4 ClipRect;
     };
 
     enum class UIBatchType { Standard, Text };
@@ -73,5 +74,8 @@ namespace Lynx
         std::shared_ptr<Material> m_CurrentMaterial = nullptr;
         std::shared_ptr<Texture> m_CurrentTexture = nullptr;
         float m_CurrentOpacity = 1.0f;
+        
+        std::vector<glm::vec4> m_ClipStack;
+        glm::vec4 m_CurrentClipRect;
     };
 }

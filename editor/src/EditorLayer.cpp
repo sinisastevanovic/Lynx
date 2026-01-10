@@ -225,7 +225,10 @@ namespace Lynx
 
                 MouseMovedEvent localE(localX, localY);
                 if (m_Engine->GetActiveScene())
+                {
                     m_Engine->GetActiveScene()->OnEvent(localE);
+                    return true;
+                }
 
             }
             return false;
@@ -237,6 +240,7 @@ namespace Lynx
             {
                 if (m_Engine->GetActiveScene())
                     m_Engine->GetActiveScene()->OnEvent(e);
+                return true;
             }
             return false;
         });
@@ -247,6 +251,7 @@ namespace Lynx
             {
                 if (m_Engine->GetActiveScene())
                     m_Engine->GetActiveScene()->OnEvent(e);
+                return true;
             }
             return false;
         });

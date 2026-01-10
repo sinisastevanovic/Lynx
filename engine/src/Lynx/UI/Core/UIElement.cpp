@@ -6,6 +6,7 @@
 #include "Lynx/UI/Widgets/StackPanel.h"
 #include "Lynx/UI/Widgets/UIButton.h"
 #include "Lynx/UI/Widgets/UIImage.h"
+#include "Lynx/UI/Widgets/UIScrollView.h"
 #include "Lynx/UI/Widgets/UIText.h"
 
 namespace Lynx
@@ -26,6 +27,18 @@ namespace Lynx
         MarkDirty();
     }
 
+    void UIElement::AddChildAt(std::shared_ptr<UIElement> child, size_t index)
+    {
+        if (child->GetParent())
+            child->GetParent()->RemoveChild(child);
+        
+        child->m_Parent = shared_from_this();
+        if (index >= m_Children.size())
+            m_Children.push_back(child);
+        else
+            m_Children.insert(m_Children.begin() + index, child);
+    }
+
     void UIElement::RemoveChild(std::shared_ptr<UIElement> child)
     {
         auto it = std::find(m_Children.begin(), m_Children.end(), child);
@@ -37,12 +50,45 @@ namespace Lynx
         }
     }
 
+    void UIElement::MoveChild(std::shared_ptr<UIElement> child, size_t newIndex)
+    {
+        auto& children = m_Children;
+        auto it = std::find(children.begin(), children.end(), child);
+        if (it == children.end()) return;
+
+        size_t oldIndex = std::distance(children.begin(), it);
+
+        if (oldIndex < newIndex) 
+            newIndex--;
+
+        children.erase(it);
+
+        if (newIndex >= children.size())
+            children.push_back(child);
+        else
+            children.insert(children.begin() + newIndex, child);
+
+        MarkDirty();
+    }
+
     void UIElement::ClearChildren()
     {
         for (auto& child : m_Children)
             child->m_Parent.reset();
         m_Children.clear();
         MarkDirty();
+    }
+
+    bool UIElement::IsDescendantOf(std::shared_ptr<UIElement> other) const
+    {
+        std::shared_ptr<UIElement> parent = GetParent();
+        while (parent)
+        {
+            if (parent == other)
+                return true;
+            parent = parent->GetParent();
+        }
+        return false;
     }
 
     void UIElement::SetOffset(UIPoint offset)
@@ -109,6 +155,7 @@ namespace Lynx
         if (needsLayoutUpdate)
             MarkDirty();
     }
+
 
     void UIElement::MarkDirty()
     {
@@ -235,9 +282,9 @@ namespace Lynx
         
     }
 
-    bool UIElement::HitTest(const glm::vec2& point)
+    bool UIElement::HitTest(const glm::vec2& point, bool ignoreHitTestVisible)
     {
-        if (m_Visibility != UIVisibility::Visible || !m_IsHitTestVisible)
+        if (m_Visibility != UIVisibility::Visible || (!m_IsHitTestVisible && !ignoreHitTestVisible))
             return false;
 
         return (point.x >= m_CachedRect.X && point.x <= m_CachedRect.X + m_CachedRect.Width &&
@@ -348,10 +395,12 @@ namespace Lynx
         {
             SetEnabled(enabled);
         }
+        ImGui::Checkbox("Clip Children", &m_ClipChildren);
     }
 
     void UIElement::Serialize(nlohmann::json& outJson) const
     {
+        outJson["UUID"] = m_UUID;
         outJson["Name"] = m_Name;
         outJson["Visibility"] = (int)m_Visibility;
         outJson["Opacity"] = m_Opacity;
@@ -365,6 +414,7 @@ namespace Lynx
         outJson["Padding"] = { m_Padding.Left, m_Padding.Top, m_Padding.Right, m_Padding.Bottom };
         outJson["HitTestVisible"] = m_IsHitTestVisible;
         outJson["Enabled"] = m_IsEnabled;
+        outJson["ClipChildren"] = m_ClipChildren;
 
         // Recursively serialize children
         std::vector<nlohmann::json> childrenArray;
@@ -383,6 +433,7 @@ namespace Lynx
 
     void UIElement::Deserialize(const nlohmann::json& json)
     {
+        if (json.contains("UUID")) m_UUID = json["UUID"].get<UUID>();
         if (json.contains("Name")) m_Name = json["Name"];
         if (json.contains("Visibility")) m_Visibility = (UIVisibility)json["Visibility"];
         if (json.contains("Opacity")) m_Opacity = json["Opacity"];
@@ -416,6 +467,8 @@ namespace Lynx
             m_IsHitTestVisible = (bool)json["HitTestVisible"];
         if (json.contains("Enabled"))
             m_IsEnabled = (bool)json["Enabled"];
+        if (json.contains("ClipChildren"))
+            m_ClipChildren = (bool)json["ClipChildren"];
 
         if (json.contains("Children"))
         {
@@ -423,25 +476,30 @@ namespace Lynx
             {
                 // TODO: we will check childJson["Type"] to creating "UIImage" or "UIText"
                 // For now, we just create base UIElements
-                std::shared_ptr<UIElement> child;
                 std::string type = childJson.value("Type", "UIElement");
-                if (type == "UIImage")
-                    child = std::make_shared<UIImage>();
-                else if (type == "StackPanel")
-                    child = std::make_shared<StackPanel>();
-                else if (type == "UIText")
-                    child = std::make_shared<UIText>();
-                else if (type == "UIButton")
-                    child = std::make_shared<UIButton>();
-                else
-                    child = std::make_shared<UIElement>();
-
+                std::shared_ptr<UIElement> child = CreateFromType(type);
                 child->Deserialize(childJson);
                 AddChild(child);
             }
         }
 
         MarkDirty();
+    }
+    
+    std::shared_ptr<UIElement> UIElement::CreateFromType(std::string type)
+    {
+        if (type == "UIImage")
+            return std::make_shared<UIImage>();
+        else if (type == "StackPanel")
+            return std::make_shared<StackPanel>();
+        else if (type == "UIText")
+            return std::make_shared<UIText>();
+        else if (type == "UIButton")
+            return std::make_shared<UIButton>();
+        else if (type == "UIScrollView")
+            return std::make_shared<UIScrollView>();
+        else
+            return std::make_shared<UIElement>();
     }
     
 }

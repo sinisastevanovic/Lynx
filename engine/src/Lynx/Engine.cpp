@@ -316,7 +316,7 @@ namespace Lynx
             if (e.Handled)
                 return;
         }
-        else if (m_Scene)
+        if (m_Scene)
         {
             m_Scene->OnEvent(e);
         }

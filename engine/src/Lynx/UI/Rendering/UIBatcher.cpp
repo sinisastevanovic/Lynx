@@ -11,6 +11,7 @@ namespace Lynx
         : m_Device(device)
     {
         ResizeBuffers(4096, 6144); // enough for ~1000 quads
+        m_CurrentClipRect = { -FLT_MAX, -FLT_MAX, FLT_MAX, FLT_MAX };
     }
     
     void UIBatcher::ResizeBuffers(size_t numVerts, size_t numIndices)
@@ -49,6 +50,8 @@ namespace Lynx
         m_Batches.clear();
         m_CurrentTexture = nullptr;
         m_CurrentMaterial = nullptr;
+        m_ClipStack.clear();
+        m_CurrentClipRect = { -100000.0f, -100000.0f, 100000.0f, 100000.0f };
     }
 
     void UIBatcher::Submit(std::shared_ptr<UICanvas> canvas)
@@ -246,22 +249,37 @@ namespace Lynx
         pixelRect.Width = cachedRect.Width * scale;
         pixelRect.Height = cachedRect.Height * scale;
 
-        // DEBUG VISUALIZATION
-        /*if (element->GetName() == "ButtonStack")
-        {
-            size_t hash = (size_t)element.get();
-            float r = ((hash & 0xFF0000) >> 16) / 255.0f;
-            float g = ((hash & 0x00FF00) >> 8) / 255.0f;
-            float b = (hash & 0x0000FF) / 255.0f;
-
-            AddQuad(pixelRect, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), {0.0f, 0.0f}, {1.0f, 1.0f}); // 50% opacity
-        }*/
-
         element->OnDraw(*this, pixelRect, scale, parentTint);
+        
+        bool clip = element->GetClipChildren();
+        if (clip)
+        {
+            glm::vec4 elementRect = {
+                cachedRect.X * scale,
+                cachedRect.Y * scale,
+                (cachedRect.X + cachedRect.Width) * scale,
+                (cachedRect.Y + cachedRect.Height) * scale
+            };
+            
+            glm::vec4 newClip;
+            newClip.x = std::max(m_CurrentClipRect.x, elementRect.x);
+            newClip.y = std::max(m_CurrentClipRect.y, elementRect.y);
+            newClip.z = std::min(m_CurrentClipRect.z, elementRect.z);
+            newClip.w = std::min(m_CurrentClipRect.w, elementRect.w);
+            
+            m_ClipStack.push_back(m_CurrentClipRect);
+            m_CurrentClipRect = newClip;
+        }
 
         for (const auto& child : element->GetChildren())
         {
             TraverseAndCollect(child, scale, finalOpacity, currentTint);
+        }
+        
+        if (clip)
+        {
+            m_CurrentClipRect = m_ClipStack.back();
+            m_ClipStack.pop_back();
         }
     }
     
@@ -280,28 +298,32 @@ namespace Lynx
         m_Vertices.push_back({
             { rect.X, rect.Y, 0.0f },
             { uvMin.x, uvMin.y },
-            finalColor
+            finalColor,
+            m_CurrentClipRect
         });
 
         // Top Right
         m_Vertices.push_back({
             { rect.X + rect.Width, rect.Y, 0.0f },
             { uvMax.x, uvMin.y  },
-            finalColor
+            finalColor,
+            m_CurrentClipRect
         });
 
         // Bottom Left
         m_Vertices.push_back({
             { rect.X, rect.Y + rect.Height, 0.0f },
             { uvMin.x, uvMax.y },
-            finalColor
+            finalColor,
+            m_CurrentClipRect
         });
 
         // Bottom Right
         m_Vertices.push_back({
             { rect.X + rect.Width, rect.Y + rect.Height, 0.0f },
             { uvMax.x, uvMax.y },
-            finalColor
+            finalColor,
+            m_CurrentClipRect
         });
 
         // CCW winding (0-2-1, 1-2-3) or similar depending on cull mode.

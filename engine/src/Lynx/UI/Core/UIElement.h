@@ -26,10 +26,15 @@ namespace Lynx
 
         // Hierarchy
         void AddChild(std::shared_ptr<UIElement> child);
+        void AddChildAt(std::shared_ptr<UIElement> child, size_t index);
         void RemoveChild(std::shared_ptr<UIElement> child);
         std::shared_ptr<UIElement> GetParent() const { return m_Parent.lock(); }
         const std::vector<std::shared_ptr<UIElement>>& GetChildren() const { return m_Children; }
+        void MoveChild(std::shared_ptr<UIElement> child, size_t newIndex);
         void ClearChildren();
+        bool IsDescendantOf(std::shared_ptr<UIElement> other) const;
+        
+        UUID GetUUID() const { return m_UUID; }
 
         // Layout Props
         void SetOffset(UIPoint offset);
@@ -56,6 +61,8 @@ namespace Lynx
         void SetMaterial(std::shared_ptr<Material> material) { m_Material = material; }
         std::shared_ptr<Material> GetMaterial() const { return m_Material; }
         glm::vec4 GetContentColor() const { return m_ContentColor; }
+        void SetClipChildren(bool clipChildren) { m_ClipChildren = clipChildren; }
+        bool GetClipChildren() const { return m_ClipChildren; }
 
         // Logic
         virtual void OnUpdate(float deltaTime);
@@ -64,7 +71,7 @@ namespace Lynx
         virtual void OnDraw(UIBatcher& batcher, const UIRect& screenRect, float scale, glm::vec4 parentTint);
 
         // Interaction
-        virtual bool HitTest(const glm::vec2& point);
+        virtual bool HitTest(const glm::vec2& point, bool ignoreHitTestVisible = false);
         void SetEnabled(bool enabled);
         bool IsEnabled() const { return m_IsEnabled; }
         virtual void OnMouseEnter() {}
@@ -72,6 +79,7 @@ namespace Lynx
         virtual void OnMouseDown() {}
         virtual void OnMouseUp() {}
         virtual void OnClick() {}
+        virtual bool OnMouseScroll(float offsetX, float offsetY) { return false; }
 
         bool IsMouseOver() const { return m_IsMouseOver; }
         bool IsPressed() const { return m_IsPressed; }
@@ -88,6 +96,8 @@ namespace Lynx
         void SetName(const std::string& name) { m_Name = name; }
 
         UIRect GetCachedRect() { return m_CachedRect; }
+        
+        static std::shared_ptr<UIElement> CreateFromType(std::string type);
 
     protected:
         void MarkDirty();
@@ -97,6 +107,8 @@ namespace Lynx
         std::string m_Name = "UIElement";
         std::weak_ptr<UIElement> m_Parent;
         std::vector<std::shared_ptr<UIElement>> m_Children;
+        
+        UUID m_UUID;
 
         // Transformation Data
         UIAnchor m_Anchor;                                  // 0-1 range relative to parent
@@ -119,9 +131,11 @@ namespace Lynx
         bool m_IsPressed = false;
         bool m_IsHitTestVisible = false;
         bool m_IsEnabled = true;
+        bool m_ClipChildren = false;
 
         bool m_IsLayoutDirty = true;
 
         friend class UICanvas;
+        friend class UIScrollView;
     };
 }

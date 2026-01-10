@@ -8,7 +8,9 @@
 #include "Lynx/UI/Widgets/StackPanel.h"
 #include "Lynx/UI/Widgets/UIButton.h"
 #include "Lynx/UI/Widgets/UIImage.h"
+#include "Lynx/UI/Widgets/UIScrollView.h"
 #include "Lynx/UI/Widgets/UIText.h"
+#include "Lynx/Utils/JsonHelpers.h"
 
 namespace Lynx
 {
@@ -192,6 +194,32 @@ namespace Lynx
             flags |= ImGuiTreeNodeFlags_Leaf;
 
         bool opened = ImGui::TreeNodeEx((void*)element.get(), flags, element->GetName().c_str());
+        
+        if (ImGui::BeginDragDropSource())
+        {
+            UIElement* ptr = element.get();
+            ImGui::SetDragDropPayload("HIERARCHY_UI_ELEMENT", &ptr, sizeof(UIElement*));
+            ImGui::Text("%s", element->GetName().c_str());
+            ImGui::EndDragDropSource();
+        }
+        
+        if (ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HIERARCHY_UI_ELEMENT"))
+            {
+                UIElement* ptr = *(UIElement**)payload->Data;
+                std::shared_ptr<UIElement> source = ptr->shared_from_this();
+                
+                if (source && source != element && !element->IsDescendantOf(source))
+                {
+                    if (auto oldParent = source->GetParent())
+                        oldParent->RemoveChild(source);
+                    
+                    element->AddChild(source);
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
 
         if (ImGui::BeginPopupContextItem())
         {
@@ -235,6 +263,20 @@ namespace Lynx
                     child->SetName("Stack Panel");
                     element->AddChild(child);
                 }
+                if (ImGui::MenuItem("Scroll Viewer"))
+                {
+                    auto child = std::make_shared<UIScrollView>();
+                    child->SetName("Scroll Viewer");
+                    element->AddChild(child);
+                    
+                    auto vScrollbar = std::make_shared<UIImage>();
+                    vScrollbar->SetName("Vertical Scrollbar");
+                    vScrollbar->SetPivot({1.0f, 0.5f});
+                    vScrollbar->SetSize({10.0f, 0.0f });
+                    vScrollbar->SetTint({ 0.5f, 0.5f, 0.5f, 0.5f });
+                    child->AddChild(vScrollbar);
+                    child->SetVerticalScrollbar(vScrollbar);
+                }
                 if (ImGui::MenuItem("Empty"))
                 {
                     auto child = std::make_shared<UIElement>();
@@ -247,6 +289,19 @@ namespace Lynx
             bool hasParent = element->GetParent() != nullptr;
             if (!hasParent)
                 ImGui::BeginDisabled(true);
+            if (ImGui::MenuItem("Duplicate"))
+            {
+                nlohmann::json data;
+                element->Serialize(data);
+                data["UUID"] = UUID();
+                
+                std::shared_ptr<UIElement> clone = UIElement::CreateFromType(data["Type"]);
+                clone->Deserialize(data);
+                
+                if (auto parent = element->GetParent())
+                    parent->AddChild(clone);
+                
+            }
             if (ImGui::MenuItem("Delete"))
             {
                 // TODO: reparent children?
@@ -273,9 +328,61 @@ namespace Lynx
 
         if (opened)
         {
-            for (auto& child : element->GetChildren())
+            bool hasPayload = ImGui::GetDragDropPayload() && std::string(ImGui::GetDragDropPayload()->DataType) == "HIERARCHY_UI_ELEMENT";
+            const auto& children = element->GetChildren();
+            for (size_t i = 0; i < children.size(); i++)
             {
+                auto child = children[i];
+                
+                if (hasPayload)
+                {
+                    ImGui::Dummy(ImVec2(ImGui::GetContentRegionAvail().x, 4.0f));
+                
+                    if (ImGui::BeginDragDropTarget())
+                    {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HIERARCHY_UI_ELEMENT"))
+                        {
+                            UIElement* sourcePtr = *(UIElement**)payload->Data;
+                            auto source = sourcePtr->shared_from_this();
+
+                            if (source->GetParent() == element)
+                            {
+                                element->MoveChild(source, i);
+                            }
+                            else
+                            {
+                                source->GetParent()->RemoveChild(source);
+                                element->AddChildAt(source, i);
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
+                }
+                
                 DrawUINode(child);
+            }
+            
+            if (hasPayload && children.size() > 0)
+            {
+                ImGui::Dummy(ImVec2(ImGui::GetContentRegionAvail().x, 4.0f));
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HIERARCHY_UI_ELEMENT"))
+                    {
+                        UIElement* sourcePtr = *(UIElement**)payload->Data;
+                        auto source = sourcePtr->shared_from_this();
+                        if (source->GetParent() == element)
+                        {
+                            element->MoveChild(source, element->GetChildren().size());
+                        }
+                        else
+                        {
+                            source->GetParent()->RemoveChild(source);
+                            element->AddChild(source);
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
             }
             ImGui::TreePop();
         }
