@@ -5,6 +5,7 @@
 #include "Lynx/Scene/Entity.h"
 #include "Lynx/Scene/Components/Components.h"
 #include "Lynx/Scene/Components/UIComponents.h"
+#include "Lynx/UI/Widgets/GridPanel.h"
 #include "Lynx/UI/Widgets/StackPanel.h"
 #include "Lynx/UI/Widgets/UIButton.h"
 #include "Lynx/UI/Widgets/UIImage.h"
@@ -261,6 +262,12 @@ namespace Lynx
                 {
                     auto child = std::make_shared<StackPanel>();
                     child->SetName("Stack Panel");
+                    element->AddChild(child);
+                }
+                if (ImGui::MenuItem("Grid Panel"))
+                {
+                    auto child = std::make_shared<GridPanel>();
+                    child->SetName("Grid Panel");
                     element->AddChild(child);
                 }
                 if (ImGui::MenuItem("Scroll Viewer"))

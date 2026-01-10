@@ -3,6 +3,7 @@
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include "Lynx/UI/Rendering/UIBatcher.h"
+#include "Lynx/UI/Widgets/GridPanel.h"
 #include "Lynx/UI/Widgets/StackPanel.h"
 #include "Lynx/UI/Widgets/UIButton.h"
 #include "Lynx/UI/Widgets/UIImage.h"
@@ -519,6 +520,8 @@ namespace Lynx
             return std::make_shared<UIImage>();
         else if (type == "StackPanel")
             return std::make_shared<StackPanel>();
+        else if (type == "GridPanel")
+            return std::make_shared<GridPanel>();
         else if (type == "UIText")
             return std::make_shared<UIText>();
         else if (type == "UIButton")
