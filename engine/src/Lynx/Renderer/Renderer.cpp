@@ -865,7 +865,7 @@ namespace Lynx
         m_CommandList->writeBuffer(m_GlobalCB, &sceneData, sizeof(SceneData));
 
         // 3. Clear Screen
-        nvrhi::utils::ClearColorAttachment(m_CommandList, m_CurrentFrameData.TargetFramebuffer, 0, nvrhi::Color(0.1f, 0.1f, 0.1f, 1.0f));
+        nvrhi::utils::ClearColorAttachment(m_CommandList, m_CurrentFrameData.TargetFramebuffer, 0, nvrhi::Color(0.05f, 0.05f, 0.05f, 1.0f));
         nvrhi::utils::ClearDepthStencilAttachment(m_CommandList, m_CurrentFrameData.TargetFramebuffer, 1.0f, 0);
     }
 
