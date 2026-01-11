@@ -174,9 +174,7 @@ namespace Lynx
             ImGuizmo::SetOrthographic(false);
             ImGuizmo::SetDrawlist();
 
-            float windowWidth = (float)ImGui::GetWindowWidth();
-            float windowHeight = (float)ImGui::GetWindowHeight();
-            ImGuizmo::SetRect(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, windowWidth, windowHeight);
+            ImGuizmo::SetRect(m_Bounds[0].x, m_Bounds[0].y, viewportSize.x, viewportSize.y);
 
             auto& camera = Engine::Get().GetEditorCamera();
             const glm::mat4& cameraView = camera.GetViewMatrix();
