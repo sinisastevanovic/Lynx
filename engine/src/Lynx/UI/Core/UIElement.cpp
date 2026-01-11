@@ -2,6 +2,8 @@
 
 #include <imgui.h>
 #include <nlohmann/json.hpp>
+
+#include "Lynx/ImGui/LXUI.h"
 #include "Lynx/UI/Rendering/UIBatcher.h"
 #include "Lynx/UI/Widgets/GridPanel.h"
 #include "Lynx/UI/Widgets/StackPanel.h"
@@ -336,115 +338,105 @@ namespace Lynx
 
     void UIElement::OnInspect()
     {
-        char buffer[256];
-        memset(buffer, 0, sizeof(buffer));
-        strcpy_s(buffer, m_Name.c_str());
-        if (ImGui::InputText("Name", buffer, sizeof(buffer)))
-        {
-            m_Name = std::string(buffer);
-        }
+        LXUI::DrawTextInput("Name", m_Name);
 
-        ImGui::Separator();
-        ImGui::Text("Transform");
-
-        bool isControlledByLayout = false;
-        if (auto parent = GetParent())
+        if (LXUI::PropertyGroup("Transform"))
         {
-            if (auto stack = std::dynamic_pointer_cast<StackPanel>(parent))
+            bool isControlledByLayout = false;
+            if (auto parent = GetParent())
             {
-                isControlledByLayout = true;
-                ImGui::TextDisabled("Layout controlled by Parent (StackPanel)");
-                ImGui::Separator();
+                if (auto stack = std::dynamic_pointer_cast<StackPanel>(parent))
+                {
+                    isControlledByLayout = true;
+                    ImGui::TextDisabled("Layout controlled by Parent (StackPanel)");
+                    ImGui::Separator();
+                }
             }
-        }
 
-        if (!isControlledByLayout)
-        {
-            float anchors[4] = {m_Anchor.MinX, m_Anchor.MinY, m_Anchor.MaxX, m_Anchor.MaxY};
-            if (ImGui::DragFloat4("Anchors (Min/Max)", anchors, 0.01f, 0.0f, 1.0f))
+            if (!isControlledByLayout)
             {
-                m_Anchor = {anchors[0], anchors[1], anchors[2], anchors[3]};
+                UIAnchor currAnchor = m_Anchor;
+                if (LXUI::DrawUIAnchorControl("Anchors (Min/Max)", currAnchor)) // TODO: Use special UI Labels for anchors and other stuff...
+                {
+                    m_Anchor = currAnchor;
+                    MarkDirty();
+                }
+
+                if (LXUI::DrawVec2Control("Pivot", m_Pivot, 0.01f, 0, 1, 0.5f))
+                {
+                    MarkDirty();
+                }
+
+                glm::vec2 offsets = {m_Offset.X, m_Offset.Y};
+                if (LXUI::DrawVec2Control("Pos / Offset", offsets, 1.0f))
+                {
+                    m_Offset = {offsets.x, offsets.y};
+                    MarkDirty();
+                }
+
+                std::vector<std::string> hAlignItems = {"Left", "Center", "Right", "Stretch"};
+                int currentHAlign = (int)m_HorizontalAlignment;
+                if (LXUI::DrawComboControl("Horizontal Alignment", currentHAlign, hAlignItems))
+                {
+                    SetHorizontalAlignment((UIAlignment)currentHAlign);
+                }
+
+                std::vector<std::string> vAlignItems = {"Top", "Center", "Bottom", "Stretch"};
+                int currentVAlign = (int)m_VerticalAlignment;
+                if (LXUI::DrawComboControl("Vertical Alignment", currentVAlign, vAlignItems))
+                {
+                    SetVerticalAlignment((UIAlignment)currentVAlign);
+                }
+            }
+
+            glm::vec2 size = {m_Size.Width, m_Size.Height};
+            if (LXUI::DrawVec2Control("Size / Delta", size, 1.0f, 0, 0, 0))
+            {
+                m_Size = {size.x, size.y};
+                MarkDirty();
+            }
+            ImGui::TableNextColumn();
+            ImGui::TableNextColumn();
+            if (ImGui::Button("Auto Size"))
+            {
+                m_Size = { 0, 0 };
                 MarkDirty();
             }
 
-            if (ImGui::Button("Stretch All"))
+            UIThickness thickness = m_Padding;
+            if (LXUI::DrawUIThicknessControl("Padding", thickness))
             {
-                m_Anchor = UIAnchor::StretchAll;
+                m_Padding = thickness;
                 MarkDirty();
             }
-
-            if (ImGui::DragFloat2("Pivot", &m_Pivot.x, 0.01f, 0.0f, 1.0f))
-            {
-                MarkDirty();
-            }
-
-            float offsets[2] = {m_Offset.X, m_Offset.Y};
-            if (ImGui::DragFloat2("Pos / Offset", offsets))
-            {
-                m_Offset = {offsets[0], offsets[1]};
-                MarkDirty();
-            }
-
-            const char* hAlignItems[] = {"Left", "Center", "Right", "Stretch"};
-            int currentHAlign = (int)m_HorizontalAlignment;
-            if (ImGui::Combo("Horizontal Alignment", &currentHAlign, hAlignItems, 4))
-            {
-                SetHorizontalAlignment((UIAlignment)currentHAlign);
-            }
-
-            const char* vAlignItems[] = {"Top", "Center", "Bottom", "Stretch"};
-            int currentVAlign = (int)m_VerticalAlignment;
-            if (ImGui::Combo("Vertical Alignment", &currentVAlign, vAlignItems, 4))
-            {
-                SetVerticalAlignment((UIAlignment)currentVAlign);
-            }
-        }
-
-        float size[2] = {m_Size.Width, m_Size.Height};
-        if (ImGui::DragFloat2("Size / Delta", size))
-        {
-            m_Size = {size[0], size[1]};
-            MarkDirty();
         }
         
-        if (ImGui::Button("Auto Size"))
+        if (LXUI::PropertyGroup("Appearance"))
         {
-            m_Size = { 0, 0 };
-            MarkDirty();
-        }
+            float opacity = m_Opacity;
+            if (LXUI::DrawSliderFloat("Opacity", opacity, 0.0f, 1.0f))
+            {
+                SetOpacity(opacity);
+            }
 
-        float padding[4] = {m_Padding.Left, m_Padding.Top, m_Padding.Right, m_Padding.Bottom};
-        if (ImGui::DragFloat4("Padding", padding))
+            std::vector<std::string> visItems = {"Visible", "Hidden", "Collapsed"};
+            int currentVis = (int)m_Visibility;
+            if (LXUI::DrawComboControl("Visibility", currentVis, visItems))
+            {
+                SetVisibility((UIVisibility)currentVis);
+            }
+        }
+        
+        if (LXUI::PropertyGroup("Misc"))
         {
-            m_Padding = {padding[0], padding[1], padding[2], padding[3]};
-            MarkDirty();
+            LXUI::DrawCheckBox("Hit Test Visible", m_IsHitTestVisible);
+            bool enabled = m_IsEnabled;
+            if (LXUI::DrawCheckBox("Enabled", enabled))
+            {
+                SetEnabled(enabled);
+            }
+            LXUI::DrawCheckBox("Clip Children", m_ClipChildren);
         }
-
-        ImGui::Separator();
-        ImGui::Text("Appearance");
-
-        float opacity = m_Opacity;
-        if (ImGui::SliderFloat("Opacity", &opacity, 0.0f, 1.0f))
-        {
-            SetOpacity(opacity);
-        }
-
-        const char* visItems[] = {"Visible", "Hidden", "Collapsed"};
-        int currentVis = (int)m_Visibility;
-        if (ImGui::Combo("Visibility", &currentVis, visItems, 3))
-        {
-            SetVisibility((UIVisibility)currentVis);
-        }
-
-        ImGui::Separator();
-        ImGui::Text("Misc");
-        ImGui::Checkbox("Hit Test Visible", &m_IsHitTestVisible);
-        bool enabled = m_IsEnabled;
-        if (ImGui::Checkbox("Enabled", &enabled))
-        {
-            SetEnabled(enabled);
-        }
-        ImGui::Checkbox("Clip Children", &m_ClipChildren);
     }
 
     void UIElement::Serialize(nlohmann::json& outJson) const

@@ -2,6 +2,8 @@
 
 #include <imgui.h>
 
+#include "Lynx/ImGui/LXUI.h"
+
 namespace Lynx
 {
     UIButton::UIButton()
@@ -69,14 +71,14 @@ namespace Lynx
     void UIButton::OnInspect()
     {
         UIImage::OnInspect();
-
-        ImGui::Separator();
-        ImGui::Text("Button Interaction");
-
-        ImGui::ColorEdit4("Normal Color", &m_NormalColor.r);
-        ImGui::ColorEdit4("Hover Color", &m_HoveredColor.r);
-        ImGui::ColorEdit4("Pressed Color", &m_PressedColor.r);
-        ImGui::ColorEdit4("Disabled Color", &m_DisabledColor.r);
+        
+        if (LXUI::PropertyGroup("Button"))
+        {
+            LXUI::DrawColorControl("Normal Color", m_NormalColor);
+            LXUI::DrawColorControl("Hover Color", m_HoveredColor);
+            LXUI::DrawColorControl("Pressed Color", m_PressedColor);
+            LXUI::DrawColorControl("Disabled Color", m_DisabledColor);
+        }
     }
 
     void UIButton::Serialize(nlohmann::json& outJson) const

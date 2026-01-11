@@ -64,7 +64,20 @@ namespace Lynx
             if (scene)
             {
                 Entity e{entity, scene};
-                Engine::Get().GetScriptEngine()->OnDestroyEntity(e);
+                Engine::Get().GetScriptEngine()->OnScriptComponentDestroyed(e);
+            }
+        }
+    }
+    
+    static void OnLuaScriptComponentConstructed(entt::registry& registry, entt::entity entity)
+    {
+        if (Engine::Get().GetSceneState() == SceneState::Edit)
+        {
+            Scene* scene = Engine::Get().GetActiveScene().get();
+            if (scene)
+            {
+                Entity e{entity, scene};
+                Engine::Get().GetScriptEngine()->OnScriptComponentAdded(e);
             }
         }
     }
@@ -222,12 +235,12 @@ namespace Lynx
             }
         }
 
-        auto luaView = m_Registry.view<LuaScriptComponent>();
+        /*auto luaView = m_Registry.view<LuaScriptComponent>();
         for (auto entity : luaView)
         {
             Entity e = { entity, this };
-            Engine::Get().GetScriptEngine()->OnCreateEntity(e);
-        }
+            Engine::Get().GetScriptEngine()->OnScriptComponentAdded(e);
+        }*/
         
         UpdateGlobalTransforms();
     }
@@ -238,7 +251,7 @@ namespace Lynx
         for (auto entity : luaView)
         {
             Entity e = { entity, this };
-            Engine::Get().GetScriptEngine()->OnDestroyEntity(e);
+            Engine::Get().GetScriptEngine()->OnScriptComponentDestroyed(e);
         }
 
         Engine::Get().GetScriptEngine()->OnRuntimeStop();
@@ -577,6 +590,11 @@ namespace Lynx
     {
         SceneSerializer serializer(shared_from_this());
         return serializer.Deserialize(m_FilePath);
+    }
+
+    void Scene::PostDeserialize()
+    {
+        m_Registry.on_construct<LuaScriptComponent>().connect<&OnLuaScriptComponentConstructed>();
     }
 
     void Scene::UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform)

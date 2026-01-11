@@ -79,6 +79,11 @@ namespace Lynx
                 m_Scene->m_Registry.emplace<DisabledComponent>(m_EntityHandle);
                 
         }
+        
+        Scene* GetScene() const
+        {
+            return m_Scene;
+        }
 
         UUID GetUUID()
         {

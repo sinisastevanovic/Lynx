@@ -3,7 +3,7 @@
 #include <imgui.h>
 
 #include "Lynx/Engine.h"
-#include "Lynx/ImGui/EditorUIHelpers.h"
+#include "Lynx/ImGui/LXUI.h"
 
 namespace Lynx
 {
@@ -148,20 +148,22 @@ namespace Lynx
     {
         UIElement::OnInspect();
         
-        ImGui::Separator();
-        ImGui::Text("Scroll Viewer");
-        ImGui::DragFloat("ScrollSensitivity", &m_ScrollSensitivity, 0.5f, 0.01f);
-        UUID scrollbarID = m_VerticalScrollbar ? m_VerticalScrollbar->GetUUID() : UUID::Null();
-        Scene* scene = Engine::Get().GetActiveScene().get();
-        if (EditorUIHelpers::DrawUIElementSelection("Vertical Scrollbar", scrollbarID, scene))
+        if (LXUI::PropertyGroup("Scroll Viewer"))
         {
-            if (scrollbarID.IsValid())
+            LXUI::DrawDragFloat("ScrollSensitivity", m_ScrollSensitivity, 0.5f, 0.01f, FLT_MAX, 20.0f);
+            
+            UUID scrollbarID = m_VerticalScrollbar ? m_VerticalScrollbar->GetUUID() : UUID::Null();
+            Scene* scene = Engine::Get().GetActiveScene().get();
+            if (LXUI::DrawUIElementSelection("Vertical Scrollbar", scrollbarID, scene))
             {
-                SetVerticalScrollbar(scene->FindUIElementByID(scrollbarID));
-            }
-            else
-            {
-                SetVerticalScrollbar(nullptr);
+                if (scrollbarID.IsValid())
+                {
+                    SetVerticalScrollbar(scene->FindUIElementByID(scrollbarID));
+                }
+                else
+                {
+                    SetVerticalScrollbar(nullptr);
+                }
             }
         }
     }

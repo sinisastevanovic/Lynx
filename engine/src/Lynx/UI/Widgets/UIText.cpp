@@ -3,7 +3,7 @@
 #include <imgui.h>
 
 #include "Lynx/Engine.h"
-#include "Lynx/ImGui/EditorUIHelpers.h"
+#include "Lynx/ImGui/LXUI.h"
 #include "Lynx/Utils/TextUtils.h"
 
 namespace Lynx
@@ -235,63 +235,64 @@ namespace Lynx
             // Calculate baseline Y for this line
             float y = startY + (i * lineHeight) + ascender;
 
-            batcher.DrawString(line.Content, m_Font, finalFontSize, {x, y}, m_Color * parentTint);
+            batcher.DrawString(line.Content, m_Font, finalFontSize, {x, y}, m_Color * parentTint, m_OutlineColor,  m_OutlineWidth);
         }
     }
 
     void UIText::OnInspect()
     {
         UIElement::OnInspect();
-        ImGui::Separator();
-        ImGui::Text("Text Properties");
-
-        char buffer[256];
-        memset(buffer, 0, sizeof(buffer));
-        strcpy_s(buffer, sizeof(buffer), m_Text.c_str());
-        if (ImGui::InputTextMultiline("Content", buffer, sizeof(buffer)))
+        
+        if (LXUI::PropertyGroup("Text"))
         {
-            SetText(std::string(buffer));
-        }
-
-        float size = m_FontSize;
-        if (ImGui::DragFloat("Font Size", &size, 1.0f, 1.0f, 500.0f))
-        {
-            SetFontSize(size);
-        }
-
-        const char* alignments[] = {"Left", "Center", "Right"};
-        int current = (int)m_TextAlignment;
-        if (ImGui::Combo("Orientation", &current, alignments, 3))
-        {
-            SetTextAlignment((TextAlignment)current);
-        }
-
-        const char* vAlignments[] = {"Top", "Center", "Bottom"};
-        int currentV = (int)m_VAlignment;
-        if (ImGui::Combo("Vertical Text Alignment", &currentV, vAlignments, 3))
-        {
-            SetVerticalAlignment((TextVerticalAlignment)currentV);
-        }
-
-        ImGui::ColorEdit4("Color", &m_Color.r);
-
-        AssetHandle fontHandle = m_Font ? m_Font->GetHandle() : AssetHandle::Null();
-        if (EditorUIHelpers::DrawAssetSelection("Font", fontHandle, {AssetType::Font}))
-        {
-            if (fontHandle)
+            std::string text = m_Text;
+            if (LXUI::DrawTextInputMultiline("Content", text))
             {
-                m_Font = Engine::Get().GetAssetManager().GetAsset<Font>(fontHandle);
+                SetText(text);
             }
-            else
-            {
-                m_Font = nullptr;
-            }
-        }
 
-        bool autoWrap = m_AutoWrap;
-        if (ImGui::Checkbox("Auto Wrap", &autoWrap))
-        {
-            SetAutoWrap(autoWrap);
+            float size = m_FontSize;
+            if (LXUI::DrawDragFloat("Font Size", size, 1.0f, 1.0f, 500.0f, 1.0f))
+            {
+                SetFontSize(size);
+            }
+
+            std::vector<std::string> alignments = {"Left", "Center", "Right"};
+            int current = (int)m_TextAlignment;
+            if (LXUI::DrawComboControl("Orientation", current, alignments))
+            {
+                SetTextAlignment((TextAlignment)current);
+            }
+
+            std::vector<std::string> vAlignments = {"Top", "Center", "Bottom"};
+            int currentV = (int)m_VAlignment;
+            if (LXUI::DrawComboControl("Vertical Text Alignment", currentV, vAlignments))
+            {
+                SetVerticalAlignment((TextVerticalAlignment)currentV);
+            }
+
+            LXUI::DrawColorControl("Color", m_Color);
+            LXUI::DrawSliderFloat("Outline Width", m_OutlineWidth, 0.0f, 0.3f);
+            LXUI::DrawColorControl("Outline Color", m_OutlineColor);
+
+            AssetHandle fontHandle = m_Font ? m_Font->GetHandle() : AssetHandle::Null();
+            if (LXUI::DrawAssetReference("Font", fontHandle, {AssetType::Font}))
+            {
+                if (fontHandle)
+                {
+                    m_Font = Engine::Get().GetAssetManager().GetAsset<Font>(fontHandle);
+                }
+                else
+                {
+                    m_Font = nullptr;
+                }
+            }
+
+            bool autoWrap = m_AutoWrap;
+            if (LXUI::DrawCheckBox("Auto Wrap", autoWrap))
+            {
+                SetAutoWrap(autoWrap);
+            }
         }
     }
 
@@ -302,6 +303,8 @@ namespace Lynx
         outJson["Text"] = m_Text;
         outJson["FontSize"] = m_FontSize;
         outJson["Color"] = m_Color;
+        outJson["OutlineWidth"] = m_OutlineWidth;
+        outJson["OutlineColor"] = m_OutlineColor;
         outJson["Alignment"] = (int)m_TextAlignment;
         outJson["VAlignment"] = (int)m_VAlignment;
         outJson["Font"] = m_Font ? m_Font->GetHandle() : AssetHandle::Null();
@@ -314,6 +317,8 @@ namespace Lynx
         if (json.contains("Text")) m_Text = json["Text"];
         if (json.contains("FontSize")) m_FontSize = json["FontSize"];
         if (json.contains("Color")) m_Color = json["Color"].get<glm::vec4>();
+        if (json.contains("OutlineWidth")) m_OutlineWidth = json["OutlineWidth"];
+        if (json.contains("OutlineColor")) m_OutlineColor = json["OutlineColor"].get<glm::vec4>();
         if (json.contains("Alignment")) m_TextAlignment = (TextAlignment)json["Alignment"];
         if (json.contains("VAlignment")) m_VAlignment = (TextVerticalAlignment)json["VAlignment"];
         if (json.contains("Font"))

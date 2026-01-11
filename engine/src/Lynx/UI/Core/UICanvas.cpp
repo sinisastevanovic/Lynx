@@ -8,6 +8,7 @@
 #include "Lynx/Event/Event.h"
 #include "Lynx/Event/KeyEvent.h"
 #include "Lynx/Event/MouseEvent.h"
+#include "Lynx/ImGui/LXUI.h"
 
 namespace Lynx
 {
@@ -194,29 +195,31 @@ namespace Lynx
     void UICanvas::OnInspect()
     {
         UIElement::OnInspect();
-
-        ImGui::Separator();
-        ImGui::Text("Canvas Scaler");
-
-        const char* modes[] = { "Constant Pixel Size", "Scale With Screen Size" };
-        int currentMode = (int)m_ScaleMode;
-        if (ImGui::Combo("Scale Mode", &currentMode, modes, 2))
+        
+        if (LXUI::PropertyGroup("Canvas"))
         {
-            m_ScaleMode = (UIScaleMode)currentMode;
-            MarkDirty();
-        }
-
-        if (m_ScaleMode == UIScaleMode::ScaleWithScreenSize)
-        {
-            float res[2] = { m_ReferenceResolution.x, m_ReferenceResolution.y };
-            if (ImGui::DragFloat2("Reference Res", res))
+            std::vector<std::string> modes = { "Constant Pixel Size", "Scale With Screen Size" };
+            int currentMode = (int)m_ScaleMode;
+            if (LXUI::DrawComboControl("Scale Mode", currentMode, modes))
             {
-                m_ReferenceResolution = { res[0], res[1] };
+                m_ScaleMode = (UIScaleMode)currentMode;
                 MarkDirty();
             }
-        }
 
-        ImGui::Text("Current Scale Factor: %.2f", m_ScaleFactor);
+            if (m_ScaleMode == UIScaleMode::ScaleWithScreenSize)
+            {
+                glm::vec2 res = m_ReferenceResolution;
+                if (LXUI::DrawVec2Control("Reference Res", res, 1.0f, 1, FLT_MAX, 1))
+                {
+                    m_ReferenceResolution = res;
+                    MarkDirty();
+                }
+            }
+            
+            ImGui::TableNextColumn();
+            ImGui::TableNextColumn();
+            ImGui::Text("Current Scale Factor: %.2f", m_ScaleFactor);
+        }
     }
 
     void UICanvas::Serialize(nlohmann::json& outJson) const

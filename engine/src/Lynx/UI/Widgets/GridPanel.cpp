@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <imgui.h>
 
+#include "Lynx/ImGui/LXUI.h"
+
 namespace Lynx
 {
     GridPanel::GridPanel()
@@ -92,25 +94,25 @@ namespace Lynx
     {
         UIElement::OnInspect();
         
-        ImGui::Separator();
-        ImGui::Text("Grid Panel");
-        
-        float size[2] = { m_CellSize.x, m_CellSize.y };
-        if (ImGui::DragFloat2("Cell Size", size, 1.0f, 0.01f, 9999))
+        if (LXUI::PropertyGroup("Grid Panel"))
         {
-            SetCellSize({ size[0], size[1] });
-        }
+            glm::vec2 size = m_CellSize;
+            if (LXUI::DrawVec2Control("Cell Size", size, 1.0f, 0.01f, FLT_MAX))
+            {
+                SetCellSize(size);
+            }
         
-        float spacing[2] = { m_Spacing.x, m_Spacing.y };
-        if (ImGui::DragFloat2("Spacing", spacing, 0.01f, 0.0f, 9999))
-        {
-            SetSpacing({ spacing[0], spacing[1] });
-        }
+            glm::vec2 spacing = m_Spacing;
+            if (LXUI::DrawVec2Control("Spacing", spacing, 0.01f, 0.0f, FLT_MAX))
+            {
+                SetSpacing(spacing);
+            }
         
-        int constraint = m_ConstraintCount;
-        if (ImGui::DragInt("Columns", &constraint, 1, 0, 9999))
-        {
-            SetConstraint(constraint);
+            int constraint = m_ConstraintCount;
+            if (LXUI::DrawDragInt("Columns", constraint, 1, 0, 9999))
+            {
+                SetConstraint(constraint);
+            }
         }
     }
 

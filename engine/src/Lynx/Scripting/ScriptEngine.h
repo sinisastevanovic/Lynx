@@ -14,21 +14,25 @@ namespace Lynx
         void Init();
         void Shutdown();
 
-        void OnEditorStart(Scene* scene, bool recreateScripts = false);
+        void OnEditorStart(Scene* scene);
         void OnEditorEnd();
         void OnRuntimeStart(Scene* scene);
         void OnRuntimeStop();
 
         void OnUpdateEntity(Entity entity, float deltaTime);
-        void OnCreateEntity(Entity entity);
-        void OnDestroyEntity(Entity entity);
+        void OnActionEvent(const std::string& action, bool pressed);
+        
+        void OnScriptComponentAdded(Entity entity);
+        void OnScriptComponentDestroyed(Entity entity);
 
         void ReloadScript(AssetHandle handle);
 
-        void LoadScript(Entity entity);
-
-        void OnActionEvent(const std::string& action, bool pressed);
     private:
+        bool InstantiateScript(Entity entity);
+        void InitializeProperties(Entity entity);
+        
+        template<typename... Args>
+        void CallMethod(Entity entity, const std::string& methodName, Args&&... args);
 
         struct ScriptEngineData;
         ScriptEngineData* m_Data = nullptr;

@@ -4,11 +4,15 @@
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec2 inUV;
 layout(location = 2) in vec4 inColor;
-layout(location = 3) in vec4 inClipRect;
+layout(location = 3) in vec4 inOutlineColor;
+layout(location = 4) in float inOutlineWidth;
+layout(location = 5) in vec4 inClipRect;
 
 layout(location = 0) out vec2 outUV;
 layout(location = 1) out vec4 outColor;
-layout(location = 2) out vec4 outClipRect;
+layout(location = 2) out vec4 outOutlineColor;
+layout(location = 3) out float outOutlineWidth;
+layout(location = 4) out vec4 outClipRect;
 
 layout(push_constant) uniform PushConsts {
     vec2 ScreenSize;
@@ -18,6 +22,8 @@ layout(push_constant) uniform PushConsts {
 void main() {
     outUV = inUV;
     outColor = inColor;
+    outOutlineColor = inOutlineColor;
+    outOutlineWidth = inOutlineWidth;
     outClipRect = inClipRect;
 
     float x = (inPosition.x / u_Push.ScreenSize.x) * 2.0 - 1.0;
@@ -31,7 +37,9 @@ void main() {
 
 layout(location = 0) in vec2 inUV;
 layout(location = 1) in vec4 inColor;
-layout(location = 2) in vec4 inClipRect;
+layout(location = 2) in vec4 inOutlineColor;
+layout(location = 3) in float inOutlineWidth;
+layout(location = 4) in vec4 inClipRect;
 
 layout(location = 0) out vec4 outFragColor;
 
@@ -64,8 +72,33 @@ void main() {
     vec3 msd = texture(sampler2D(u_Texture, u_Sampler), inUV).rgb;
     float sd = median(msd.r, msd.g, msd.b);
 
-    float screenPxDistance = screenPxRange()*(sd - 0.5);
+    float pxRange = screenPxRange();
+    float screenPxDistance = pxRange * (sd - 0.5);
     float opacity = clamp(screenPxDistance + 0.5, 0.0, 1.0);
 
-    outFragColor = vec4(inColor.rgb, inColor.a * opacity);
+    vec4 finalColor = inColor;
+    finalColor.a *= opacity;
+
+    if (inOutlineWidth > 0.0) {
+        // Outline Logic
+        // Outline extends OUTWARDS from 0.5.
+        // Threshold shifts from 0.5 to (0.5 - Width).
+        // Width is in SD units (0.0 to 0.5).
+
+        float distOutline = pxRange * (sd - (0.5 - inOutlineWidth));
+        float opacityOutline = clamp(distOutline + 0.5, 0.0, 1.0);
+
+        // Composite
+        // If inside Body -> Body Color
+        // If inside Outline (but not Body) -> Outline Color
+        // Linear Interpolate based on Body Opacity
+
+        // This gives a crisp transition:
+        vec4 outlineCol = inOutlineColor;
+        outlineCol.a *= opacityOutline;
+
+        finalColor = mix(outlineCol, finalColor, opacity); // Lerp based on Inner Opacity
+    }
+
+    outFragColor = finalColor;
 }

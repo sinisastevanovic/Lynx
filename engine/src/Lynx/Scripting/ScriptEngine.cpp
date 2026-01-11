@@ -116,57 +116,124 @@ namespace Lynx
 
     void ScriptEngine::Shutdown()
     {
-        if (m_Data)
-        {
-            delete m_Data;
-            m_Data = nullptr;
-        }
+        delete m_Data;
+        m_Data = nullptr;
     }
 
-    void ScriptEngine::OnEditorStart(Scene* scene, bool recreateScripts)
+    void ScriptEngine::OnEditorStart(Scene* scene)
     {
+        LX_CORE_INFO("Script Editor start!");
         m_Data->SceneContext = scene;
-
-        if (recreateScripts)
-        {
-            auto luaView = scene->Reg().view<LuaScriptComponent>();
-            for (auto entity : luaView)
-            {
-                Entity e = { entity, scene };
-                LoadScript(e);
-            }
-        }
     }
-
+    
     void ScriptEngine::OnEditorEnd()
     {
+        LX_CORE_INFO("Script Editor stop!");
         m_Data->SceneContext = nullptr;
     }
 
     void ScriptEngine::OnRuntimeStart(Scene* scene)
     {
+        LX_CORE_INFO("Script Runtime start!");
         m_Data->SceneContext = scene;
+        auto view = scene->Reg().view<LuaScriptComponent>();
+        for (auto entityID : view)
+        {
+            Entity entity{ entityID, scene };
+            if (!entity.GetComponent<LuaScriptComponent>().Self.valid())
+            {
+                InstantiateScript(entity);
+                InitializeProperties(entity);
+            }
+
+            CallMethod(entity, "OnCreate");
+        }
     }
 
     void ScriptEngine::OnRuntimeStop()
     {
+        LX_CORE_INFO("Script Runtime stopped!");
+        if (m_Data->SceneContext)
+        {
+            auto view = m_Data->SceneContext->Reg().view<LuaScriptComponent>();
+            for (auto entityID : view)
+            {
+                Entity entity{ entityID, m_Data->SceneContext };
+                if (entity.GetComponent<LuaScriptComponent>().Self.valid())
+                {
+                    CallMethod(entity, "OnDestroy");
+                }
+            }
+        }
         m_Data->SceneContext = nullptr;
     }
 
-    void ScriptEngine::OnCreateEntity(Entity entity)
+    void ScriptEngine::OnScriptComponentAdded(Entity entity)
     {
-        if (!entity.HasComponent<LuaScriptComponent>())
+        LX_CORE_INFO("Script Component Added!");
+        if (!InstantiateScript(entity))
             return;
+        
+        InitializeProperties(entity);
+        
+        if (Engine::Get().GetSceneState() == SceneState::Play)
+        {
+            CallMethod(entity, "OnCreate");
+        }
+    }
 
+    void ScriptEngine::OnScriptComponentDestroyed(Entity entity)
+    {
+        LX_CORE_INFO("Script Component Removed!");
+        if (Engine::Get().GetSceneState() == SceneState::Play)
+        {
+            CallMethod(entity, "OnDestroy");
+        }
+        
+        auto& lsc = entity.GetComponent<LuaScriptComponent>();
+        lsc.Self = sol::nil;
+    }
+
+    bool ScriptEngine::InstantiateScript(Entity entity)
+    {
         auto& lsc = entity.GetComponent<LuaScriptComponent>();
         if (!lsc.ScriptHandle.IsValid())
-            return;
-
-        if (!lsc.Self.valid())
+            return false;
+        
+        auto scriptAsset = Engine::Get().GetAssetManager().GetAsset<Script>(lsc.ScriptHandle);
+        if (!scriptAsset)
+            return false;
+        
+        std::filesystem::path scriptPath = scriptAsset->GetFilePath();
+        if (scriptPath.empty())
+            return false;
+        
+        sol::load_result result = m_Data->Lua.load_file(scriptPath.string());
+        if (!result.valid())
         {
-            LoadScript(entity);
+            sol::error err = result;
+            LX_CORE_ERROR("Failed to load script '{0}': {1}", scriptPath.string(), err.what());
+            return false;
         }
+        
+        sol::protected_function_result scriptResult = result();
+        if (scriptResult.valid())
+        {
+            lsc.Self = scriptResult.get<sol::table>();
+            lsc.Self["CurrentEntity"] = entity;
+            return true;
+        }
+        else
+        {
+            sol::error err = scriptResult;
+            LX_CORE_ERROR("Failed to instantiate script '{0}': {1}", scriptPath.string(), err.what());
+            return false;
+        }
+    }
 
+    void ScriptEngine::InitializeProperties(Entity entity)
+    {
+        auto& lsc = entity.GetComponent<LuaScriptComponent>();
         if (!lsc.Self.valid())
             return;
         
@@ -178,231 +245,99 @@ namespace Lynx
             {
                 std::string propName = key.as<std::string>();
                 sol::table propDef = value.as<sol::table>();
-
+                
                 if (lsc.Self[propName] == sol::nil)
-                {
                     lsc.Self[propName] = propDef["Default"];
-                }
-            }
-        }
-
-        sol::protected_function onCreate = lsc.Self["OnCreate"];
-        if (onCreate.valid())
-        {
-            sol::protected_function_result createResult = onCreate(lsc.Self);
-            if (!createResult.valid())
-            {
-                sol::error err = createResult;
-                LX_CORE_ERROR("Lua Runtime Error: {0}", err.what());
             }
         }
     }
-
-    void ScriptEngine::OnDestroyEntity(Entity entity)
-    {
-        if (!entity.HasComponent<LuaScriptComponent>())
-            return;
-
-        auto& lsc = entity.GetComponent<LuaScriptComponent>();
-        if (lsc.Self.valid())
-        {
-            sol::protected_function onDestroy = lsc.Self["OnDestroy"];
-            if (onDestroy.valid())
-            {
-                sol::protected_function_result result = onDestroy(lsc.Self);
-                if (!result.valid())
-                {
-                    sol::error err = result;
-                    LX_CORE_ERROR("Lua Runtime Error: {0}", err.what());
-                }
-            }
-
-            lsc.Self = sol::nil;
-        }
-    }
-
+    
     void ScriptEngine::ReloadScript(AssetHandle handle)
     {
         if (!m_Data->SceneContext)
             return;
-
+        
         bool isRuntime = Engine::Get().GetSceneState() == SceneState::Play;
-
         auto view = m_Data->SceneContext->Reg().view<LuaScriptComponent>();
-        for (auto& entityId : view)
+        
+        for (auto& entityID : view)
         {
-            Entity entity { entityId, m_Data->SceneContext };
+            Entity entity{ entityID, m_Data->SceneContext };
             auto& lsc = entity.GetComponent<LuaScriptComponent>();
-
+            
             if (handle == lsc.ScriptHandle)
             {
-                LX_CORE_INFO("Reloading script for Entity {0}", (uint64_t)entityId);
-
+                LX_CORE_INFO("Reloading script for Entity {0}", (uint64_t)entityID);
+                
                 std::unordered_map<std::string, sol::object> backupProps;
                 if (lsc.Self.valid())
                 {
                     sol::optional<sol::table> propsOpt = lsc.Self["Properties"];
                     if (propsOpt)
                     {
-                        sol::table propsDef = propsOpt.value();
-                        for (auto& [key, value] : propsDef)
+                        for (auto& [key, value] : propsOpt.value())
                         {
-                            if (key.is<std::string>())
-                            {
-                                std::string name = key.as<std::string>();
-                                sol::object val = lsc.Self[name];
-                                if (val.valid())
-                                    backupProps[name] = val;
-                            }
+                            std::string name = key.as<std::string>();
+                            sol::object val = lsc.Self[name];
+                            if (val.valid()) backupProps[name] = val;
                         }
                     }
 
-                    if (isRuntime && lsc.Self["OnDestroy"].valid())
-                    {
-                        sol::protected_function_result result = lsc.Self["OnDestroy"](lsc.Self);
-                        if (!result.valid())
-                        {
-                            sol::error err = result;
-                            LX_CORE_ERROR("Lua Runtime Error: {0}", err.what());
-                        }
-                    }
+                    if (isRuntime) 
+                        CallMethod(entity, "OnDestroy");
                 }
-
-                std::string scriptPath = Engine::Get().GetAssetRegistry().Get(lsc.ScriptHandle).FilePath.string();
-
-                sol::load_result result = m_Data->Lua.load_file(scriptPath);
-                if (!result.valid())
+                
+                if (InstantiateScript(entity))
                 {
-                    sol::error err = result;
-                    LX_CORE_ERROR("Failed to reload script: {0}", err.what());
-                    continue;
-                }
-
-                sol::protected_function_result scriptResult = result();
-                if (scriptResult.valid())
-                {
-                    lsc.Self = scriptResult.get<sol::table>();
-                    lsc.Self["CurrentEntity"] = entity;
-
-                    sol::optional<sol::table> propertiesOption = lsc.Self["Properties"];
-                    if (propertiesOption)
-                    {
-                        sol::table properties = propertiesOption.value();
-                        for (auto& [key, value] : properties)
-                        {
-                            std::string propName = key.as<std::string>();
-                            sol::table propDef = value.as<sol::table>();
-                            // Set default
-                            lsc.Self[propName] = propDef["Default"];
-                        }
-                    }
-
+                    InitializeProperties(entity);
                     for (auto& [name, val] : backupProps)
                     {
-                        // Check if the new script still has this property
-                        if (propertiesOption && propertiesOption.value()[name].valid())
+                        sol::optional<sol::table> newProps = lsc.Self["Properties"];
+                        if (newProps && newProps.value()[name].valid())
                         {
                             lsc.Self[name] = val;
                         }
                     }
-
-                    if (isRuntime && lsc.Self["OnCreate"].valid())
-                    {
-                        sol::protected_function_result createResult = lsc.Self["OnCreate"](lsc.Self);
-                        if (!createResult.valid())
-                        {
-                            sol::error err = createResult;
-                            LX_CORE_ERROR("Lua Runtime Error: {0}", err.what());
-                        }
-                    }
-                }
-                else
-                {
-                    sol::error err = scriptResult;
-                    LX_CORE_ERROR("Failed to execute script '{0}': {1}", scriptPath, err.what());
+                    if (isRuntime) 
+                        CallMethod(entity, "OnCreate");
                 }
             }
         }
     }
-
+    
     void ScriptEngine::OnUpdateEntity(Entity entity, float deltaTime)
     {
-        if (!entity.HasComponent<LuaScriptComponent>())
-            return;
-
-        auto& lsc = entity.GetComponent<LuaScriptComponent>();
-        if (lsc.Self.valid())
-        {
-            sol::protected_function onUpdate = lsc.Self["OnUpdate"];
-            if (onUpdate.valid())
-            {
-                sol::protected_function_result result = onUpdate(lsc.Self, deltaTime);
-                if (!result.valid())
-                {
-                    sol::error err = result;
-                    LX_CORE_ERROR("Lua Runtime Error: {0}", err.what());
-                }
-            }
-        }
+        CallMethod(entity, "OnUpdate", deltaTime);
     }
-
-    void ScriptEngine::LoadScript(Entity entity)
-    {
-        if (!entity.HasComponent<LuaScriptComponent>())
-            return;
-
-        auto& lsc = entity.GetComponent<LuaScriptComponent>();
-        if (!lsc.ScriptHandle.IsValid())
-            return;
-
-        // Needed, as this loads the asset and makes reloading possible
-        auto scriptAsset = Engine::Get().GetAssetManager().GetAsset<Script>(lsc.ScriptHandle);
-        std::filesystem::path scriptPath = scriptAsset->GetFilePath();
-        if (scriptPath.empty())
-        {
-            LX_CORE_ERROR("Could not find script path for asset {0}", lsc.ScriptHandle);
-            return;
-        }
-
-        sol::load_result result = m_Data->Lua.load_file(scriptPath.string());
-        if (!result.valid())
-        {
-            sol::error err = result;
-            LX_CORE_ERROR("Failed to load script '{0}': {1}", scriptPath.string(), err.what());
-            return;
-        }
-
-        sol::protected_function_result scriptResult = result();
-        if (scriptResult.valid())
-        {
-            lsc.Self = scriptResult.get<sol::table>();
-            lsc.Self["CurrentEntity"] = entity;
-        }
-        else
-        {
-            sol::error err = scriptResult;
-            LX_CORE_ERROR("Failed to execute script '{0}': {1}", scriptPath.string(), err.what());
-        }
-    }
-
+    
     void ScriptEngine::OnActionEvent(const std::string& action, bool pressed)
     {
+        if (!m_Data->SceneContext)
+            return;
+        
         auto view = m_Data->SceneContext->Reg().view<LuaScriptComponent>();
-        for (auto entity : view)
+        for (auto entityID : view)
         {
-            auto& lsc = m_Data->SceneContext->Reg().get<LuaScriptComponent>(entity);
-            if (lsc.Self.valid())
+            Entity entity{ entityID, m_Data->SceneContext };
+            CallMethod(entity, "OnInput", action, pressed);
+        }
+    }
+    
+    template <typename ... Args>
+    void ScriptEngine::CallMethod(Entity entity, const std::string& methodName, Args&&... args)
+    {
+        auto& lsc = entity.GetComponent<LuaScriptComponent>();
+        if (!lsc.Self.valid())
+            return;
+        
+        sol::protected_function func = lsc.Self[methodName];
+        if (func.valid())
+        {
+            auto result = func(lsc.Self, std::forward<Args>(args)...);
+            if (!result.valid())
             {
-                sol::protected_function onInput = lsc.Self["OnInput"];
-                if (onInput.valid())
-                {
-                    auto result = onInput(lsc.Self, action, pressed);
-                    if (!result.valid())
-                    {
-                        sol::error err = result;
-                        LX_CORE_ERROR("Lua Runtime Error: {0}", err.what());
-                    }
-                }
+                sol::error err = result;
+                LX_CORE_ERROR("Lua Runtime Error ({0}): {1}", methodName, err.what());
             }
         }
     }

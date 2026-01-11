@@ -1,6 +1,7 @@
 #include "InspectorPanel.h"
 #include <imgui.h>
 
+#include "Lynx/ImGui/LXUI.h"
 #include "Lynx/Scene/Components/Components.h"
 
 namespace Lynx
@@ -19,7 +20,10 @@ namespace Lynx
                 char buffer[256];
                 memset(buffer, 0, sizeof(buffer));
                 strcpy_s(buffer, sizeof(buffer), tag.c_str());
-                if (ImGui::InputText("Tag", buffer, sizeof(buffer)))
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("Tag");
+                ImGui::SameLine();
+                if (ImGui::InputText("##Tag", buffer, sizeof(buffer)))
                 {
                     tag = std::string(buffer);
                 }
@@ -40,7 +44,9 @@ namespace Lynx
             {
                 if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
                 {
+                    LXUI::BeginPropertyGrid();
                     registeredComponents.at("Transform").drawUI(m_Context->Reg(), m_Selection);
+                    LXUI::EndPropertyGrid();
                 }
             }
 
@@ -68,12 +74,18 @@ namespace Lynx
                         }
                         ImGui::EndPopup();
                     }
+                    
+                    ImGui::PopID();
 
                     if (open)
                     {
                         if (info.drawUI)
                         {
+                            LXUI::BeginPropertyGrid();
+                            ImGui::PushID(name.c_str());
                             info.drawUI(m_Context->Reg(), m_Selection);
+                            ImGui::PopID();
+                            LXUI::EndPropertyGrid();
                         }
                         else
                         {
@@ -82,8 +94,6 @@ namespace Lynx
                             ImGui::EndDisabled();
                         }
                     }
-                    
-                    ImGui::PopID();
                 }
             }
 
@@ -109,7 +119,9 @@ namespace Lynx
         }
         else if (m_Context && m_SelectedUIElement)
         {
+            LXUI::BeginPropertyGrid();
             m_SelectedUIElement->OnInspect();
+            LXUI::EndPropertyGrid();
         }
         ImGui::End();
     }

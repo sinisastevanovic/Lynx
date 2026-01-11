@@ -16,7 +16,9 @@ namespace Lynx
     {
         glm::vec3 Position;
         glm::vec2 UV;
-        glm::vec4 Color;
+        uint32_t Color;
+        uint32_t OutlineColor = 0;
+        float OutlineWidth = 0.0f;
         glm::vec4 ClipRect;
     };
 
@@ -52,11 +54,11 @@ namespace Lynx
             glm::vec2 uvMin = {0.0f, 0.0f}, glm::vec2 uvMax = {1.0f, 1.0f});
         void DrawNineSlice(const UIRect& rect, const UIThickness& border, const glm::vec4& color, std::shared_ptr<Material> material, std::shared_ptr<Texture> textureOverride,
             glm::vec2 uvMin = {0.0f, 0.0f}, glm::vec2 uvMax = {1.0f, 1.0f});
-        void DrawString(const std::string& text, std::shared_ptr<Font> font, float fontSize, glm::vec2 position, const glm::vec4& color);
+        void DrawString(const std::string& text, std::shared_ptr<Font> font, float fontSize, glm::vec2 position, const glm::vec4& color, const glm::vec4& outlineColor, float outlineWidth);
 
     private:
         void TraverseAndCollect(std::shared_ptr<UIElement> element, float scale, float parentOpacity, glm::vec4 parentTint);
-        void AddQuad(const UIRect& rect, const glm::vec4& color, glm::vec2 uvMin, glm::vec2 uvMax);
+        void AddQuad(const UIRect& rect, const glm::vec4& color, glm::vec2 uvMin, glm::vec2 uvMax, const glm::vec4& outlineColor = glm::vec4(0), float outlineWidth = 0.0f);
         void ResizeBuffers(size_t numVerts, size_t numIndices);
 
     private:

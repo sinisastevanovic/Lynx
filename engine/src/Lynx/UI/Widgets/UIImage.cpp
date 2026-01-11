@@ -5,7 +5,7 @@
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Sprite.h"
 #include "Lynx/Asset/Texture.h"
-#include "Lynx/ImGui/EditorUIHelpers.h"
+#include "Lynx/ImGui/LXUI.h"
 
 namespace Lynx
 {
@@ -111,45 +111,47 @@ namespace Lynx
     void UIImage::OnInspect()
     {
         UIElement::OnInspect();
-        ImGui::Separator();
-        ImGui::Text("Image");
-        ImGui::ColorEdit4("Tint", &m_Tint.x);
-
-        AssetHandle texHandle = m_ImageResource ? m_ImageResource->GetHandle() : AssetHandle::Null();
-        if (EditorUIHelpers::DrawAssetSelection("Texture", texHandle, { AssetType::Texture, AssetType::Sprite }))
+        
+        if (LXUI::PropertyGroup("Image"))
         {
-            SetTextureInternal(texHandle);
-        }
+            LXUI::DrawColorControl("Tint", m_Tint);
 
-        AssetHandle matHandle = m_Material ? m_Material->GetHandle() : AssetHandle::Null();
-        if (EditorUIHelpers::DrawAssetSelection("Material", matHandle, { AssetType::Material }))
-        {
-            SetMaterialInternal(matHandle);
-        }
-
-        const char* types[] = { "Simple", "Sliced", "Filled" };
-        int currentType = (int)m_ImageType;
-        if (ImGui::Combo("Draw As", &currentType, types, 3))
-        {
-            SetImageType((ImageType)currentType);
-        }
-
-        if (m_ImageType == ImageType::Sliced)
-        {
-            float borders[4] = { m_Border.Left, m_Border.Top, m_Border.Right, m_Border.Bottom };
-            if (ImGui::DragFloat4("Borders (L,T,R,B)", borders))
+            AssetHandle texHandle = m_ImageResource ? m_ImageResource->GetHandle() : AssetHandle::Null();
+            if (LXUI::DrawAssetReference("Texture", texHandle, { AssetType::Texture, AssetType::Sprite }))
             {
-                SetBorder({ borders[0], borders[1], borders[2], borders[3] });
+                SetTextureInternal(texHandle);
             }
-        }
-        else if (m_ImageType == ImageType::Filled)
-        {
-            ImGui::SliderFloat("Fill Amount", &m_FillAmount, 0.0f, 1.0f);
-            const char* fillTypes[] = { "Horizontal", "Vertical" };
-            int currentFillType = (int)m_FillMethod;
-            if (ImGui::Combo("Fill Method", &currentFillType, fillTypes, 2))
+
+            AssetHandle matHandle = m_Material ? m_Material->GetHandle() : AssetHandle::Null();
+            if (LXUI::DrawAssetReference("Material", matHandle, { AssetType::Material }))
             {
-                SetFillMethod((FillMethod)currentFillType);
+                SetMaterialInternal(matHandle);
+            }
+
+            std::vector<std::string> types = { "Simple", "Sliced", "Filled" };
+            int currentType = (int)m_ImageType;
+            if (LXUI::DrawComboControl("Draw As", currentType, types))
+            {
+                SetImageType((ImageType)currentType);
+            }
+
+            if (m_ImageType == ImageType::Sliced)
+            {
+                UIThickness borders = m_Border;
+                if (LXUI::DrawUIThicknessControl("Borders", borders))
+                {
+                    SetBorder(borders);
+                }
+            }
+            else if (m_ImageType == ImageType::Filled)
+            {
+                LXUI::DrawSliderFloat("Fill Amount", m_FillAmount, 0.0f, 1.0f);
+                std::vector<std::string> fillTypes = { "Horizontal", "Vertical" };
+                int currentFillType = (int)m_FillMethod;
+                if (LXUI::DrawComboControl("Fill Method", currentFillType, fillTypes))
+                {
+                    SetFillMethod((FillMethod)currentFillType);
+                }
             }
         }
     }

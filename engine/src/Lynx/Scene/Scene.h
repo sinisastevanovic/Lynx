@@ -50,6 +50,8 @@ namespace Lynx
 
     protected:
         virtual bool LoadSourceData() override;
+        
+        void PostDeserialize();
 
     private:
         void UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform);
@@ -61,5 +63,6 @@ namespace Lynx
 
         friend class Entity;
         friend class SceneHierarchyPanel; // For editor later
+        friend class SceneSerializer;
     };
 }

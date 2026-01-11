@@ -34,17 +34,17 @@ namespace Lynx
         m_StandardPipelineState.SetPath("engine/resources/Shaders/UI_Standard.glsl");
         m_StandardPipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
-            m_StandardPipeline = this->CreatePipeline(ctx, shader);
+            m_StandardPipeline = this->CreatePipeline(ctx, shader, false);
         });
 
         m_TextPipelineState.SetPath("engine/resources/Shaders/UI_Text.glsl");
         m_TextPipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
-            m_TextPipeline = this->CreatePipeline(ctx, shader);
+            m_TextPipeline = this->CreatePipeline(ctx, shader, true);
         });
     }
 
-    nvrhi::GraphicsPipelineHandle UIPass::CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader)
+    nvrhi::GraphicsPipelineHandle UIPass::CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader, bool isText)
     {
         auto pipeDesc = nvrhi::GraphicsPipelineDesc()
             .addBindingLayout(m_BindingLayout)
@@ -55,33 +55,78 @@ namespace Lynx
         pipeDesc.renderState.rasterState.frontCounterClockwise = true; // Quad generation 0->1->2 might be CW
         pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::None; // Safe for 2D
 
-        nvrhi::VertexAttributeDesc attributes[] = {
-            nvrhi::VertexAttributeDesc()
-                .setName("POSITION")
-                .setFormat(nvrhi::Format::RGB32_FLOAT)
-                .setBufferIndex(0)
-                .setOffset(offsetof(UIVertex, Position))
-                .setElementStride(sizeof(UIVertex)),
-            nvrhi::VertexAttributeDesc()
-                .setName("TEXCOORD")
-                .setFormat(nvrhi::Format::RG32_FLOAT)
-                .setBufferIndex(0)
-                .setOffset(offsetof(UIVertex, UV))
-                .setElementStride(sizeof(UIVertex)),
-            nvrhi::VertexAttributeDesc()
-                .setName("COLOR")
-                .setFormat(nvrhi::Format::RGBA32_FLOAT)
-                .setBufferIndex(0)
-                .setOffset(offsetof(UIVertex, Color))
-                .setElementStride(sizeof(UIVertex)),
-            nvrhi::VertexAttributeDesc()
-                .setName("CLIPRECT")
-                .setFormat(nvrhi::Format::RGBA32_FLOAT)
-                .setBufferIndex(0)
-                .setOffset(offsetof(UIVertex, ClipRect))
-                .setElementStride(sizeof(UIVertex))
-        };
-        pipeDesc.inputLayout = ctx.Device->createInputLayout(attributes, 4, shader->GetVertexShader());
+        if (!isText)
+        {
+            nvrhi::VertexAttributeDesc attributes[] = {
+                nvrhi::VertexAttributeDesc()
+                    .setName("POSITION")
+                    .setFormat(nvrhi::Format::RGB32_FLOAT)
+                    .setBufferIndex(0)
+                    .setOffset(offsetof(UIVertex, Position))
+                    .setElementStride(sizeof(UIVertex)),
+                nvrhi::VertexAttributeDesc()
+                    .setName("TEXCOORD")
+                    .setFormat(nvrhi::Format::RG32_FLOAT)
+                    .setBufferIndex(0)
+                    .setOffset(offsetof(UIVertex, UV))
+                    .setElementStride(sizeof(UIVertex)),
+                nvrhi::VertexAttributeDesc()
+                    .setName("COLOR")
+                    .setFormat(nvrhi::Format::RGBA8_UNORM)
+                    .setBufferIndex(0)
+                    .setOffset(offsetof(UIVertex, Color))
+                    .setElementStride(sizeof(UIVertex)),
+                nvrhi::VertexAttributeDesc()
+                    .setName("CLIPRECT")
+                    .setFormat(nvrhi::Format::RGBA32_FLOAT)
+                    .setBufferIndex(0)
+                    .setOffset(offsetof(UIVertex, ClipRect))
+                    .setElementStride(sizeof(UIVertex))
+            };
+            pipeDesc.inputLayout = ctx.Device->createInputLayout(attributes, 4, shader->GetVertexShader());
+        }
+        else
+        {
+            nvrhi::VertexAttributeDesc attributes[] = {
+                nvrhi::VertexAttributeDesc()
+                    .setName("POSITION")
+                    .setFormat(nvrhi::Format::RGB32_FLOAT)
+                    .setBufferIndex(0)
+                    .setOffset(offsetof(UIVertex, Position))
+                    .setElementStride(sizeof(UIVertex)),
+                nvrhi::VertexAttributeDesc()
+                    .setName("TEXCOORD")
+                    .setFormat(nvrhi::Format::RG32_FLOAT)
+                    .setBufferIndex(0)
+                    .setOffset(offsetof(UIVertex, UV))
+                    .setElementStride(sizeof(UIVertex)),
+                nvrhi::VertexAttributeDesc()
+                    .setName("COLOR")
+                    .setFormat(nvrhi::Format::RGBA8_UNORM)
+                    .setBufferIndex(0)
+                    .setOffset(offsetof(UIVertex, Color))
+                    .setElementStride(sizeof(UIVertex)),
+                nvrhi::VertexAttributeDesc()
+                    .setName("OUTLINECOLOR")
+                    .setFormat(nvrhi::Format::RGBA8_UNORM)
+                    .setBufferIndex(0)
+                    .setOffset(offsetof(UIVertex, OutlineColor))
+                    .setElementStride(sizeof(UIVertex)),
+                nvrhi::VertexAttributeDesc()
+                    .setName("OUTLINEWIDTH")
+                    .setFormat(nvrhi::Format::R32_FLOAT)
+                    .setBufferIndex(0)
+                    .setOffset(offsetof(UIVertex, OutlineWidth))
+                    .setElementStride(sizeof(UIVertex)),
+                nvrhi::VertexAttributeDesc()
+                    .setName("CLIPRECT")
+                    .setFormat(nvrhi::Format::RGBA32_FLOAT)
+                    .setBufferIndex(0)
+                    .setOffset(offsetof(UIVertex, ClipRect))
+                    .setElementStride(sizeof(UIVertex))
+            };
+            pipeDesc.inputLayout = ctx.Device->createInputLayout(attributes, 6, shader->GetVertexShader());
+        }
 
         // Alpha Blending
         pipeDesc.renderState.blendState.targets[0]
@@ -103,11 +148,11 @@ namespace Lynx
         // 1. Update Shader if hot-reloaded
         m_StandardPipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
-            m_StandardPipeline = this->CreatePipeline(ctx, shader);
+            m_StandardPipeline = this->CreatePipeline(ctx, shader, false);
         });
         m_TextPipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
-            m_TextPipeline = this->CreatePipeline(ctx, shader);
+            m_TextPipeline = this->CreatePipeline(ctx, shader, true);
         });
 
         // 2. Collect UI Data

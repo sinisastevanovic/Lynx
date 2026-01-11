@@ -209,7 +209,8 @@ namespace Lynx
                     ImVec2 min = ImGui::GetItemRectMin();
                     ImVec2 max = ImGui::GetItemRectMax();
                     // Draw a thick rounded border around the button
-                    ImGui::GetWindowDrawList()->AddRect(min, max, IM_COL32(255, 255, 0, 255), 4.0f, 0, 2.0f);
+                    ImU32 selectionColor = ImGui::GetColorU32(ImGuiCol_ResizeGripHovered);
+                    ImGui::GetWindowDrawList()->AddRect(min, max, selectionColor, 4.0f, 0, 2.0f);
                 }
                 
                 if (!isDirectory && ImGui::BeginDragDropSource())

@@ -35,7 +35,9 @@ namespace Lynx
 
         std::stringstream ss;
         ss << stream.rdbuf();
-        return DeserializeFromString(ss.str());
+        bool result = DeserializeFromString(ss.str());
+        m_Scene->PostDeserialize();
+        return result;
     }
 
     bool SceneSerializer::DeserializeFromString(const std::string& serialized)

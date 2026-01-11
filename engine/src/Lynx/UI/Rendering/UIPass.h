@@ -15,7 +15,7 @@ namespace Lynx
         void Execute(RenderContext& ctx, RenderData& renderData) override;
 
     private:
-        nvrhi::GraphicsPipelineHandle CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader);
+        nvrhi::GraphicsPipelineHandle CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader, bool isText);
         nvrhi::BindingSetHandle GetBindingSet(RenderContext& ctx, Texture* texture);
 
     private:

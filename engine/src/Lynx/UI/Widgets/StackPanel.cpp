@@ -3,6 +3,8 @@
 #include <imgui.h>
 #include <glm/gtc/epsilon.hpp>
 
+#include "Lynx/ImGui/LXUI.h"
+
 namespace Lynx
 {
     StackPanel::StackPanel()
@@ -173,20 +175,21 @@ namespace Lynx
     void StackPanel::OnInspect()
     {
         UIElement::OnInspect();
-        ImGui::Separator();
-        ImGui::Text("Stack Layout");
-
-        const char* orientations[] = { "Vertical", "Horizontal" };
-        int current = (int)m_Orientation;
-        if (ImGui::Combo("Orientation", &current, orientations, 2))
+        
+        if (LXUI::PropertyGroup("Stack Layout"))
         {
-            SetOrientation((Orientation)current);
-        }
+            std::vector<std::string> orientations = { "Vertical", "Horizontal" };
+            int current = (int)m_Orientation;
+            if (LXUI::DrawComboControl("Orientation", current, orientations))
+            {
+                SetOrientation((Orientation)current);
+            }
 
-        float spacing = m_Spacing;
-        if (ImGui::DragFloat("Spacing", &spacing))
-        {
-            SetSpacing(spacing);
+            float spacing = m_Spacing;
+            if (LXUI::DrawDragFloat("Spacing", spacing, 0.01f, 0, FLT_MAX))
+            {
+                SetSpacing(spacing);
+            }
         }
     }
 

@@ -21,7 +21,7 @@
 
 #include "Event/ActionEvent.h"
 #include "Event/SceneEvents.h"
-#include "ImGui/EditorUIHelpers.h"
+#include "ImGui/LXUI.h"
 #include "Renderer/DebugRenderer.h"
 #include "Scene/Components/LuaScriptComponent.h"
 #include "Scene/Components/NativeScriptComponent.h"
@@ -58,8 +58,18 @@ namespace Lynx
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+        
+        ImFontConfig fontConfig;
+        fontConfig.GlyphOffset.y = -2.0f;
+        ImFont* font = io.Fonts->AddFontFromFileTTF("engine/resources/Fonts/OpenSans/OpenSans-Regular.ttf", 18.0f, &fontConfig);
+        if (font == nullptr)
+        {
+            LX_CORE_ERROR("Failed to load ImGui font: engine/resources/Fonts/OpenSans/OpenSans-Regular.ttf");
+            io.Fonts->AddFontDefault();
+        }
+        
         ImGui_ImplGlfw_InitForVulkan(m_Window->GetNativeWindow(), true);
-        ImGui::StyleColorsDark();
+        //ImGui::StyleColorsDark();
         m_Renderer->Init();
 
         m_ScriptEngine = std::make_unique<ScriptEngine>();
@@ -92,7 +102,7 @@ namespace Lynx
 
         if (m_Scene && m_SceneState == SceneState::Edit)
         {
-            m_ScriptEngine->OnEditorStart(m_Scene.get(), true);
+            m_ScriptEngine->OnEditorStart(m_Scene.get());
         }
 
         // Load all textures and meshes
@@ -223,7 +233,12 @@ namespace Lynx
     void Engine::SetSceneState(SceneState state)
     {
         if (m_SceneState == SceneState::Play && state == SceneState::Edit && m_GameModule)
-            m_GameModule->OnShutdown();
+        {
+            if (m_GameModule)
+                m_GameModule->OnShutdown();
+            m_Scene->OnRuntimeStop();
+            m_ScriptEngine->OnEditorStart(m_Scene.get());
+        }
         
         m_SceneState = state;
         if (m_SceneRenderer)
@@ -234,12 +249,6 @@ namespace Lynx
             if (m_GameModule)
                 m_GameModule->OnStart();
         }
-        else if (m_SceneState == SceneState::Edit)
-        {
-            m_Scene->OnRuntimeStop();
-            m_ScriptEngine->OnEditorStart(m_Scene.get());
-        }
-        
     }
 
     void Engine::OnEvent(Event& e)
@@ -350,17 +359,16 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& transform = reg.get<TransformComponent>(entity);
-                ImGui::DragFloat3("Translation", &transform.Translation.x, 0.1f);
+                
+                LXUI::DrawVec3Control("Position", transform.Translation);
 
-                glm::vec3 rotation = transform.GetRotationEuler();
-                glm::vec3 rotationDegrees = glm::degrees(rotation);
-                if (ImGui::DragFloat3("Rotation", &rotationDegrees.x, 0.1f))
+                glm::vec3 rotationDegrees = glm::degrees(glm::eulerAngles(transform.Rotation));
+                if (LXUI::DrawVec3Control("Rotation", rotationDegrees))
                 {
-                    glm::vec3 newRotation = glm::radians(rotationDegrees);
-                    transform.SetRotationEuler(newRotation);
+                    transform.Rotation = glm::quat(glm::radians(rotationDegrees));
                 }
 
-                ImGui::DragFloat3("Scale", &transform.Scale.x, 0.1f);
+                LXUI::DrawVec3Control("Scale", transform.Scale, 0.0f, 0.0f, 1.0f);
             });
 
         m_ComponentRegistry.RegisterCoreComponent<RelationshipComponent>("Relationship",
@@ -448,27 +456,14 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& cameraComp = reg.get<CameraComponent>(entity);
-                ImGui::Checkbox("Primary", &cameraComp.Primary);
-                ImGui::Checkbox("FixedAspectRatio", &cameraComp.FixedAspectRatio);
-
-                const char* projectionTypeStrings[] = { "Perspective", "Orthographic" };
-                const char* currentProjectionTypeStr = projectionTypeStrings[(int)cameraComp.Camera.GetProjectionType()];
-
-                if (ImGui::BeginCombo("Projection", currentProjectionTypeStr))
+                LXUI::DrawCheckBox("Primary", cameraComp.Primary);
+                LXUI::DrawCheckBox("FixedAspectRatio", cameraComp.FixedAspectRatio);
+                
+                std::vector<std::string> projectionTypeStrings = {"Perspective", "Orthographic"};
+                int currentProjectionType = (int)cameraComp.Camera.GetProjectionType();
+                if (LXUI::DrawComboControl("Projection", currentProjectionType, projectionTypeStrings))
                 {
-                    for (int i = 0; i < 2; i++)
-                    {
-                        bool isSelected = currentProjectionTypeStr == projectionTypeStrings[i];
-                        if (ImGui::Selectable(projectionTypeStrings[i], isSelected))
-                        {
-                            currentProjectionTypeStr = projectionTypeStrings[i];
-                            cameraComp.Camera.SetProjectionType((SceneCamera::ProjectionType)i);
-                        }
-
-                        if (isSelected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
+                    cameraComp.Camera.SetProjectionType((SceneCamera::ProjectionType)currentProjectionType);
                 }
 
                 if (cameraComp.Camera.GetProjectionType() == SceneCamera::ProjectionType::Perspective)
@@ -476,15 +471,16 @@ namespace Lynx
                     float currFOV = glm::degrees(cameraComp.Camera.GetPerspectiveVerticalFOV());
                     float currNear = cameraComp.Camera.GetPerspectiveNearClip();
                     float currFar = cameraComp.Camera.GetPerspectiveFarClip();
-                    if (ImGui::DragFloat("FOV", &currFOV, 0.1f))
+
+                    if (LXUI::DrawDragFloat("FOV", currFOV, 0.1f))
                     {
                         cameraComp.Camera.SetPerspectiveVerticalFOV(glm::radians(currFOV));
                     }
-                    if (ImGui::DragFloat("Near Clip", &currNear, 0.1f))
+                    if (LXUI::DrawDragFloat("Near Clip", currNear, 0.1f))
                     {
                         cameraComp.Camera.SetPerspectiveNearClip(currNear);
                     }
-                    if (ImGui::DragFloat("Far Clip", &currFar, 0.1f))
+                    if (LXUI::DrawDragFloat("Far Clip", currFar, 0.1f))
                     {
                         cameraComp.Camera.SetPerspectiveFarClip(currFar);
                     }
@@ -494,15 +490,15 @@ namespace Lynx
                     float currSize = cameraComp.Camera.GetOrthographicSize();
                     float currNear = cameraComp.Camera.GetOrthographicNearClip();
                     float currFar = cameraComp.Camera.GetOrthographicFarClip();
-                    if (ImGui::DragFloat("Size", &currSize, 0.1f))
+                    if (LXUI::DrawDragFloat("Size", currSize, 0.1f))
                     {
                         cameraComp.Camera.SetOrthographicSize(currSize);
                     }
-                    if (ImGui::DragFloat("Near Clip", &currNear, 0.1f))
+                    if (LXUI::DrawDragFloat("Near Clip", currNear, 0.1f))
                     {
                         cameraComp.Camera.SetOrthographicNearClip(currNear);
                     }
-                    if (ImGui::DragFloat("Far Clip", &currFar, 0.1f))
+                    if (LXUI::DrawDragFloat("Far Clip", currFar, 0.1f))
                     {
                         cameraComp.Camera.SetOrthographicFarClip(currFar);
                     }
@@ -524,7 +520,7 @@ namespace Lynx
             {
                 auto& meshComp = reg.get<MeshComponent>(entity);
                
-                EditorUIHelpers::DrawAssetSelection("Static Mesh", meshComp.Mesh, {AssetType::StaticMesh});
+                LXUI::DrawAssetReference("Static Mesh", meshComp.Mesh, {AssetType::StaticMesh});
                 if (meshComp.Mesh)
                 {
                     auto mesh = Engine::Get().GetAssetManager().GetAsset<StaticMesh>(meshComp.Mesh);
@@ -536,6 +532,8 @@ namespace Lynx
                         {
                             if (submesh.Material)
                             {
+                                // TODO: Change this to work with the new table layout
+                                // TODO: actually change static meshes to use proper materials, not import generated ones!
                                 std::string matId = "Material " + std::to_string(index);
                                 ImGui::PushID(matId.c_str());
 
@@ -575,30 +573,17 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& rbComp = reg.get<RigidBodyComponent>(entity);
-
-                const char* rbTypeStrings[] = { "Static", "Dynamic", "Kinematic" };
-                const char* currentRbTypeStr = rbTypeStrings[(int)rbComp.Type];
-
-                if (ImGui::BeginCombo("Body Type", currentRbTypeStr))
+                
+                std::vector<std::string> typeItems = { "Static", "Dynamic", "Kinematic" };
+                int currType = (int)rbComp.Type;
+                if (LXUI::DrawComboControl("Type", currType, typeItems))
                 {
-                    for (int i = 0; i < 2; i++)
-                    {
-                        bool isSelected = currentRbTypeStr == rbTypeStrings[i];
-                        if (ImGui::Selectable(rbTypeStrings[i], isSelected))
-                        {
-                            currentRbTypeStr = rbTypeStrings[i];
-                            rbComp.Type = (RigidBodyType)i;
-                        }
-
-                        if (isSelected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
+                    rbComp.Type = (RigidBodyType)currType;
                 }
 
-                ImGui::Checkbox("LockRotationX", &rbComp.LockRotationX);
-                ImGui::Checkbox("LockRotationY", &rbComp.LockRotationY);
-                ImGui::Checkbox("LockRotationZ", &rbComp.LockRotationZ);
+                LXUI::DrawCheckBox("LockRotationX", rbComp.LockRotationX);
+                LXUI::DrawCheckBox("LockRotationY", rbComp.LockRotationY);
+                LXUI::DrawCheckBox("LockRotationZ", rbComp.LockRotationZ);
             });
 
         m_ComponentRegistry.RegisterCoreComponent<BoxColliderComponent>("BoxCollider",
@@ -616,7 +601,7 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& bcComp = reg.get<BoxColliderComponent>(entity);
-                ImGui::DragFloat3("Half Size", &bcComp.HalfSize.x);
+                LXUI::DrawVec3Control("Half Size", bcComp.HalfSize, 0, FLT_MAX, 0.5f);
             });
 
         m_ComponentRegistry.RegisterCoreComponent<SphereColliderComponent>("SphereCollider",
@@ -633,7 +618,7 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& scComp = reg.get<SphereColliderComponent>(entity);
-                ImGui::DragFloat("Radius", &scComp.Radius);
+                LXUI::DrawDragFloat("Radius", scComp.Radius, 0.1f, 0, FLT_MAX, 0.5f);
             });
 
         m_ComponentRegistry.RegisterCoreComponent<CapsuleColliderComponent>("CapsuleCollider",
@@ -652,8 +637,8 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& ccComp = reg.get<CapsuleColliderComponent>(entity);
-                ImGui::DragFloat("Radius", &ccComp.Radius);
-                ImGui::DragFloat("HalfHeight", &ccComp.HalfHeight);
+                LXUI::DrawDragFloat("Radius", ccComp.Radius, 0.1f, 0, FLT_MAX, 0.5f);
+                LXUI::DrawDragFloat("Half Height", ccComp.HalfHeight, 0.1f, 0, FLT_MAX, 0.5f);
             });
 
         m_ComponentRegistry.RegisterCoreComponent<NativeScriptComponent>("NativeScript",
@@ -675,8 +660,9 @@ namespace Lynx
             {
                 auto& nscComp = reg.get<NativeScriptComponent>(entity);
 
+                LXUI::DrawLabel("Script Class");
                 std::string current = nscComp.ScriptName.empty() ? "None" : nscComp.ScriptName;
-                if (ImGui::BeginCombo("Script Class", current.c_str()))
+                if (ImGui::BeginCombo("##Script Class", current.c_str()))
                 {
                     for (const auto& [name, bindFunc] : Engine::Get().GetComponentRegistry().GetRegisteredScripts())
                     {
@@ -717,6 +703,7 @@ namespace Lynx
                             if (!runtimeVal.valid())
                                 continue;
                             
+                            // TODO: Helper for supported types? 
                             if (type == "Float") propsJson[name] = runtimeVal.as<float>();
                             else if (type == "Int") propsJson[name] = runtimeVal.as<int>();
                             else if (type == "String") propsJson[name] = runtimeVal.as<std::string>();
@@ -753,7 +740,7 @@ namespace Lynx
                     if (scene)
                     {
                         Entity e { entity, scene };
-                        Engine::Get().GetScriptEngine()->LoadScript(e);
+                        Engine::Get().GetScriptEngine()->OnScriptComponentAdded(e);
                     }
                 }
 
@@ -798,8 +785,17 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& lscComp = reg.get<LuaScriptComponent>(entity);
-                EditorUIHelpers::DrawAssetSelection("Script", lscComp.ScriptHandle, {AssetType::Script});
-                EditorUIHelpers::DrawLuaScriptSection(&lscComp);
+                Scene* scene = reg.ctx().get<Scene*>();
+                AssetHandle scriptHandle = lscComp.ScriptHandle;
+                if (LXUI::DrawAssetReference("Script", scriptHandle, {AssetType::Script}))
+                {
+                    Entity e{ entity, scene };
+                    Engine::Get().GetScriptEngine()->OnScriptComponentDestroyed(e);
+                    lscComp.ScriptHandle = scriptHandle;
+                    Engine::Get().GetScriptEngine()->OnScriptComponentAdded(e);
+                }
+                
+                LXUI::DrawLuaScriptSection(&lscComp);
             });
 
         m_ComponentRegistry.RegisterCoreComponent<DirectionalLightComponent>("DirectionalLight",
@@ -821,9 +817,9 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& light = reg.get<DirectionalLightComponent>(entity);
-                ImGui::ColorEdit3("Color", &light.Color.x);
-                ImGui::DragFloat("Intensity", &light.Intensity, 0.1f, 0.0f, 100.0f);
-                ImGui::Checkbox("Cast Shadows", &light.CastShadows);
+                LXUI::DrawColor3Control("Color", light.Color);
+                LXUI::DrawDragFloat("Intensity", light.Intensity, 0.1f, 0, 10000);
+                LXUI::DrawCheckBox("CastShadows", light.CastShadows);
             });
 
         m_ComponentRegistry.RegisterCoreComponent<ParticleEmitterComponent>("ParticleEmitter",
@@ -882,16 +878,16 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& comp = reg.get<ParticleEmitterComponent>(entity);
-                EditorUIHelpers::DrawAssetSelection("Material", comp.Material, {AssetType::Material});
+                LXUI::DrawAssetReference("Material", comp.Material, {AssetType::Material});
 
                 int maxP = (int)comp.MaxParticles;
-                if (ImGui::DragInt("Max Particles", &maxP, 1.0f, 1, 100000))
+                if (LXUI::DrawDragInt("Max Particles", maxP, 1.0f, 1, 100000, 1))
                 {
                     comp.SetMaxParticles(maxP);
                 }
                 
-                ImGui::DragFloat("Emission Rate", &comp.EmissionRate, 0.1f, 0.0f, 1000.0f);
-                if (ImGui::Checkbox("Looping", &comp.IsLooping))
+                LXUI::DrawDragFloat("Emission Rate", comp.EmissionRate, 0.1f, 0.0f, 1000.0f);
+                if (LXUI::DrawCheckBox("Looping", comp.IsLooping))
                 {
                     comp.BurstDone = false;
                 }
@@ -905,22 +901,26 @@ namespace Lynx
                     }
                 }
 
-                ImGui::Checkbox("Depth Sorting", &comp.DepthSorting);
+                LXUI::DrawCheckBox("Depth Sorting", comp.DepthSorting);
                 
-                if (ImGui::TreeNode("Properties"))
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                if (ImGui::TreeNodeEx("Properties", ImGuiTreeNodeFlags_DefaultOpen))
                 {
-                    ImGui::DragFloat3("Position Offset", &comp.Properties.Position.x, 0.1f);
-                    ImGui::DragFloat3("Velocity", &comp.Properties.Velocity.x, 0.1f);
-                    ImGui::DragFloat3("Velocity Variation", &comp.Properties.VelocityVariation.x, 0.1f);
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    LXUI::DrawVec3Control("Position Offset", comp.Properties.Position);
+                    LXUI::DrawVec3Control("Velocity", comp.Properties.Velocity);
+                    LXUI::DrawVec3Control("Velocity Variation", comp.Properties.VelocityVariation);
                 
-                    ImGui::ColorEdit4("Color Begin", &comp.Properties.ColorBegin.r);
-                    ImGui::ColorEdit4("Color End", &comp.Properties.ColorEnd.r);
+                    LXUI::DrawColorControl("Color Begin", comp.Properties.ColorBegin);
+                    LXUI::DrawColorControl("Color End", comp.Properties.ColorEnd);
                 
-                    ImGui::DragFloat("Size Begin", &comp.Properties.SizeBegin, 0.1f);
-                    ImGui::DragFloat("Size End", &comp.Properties.SizeEnd, 0.1f);
-                    ImGui::DragFloat("Size Variation", &comp.Properties.SizeVariation, 0.1f);
+                    LXUI::DrawDragFloat("Size Begin", comp.Properties.SizeBegin, 0.1f);
+                    LXUI::DrawDragFloat("Size End", comp.Properties.SizeEnd, 0.1f);
+                    LXUI::DrawDragFloat("Size Variation", comp.Properties.SizeVariation, 0.1f);
                 
-                    ImGui::DragFloat("Life Time", &comp.Properties.LifeTime, 0.1f, 0.0f, 100.0f);
+                    LXUI::DrawDragFloat("Life Time", comp.Properties.LifeTime, 0.1f, 0.0f, 100.0f);
                 
                     ImGui::TreePop();
                 }

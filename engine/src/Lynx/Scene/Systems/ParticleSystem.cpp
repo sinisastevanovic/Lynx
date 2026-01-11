@@ -98,7 +98,7 @@ namespace Lynx
                 });
             }
 
-            if (!activeParticles.empty())
+            if (!activeParticles.empty() && emitter.Material.IsValid())
             {
                 auto mat = Engine::Get().GetAssetManager().GetAsset<Material>(emitter.Material);
                 if (mat)

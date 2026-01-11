@@ -6,6 +6,7 @@
 #include <imgui.h>
 
 #include "EditorLayer.h"
+#include "ImGui/EditorTheme.h"
 #include "Panels/SceneHierarchyPanel.h"
 
 
@@ -22,6 +23,7 @@ int main(int argc, char** argv)
 
     Lynx::Engine engine;
     engine.Initialize(true);
+    Lynx::EditorTheme::ApplyTheme();
     engine.SetSceneState(Lynx::SceneState::Edit);
 
     Lynx::IGameModule* gameModule = nullptr;

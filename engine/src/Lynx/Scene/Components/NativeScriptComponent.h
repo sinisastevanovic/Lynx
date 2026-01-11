@@ -5,6 +5,7 @@
 
 namespace Lynx
 {
+    // TODO: Add drawImgui functions to ScripableEntity
     struct NativeScriptComponent
     {
         ScriptableEntity* Instance = nullptr;

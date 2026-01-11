@@ -300,6 +300,7 @@ namespace Lynx
         if (!filepath.empty())
         {
             m_EditorScene = Engine::Get().GetAssetManager().GetAsset<Scene>(filepath, AssetLoadMode::Blocking);
+            m_Engine->GetScriptEngine()->OnEditorStart(m_EditorScene.get());
             m_Engine->SetActiveScene(m_EditorScene);
             m_SelectedEntity = entt::null;
         }

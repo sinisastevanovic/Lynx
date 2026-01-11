@@ -41,6 +41,12 @@ namespace Lynx
 
         void SetColor(const glm::vec4& color);
         const glm::vec4& GetColor() const { return m_Color; }
+        
+        void SetOutlineWidth(float outlineWidth) { m_OutlineWidth = outlineWidth; }
+        float GetOutlineWidth() const { return m_OutlineWidth; }
+        
+        void SetOutlineColor(const glm::vec4& outlineColor) { m_OutlineColor = outlineColor; }
+        const glm::vec4& GetOutlineColor() const { return m_OutlineColor; }
 
         void SetTextAlignment(TextAlignment alignment);
         TextAlignment GetTextAlignment() const { return m_TextAlignment; }
@@ -68,6 +74,8 @@ namespace Lynx
         std::shared_ptr<Font> m_Font;
         float m_FontSize = 24.0f;
         glm::vec4 m_Color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        float m_OutlineWidth = 0.0f;
+        glm::vec4 m_OutlineColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
         TextAlignment m_TextAlignment = TextAlignment::Left;
         TextVerticalAlignment m_VAlignment = TextVerticalAlignment::Top;
         

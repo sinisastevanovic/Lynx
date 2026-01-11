@@ -7,6 +7,15 @@
 
 namespace Lynx
 {
+    static uint32_t PackColor(const glm::vec4& color)
+    {
+        uint8_t r = (uint8_t)(glm::clamp(color.r, 0.0f, 1.0f) * 255.0f);
+        uint8_t g = (uint8_t)(glm::clamp(color.g, 0.0f, 1.0f) * 255.0f);
+        uint8_t b = (uint8_t)(glm::clamp(color.b, 0.0f, 1.0f) * 255.0f);
+        uint8_t a = (uint8_t)(glm::clamp(color.a, 0.0f, 1.0f) * 255.0f);
+        return (a << 24) | (b << 16) | (g << 8) | r; // Little Endian (R G B A in memory)
+    }
+    
     UIBatcher::UIBatcher(nvrhi::DeviceHandle device)
         : m_Device(device)
     {
@@ -163,11 +172,13 @@ namespace Lynx
             uvMax.y - borderV_Bottom,
             uvMax.y
         };
+        
+        uint32_t packedColor = PackColor(color);
 
         uint32_t startIndex = (uint32_t)m_Vertices.size();
         for (int j = 0; j < 4; j++) {
             for (int i = 0; i < 4; i++) {
-                m_Vertices.push_back({ { x[i], y[j], 0.0f }, { u[i], v[j] }, color });
+                m_Vertices.push_back({ { x[i], y[j], 0.0f }, { u[i], v[j] }, packedColor, 0, 0.0f, {0.0f, 0.0f, 0.0f, 0.0f} }); // TODO: We need to duplicate the logic from AddQuad
             }
         }
 
@@ -187,7 +198,7 @@ namespace Lynx
         }
     }
 
-    void UIBatcher::DrawString(const std::string& text, std::shared_ptr<Font> font, float fontSize, glm::vec2 position, const glm::vec4& color)
+    void UIBatcher::DrawString(const std::string& text, std::shared_ptr<Font> font, float fontSize, glm::vec2 position, const glm::vec4& color, const glm::vec4& outlineColor, float outlineWidth)
     {
         auto atlas = font->GetTexture();
         if (!atlas)
@@ -222,7 +233,7 @@ namespace Lynx
             gr.Y = y - glyph->PlaneTop * scale;
             gr.Width = (glyph->PlaneRight - glyph->PlaneLeft) * scale;
             gr.Height = (glyph->PlaneTop - glyph->PlaneBottom) * scale;
-            AddQuad(gr, color, {glyph->AtlasLeft, glyph->AtlasTop}, {glyph->AtlasRight, glyph->AtlasBottom});
+            AddQuad(gr, color, {glyph->AtlasLeft, glyph->AtlasTop}, {glyph->AtlasRight, glyph->AtlasBottom}, outlineColor, outlineWidth);
             m_Batches.back().IndexCount += 6;
             x += glyph->Advance * scale;
         }
@@ -293,12 +304,15 @@ namespace Lynx
         }
     }
     
-    void UIBatcher::AddQuad(const UIRect& rect, const glm::vec4& color, glm::vec2 uvMin, glm::vec2 uvMax)
+    void UIBatcher::AddQuad(const UIRect& rect, const glm::vec4& color, glm::vec2 uvMin, glm::vec2 uvMax, const glm::vec4& outlineColor, float outlineWidth)
     {
         uint32_t startIndex = (uint32_t)m_Vertices.size();
 
         glm::vec4 finalColor = color;
         finalColor.a *= m_CurrentOpacity;
+        
+        uint32_t packedColor = PackColor(finalColor);
+        uint32_t packedOutline = PackColor(outlineColor);
 
         // 0 -- 1
         // |    |
@@ -308,7 +322,9 @@ namespace Lynx
         m_Vertices.push_back({
             { rect.X, rect.Y, 0.0f },
             { uvMin.x, uvMin.y },
-            finalColor,
+            packedColor,
+            packedOutline,
+            outlineWidth,
             m_CurrentClipRect
         });
 
@@ -316,7 +332,9 @@ namespace Lynx
         m_Vertices.push_back({
             { rect.X + rect.Width, rect.Y, 0.0f },
             { uvMax.x, uvMin.y  },
-            finalColor,
+            packedColor,
+            packedOutline,
+            outlineWidth,
             m_CurrentClipRect
         });
 
@@ -324,7 +342,9 @@ namespace Lynx
         m_Vertices.push_back({
             { rect.X, rect.Y + rect.Height, 0.0f },
             { uvMin.x, uvMax.y },
-            finalColor,
+            packedColor,
+            packedOutline,
+            outlineWidth,
             m_CurrentClipRect
         });
 
@@ -332,7 +352,9 @@ namespace Lynx
         m_Vertices.push_back({
             { rect.X + rect.Width, rect.Y + rect.Height, 0.0f },
             { uvMax.x, uvMax.y },
-            finalColor,
+            packedColor,
+            packedOutline,
+            outlineWidth,
             m_CurrentClipRect
         });
 

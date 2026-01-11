@@ -91,6 +91,9 @@ namespace Lynx
         for (auto entity : meshView)
         {
             auto [transform, meshComp] = meshView.get<TransformComponent, MeshComponent>(entity);
+            if (!meshComp.Mesh)
+                continue;
+            
             auto mesh = assetManager.GetAsset<StaticMesh>(meshComp.Mesh);
             if (mesh)
             {

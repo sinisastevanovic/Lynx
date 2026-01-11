@@ -6,7 +6,7 @@
 #include "Lynx/Asset/Sprite.h"
 #include "Lynx/Asset/Serialization/MaterialSerializer.h"
 #include "Lynx/Asset/Serialization/SpriteSerializer.h"
-#include "Lynx/ImGui/EditorUIHelpers.h"
+#include "Lynx/ImGui/LXUI.h"
 
 namespace Lynx
 {
@@ -40,25 +40,27 @@ namespace Lynx
         auto texture = std::static_pointer_cast<Texture>(m_SelectedAsset);
         ImGui::Text("Texture: %s", m_EditingSpec.DebugName.c_str());
         ImGui::Separator();
+        
+        LXUI::BeginPropertyGrid();
 
-        const char* formatStrings[] = { "None", "RGBA8", "RG16F", "RG32F", "R32I", "R8", "Depth32", "Depth24Stencil8" };
+        std::vector<std::string> formatStrings = { "None", "RGBA8", "RG16F", "RG32F", "R32I", "R8", "Depth32", "Depth24Stencil8" };
         int currFormat = (int)m_EditingSpec.Format;
         
         ImGui::Text("Format: %s", formatStrings[currFormat]);
-        if (ImGui::Checkbox("Generate Mips", &m_EditingSpec.GenerateMips)) m_IsDirty = true;
-        if (ImGui::Checkbox("Is sRGB", &m_EditingSpec.IsSRGB)) m_IsDirty = true;
+        if (LXUI::DrawCheckBox("Generate Mips", m_EditingSpec.GenerateMips)) m_IsDirty = true;
+        if (LXUI::DrawCheckBox("Is sRGB", m_EditingSpec.IsSRGB)) m_IsDirty = true;
 
-        const char* filterOptions[] = { "Bilinear", "Nearest", "Trilinear" };
+        std::vector<std::string> filterOptions = { "Bilinear", "Nearest", "Trilinear" };
         int currentFilter = (int)m_EditingSpec.SamplerSettings.FilterMode;
-        if (ImGui::Combo("Filter Mode", &currentFilter, filterOptions, IM_ARRAYSIZE(filterOptions)))
+        if (LXUI::DrawComboControl("Filter Mode", currentFilter, filterOptions))
         {
             m_EditingSpec.SamplerSettings.FilterMode = (TextureFilter)currentFilter;
             m_IsDirty = true;
         }
 
-        const char* wrapOptions[] = { "Repeat", "Clamp", "Mirror" };
+        std::vector<std::string> wrapOptions = { "Repeat", "Clamp", "Mirror" };
         int currentWrap = (int)m_EditingSpec.SamplerSettings.WrapMode;
-        if (ImGui::Combo("Wrap Mode", &currentWrap, wrapOptions, IM_ARRAYSIZE(wrapOptions)))
+        if (LXUI::DrawComboControl("Wrap Mode", currentWrap, wrapOptions))
         {
             m_EditingSpec.SamplerSettings.WrapMode = (TextureWrap)currentWrap;
             m_IsDirty = true;
@@ -66,12 +68,14 @@ namespace Lynx
 
         if (m_EditingSpec.SamplerSettings.FilterMode == TextureFilter::Trilinear)
         {
-            if (ImGui::Checkbox("Use Anisotropy", &m_EditingSpec.SamplerSettings.UseAnisotropy))
+            if (LXUI::DrawCheckBox("Use Anisotropy", m_EditingSpec.SamplerSettings.UseAnisotropy))
             {
                 m_IsDirty = true;
             }
         }
 
+        LXUI::EndPropertyGrid();
+        
         ImGui::Spacing();
         ImGui::Separator();
 
@@ -106,39 +110,43 @@ namespace Lynx
         auto material = std::static_pointer_cast<Material>(m_SelectedAsset);
         ImGui::Text("Material Editor");
         ImGui::Separator();
+        
+        LXUI::BeginPropertyGrid();
 
-        const char* modes[] = { "Opaque", "Masked", "Translucent", "Additive" };
+        std::vector<std::string> modes = { "Opaque", "Masked", "Translucent", "Additive" };
         int currentMode = (int)material->Mode;
-        if (ImGui::Combo("Blend Mode", &currentMode, modes, 4))
+        if (LXUI::DrawComboControl("Blend Mode", currentMode, modes))
         {
             material->Mode = (AlphaMode)currentMode;
             m_IsDirty = true;
         }
 
-        if (ImGui::ColorEdit4("Albedo Color", &material->AlbedoColor.r))
+        if (LXUI::DrawColorControl("Albedo Color", material->AlbedoColor))
             m_IsDirty = true;
 
-        if (EditorUIHelpers::DrawAssetSelection("Albedo Map", material->AlbedoTexture, { AssetType::Texture }))
+        if (LXUI::DrawAssetReference("Albedo Map", material->AlbedoTexture, { AssetType::Texture }))
             m_IsDirty = true;
 
-        if (ImGui::DragFloat2("Tiling (Rows/Cols)", &material->Tiling.x, 1.0f, 1.0f, 64.0f))
+        if (LXUI::DrawVec2Control("Tiling (Rows/Cols)", material->Tiling, 1.0f, 1.0f, 64.0f))
             m_IsDirty = true;
 
-        if (ImGui::DragFloat("Metallic", &material->Metallic, 0.01f, 0.0f, 1.0f))
+        if (LXUI::DrawDragFloat("Metallic", material->Metallic, 0.01f, 0.0f, 1.0f))
             m_IsDirty = true;
-        if (ImGui::DragFloat("Roughness", &material->Roughness, 0.01f, 0.0f, 1.0f))
+        if (LXUI::DrawDragFloat("Roughness", material->Roughness, 0.01f, 0.0f, 1.0f))
             m_IsDirty = true;
-        if (EditorUIHelpers::DrawAssetSelection("Normal Map", material->NormalMap, {AssetType::Texture}))
+        if (LXUI::DrawAssetReference("Normal Map", material->NormalMap, {AssetType::Texture}))
             m_IsDirty = true;
-        if (EditorUIHelpers::DrawAssetSelection("ORM Map", material->MetallicRoughnessTexture, {AssetType::Texture}))
+        if (LXUI::DrawAssetReference("ORM Map", material->MetallicRoughnessTexture, {AssetType::Texture}))
             m_IsDirty = true;
 
-        if (ImGui::ColorEdit3("Emissive Color", &material->EmissiveColor.r))
+        if (LXUI::DrawColor3Control("Emissive Color", material->EmissiveColor))
             m_IsDirty = true;
-        if (ImGui::DragFloat("Emissive Strength", &material->EmissiveStrength, 0.1f, 0.0f, 100.0f))
+        if (LXUI::DrawDragFloat("Emissive Strength", material->EmissiveStrength, 0.1f, 0.0f, 100.0f))
             m_IsDirty = true;
-        if (EditorUIHelpers::DrawAssetSelection("Emissive Map", material->EmissiveTexture, {AssetType::Texture}))
+        if (LXUI::DrawAssetReference("Emissive Map", material->EmissiveTexture, {AssetType::Texture}))
             m_IsDirty = true;
+        
+        LXUI::EndPropertyGrid();
 
         bool canApply = m_IsDirty;
         if (!canApply)
@@ -165,11 +173,14 @@ namespace Lynx
     void AssetPropertiesPanel::DrawSpriteProperties()
     {
         auto sprite = std::static_pointer_cast<Sprite>(m_SelectedAsset);
+        
         ImGui::Text("Sprite Editor");
         ImGui::Separator();
+        
+        LXUI::BeginPropertyGrid();
 
         AssetHandle texHandle = sprite->GetTexture() ? sprite->GetTexture()->GetHandle() : AssetHandle::Null();
-        if (EditorUIHelpers::DrawAssetSelection("Texture", texHandle, {AssetType::Texture}))
+        if (LXUI::DrawAssetReference("Texture", texHandle, {AssetType::Texture}))
         {
             if (texHandle.IsValid())
             {
@@ -178,22 +189,24 @@ namespace Lynx
             }
         }
 
-        if (ImGui::DragFloat2("UV Min", &sprite->m_UVMin.x, 0.1f, 0.0f, 1.0f))
+        if (LXUI::DrawVec2Control("UV Min", sprite->m_UVMin, 0.1f, 0.0f, 1.0f))
         {
             m_IsDirty = true;
         }
 
-        if (ImGui::DragFloat2("UV Max", &sprite->m_UVMax.x, 0.1f, 0.0f, 1.0f))
+        if (LXUI::DrawVec2Control("UV Max", sprite->m_UVMax, 0.1f, 0.0f, 1.0f))
         {
             m_IsDirty = true;
         }
 
-        float thickness[4] = { sprite->m_Border.Left, sprite->m_Border.Top, sprite->m_Border.Right, sprite->m_Border.Bottom };
-        if (ImGui::DragFloat4("Borders (L,T,R,B)", thickness, 1.0f))
+        UIThickness thickness = sprite->m_Border;
+        if (LXUI::DrawUIThicknessControl("Borders", thickness))
         {
-            sprite->m_Border = { thickness[0], thickness[1], thickness[2], thickness[3] };
+            sprite->m_Border = thickness;
             m_IsDirty = true;
         }
+        
+        LXUI::EndPropertyGrid();
 
         bool canApply = m_IsDirty;
         if (!canApply)
