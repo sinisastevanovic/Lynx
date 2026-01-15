@@ -25,7 +25,8 @@ namespace Lynx::AssetUtils
         { AssetType::StaticMesh, { "3D Model",      { "*.gltf" },"ASSET_STATICMESH" } },
         { AssetType::Script , { "Lua Script", { "*.lua" }, "ASSET_SCRIPT" } },
         { AssetType::Sprite , { "Sprite Asset", { "*.lxsprite" }, "ASSET_SPRITE" } },
-        { AssetType::Font , { "Font Asset", { "*.lxfont" }, "ASSET_FONT" } }
+        { AssetType::Font , { "Font Asset", { "*.lxfont" }, "ASSET_FONT" } },
+        { AssetType::Prefab , { "Prefab Asset", { "*.lxprefab" }, "ASSET_PREFAB" } }
     };
 
     

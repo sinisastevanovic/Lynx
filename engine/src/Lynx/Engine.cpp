@@ -23,6 +23,7 @@
 #include "Event/SceneEvents.h"
 #include "ImGui/LXUI.h"
 #include "Renderer/DebugRenderer.h"
+#include "Scene/Components/IDComponent.h"
 #include "Scene/Components/LuaScriptComponent.h"
 #include "Scene/Components/NativeScriptComponent.h"
 #include "Scene/Components/UIComponents.h"
@@ -338,7 +339,7 @@ namespace Lynx
 
     void Engine::RegisterCoreComponents()
     {
-        m_ComponentRegistry.RegisterCoreComponent<TransformComponent>("Transform",
+        m_ComponentRegistry.RegisterCoreInternalOnlyComponent<TransformComponent>("Transform",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& transform = reg.get<TransformComponent>(entity);
@@ -371,9 +372,10 @@ namespace Lynx
                 LXUI::DrawVec3Control("Scale", transform.Scale, 0.0f, 0.0f, 1.0f);
             });
 
-        m_ComponentRegistry.RegisterCoreComponent<RelationshipComponent>("Relationship",
+        m_ComponentRegistry.RegisterCoreInternalOnlyComponent<RelationshipComponent>("Relationship",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
+                // Not really used anymore, as this gets manually serialized in SceneSerializer
                 auto& comp = reg.get<RelationshipComponent>(entity);
                 if (comp.Parent != entt::null)
                 {
@@ -385,10 +387,10 @@ namespace Lynx
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
-                
+                // Manually deserialized in SceneSerializer
             });
 
-        m_ComponentRegistry.RegisterCoreComponent<TagComponent>("Tag",
+        m_ComponentRegistry.RegisterCoreInternalOnlyComponent<TagComponent>("Tag",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& tagComponent = reg.get<TagComponent>(entity);
@@ -649,7 +651,7 @@ namespace Lynx
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
-                auto& nscComp = reg.get<NativeScriptComponent>(entity);
+                auto& nscComp = reg.get_or_emplace<NativeScriptComponent>(entity);
                 if (json.contains("ScriptName"))
                 {
                     std::string scriptName = json["ScriptName"];
@@ -731,7 +733,7 @@ namespace Lynx
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
-                auto& lscComp = reg.get<LuaScriptComponent>(entity);
+                auto& lscComp = reg.get_or_emplace<LuaScriptComponent>(entity);
                 lscComp.ScriptHandle = AssetHandle(json["Script"]);
 
                 if (!lscComp.Self.valid() && lscComp.ScriptHandle.IsValid())
@@ -948,6 +950,22 @@ namespace Lynx
                     comp.Canvas->Deserialize(json["Canvas"]);
                     comp.Canvas->OnPostLoad();
                 }
+            }
+        );
+        m_ComponentRegistry.RegisterCoreInternalOnlyComponent<PrefabComponent>("Prefab",
+            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+            {
+                auto& comp = reg.get<PrefabComponent>(entity);
+                json["PrefabHandle"] = comp.PrefabHandle;
+                json["SubEntityID"] = comp.SubEntityID;
+                //json["Overrides"] = comp.Overrides;
+            },
+            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+            {
+                auto& comp = reg.get_or_emplace<PrefabComponent>(entity);
+                comp.PrefabHandle = json["PrefabHandle"].get<AssetHandle>();
+                comp.SubEntityID = json["SubEntityID"].get<UUID>();
+                //comp.Overrides = json["Overrides"].get<std::unordered_set<std::string>>();
             }
         );
     }

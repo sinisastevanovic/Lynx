@@ -112,6 +112,19 @@ namespace Lynx
         debug.set_function("DrawCapsule", [](glm::vec3 center, float radius, float height, glm::quat rotation, glm::vec4 color) {
             DebugRenderer::DrawCapsule(center, radius, height * 0.5f, rotation, color); // Note: Height/2 conversion?
         });
+        
+        auto world = m_Data->Lua.create_named_table("World");
+        world.set_function("Instantiate", [this](uint64_t prefabID, sol::optional<Entity> parent) -> Entity
+        {
+            if (!this->m_Data->SceneContext)
+                return {};
+            
+            Entity parentEnt = {};
+            if (parent)
+                parentEnt = parent.value();
+            
+            return this->m_Data->SceneContext->InstantiatePrefab(AssetHandle(prefabID), parentEnt);
+        });
     }
 
     void ScriptEngine::Shutdown()

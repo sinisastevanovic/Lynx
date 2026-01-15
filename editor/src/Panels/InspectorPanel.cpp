@@ -1,7 +1,9 @@
 #include "InspectorPanel.h"
 #include <imgui.h>
 
+#include "Lynx/Asset/Prefab.h"
 #include "Lynx/ImGui/LXUI.h"
+#include "Lynx/Scene/SceneSerializer.h"
 #include "Lynx/Scene/Components/Components.h"
 
 namespace Lynx
@@ -39,6 +41,61 @@ namespace Lynx
                         m_Context->Reg().emplace<DisabledComponent>(m_Selection);
                 }
             }
+            
+            if (m_Context->Reg().all_of<PrefabComponent>(m_Selection))
+            {
+                auto& pc = m_Context->Reg().get<PrefabComponent>(m_Selection);
+                if (pc.PrefabHandle.IsValid())
+                {
+                    ImGui::Text("Prefab Instance"); 
+                    ImGui::SameLine();
+                    if (ImGui::Button("Apply Overrides"))
+                    {
+                        Entity root = { m_Selection, m_Context };
+                        while (true)
+                        {
+                            Entity parent = root.GetParent();
+                            if (!parent)
+                                break;
+                            if (!parent.HasComponent<PrefabComponent>())
+                                break;
+                            if (parent.GetComponent<PrefabComponent>().PrefabHandle != pc.PrefabHandle)
+                                break;
+                            
+                            root = parent;
+                        }
+                        
+                        nlohmann::json prefabJson;
+                        SceneSerializer::SerializePrefab(root, prefabJson, true);
+                        std::filesystem::path filePath = Engine::Get().GetAssetManager().GetAssetPath(pc.PrefabHandle);
+                        std::ofstream fout(filePath);
+                        fout << prefabJson.dump(4);
+                        fout.close();
+                        // TODO: reload asset and replace unedited prefabs in scene with this!
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Revert"))
+                    {
+                        Entity root = { m_Selection, m_Context };
+                        while (true)
+                        {
+                            Entity parent = root.GetParent();
+                            if (!parent)
+                                break;
+                            if (!parent.HasComponent<PrefabComponent>())
+                                break;
+                            if (parent.GetComponent<PrefabComponent>().PrefabHandle != pc.PrefabHandle)
+                                break;
+                            
+                            root = parent;
+                        }
+                        
+                        auto prefabAsset = Engine::Get().GetAssetManager().GetAsset<Prefab>(pc.PrefabHandle);
+                        auto prefabJson = prefabAsset->GetData();
+                        SceneSerializer::DeserializePrefabInto(m_Context, prefabJson, root);
+                    }
+                }
+            }
 
             if (m_Context->Reg().all_of<TransformComponent>(m_Selection))
             {
@@ -52,7 +109,11 @@ namespace Lynx
 
             for (const auto& [name, info] : registeredComponents)
             {
-                if (name == "Tag" || name == "Transform" || name == "Relationship")
+                if (name == "Tag" || name == "Transform" || name == "Relationship" || name == "Prefab")
+                    continue;
+                
+                bool internalUse = info.InternalUseOnly;
+                if (!info.drawUI && internalUse)
                     continue;
                 
                 if (info.has(m_Context->Reg(), m_Selection))
@@ -60,7 +121,7 @@ namespace Lynx
                     ImGui::PushID(name.c_str());
                     bool open = ImGui::CollapsingHeader(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
 
-                    if (ImGui::BeginPopupContextItem("ComponentSettings"))
+                    if (!internalUse && ImGui::BeginPopupContextItem("ComponentSettings"))
                     {
                         if (ImGui::MenuItem("Remove Component"))
                         {
@@ -105,7 +166,7 @@ namespace Lynx
             {
                 for (const auto& [name, info] : registeredComponents)
                 {
-                    if (!info.has(m_Context->Reg(), m_Selection))
+                    if (!info.InternalUseOnly && !info.has(m_Context->Reg(), m_Selection))
                     {
                         if (ImGui::MenuItem(name.c_str()))
                         {

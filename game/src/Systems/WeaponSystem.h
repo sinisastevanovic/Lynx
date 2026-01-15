@@ -56,20 +56,25 @@ public:
 private:
     static void SpawnProjectile(const std::shared_ptr<Lynx::Scene>& scene, Lynx::AssetManager& assetManager, glm::vec3 start, glm::vec3 target, const WeaponComponent& weapon)
     {
-        glm::vec3 direction = glm::normalize(target - start);
+        if (weapon.ProjectilePrefab.IsValid())
+        {
+            auto bullet = scene->InstantiatePrefab(weapon.ProjectilePrefab);
+            
+            glm::vec3 direction = glm::normalize(target - start);
+            auto& transform = bullet.GetComponent<Lynx::TransformComponent>();
+            transform.Translation = start + glm::vec3(0, 0.5f, 0);
+            transform.Scale = { 0.2f, 0.2f, 0.2f };
 
-        auto bullet = scene->CreateEntity("Bullet");
-        auto& transform = bullet.GetComponent<Lynx::TransformComponent>();
-        transform.Translation = start + glm::vec3(0, 0.5f, 0);
-        transform.Scale = { 0.2f, 0.2f, 0.2f };
+            /*auto& mesh = bullet.AddComponent<Lynx::MeshComponent>();
+            mesh.Mesh = assetManager.GetDefaultCube()->GetHandle();*/
 
-        auto& mesh = bullet.AddComponent<Lynx::MeshComponent>();
-        mesh.Mesh = assetManager.GetDefaultCube()->GetHandle();
+            auto& proj = bullet.GetComponent<ProjectileComponent>();
+            proj.Damage = weapon.Damage;
+            proj.Velocity = direction * weapon.ProjectileSpeed;
+        }
 
-        auto& proj = bullet.AddComponent<ProjectileComponent>();
-        proj.Damage = weapon.Damage;
-        proj.Velocity = direction * weapon.ProjectileSpeed;
-        proj.Lifetime = 3.0f;
+        //auto bullet = scene->CreateEntity("Bullet");
+        
     }
     
 };

@@ -25,6 +25,7 @@ struct WeaponComponent
     float Damage = 5.0f;
     float ProjectileSpeed = 20.0f;
     float CooldownTimer = 0.0f;
+    Lynx::AssetHandle ProjectilePrefab = Lynx::AssetHandle();
 };
 
 struct ProjectileComponent

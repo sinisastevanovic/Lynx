@@ -62,7 +62,7 @@ namespace Lynx
     {
         DrawLabel(label);
         std::string id = "##" + label;
-        return ImGui::SliderFloat(id.c_str(), &value, min, max, "%.2f");
+        return ImGui::SliderFloat(id.c_str(), &value, min, max);
     }
 
     bool LXUI::DrawDragInt(const std::string& label, int& value, float speed, int min, int max, int resetValue)
@@ -156,7 +156,7 @@ namespace Lynx
         ImGui::PopStyleColor(3);
         
         ImGui::SameLine();
-        if (ImGui::DragFloat("##X", &value.x, speed, min, max, "%.2f"))
+        if (ImGui::DragFloat("##X", &value.x, speed, min, max))
             changed = true;
         ImGui::PopItemWidth();
         ImGui::SameLine();
@@ -172,7 +172,7 @@ namespace Lynx
         ImGui::PopStyleColor(3);
 
         ImGui::SameLine();
-        if (ImGui::DragFloat("##Y", &value.y, speed, min, max, "%.2f")) changed = true;
+        if (ImGui::DragFloat("##Y", &value.y, speed, min, max)) changed = true;
         ImGui::PopItemWidth();
         ImGui::SameLine();
 
@@ -211,7 +211,7 @@ namespace Lynx
         ImGui::PopStyleColor(3);
         
         ImGui::SameLine();
-        if (ImGui::DragFloat("##X", &value.x, 0.1f, min, max, "%.2f"))
+        if (ImGui::DragFloat("##X", &value.x, 0.1f, min, max))
             changed = true;
         ImGui::PopItemWidth();
         ImGui::SameLine();
@@ -227,7 +227,7 @@ namespace Lynx
         ImGui::PopStyleColor(3);
 
         ImGui::SameLine();
-        if (ImGui::DragFloat("##Y", &value.y, 0.1f, min, max, "%.2f")) changed = true;
+        if (ImGui::DragFloat("##Y", &value.y, 0.1f, min, max)) changed = true;
         ImGui::PopItemWidth();
         ImGui::SameLine();
 
@@ -243,7 +243,7 @@ namespace Lynx
         ImGui::PopStyleColor(3);
 
         ImGui::SameLine();
-        if (ImGui::DragFloat("##Z", &value.z, 0.1f, min, max, "%.2f")) changed = true;
+        if (ImGui::DragFloat("##Z", &value.z, 0.1f, min, max)) changed = true;
         ImGui::PopItemWidth();
 
         ImGui::PopStyleVar();
@@ -281,7 +281,7 @@ namespace Lynx
         ImGui::PopStyleColor(3);
         
         ImGui::SameLine();
-        if (ImGui::DragFloat("##X", &value.x, 0.1f, min, max, "%.2f"))
+        if (ImGui::DragFloat("##X", &value.x, 0.1f, min, max))
             changed = true;
         ImGui::PopItemWidth();
         ImGui::SameLine();
@@ -297,7 +297,7 @@ namespace Lynx
         ImGui::PopStyleColor(3);
 
         ImGui::SameLine();
-        if (ImGui::DragFloat("##Y", &value.y, 0.1f, min, max, "%.2f")) changed = true;
+        if (ImGui::DragFloat("##Y", &value.y, 0.1f, min, max)) changed = true;
         ImGui::PopItemWidth();
         ImGui::SameLine();
 
@@ -313,7 +313,7 @@ namespace Lynx
         ImGui::PopStyleColor(3);
 
         ImGui::SameLine();
-        if (ImGui::DragFloat("##Z", &value.z, 0.1f, min, max, "%.2f")) changed = true;
+        if (ImGui::DragFloat("##Z", &value.z, 0.1f, min, max)) changed = true;
         ImGui::PopItemWidth();
         ImGui::SameLine();
         
@@ -329,7 +329,7 @@ namespace Lynx
         ImGui::PopStyleColor(3);
 
         ImGui::SameLine();
-        if (ImGui::DragFloat("##W", &value.w, 0.1f, min, max, "%.2f")) changed = true;
+        if (ImGui::DragFloat("##W", &value.w, 0.1f, min, max)) changed = true;
         ImGui::PopItemWidth();
 
         ImGui::PopStyleVar();
@@ -627,7 +627,7 @@ namespace Lynx
         }
         
         ImGui::SameLine();
-        if (ImGui::DragFloat("##L", &anchor.MinX, 0.01f, 0, 1, "%.2f"))
+        if (ImGui::DragFloat("##L", &anchor.MinX, 0.01f, 0, 1))
             changed = true;
         ImGui::PopItemWidth();
         ImGui::SameLine();
@@ -639,7 +639,7 @@ namespace Lynx
         }
 
         ImGui::SameLine();
-        if (ImGui::DragFloat("##T", &anchor.MinY, 0.01f, 0, 1, "%.2f"))
+        if (ImGui::DragFloat("##T", &anchor.MinY, 0.01f, 0, 1))
             changed = true;
         ImGui::PopItemWidth();
         ImGui::SameLine();
@@ -651,7 +651,7 @@ namespace Lynx
         }
 
         ImGui::SameLine();
-        if (ImGui::DragFloat("##R", &anchor.MaxX, 0.01f, 0, 1, "%.2f"))
+        if (ImGui::DragFloat("##R", &anchor.MaxX, 0.01f, 0, 1))
             changed = true;
         ImGui::PopItemWidth();
         ImGui::SameLine();
@@ -663,7 +663,7 @@ namespace Lynx
         }
 
         ImGui::SameLine();
-        if (ImGui::DragFloat("##B", &anchor.MaxY, 0.01f, 0, 1, "%.2f")) 
+        if (ImGui::DragFloat("##B", &anchor.MaxY, 0.01f, 0, 1)) 
             changed = true;
         ImGui::PopItemWidth();
 
@@ -706,7 +706,7 @@ namespace Lynx
         }
         
         ImGui::SameLine();
-        if (ImGui::DragFloat("##L", &thickness.Left, 1.0f, 0, 0, "%.2f"))
+        if (ImGui::DragFloat("##L", &thickness.Left, 1.0f, 0, 0))
             changed = true;
         ImGui::PopItemWidth();
         ImGui::SameLine();
@@ -718,7 +718,7 @@ namespace Lynx
         }
 
         ImGui::SameLine();
-        if (ImGui::DragFloat("##T", &thickness.Top, 1.0f, 0, 0, "%.2f"))
+        if (ImGui::DragFloat("##T", &thickness.Top, 1.0f, 0, 0))
             changed = true;
         ImGui::PopItemWidth();
         ImGui::SameLine();
@@ -730,7 +730,7 @@ namespace Lynx
         }
 
         ImGui::SameLine();
-        if (ImGui::DragFloat("##R", &thickness.Right, 1.0f, 0, 0, "%.2f"))
+        if (ImGui::DragFloat("##R", &thickness.Right, 1.0f, 0, 0))
             changed = true;
         ImGui::PopItemWidth();
         ImGui::SameLine();
@@ -742,7 +742,7 @@ namespace Lynx
         }
 
         ImGui::SameLine();
-        if (ImGui::DragFloat("##B", &thickness.Bottom, 1.0f, 0, 0, "%.2f")) 
+        if (ImGui::DragFloat("##B", &thickness.Bottom, 1.0f, 0, 0)) 
             changed = true;
         ImGui::PopItemWidth();
 

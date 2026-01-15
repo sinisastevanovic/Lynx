@@ -178,7 +178,7 @@ namespace Lynx
         uint32_t startIndex = (uint32_t)m_Vertices.size();
         for (int j = 0; j < 4; j++) {
             for (int i = 0; i < 4; i++) {
-                m_Vertices.push_back({ { x[i], y[j], 0.0f }, { u[i], v[j] }, packedColor, 0, 0.0f, {0.0f, 0.0f, 0.0f, 0.0f} }); // TODO: We need to duplicate the logic from AddQuad
+                m_Vertices.push_back({ { x[i], y[j], 0.0f }, { u[i], v[j] }, packedColor, 0, 0.0f, m_CurrentClipRect }); // TODO: We need to duplicate the logic from AddQuad
             }
         }
 

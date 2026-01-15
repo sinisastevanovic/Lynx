@@ -111,4 +111,15 @@ namespace Lynx
         DirectionalLightComponent() = default;
         DirectionalLightComponent(const DirectionalLightComponent&) = default;
     };
+    
+    struct PrefabComponent
+    {
+        AssetHandle PrefabHandle = AssetHandle::Null();
+        UUID SubEntityID = UUID::Null();
+        
+        //std::unordered_set<std::string> Overrides;
+        
+        PrefabComponent() = default;
+        PrefabComponent(const PrefabComponent&) = default;
+    };
 }

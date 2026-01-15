@@ -5,9 +5,12 @@
 #include "Asset.h"
 #include "Font.h"
 #include "Material.h"
+#include "Prefab.h"
 #include "Script.h"
 #include "Shader.h"
 #include "Sprite.h"
+#include "Lynx/Engine.h"
+#include "Lynx/Event/AssetEvents.h"
 #include "Lynx/Scene/Scene.h"
 
 namespace Lynx
@@ -146,6 +149,9 @@ namespace Lynx
             case AssetType::Font:
                 newAsset = std::make_shared<Font>(metadata.FilePath.string());
                 break;
+            case AssetType::Prefab:
+                newAsset = std::make_shared<Prefab>(metadata.FilePath.string());
+                break;
             case AssetType::None:
             case AssetType::SkeletalMesh:
             default: LX_CORE_ERROR("AssetType not supported yet ({0})!", static_cast<int>(metadata.Type)); return nullptr;
@@ -164,15 +170,19 @@ namespace Lynx
         if (asset->Reload())
         {
             LX_CORE_INFO("Asset reloaded successfully");
-            std::lock_guard<std::mutex> lock(m_AssetsMutex);
-            for (auto& [otherHandle, otherAsset] : m_LoadedAssets)
             {
-                if (otherAsset->DependsOn(asset->GetHandle()))
+                std::lock_guard<std::mutex> lock(m_AssetsMutex);
+                for (auto& [otherHandle, otherAsset] : m_LoadedAssets)
                 {
-                    otherAsset->IncrementVersion();
+                    if (otherAsset->DependsOn(asset->GetHandle()))
+                    {
+                        otherAsset->IncrementVersion();
+                    }
                 }
             }
             asset->IncrementVersion();
+            AssetReloadedEvent e(handle);
+            Engine::Get().OnEvent(e);
         }
     }
 

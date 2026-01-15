@@ -15,7 +15,10 @@
 #include <glm/gtx/matrix_decompose.hpp>
 
 #include "SceneSerializer.h"
+#include "Components/IDComponent.h"
 #include "Components/UIComponents.h"
+#include "Lynx/Asset/Prefab.h"
+#include "Lynx/Event/AssetEvents.h"
 
 namespace Lynx
 {
@@ -133,6 +136,62 @@ namespace Lynx
         
         DetachEntity(entity);
         m_Registry.destroy(entity);
+    }
+
+    Entity Scene::InstantiatePrefab(std::shared_ptr<Prefab> prefab)
+    {
+        return InstantiatePrefab(prefab, {});
+    }
+
+    Entity Scene::InstantiatePrefab(AssetHandle prefab)
+    {
+        return InstantiatePrefab(prefab, {});
+    }
+
+    Entity Scene::InstantiatePrefab(std::shared_ptr<Prefab> prefab, Entity parent)
+    {
+        if (!prefab)
+            return {};
+        
+        auto data = prefab->GetData();
+        Entity rootInstance = SceneSerializer::DeserializePrefab(this, data, parent);
+        if (rootInstance)
+        {
+            auto entitiesJson = data["Entities"];
+            if (entitiesJson.is_array())
+            {
+                int jsonIndex = 0;
+                std::function<void(Entity)> tagEntity = [&](Entity current)
+                {
+                    if (jsonIndex >= entitiesJson.size())
+                        return;
+                    
+                    UUID originalID = entitiesJson[jsonIndex]["ID"].get<UUID>();
+                    jsonIndex++;
+                    
+                    auto& pc = current.AddComponent<PrefabComponent>();
+                    pc.PrefabHandle = prefab->GetHandle();
+                    pc.SubEntityID = originalID;
+                    
+                    auto& rel = current.GetComponent<RelationshipComponent>();
+                    entt::entity child = rel.FirstChild;
+                    while (child != entt::null)
+                    {
+                        tagEntity(Entity(child, this));
+                        child = Reg().get<RelationshipComponent>(child).NextSibling;
+                    }
+                };
+                
+                tagEntity(rootInstance);
+            }
+        }
+        return rootInstance;
+    }
+
+    Entity Scene::InstantiatePrefab(AssetHandle prefab, Entity parent)
+    {
+        auto prefabAsset = Engine::Get().GetAssetManager().GetAsset<Prefab>(prefab, AssetLoadMode::Blocking);
+        return InstantiatePrefab(prefabAsset, parent);
     }
 
     void Scene::OnRuntimeStart()
@@ -446,6 +505,38 @@ namespace Lynx
                     comp.Canvas->OnEvent(event);
             }
         }
+        
+        EventDispatcher dispatcher(event);
+        dispatcher.Dispatch<AssetReloadedEvent>([this](AssetReloadedEvent& event)
+        {
+            auto view = m_Registry.view<PrefabComponent>();
+            for (auto entityID : view)
+            {
+                Entity entity(entityID, this);
+                auto& pc = entity.GetComponent<PrefabComponent>();
+                
+                if (pc.PrefabHandle == event.GetHandle())
+                {
+                    Entity parent = entity.GetParent();
+                    bool isRoot = true;
+                    if (parent && parent.HasComponent<PrefabComponent>() && parent.GetComponent<PrefabComponent>().PrefabHandle == pc.PrefabHandle)
+                    {
+                        isRoot = false;
+                    }
+                    
+                    if (isRoot)
+                    {
+                        auto prefab = Engine::Get().GetAssetManager().GetAsset<Prefab>(event.GetHandle(), AssetLoadMode::Blocking);
+                        if (prefab)
+                        {
+                            auto json = prefab->GetData();
+                            SceneSerializer::DeserializePrefabInto(this, json, entity);
+                        }
+                    }
+                }
+            }
+            return false;
+        });
     }
 
     void Scene::AttachEntity(entt::entity child, entt::entity parent)
@@ -475,7 +566,7 @@ namespace Lynx
                 if (currentRel.NextSibling == entt::null)
                 {
                     currentRel.NextSibling = child;
-                    childRel.PrevSibling = currentRel.PrevSibling;
+                    childRel.PrevSibling = current;
                     break;
                 }
                 current = currentRel.NextSibling;

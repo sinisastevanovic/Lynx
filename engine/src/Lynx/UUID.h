@@ -30,7 +30,8 @@ namespace Lynx
     
     };
 
-    typedef UUID AssetHandle;
+    typedef UUID AssetHandle; // TODO: I think we should refactor AssetHandle into it's own class with helper methods to Load the asset async or blocking...
+                                // Maybe with a .Get() method and .IsLoaded() and .Load() and .LoadAsync()
 }
 
 namespace std

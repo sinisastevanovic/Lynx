@@ -91,6 +91,7 @@ namespace Lynx
         bool m_IsEditor = false;
         
         friend class EditorLayer;
+        friend class AssetManager;
     };
 }
 

@@ -10,6 +10,7 @@
 
 namespace Lynx
 {
+    class Prefab;
     class PhysicsSystem;
     class Entity;
 
@@ -21,6 +22,11 @@ namespace Lynx
 
         Entity CreateEntity(const std::string& name = std::string());
         void DestroyEntity(entt::entity entity, bool excludeChildren = true);
+        
+        Entity InstantiatePrefab(std::shared_ptr<Prefab> prefab);
+        Entity InstantiatePrefab(std::shared_ptr<Prefab> prefab, Entity parent);
+        Entity InstantiatePrefab(AssetHandle prefab);
+        Entity InstantiatePrefab(AssetHandle prefab, Entity parent);
 
         void OnRuntimeStart();
         void OnRuntimeStop();

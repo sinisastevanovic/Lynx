@@ -2,7 +2,11 @@
 
 #include <imgui.h>
 
+#include "../Utils/PlatformUtils.h"
+#include "Lynx/Engine.h"
+#include "Lynx/Asset/Prefab.h"
 #include "Lynx/Scene/Entity.h"
+#include "Lynx/Scene/SceneSerializer.h"
 #include "Lynx/Scene/Components/Components.h"
 #include "Lynx/Scene/Components/UIComponents.h"
 #include "Lynx/UI/Widgets/GridPanel.h"
@@ -65,6 +69,26 @@ namespace Lynx
                     entt::entity payloadEntity = *(const entt::entity*)payload->Data;
                     m_Context->DetachEntityKeepWorld(payloadEntity);
                 }
+                else if (const ImGuiPayload* prefabPayload = ImGui::AcceptDragDropPayload("ASSET_PREFAB"))
+                {
+                    uint64_t data = *(const uint64_t*)prefabPayload->Data;
+                    AssetHandle prefabHandle = AssetHandle(data);
+                    if (prefabHandle.IsValid())
+                    {
+                        m_Context->InstantiatePrefab(prefabHandle);
+                        /*auto prefabAsset = Engine::Get().GetAssetManager().GetAsset<Prefab>(prefabHandle, AssetLoadMode::Blocking);
+                        if (prefabAsset)
+                        {
+                            auto json = prefabAsset->GetData();
+                            Entity newEntity = SceneSerializer::DeserializePrefab(m_Context, json); // TODO: We need a general instantiate method. Maybe on PrefabAsset or scene? 
+                            if (newEntity)
+                            {
+                                auto& pc = newEntity.AddComponent<PrefabComponent>();
+                                pc.PrefabHandle = prefabHandle;
+                            }
+                        }*/
+                    }
+                }
                 ImGui::EndDragDropTarget();
             }
 
@@ -114,11 +138,37 @@ namespace Lynx
         bool hasChildren = (m_Context->Reg().get<RelationshipComponent>(entity).ChildrenCount > 0) || m_Context->Reg().all_of<UICanvasComponent>(entity);
         if (!hasChildren)
             flags |= ImGuiTreeNodeFlags_Leaf;
+        
+        bool isPrefab = m_Context->Reg().all_of<PrefabComponent>(entity);
+        if (isPrefab)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.65f, 1.0f, 1.0f));
+        }
 
         bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)entity, flags, tag.c_str());
+        
+        if (isPrefab)
+        {
+            ImGui::PopStyleColor();
+        }
 
         if (ImGui::BeginPopupContextItem())
         {
+            if (ImGui::MenuItem("Create Prefab"))
+            {
+                std::string filepath = FileDialogs::SaveFile(AssetUtils::GetFilterForAssetType(AssetType::Prefab));
+                if (!filepath.empty())
+                {
+                    if (std::filesystem::path(filepath).extension().empty())
+                        filepath += ".lxprefab";
+                    
+                    nlohmann::json entityJson;
+                    SceneSerializer::SerializePrefab(Entity(entity, m_Context), entityJson, true);
+                    std::ofstream fout(filepath);
+                    fout << entityJson.dump(4);
+                    fout.close();
+                }
+            }
             if (ImGui::MenuItem("Delete Entity"))
             {
                 m_DeferredDeletion = entity;
@@ -142,6 +192,26 @@ namespace Lynx
                 if (payloadEntity != entity)
                 {
                     m_Context->AttachEntityKeepWorld(payloadEntity, entity);
+                }
+            }
+            else if (const ImGuiPayload* prefabPayload = ImGui::AcceptDragDropPayload("ASSET_PREFAB"))
+            {
+                uint64_t data = *(const uint64_t*)prefabPayload->Data;
+                AssetHandle prefabHandle = AssetHandle(data);
+                if (prefabHandle.IsValid())
+                {
+                    m_Context->InstantiatePrefab(prefabHandle, Entity(entity, m_Context));
+                    /*auto prefabAsset = Engine::Get().GetAssetManager().GetAsset<Prefab>(prefabHandle, AssetLoadMode::Blocking);
+                    if (prefabAsset)
+                    {
+                        auto json = prefabAsset->GetData();
+                        Entity newEntity = SceneSerializer::DeserializePrefab(m_Context, json, Entity(entity, m_Context)); // TODO: We need a general instantiate method. Maybe on PrefabAsset or scene? 
+                        if (newEntity)
+                        {
+                            auto& pc = newEntity.AddComponent<PrefabComponent>();
+                            pc.PrefabHandle = prefabHandle;
+                        }
+                    }*/
                 }
             }
             ImGui::EndDragDropTarget();

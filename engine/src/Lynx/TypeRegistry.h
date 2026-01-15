@@ -30,6 +30,7 @@ namespace Lynx
         SerializeComponentFunc serialize;
         DeserializeComponentFunc deserialize;
         bool IsCore;
+        bool InternalUseOnly;
     };
 
     using ScriptBindFunc = std::function<void(NativeScriptComponent&)>;
@@ -46,13 +47,25 @@ namespace Lynx
         template <typename T>
         void RegisterCoreComponent(const std::string& name, SerializeComponentFunc serFunc, DeserializeComponentFunc deserFunc, DrawComponentUIFunc uiFunc)
         {
-            RegisterInternal<T>(name, serFunc, deserFunc, uiFunc, true);
+            RegisterInternal<T>(name, serFunc, deserFunc, uiFunc, true, false);
         }
 
         template <typename T>
         void RegisterCoreComponent(const std::string& name, SerializeComponentFunc serFunc, DeserializeComponentFunc deserFunc)
         {
-            RegisterInternal<T>(name, serFunc, deserFunc, nullptr, true);
+            RegisterInternal<T>(name, serFunc, deserFunc, nullptr, true, false);
+        }
+        
+        template <typename T>
+        void RegisterCoreInternalOnlyComponent(const std::string& name, SerializeComponentFunc serFunc, DeserializeComponentFunc deserFunc, DrawComponentUIFunc uiFunc)
+        {
+            RegisterInternal<T>(name, serFunc, deserFunc, uiFunc, true, true);
+        }
+        
+        template <typename T>
+        void RegisterCoreInternalOnlyComponent(const std::string& name, SerializeComponentFunc serFunc, DeserializeComponentFunc deserFunc)
+        {
+            RegisterInternal<T>(name, serFunc, deserFunc, nullptr, true, true);
         }
 
         template <typename T>
@@ -134,10 +147,11 @@ namespace Lynx
     private:
         template <typename T>
         void RegisterInternal(const std::string& name, SerializeComponentFunc serFunc, DeserializeComponentFunc deserFunc, DrawComponentUIFunc uiFunc,
-                              bool isCore)
+                              bool isCore, bool internalUseOnly)
         {
             ComponentInfo info;
             info.name = name;
+            info.InternalUseOnly = internalUseOnly;
 
             info.add = [](entt::registry& registry, entt::entity entity)
             {
@@ -192,13 +206,13 @@ namespace Lynx
         template <typename T>
         void RegisterComponent(const std::string& name, SerializeComponentFunc serFunc, DeserializeComponentFunc deserFunc, DrawComponentUIFunc uiFunc)
         {
-            m_Registry.RegisterInternal<T>(name, serFunc, deserFunc, uiFunc, false);
+            m_Registry.RegisterInternal<T>(name, serFunc, deserFunc, uiFunc, false, false);
         }
 
         template <typename T>
         void RegisterComponent(const std::string& name, SerializeComponentFunc serFunc, DeserializeComponentFunc deserFunc)
         {
-            m_Registry.RegisterInternal<T>(name, serFunc, deserFunc, nullptr, false);
+            m_Registry.RegisterInternal<T>(name, serFunc, deserFunc, nullptr, false, false);
         }
         
         template <typename T>

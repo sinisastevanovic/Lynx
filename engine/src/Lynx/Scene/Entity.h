@@ -1,10 +1,8 @@
 #pragma once
 
 #include "Scene.h"
-#include "Components/Components.h"
 #include "entt/entt.hpp"
 #include "Lynx/Log.h"
-#include "Lynx/Scene/Components/IDComponent.h"
 
 namespace Lynx
 {
@@ -37,9 +35,20 @@ namespace Lynx
             }
             return m_Scene->m_Registry.get<T>(m_EntityHandle);
         }
+        
+        template<typename T>
+        const T& GetComponent() const
+        {
+            if (!HasComponent<T>())
+            {
+                LX_CORE_ERROR("Entity does not have component!");
+                // Throw or handle?
+            }
+            return m_Scene->m_Registry.get<T>(m_EntityHandle);
+        }
 
         template<typename T>
-        bool HasComponent()
+        bool HasComponent() const
         {
             return m_Scene->m_Registry.all_of<T>(m_EntityHandle);
         }
@@ -71,24 +80,18 @@ namespace Lynx
                 m_Scene->DetachEntity(m_EntityHandle);
         }
         
-        void SetVisibility(bool visible)
-        {
-            if (visible && HasComponent<DisabledComponent>())
-                m_Scene->m_Registry.remove<DisabledComponent>(m_EntityHandle);
-            else if (!visible && !HasComponent<DisabledComponent>())
-                m_Scene->m_Registry.emplace<DisabledComponent>(m_EntityHandle);
-                
-        }
+        bool HasParent() const;
+        Entity GetParent() const;
+        bool HasChild() const;
+        
+        void SetVisibility(bool visible);
         
         Scene* GetScene() const
         {
             return m_Scene;
         }
 
-        UUID GetUUID()
-        {
-            return GetComponent<IDComponent>().ID;
-        }
+        UUID GetUUID() const;
 
         operator bool() const { return m_EntityHandle != entt::null; }
         operator entt::entity() const { return m_EntityHandle; }
