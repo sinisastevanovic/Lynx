@@ -39,7 +39,7 @@ namespace Lynx
                     while (emitter.TimeSinceLastEmit >= emitInterval)
                     {
                         emitter.TimeSinceLastEmit -= emitInterval;
-                        EmitParticle(emitter, trans.Translation);
+                        EmitParticle(emitter, trans.GetWorldTranslation());
                     }
                 }
                 else
@@ -49,7 +49,7 @@ namespace Lynx
                         int burstCount = (int)emitter.EmissionRate;
                         for (int i = 0; i < burstCount; i++)
                         {
-                            EmitParticle(emitter, trans.Translation);
+                            EmitParticle(emitter, trans.GetWorldTranslation());
                         }
                         emitter.BurstDone = true;
                     }

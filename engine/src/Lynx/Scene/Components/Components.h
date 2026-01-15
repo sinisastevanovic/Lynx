@@ -10,6 +10,7 @@
 #include <glm/gtx/quaternion.hpp>
 
 #include <string>
+#include <glm/gtx/matrix_decompose.hpp>
 
 #include "Lynx/Renderer/SceneCamera.h"
 
@@ -36,6 +37,33 @@ namespace Lynx
         TransformComponent() = default;
         TransformComponent(const TransformComponent&) = default;
         TransformComponent(const glm::vec3& translation) : Translation(translation) {}
+        
+        glm::vec3 GetWorldTranslation() const
+        {
+            return glm::vec3(WorldMatrix[3]);
+        }
+        
+        glm::quat GetWorldRotation() const
+        {
+            glm::vec3 scale;
+            glm::quat rotation;
+            glm::vec3 translation;
+            glm::vec3 skew;
+            glm::vec4 perspective;
+            glm::decompose(WorldMatrix, scale, rotation, translation, skew, perspective);
+            return rotation;
+        }
+        
+        glm::vec3 GetWorldScale() const
+        {
+            glm::vec3 scale;
+            glm::quat rotation;
+            glm::vec3 translation;
+            glm::vec3 skew;
+            glm::vec4 perspective;
+            glm::decompose(WorldMatrix, scale, rotation, translation, skew, perspective);
+            return scale;
+        }
 
         glm::mat4 GetTransform() const
         {
