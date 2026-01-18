@@ -1,19 +1,16 @@
 #pragma once
-#include <memory>
+#include "Lynx.h"
 
 #include "Components/GameComponents.h"
 #include "Lynx/Asset/AssetManager.h"
-#include "Lynx/Scene/Entity.h"
-#include "Lynx/Scene/Scene.h"
-#include "Lynx/Scene/Components/Components.h"
 #include "Lynx/Scene/Components/PhysicsComponents.h"
 
 class EnemySystem
 {
 public:
-    static void Update(std::shared_ptr<Lynx::Scene> scene, float dt)
+    static void Update(std::shared_ptr<Scene> scene, float dt)
     {
-        auto& engine = Lynx::Engine::Get();
+        auto& engine = Engine::Get();
         auto& assetManager = engine.GetAssetManager();
 
         // --- Spawning Logic ---
@@ -32,18 +29,18 @@ public:
 
         // --- AI / Movement Logic
         glm::vec3 playerPos = { 0, 0, 0 };
-        auto playerView = scene->Reg().view<Lynx::TransformComponent, PlayerComponent>();
+        auto playerView = scene->Reg().view<TransformComponent, PlayerComponent>();
         for (auto pEntity : playerView)
         {
-            playerPos = playerView.get<Lynx::TransformComponent>(pEntity).Translation;
+            playerPos = playerView.get<TransformComponent>(pEntity).Translation;
             break;
         }
 
         auto& bodyInterface = scene->GetPhysicsSystem().GetBodyInterface();
-        auto enemyView = scene->Reg().view<Lynx::TransformComponent, EnemyComponent, Lynx::RigidBodyComponent>();
+        auto enemyView = scene->Reg().view<TransformComponent, EnemyComponent, RigidBodyComponent>();
         for (auto eEntity : enemyView)
         {
-            auto [transform, enemy, rb] = enemyView.get<Lynx::TransformComponent, EnemyComponent, Lynx::RigidBodyComponent>(eEntity);
+            auto [transform, enemy, rb] = enemyView.get<TransformComponent, EnemyComponent, RigidBodyComponent>(eEntity);
 
             glm::vec3 direction = playerPos - transform.Translation;
             direction.y = 0;
@@ -72,7 +69,7 @@ public:
 
 private:
     // TODO: AssetManager should not be in here. 
-    static void SpawnEnemy(std::shared_ptr<Lynx::Scene> scene, Lynx::AssetManager& assetManager)
+    static void SpawnEnemy(std::shared_ptr<Scene> scene, AssetManager& assetManager)
     {
         // Spawn in random circle around the origin (for now)
         // TODO: Spawn outside of camera view
@@ -81,20 +78,20 @@ private:
         glm::vec3 spawnPos = { cos(angle) * radius, 1.0f, sin(angle) * radius };
 
         auto enemy = scene->CreateEntity("Enemy");
-        auto& transform = enemy.GetComponent<Lynx::TransformComponent>();
+        auto& transform = enemy.GetComponent<TransformComponent>();
         transform.Translation = spawnPos;
         transform.Scale = { 2.0f, 2.0f, 2.0f };
 
         enemy.AddComponent<EnemyComponent>();
 
-        auto& mesh = enemy.AddComponent<Lynx::MeshComponent>();
+        auto& mesh = enemy.AddComponent<MeshComponent>();
         mesh.Mesh = assetManager.GetAsset("assets/Models/Bottle/WaterBottle.gltf")->GetHandle();
 
-        auto& rb = enemy.AddComponent<Lynx::RigidBodyComponent>();
-        rb.Type = Lynx::RigidBodyType::Dynamic;
+        auto& rb = enemy.AddComponent<RigidBodyComponent>();
+        rb.Type = RigidBodyType::Dynamic;
         rb.LockAllRotation();
 
-        auto& collider = enemy.AddComponent<Lynx::CapsuleColliderComponent>();
+        auto& collider = enemy.AddComponent<CapsuleColliderComponent>();
         collider.Radius = 0.4f;
         collider.HalfHeight = 0.9f;
     }

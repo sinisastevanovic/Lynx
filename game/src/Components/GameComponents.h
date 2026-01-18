@@ -1,5 +1,11 @@
 #pragma once
 
+namespace Lynx
+{
+    class UIText;
+    class UIImage;
+}
+
 struct PlayerComponent
 {
     float MoveSpeed = 5.0f;
@@ -25,7 +31,7 @@ struct WeaponComponent
     float Damage = 5.0f;
     float ProjectileSpeed = 20.0f;
     float CooldownTimer = 0.0f;
-    Lynx::AssetHandle ProjectilePrefab = Lynx::AssetHandle();
+    AssetHandle ProjectilePrefab = AssetHandle();
 };
 
 struct ProjectileComponent
@@ -34,4 +40,27 @@ struct ProjectileComponent
     float Damage = 0.0f;
     float Lifetime = 3.0f;
     float Radius = 0.2f;
+    
+    entt::entity Owner = entt::null;
+};
+
+struct PlayerHUDComponent
+{
+    UUID HPBarID = UUID::Null();
+    UUID HPTextID = UUID::Null();
+    UUID XPBarID = UUID::Null();
+    UUID LevelTextID = UUID::Null();
+    
+    mutable std::weak_ptr<UIImage> CachedHPBar;
+    mutable std::weak_ptr<UIImage> CachedXPBar;
+    mutable std::weak_ptr<UIText> CachedHPText;
+    mutable std::weak_ptr<UIText> CachedLevelText;
+};
+
+struct ExperienceComponent
+{
+    float CurrentXP = 0.0f;
+    float TargetXP = 100.0f;
+    int Level = 1;
+    mutable int LastUILevel = 0;
 };

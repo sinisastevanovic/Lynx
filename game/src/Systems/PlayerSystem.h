@@ -1,31 +1,28 @@
 #pragma once
-#include <memory>
+#include "Lynx.h"
 
 #include "Components/GameComponents.h"
-#include "Lynx/Input.h"
-#include "Lynx/Scene/Scene.h"
-#include "Lynx/Scene/Components/Components.h"
 #include "Lynx/Scene/Components/PhysicsComponents.h"
 
 class PlayerSystem
 {
 public:
-    static void Update(std::shared_ptr<Lynx::Scene> scene, float dt)
+    static void Update(std::shared_ptr<Scene> scene, float dt)
     {
         auto& bodyInterface = scene->GetPhysicsSystem().GetBodyInterface();
-        auto view = scene->Reg().view<Lynx::TransformComponent, PlayerComponent, Lynx::RigidBodyComponent>();
+        auto view = scene->Reg().view<TransformComponent, PlayerComponent, RigidBodyComponent>();
         for (auto entity : view)
         {
-            auto [transform, player, rb] = view.get<Lynx::TransformComponent, PlayerComponent, Lynx::RigidBodyComponent>(entity);
+            auto [transform, player, rb] = view.get<TransformComponent, PlayerComponent, RigidBodyComponent>(entity);
 
             glm::vec3 velocity = { 0.0f, 0.0f, 0.0f };
 
-            velocity.z += Lynx::Input::GetAxis("MoveUpDown");
-            velocity.x += Lynx::Input::GetAxis("MoveLeftRight");
-            /*if (Lynx::Input::IsKeyPressed(Lynx::KeyCode::W)) velocity.z -= 1.0f;
-            if (Lynx::Input::IsKeyPressed(Lynx::KeyCode::S)) velocity.z += 1.0f;
-            if (Lynx::Input::IsKeyPressed(Lynx::KeyCode::A)) velocity.x -= 1.0f;
-            if (Lynx::Input::IsKeyPressed(Lynx::KeyCode::D)) velocity.x += 1.0f;*/
+            velocity.z += Input::GetAxis("MoveUpDown");
+            velocity.x += Input::GetAxis("MoveLeftRight");
+            /*if (Input::IsKeyPressed(KeyCode::W)) velocity.z -= 1.0f;
+            if (Input::IsKeyPressed(KeyCode::S)) velocity.z += 1.0f;
+            if (Input::IsKeyPressed(KeyCode::A)) velocity.x -= 1.0f;
+            if (Input::IsKeyPressed(KeyCode::D)) velocity.x += 1.0f;*/
 
             if (glm::length(velocity) > 0.0f)
             {

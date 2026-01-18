@@ -1,22 +1,20 @@
 #pragma once
-#include <memory>
+#include "Lynx.h"
 
 #include "DamageSystem.h"
 #include "Components/GameComponents.h"
-#include "Lynx/Scene/Scene.h"
-#include "Lynx/Scene/Components/Components.h"
 
 class ProjectileSystem
 {
 public:
-    static void Update(std::shared_ptr<Lynx::Scene> scene, float dt)
+    static void Update(std::shared_ptr<Scene> scene, float dt)
     {
-        auto bulletView = scene->Reg().view<Lynx::TransformComponent, ProjectileComponent>();
+        auto bulletView = scene->Reg().view<TransformComponent, ProjectileComponent>();
 
         std::vector<entt::entity> bulletsToDestroy;
         for (auto entity : bulletView)
         {
-            auto [transform, projectile] = bulletView.get<Lynx::TransformComponent, ProjectileComponent>(entity);
+            auto [transform, projectile] = bulletView.get<TransformComponent, ProjectileComponent>(entity);
 
             transform.Translation += projectile.Velocity * dt;
             projectile.Lifetime -= dt;
@@ -26,10 +24,10 @@ public:
                 continue;
             }
 
-            auto targetView = scene->Reg().view<Lynx::TransformComponent, EnemyComponent>();
+            auto targetView = scene->Reg().view<TransformComponent, EnemyComponent>();
             for (auto targetEntity : targetView)
             {
-                auto& targetTransform = targetView.get<Lynx::TransformComponent>(targetEntity);
+                auto& targetTransform = targetView.get<TransformComponent>(targetEntity);
 
                 float distSq = glm::distance2(transform.Translation, targetTransform.Translation);
                 float hitRadius = 0.5f + projectile.Radius;
@@ -42,8 +40,17 @@ public:
                     if (enemy.Health <= 0.0f)
                     {
                         scene->DestroyEntity(targetEntity);
+
+                        if (projectile.Owner != entt::null && scene->Reg().valid(projectile.Owner))
+                        {
+                            if (scene->Reg().all_of<ExperienceComponent>(projectile.Owner))
+                            {
+                                auto& xpComp = scene->Reg().get<ExperienceComponent>(projectile.Owner);
+                                xpComp.CurrentXP += 10.0f; // TODO: Don't hardcode and also enemies should drop XP Orbs
+                            }
+                        }
                     }
-                    
+
                     DamageTextSystem::Spawn(targetTransform.Translation, (int)(projectile.Damage));
 
                     bulletsToDestroy.push_back(entity);

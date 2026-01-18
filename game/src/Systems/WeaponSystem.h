@@ -1,25 +1,21 @@
 #pragma once
-#include <memory>
+#include "Lynx.h"
 
 #include "Components/GameComponents.h"
-#include "Lynx/Engine.h"
-#include "Lynx/Scene/Entity.h"
-#include "Lynx/Scene/Scene.h"
-#include "Lynx/Scene/Components/Components.h"
 
 class WeaponSystem
 {
 public:
 
-    static void Update(std::shared_ptr<Lynx::Scene> scene, float dt)
+    static void Update(std::shared_ptr<Scene> scene, float dt)
     {
-        auto& engine = Lynx::Engine::Get();
+        auto& engine = Engine::Get();
         auto& assetManager = engine.GetAssetManager();
 
-        auto sourceView = scene->Reg().view<Lynx::TransformComponent, WeaponComponent>();
+        auto sourceView = scene->Reg().view<TransformComponent, WeaponComponent>();
         for (auto entity : sourceView)
         {
-            auto [sourceTransform, weapon] = sourceView.get<Lynx::TransformComponent, WeaponComponent>(entity);
+            auto [sourceTransform, weapon] = sourceView.get<TransformComponent, WeaponComponent>(entity);
 
             if (weapon.CooldownTimer > 0.0f)
             {
@@ -31,10 +27,10 @@ public:
             float closestDistSq = weapon.Range * weapon.Range;
             glm::vec3 targetPos = { 0, 0, 0 };
 
-            auto targetView = scene->Reg().view<Lynx::TransformComponent, EnemyComponent>();
+            auto targetView = scene->Reg().view<TransformComponent, EnemyComponent>();
             for (auto targetEntity: targetView)
             {
-                auto& targetTransform = targetView.get<Lynx::TransformComponent>(targetEntity);
+                auto& targetTransform = targetView.get<TransformComponent>(targetEntity);
                 float distSq = glm::distance2(sourceTransform.Translation, targetTransform.Translation);
 
                 if (distSq < closestDistSq)
@@ -47,34 +43,32 @@ public:
 
             if (target != entt::null)
             {
-                SpawnProjectile(scene, assetManager, sourceTransform.Translation, targetPos, weapon);
+                SpawnProjectile(scene, entity, assetManager, sourceTransform.Translation, targetPos, weapon);
                 weapon.CooldownTimer = weapon.FireRate;
             }
         }
     }
 
 private:
-    static void SpawnProjectile(const std::shared_ptr<Lynx::Scene>& scene, Lynx::AssetManager& assetManager, glm::vec3 start, glm::vec3 target, const WeaponComponent& weapon)
+    static void SpawnProjectile(const std::shared_ptr<Scene>& scene, entt::entity owner, AssetManager& assetManager, glm::vec3 start, glm::vec3 target, const WeaponComponent& weapon)
     {
         if (weapon.ProjectilePrefab.IsValid())
         {
             auto bullet = scene->InstantiatePrefab(weapon.ProjectilePrefab);
             
             glm::vec3 direction = glm::normalize(target - start);
-            auto& transform = bullet.GetComponent<Lynx::TransformComponent>();
+            auto& transform = bullet.GetComponent<TransformComponent>();
             transform.Translation = start + glm::vec3(0, 0.5f, 0);
             transform.Scale = { 0.2f, 0.2f, 0.2f };
-
-            /*auto& mesh = bullet.AddComponent<Lynx::MeshComponent>();
-            mesh.Mesh = assetManager.GetDefaultCube()->GetHandle();*/
+            
+            if (!bullet.HasComponent<ProjectileComponent>())
+                bullet.AddComponent<ProjectileComponent>();
 
             auto& proj = bullet.GetComponent<ProjectileComponent>();
             proj.Damage = weapon.Damage;
             proj.Velocity = direction * weapon.ProjectileSpeed;
+            proj.Owner = owner;
         }
-
-        //auto bullet = scene->CreateEntity("Bullet");
-        
     }
     
 };

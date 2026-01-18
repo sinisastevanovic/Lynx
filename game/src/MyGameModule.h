@@ -2,15 +2,15 @@
 #include <Lynx.h>
 #include <Lynx/GameModule.h>
 
-class MyGame : public Lynx::IGameModule
+class MyGame : public IGameModule
 {
 public:
-    virtual void RegisterScripts(Lynx::GameTypeRegistry* registry) override;
-    virtual void RegisterComponents(Lynx::GameTypeRegistry* registry) override;
+    virtual void RegisterScripts(GameTypeRegistry* registry) override;
+    virtual void RegisterComponents(GameTypeRegistry* registry) override;
     virtual void OnStart() override;
     virtual void OnUpdate(float deltaTime) override;
     virtual void OnShutdown() override;
     
 private:
-    std::shared_ptr<Lynx::Material> m_ParticleMat;
+    std::shared_ptr<Material> m_ParticleMat;
 };

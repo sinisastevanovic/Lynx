@@ -7,62 +7,33 @@
 
 #include "EditorLayer.h"
 #include "ImGui/EditorTheme.h"
-#include "Panels/SceneHierarchyPanel.h"
-
-
-#if defined(_WIN32)
-    #define NOMINMAX
-    #include <windows.h>
-#else
-    #include <dlfcn.h>
-#endif
+#include "Lynx/Core/DllLoader.h"
 
 int main(int argc, char** argv)
 {
     std::cout << "--- Starting Editor ---" << std::endl;
 
-    Lynx::Engine engine;
+    Engine engine;
     engine.Initialize(true);
-    Lynx::EditorTheme::ApplyTheme();
-    engine.SetSceneState(Lynx::SceneState::Edit);
+    EditorTheme::ApplyTheme();
+    engine.SetSceneState(SceneState::Edit);
 
-    Lynx::IGameModule* gameModule = nullptr;
-    Lynx::DestroyGameFunc destroyFunc = nullptr;
-
-#if defined(_WIN32)
-    HMODULE gameDLL = LoadLibraryA("game_dll.dll");
-    if (gameDLL)
+    IGameModule* gameModule = nullptr;
+    DestroyGameFunc destroyFunc = nullptr;
+    
+    DllHandle gameDLL = DllLoader::Load("game_dll.dll");
+    if (gameDLL.IsValid())
     {
-        Lynx::CreateGameFunc createFunc = (Lynx::CreateGameFunc)GetProcAddress(gameDLL, "CreateGameModule");
-        destroyFunc = (Lynx::DestroyGameFunc)GetProcAddress(gameDLL, "DestroyGameModule");
+        auto createFunc = DllLoader::GetSymbol<CreateGameFunc>(gameDLL, "CreateGameModule");
+        destroyFunc = DllLoader::GetSymbol<DestroyGameFunc>(gameDLL, "DestroyGameModule");
         if (createFunc)
-        {
             gameModule = createFunc();
-        }
+        
+        LX_CORE_INFO("Game DLL loaded.");
     }
-    else
-    {
-        LX_CORE_ERROR("Could not load game_dll.dll");
-    }
-#else
-    void* gameDLL = dlopen("./libgame_dll.so", RTLD_LAZY);
-    if (gameDLL)
-    {
-        Lynx::CreateGameFunc createFunc = (Lynx::CreateGameFunc)dlsym(gameDLL, "CreateGameModule");
-        destroyFunc = (Lynx::DestroyGameFunc)dlsym(gameDLL, "DestroyGameModule");
-        if (createFunc)
-        {
-            gameModule = createFunc();
-        }
-    }
-    else
-    {
-        LX_CORE_ERROR("Could not load libgame_dll.dll");
-    }
-#endif
 
     {
-        Lynx::EditorLayer editorLayer(&engine);
+        EditorLayer editorLayer(&engine);
         editorLayer.OnAttach();
 
         engine.SetImGuiRenderCallback([&editorLayer]()
@@ -89,13 +60,11 @@ int main(int argc, char** argv)
         LX_CORE_INFO("Game module destroyed.");
     }
     
-#if defined(_WIN32)
-    if (gameDLL)
+    if (gameDLL.IsValid())
     {
-        FreeLibrary(gameDLL);
+        DllLoader::Unload(gameDLL);
         LX_CORE_INFO("Game DLL unloaded.");
     }
-#endif
 
     engine.Shutdown();
     std::cout << "--- Editor Finished ---" << std::endl;

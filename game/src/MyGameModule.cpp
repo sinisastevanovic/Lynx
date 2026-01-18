@@ -1,14 +1,8 @@
 #include "MyGameModule.h"
 
 #include <Lynx/TypeRegistry.h>
-#include <Lynx/Scene/Scene.h>
-#include <Lynx/Scene/Components/Components.h>
-#include <Lynx/Scene/Entity.h>
-#include <Lynx/Engine.h>
 
 #include "Components/GameComponents.h"
-#include "Lynx/Input.h"
-#include "Lynx/Scene/Components/PhysicsComponents.h"
 #include "Systems/CameraSystem.h"
 #include "Systems/EnemySystem.h"
 #include "Systems/PlayerSystem.h"
@@ -16,27 +10,20 @@
 #include "Systems/WeaponSystem.h"
 
 #include <imgui.h>
-#include <nlohmann/json.hpp>
 #include "Lynx/Utils/JsonHelpers.h"
 
 #include "Components/TestNativeScript.h"
-#include "Lynx/Asset/Sprite.h"
 #include "Lynx/ImGui/LXUI.h"
 #include "Lynx/Scene/Components/LuaScriptComponent.h"
-#include "Lynx/Scene/Components/NativeScriptComponent.h"
-#include "Lynx/Scene/Components/UIComponents.h"
-#include "Lynx/UI/Core/UIElement.h"
-#include "Lynx/UI/Widgets/StackPanel.h"
-#include "Lynx/UI/Widgets/UIButton.h"
-#include "Lynx/UI/Widgets/UIImage.h"
-#include "Lynx/UI/Widgets/UIText.h"
+#include "Systems/ExperienceSystem.h"
+#include "Systems/HUDSystem.h"
 
-void MyGame::RegisterScripts(Lynx::GameTypeRegistry* registry)
+void MyGame::RegisterScripts(GameTypeRegistry* registry)
 {
     registry->RegisterScript<TestNativeScript>("TestNativeScript");
 }
 
-void MyGame::RegisterComponents(Lynx::GameTypeRegistry* registry)
+void MyGame::RegisterComponents(GameTypeRegistry* registry)
 {
     LX_INFO("Registering custom types...");
     registry->RegisterComponent<PlayerComponent>("Player Component",
@@ -53,7 +40,7 @@ void MyGame::RegisterComponents(Lynx::GameTypeRegistry* registry)
     [](entt::registry& reg, entt::entity entity)
     {
         auto& player = reg.get<PlayerComponent>(entity);
-        Lynx::LXUI::DrawDragFloat("Move Speed", player.MoveSpeed, 0.1f);
+        LXUI::DrawDragFloat("Move Speed", player.MoveSpeed, 0.1f);
     });
 
     registry->RegisterComponent<EnemyComponent>("Enemy Component",
@@ -72,8 +59,8 @@ void MyGame::RegisterComponents(Lynx::GameTypeRegistry* registry)
     [](entt::registry& reg, entt::entity entity)
     {
         auto& comp = reg.get<EnemyComponent>(entity);
-        Lynx::LXUI::DrawDragFloat("Move Speed", comp.MoveSpeed, 0.1f);
-        Lynx::LXUI::DrawDragFloat("Health", comp.Health, 0.1f);
+        LXUI::DrawDragFloat("Move Speed", comp.MoveSpeed, 0.1f);
+        LXUI::DrawDragFloat("Health", comp.Health, 0.1f);
     });
 
     registry->RegisterComponent<EnemySpawnerComponent>("EnemySpawnerComponent",
@@ -92,8 +79,8 @@ void MyGame::RegisterComponents(Lynx::GameTypeRegistry* registry)
     [](entt::registry& reg, entt::entity entity)
     {
         auto& comp = reg.get<EnemySpawnerComponent>(entity);
-        Lynx::LXUI::DrawDragFloat("SpawnRate", comp.SpawnRate, 0.1f);
-        Lynx::LXUI::DrawDragInt("MaxEnemies", comp.MaxEnemies, 1);
+        LXUI::DrawDragFloat("SpawnRate", comp.SpawnRate, 0.1f);
+        LXUI::DrawDragInt("MaxEnemies", comp.MaxEnemies, 1);
     });
 
     registry->RegisterComponent<WeaponComponent>("Weapon Component",
@@ -113,16 +100,16 @@ void MyGame::RegisterComponents(Lynx::GameTypeRegistry* registry)
         comp.Range = json["Range"];
         comp.Damage = json["Damage"];
         comp.ProjectileSpeed = json["ProjectileSpeed"];
-        comp.ProjectilePrefab = json["ProjectilePrefab"].get<Lynx::AssetHandle>();
+        comp.ProjectilePrefab = json["ProjectilePrefab"].get<AssetHandle>();
     },
     [](entt::registry& reg, entt::entity entity)
     {
         auto& comp = reg.get<WeaponComponent>(entity);
-        Lynx::LXUI::DrawDragFloat("Fire Rate", comp.FireRate, 0.1f);
-        Lynx::LXUI::DrawDragFloat("Range", comp.Range, 0.1f);
-        Lynx::LXUI::DrawDragFloat("Damage", comp.Damage, 0.1f);
-        Lynx::LXUI::DrawDragFloat("Projectile Speed", comp.ProjectileSpeed, 0.1f);
-        Lynx::LXUI::DrawAssetReference("Bullet Prefab", comp.ProjectilePrefab, {Lynx::AssetType::Prefab});
+        LXUI::DrawDragFloat("Fire Rate", comp.FireRate, 0.1f);
+        LXUI::DrawDragFloat("Range", comp.Range, 0.1f);
+        LXUI::DrawDragFloat("Damage", comp.Damage, 0.1f);
+        LXUI::DrawDragFloat("Projectile Speed", comp.ProjectileSpeed, 0.1f);
+        LXUI::DrawAssetReference("Bullet Prefab", comp.ProjectilePrefab, {AssetType::Prefab});
     });
 
     registry->RegisterComponent<ProjectileComponent>("Projectile Component",
@@ -143,106 +130,79 @@ void MyGame::RegisterComponents(Lynx::GameTypeRegistry* registry)
     [](entt::registry& reg, entt::entity entity)
     {
         auto& comp = reg.get<ProjectileComponent>(entity);
-        Lynx::LXUI::DrawDragFloat("Damage", comp.Damage, 0.1f);
-        Lynx::LXUI::DrawDragFloat("Lifetime", comp.Lifetime, 0.1f);
-        Lynx::LXUI::DrawDragFloat("Radius", comp.Radius, 0.1f);
+        LXUI::DrawDragFloat("Damage", comp.Damage, 0.1f);
+        LXUI::DrawDragFloat("Lifetime", comp.Lifetime, 0.1f);
+        LXUI::DrawDragFloat("Radius", comp.Radius, 0.1f);
     });
-}
-
-void CreateMyUI(std::shared_ptr<Lynx::Scene> scene)
-{
-    using namespace Lynx;
-    Entity uiEntity = scene->CreateEntity("MainMenu");
-    auto& canvasComp = uiEntity.AddComponent<UICanvasComponent>();
-    return;
-    auto root = canvasComp.Canvas;
     
-    // 1. Fullscreen Background
-    auto bg = std::make_shared<UIImage>();
-    bg->SetName("Background");
-    bg->SetAnchor(UIAnchor::StretchAll);
-    bg->SetTint({ 0.1f, 0.1f, 0.2f, 1.0f }); // Dark Blue
-    root->AddChild(bg);
+    registry->RegisterComponent<ExperienceComponent>("Experience Component",
+    [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+    {
+        auto& comp = reg.get<ExperienceComponent>(entity);
+        json["CurrentXP"] = comp.CurrentXP;
+        json["TargetXP"] = comp.TargetXP;
+        json["Level"] = comp.Level;
+    },
+    [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+    {
+        auto& comp = reg.get_or_emplace<ExperienceComponent>(entity);
+        comp.CurrentXP = json.value("CurrentXP", 0.0f);
+        comp.TargetXP = json.value("TargetXP", 100.0f);
+        comp.Level = json.value("Level", 1);
+    },
+    [](entt::registry& reg, entt::entity entity)
+    {
+        auto& comp = reg.get<ExperienceComponent>(entity);
+        
+        LXUI::DrawDragFloat("CurrentXP", comp.CurrentXP);
+        LXUI::DrawDragFloat("TargetXP", comp.TargetXP);
+        LXUI::DrawDragInt("Level", comp.Level, 1, 0, 9999);
+    });
     
-    // 2. Center Panel (The Menu Window)
-    auto window = std::make_shared<UIImage>();
-    window->SetName("MenuWindow");
-    window->SetAnchor(UIAnchor::Center);
-    window->SetSize({ 400.0f, 500.0f }); // Fixed size window
-    window->SetTint({ 0.2f, 0.2f, 0.2f, 0.9f }); // Dark Grey
-    
-    // window->SetType(ImageType::Sliced);
-    // window->SetBorder({5,5,5,5});
-    
-    bg->AddChild(window);
-    
-    // 3. StackPanel (The Layout Manager)
-    auto stack = std::make_shared<StackPanel>();
-    stack->SetName("ButtonStack");
-    stack->SetAnchor(UIAnchor::StretchAll); // Fill the window
-    stack->SetOffset({ 0.0f, 0.0f }); // Padding 20dp
-    stack->SetSize({ 0.0f, 0.0f }); // Negative size delta = margins from Right/Bottom
-    
-    stack->SetOrientation(Orientation::Vertical);
-    stack->SetSpacing(15.0f); // 15dp gap between buttons
-    window->AddChild(stack);
-    
-    // 4. Test Buttons
-    
-    // A. Stretch Button (Default)
-    auto btnStretch = std::make_shared<UIButton>();
-    btnStretch->SetName("Btn_Stretch");
-    btnStretch->SetSize({ 0.0f, 50.0f }); // Width ignored in stretch, Height 50
-    btnStretch->SetTint({ 0.2f, 0.6f, 0.2f, 1.0f }); // Green
-    btnStretch->SetHorizontalAlignment(UIAlignment::Stretch);
-    stack->AddChild(btnStretch);
-
-    auto btnText = std::make_shared<UIText>();
-    btnText->SetName("Btn_Text");
-    btnText->SetSize({ 0.0f, 0.0f });
-    btnText->SetAnchor(UIAnchor::StretchAll);
-    btnStretch->AddChild(btnText);
-    
-    // B. Left/Start Button
-    auto btnLeft = std::make_shared<UIButton>();
-    btnLeft->SetName("Btn_Left");
-    btnLeft->SetSize({ 150.0f, 50.0f }); // Fixed width
-    btnLeft->SetTint({ 0.6f, 0.2f, 0.2f, 1.0f }); // Red
-    btnLeft->SetHorizontalAlignment(UIAlignment::Start);
-    stack->AddChild(btnLeft);
-    
-    // C. Center Button
-    auto btnCenter = std::make_shared<UIButton>();
-    btnCenter->SetName("Btn_Center");
-    btnCenter->SetSize({ 150.0f, 50.0f });
-    btnCenter->SetTint({ 0.2f, 0.2f, 0.6f, 1.0f }); // Blue
-    btnCenter->SetHorizontalAlignment(UIAlignment::Center);
-    stack->AddChild(btnCenter);
-    
-    // D. Right/End Button
-    auto btnRight = std::make_shared<UIButton>();
-    btnRight->SetName("Btn_Right");
-    btnRight->SetSize({ 150.0f, 50.0f });
-    btnRight->SetTint({ 0.6f, 0.6f, 0.2f, 1.0f }); // Yellow
-    btnRight->SetHorizontalAlignment(UIAlignment::End);
-    stack->AddChild(btnRight);
+    registry->RegisterComponent<PlayerHUDComponent>("Player HUD Binding",
+    [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+    {
+        auto& comp = reg.get<PlayerHUDComponent>(entity);
+        json["HPBar"] = comp.HPBarID;
+        json["HPText"] = comp.HPTextID;
+        json["XPBar"] = comp.XPBarID;
+        json["LevelText"] = comp.LevelTextID;
+    },
+    [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+    {
+        auto& comp = reg.get_or_emplace<PlayerHUDComponent>(entity);
+        comp.HPBarID = json.value<UUID>("HPBar", UUID::Null());
+        comp.HPTextID = json.value<UUID>("HPText", UUID::Null());
+        comp.XPBarID = json.value<UUID>("XPBar", UUID::Null());
+        comp.LevelTextID = json.value<UUID>("LevelText", UUID::Null());
+    },
+    [](entt::registry& reg, entt::entity entity)
+    {
+        auto& comp = reg.get<PlayerHUDComponent>(entity);
+        auto scene = reg.ctx().get<Scene*>();
+        
+        LXUI::DrawUIElementSelection("HP Bar", comp.HPBarID, scene);
+        LXUI::DrawUIElementSelection("HP Text", comp.HPTextID, scene);
+        LXUI::DrawUIElementSelection("XP Bar", comp.XPBarID, scene);
+        LXUI::DrawUIElementSelection("Level Text", comp.LevelTextID, scene);
+    });
 }
 
 void MyGame::OnStart()
 {
     LX_INFO("OnStart called.");
 
-    auto scene = Lynx::Engine().Get().GetActiveScene();
+    auto scene = Engine().Get().GetActiveScene();
     
     DamageTextSystem::Init(scene);
 
-    Lynx::Input::BindAxis("MoveLeftRight", Lynx::KeyCode::D, Lynx::KeyCode::A);
-    Lynx::Input::BindAxis("MoveUpDown", Lynx::KeyCode::S, Lynx::KeyCode::W);
+    Input::BindAxis("MoveLeftRight", KeyCode::D, KeyCode::A);
+    Input::BindAxis("MoveUpDown", KeyCode::S, KeyCode::W);
 }
 
 void MyGame::OnUpdate(float deltaTime)
 {
-    auto scene = Lynx::Engine::Get().GetActiveScene();
+    auto scene = Engine::Get().GetActiveScene();
     
     EnemySystem::Update(scene, deltaTime);
     PlayerSystem::Update(scene, deltaTime);
@@ -251,11 +211,13 @@ void MyGame::OnUpdate(float deltaTime)
     ProjectileSystem::Update(scene, deltaTime);
     WeaponSystem::Update(scene, deltaTime);
     DamageTextSystem::Update(deltaTime, scene);
+    ExperienceSystem::Update(scene, deltaTime);
+    HUDSystem::Update(scene, deltaTime);
 }
 
 void MyGame::OnShutdown()
 {
     LX_INFO("OnShutdown called.");
     DamageTextSystem::Shutdown();
-   // Lynx::Engine::Get().GetAssetManager().UnloadAsset(m_ParticleMat->GetHandle()); // TODO: This is temporary!! We need a way to clear all runtime game assets. 
+   // Engine::Get().GetAssetManager().UnloadAsset(m_ParticleMat->GetHandle()); // TODO: This is temporary!! We need a way to clear all runtime game assets. 
 }

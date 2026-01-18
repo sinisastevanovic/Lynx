@@ -1,15 +1,12 @@
 #pragma once
-#include "Lynx/Engine.h"
-#include "Lynx/Scene/Scene.h"
+#include "Lynx.h"
 #include "Lynx/Scene/Components/UIComponents.h"
 #include "Lynx/UI/Core/UIObjectPool.h"
 #include "Lynx/UI/Widgets/UIText.h"
-#include "Lynx/Utils/MathHelpers.h"
-
 
 struct FloatingText
 {
-    std::shared_ptr<Lynx::UIText> Element;
+    std::shared_ptr<UIText> Element;
     glm::vec3 WorldPos;
     float LifeTime;
     float MaxLifeTime;
@@ -20,25 +17,25 @@ struct FloatingText
 class DamageTextSystem
 {
 public:
-    static void Init(std::shared_ptr<Lynx::Scene> scene)
+    static void Init(std::shared_ptr<Scene> scene)
     {
-        auto view = scene->Reg().view<Lynx::UICanvasComponent>();
+        auto view = scene->Reg().view<UICanvasComponent>();
         for (auto e : view)
         {
-            s_Canvas = view.get<Lynx::UICanvasComponent>(e).Canvas;
+            s_Canvas = view.get<UICanvasComponent>(e).Canvas;
             break;
         }
 
         if (!s_Canvas) 
             return;
         
-        s_TextPool = std::make_unique<Lynx::UIObjectPool<Lynx::UIText>>([=]()
+        s_TextPool = std::make_unique<UIObjectPool<UIText>>([=]()
         {
-            auto t = std::make_shared<Lynx::UIText>();
+            auto t = std::make_shared<UIText>();
             t->SetText("0");
-            t->SetAnchor(Lynx::UIAnchor::TopLeft);
+            t->SetAnchor(UIAnchor::TopLeft);
             t->SetPivot({0.5f, 0.5f});
-            t->SetTextAlignment(Lynx::TextAlignment::Center);
+            t->SetTextAlignment(TextAlignment::Center);
             t->SetFontSize(24);
             t->SetColor({1.0f, 0.0f, 0.0f, 1.0f});
             s_Canvas->AddChild(t);
@@ -59,12 +56,12 @@ public:
         s_ActiveTexts.push_back({text, worldPos, 1.0f, 1.0f});
     }
     
-    static void Update(float dt, std::shared_ptr<Lynx::Scene> scene)
+    static void Update(float dt, std::shared_ptr<Scene> scene)
     {
         if (s_ActiveTexts.empty())
             return;
         
-        glm::mat4 viewProj = Lynx::Engine::Get().GetRenderer().GetCameraViewProjMatrix();
+        glm::mat4 viewProj = Engine::Get().GetRenderer().GetCameraViewProjMatrix();
         
         for (auto it = s_ActiveTexts.begin(); it != s_ActiveTexts.end(); )
         {
@@ -79,15 +76,15 @@ public:
             }
             
             item.WorldPos.y += item.FloatSpeed * dt * 0.01f;
-            glm::vec3 screenPos = Lynx::MathHelpers::WorldToCanvas(item.WorldPos, viewProj, s_Canvas.get());
+            glm::vec3 screenPos = MathHelpers::WorldToCanvas(item.WorldPos, viewProj, s_Canvas.get());
             
             if (screenPos.z < 0 || screenPos.z > 1)
             {
-                item.Element->SetVisibility(Lynx::UIVisibility::Hidden);
+                item.Element->SetVisibility(UIVisibility::Hidden);
             }
             else
             {
-                item.Element->SetVisibility(Lynx::UIVisibility::Visible);
+                item.Element->SetVisibility(UIVisibility::Visible);
                 item.Element->SetOffset({screenPos.x, screenPos.y});
             }
             
@@ -106,7 +103,7 @@ public:
     }
     
 private:
-    static inline std::shared_ptr<Lynx::UICanvas> s_Canvas;
-    static inline std::unique_ptr<Lynx::UIObjectPool<Lynx::UIText>> s_TextPool;
+    static inline std::shared_ptr<UICanvas> s_Canvas;
+    static inline std::unique_ptr<UIObjectPool<UIText>> s_TextPool;
     static inline std::vector<FloatingText> s_ActiveTexts;
 };
