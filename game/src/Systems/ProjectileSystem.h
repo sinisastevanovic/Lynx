@@ -24,32 +24,21 @@ public:
                 continue;
             }
 
-            auto targetView = scene->Reg().view<TransformComponent, EnemyComponent>();
+            auto targetView = scene->Reg().view<TransformComponent, EnemyComponent, HealthComponent>(entt::exclude<DeadTag>);
             for (auto targetEntity : targetView)
             {
                 auto& targetTransform = targetView.get<TransformComponent>(targetEntity);
+                glm::vec3 targetPosition = targetTransform.GetWorldTranslation();
 
-                float distSq = glm::distance2(transform.Translation, targetTransform.Translation);
+                float distSq = glm::distance2(transform.Translation, targetPosition);
                 float hitRadius = 0.5f + projectile.Radius;
 
                 if (distSq < (hitRadius * hitRadius))
                 {
                     auto& enemy = targetView.get<EnemyComponent>(targetEntity);
-                    enemy.Health -= projectile.Damage;
-
-                    if (enemy.Health <= 0.0f)
-                    {
-                        scene->DestroyEntity(targetEntity);
-
-                        if (projectile.Owner != entt::null && scene->Reg().valid(projectile.Owner))
-                        {
-                            if (scene->Reg().all_of<ExperienceComponent>(projectile.Owner))
-                            {
-                                auto& xpComp = scene->Reg().get<ExperienceComponent>(projectile.Owner);
-                                xpComp.CurrentXP += 10.0f; // TODO: Don't hardcode and also enemies should drop XP Orbs
-                            }
-                        }
-                    }
+                    auto& targetHealth = targetView.get<HealthComponent>(targetEntity);
+                    
+                    targetHealth.CurrentHealth -= projectile.Damage;
 
                     DamageTextSystem::Spawn(targetTransform.Translation, (int)(projectile.Damage));
 

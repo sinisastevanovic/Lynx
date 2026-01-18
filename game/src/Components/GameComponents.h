@@ -14,7 +14,7 @@ struct PlayerComponent
 struct EnemyComponent
 {
     float MoveSpeed = 2.5f;
-    float Health = 10.0f; // TODO: Move to HealthComponent
+    float XPValue = 10.0f;
 };
 
 struct EnemySpawnerComponent
@@ -57,6 +57,12 @@ struct PlayerHUDComponent
     mutable std::weak_ptr<UIText> CachedLevelText;
 };
 
+struct HealthComponent
+{
+    float CurrentHealth = 100.0f;
+    float MaxHealth = 100.0f;
+};
+
 struct ExperienceComponent
 {
     float CurrentXP = 0.0f;
@@ -64,3 +70,23 @@ struct ExperienceComponent
     int Level = 1;
     mutable int LastUILevel = 0;
 };
+
+enum class PickupType { XP, Health };
+
+struct PickupComponent
+{
+    PickupType Type = PickupType::XP;
+    float Value = 10.0f;
+    bool Magnetic = false;
+    
+    bool IsMagnetized = false;
+    entt::entity MagentizedBy = entt::null;
+};
+
+struct MagnetComponent
+{
+    float Radius = 3.0f;
+    float Strength = 10.0f;
+};
+
+struct DeadTag {};

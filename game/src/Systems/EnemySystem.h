@@ -83,6 +83,10 @@ private:
         transform.Scale = { 2.0f, 2.0f, 2.0f };
 
         enemy.AddComponent<EnemyComponent>();
+        
+        auto& health = enemy.AddComponent<HealthComponent>();
+        health.MaxHealth = 10.0f;
+        health.CurrentHealth = health.MaxHealth;
 
         auto& mesh = enemy.AddComponent<MeshComponent>();
         mesh.Mesh = assetManager.GetAsset("assets/Models/Bottle/WaterBottle.gltf")->GetHandle();
