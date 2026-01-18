@@ -68,7 +68,7 @@ public:
     }
 
 private:
-    // TODO: AssetManager should not be in here. 
+    // TODO: Use prefabs. 
     static void SpawnEnemy(std::shared_ptr<Scene> scene, AssetManager& assetManager)
     {
         // Spawn in random circle around the origin (for now)
@@ -84,6 +84,11 @@ private:
 
         enemy.AddComponent<EnemyComponent>();
         
+        // TODO: Maybe do it like this? So we could initialize with some stats? But maybe not, they depend on the prefab right? 
+        // static void OnEnemyCreated(entt::registry& reg, entt::entity entity) {
+        //      //Automatically add health when Enemy is created
+        //      reg.emplace<HealthComponent>(entity, 100.0f);
+        //}
         auto& health = enemy.AddComponent<HealthComponent>();
         health.MaxHealth = 10.0f;
         health.CurrentHealth = health.MaxHealth;
