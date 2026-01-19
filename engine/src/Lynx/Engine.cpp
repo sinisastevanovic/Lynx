@@ -137,8 +137,10 @@ namespace Lynx
         while (m_IsRunning)
         {
             float time = (float)glfwGetTime();
-            float deltaTime = time - lastFrameTime;
+            m_UnscaledDeltaTime = time - lastFrameTime;
             lastFrameTime = time;
+            
+            m_DeltaTime = m_Paused ? 0.0f : m_UnscaledDeltaTime * m_TimeScale;
             
             if (m_Window->ShouldClose())
                 m_IsRunning = false;
@@ -162,19 +164,19 @@ namespace Lynx
             // TODO: We should load all the textures and meshes before we run the scene!!!
             if (m_SceneState == SceneState::Edit)
             {
-                m_EditorCamera.OnUpdate(deltaTime);
-                m_Scene->OnUpdateEditor(deltaTime, m_EditorCamera.GetPosition());
+                m_EditorCamera.OnUpdate(m_UnscaledDeltaTime);
+                m_Scene->OnUpdateEditor(m_UnscaledDeltaTime, m_EditorCamera.GetPosition());
                 
-                m_SceneRenderer->RenderEditor(m_EditorCamera, deltaTime);
+                m_SceneRenderer->RenderEditor(m_EditorCamera, m_UnscaledDeltaTime);
             }
             else if (m_SceneState == SceneState::Play)
             {
-                m_Scene->OnUpdateRuntime(deltaTime);
+                m_Scene->OnUpdateRuntime(m_DeltaTime);
                 if (gameModule)
-                    gameModule->OnUpdate(deltaTime);
+                    gameModule->OnUpdate(m_DeltaTime);
                 
                 m_Scene->UpdateGlobalTransforms();
-                m_SceneRenderer->RenderRuntime(deltaTime);
+                m_SceneRenderer->RenderRuntime(m_DeltaTime);
             }
         }
 

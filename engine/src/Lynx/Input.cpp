@@ -33,7 +33,7 @@ namespace Lynx
 
     bool Input::GetButton(const std::string& name)
     {
-        if (Engine::Get().AreEventsBlocked())
+        if (Engine::Get().AreEventsBlocked() || Engine::Get().IsPaused())
             return false;
         
         if (s_ActionMappings.find(name) != s_ActionMappings.end())
@@ -47,7 +47,7 @@ namespace Lynx
 
     float Input::GetAxis(const std::string& name)
     {
-        if (Engine::Get().AreEventsBlocked())
+        if (Engine::Get().AreEventsBlocked() || Engine::Get().IsPaused())
             return 0.0f;
         
         float value = 0.0f;

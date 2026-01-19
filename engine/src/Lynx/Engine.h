@@ -3,11 +3,9 @@
 #include "Window.h"
 #include "Asset/AssetManager.h"
 #include "Renderer/Renderer.h"
-#include "Physics/PhysicsSystem.h"
 #include "Event/Event.h"
 #include "Lynx/Renderer/EditorCamera.h"
 #include "Renderer/SceneRenderer.h"
-#include "Scene/Systems/ParticleSystem.h"
 #include "Scripting/ScriptEngine.h"
 
 namespace Lynx
@@ -58,6 +56,15 @@ namespace Lynx
 
         using EventCallbackFn = std::function<void(Event&)>;
         void SetAppEventCallback(const EventCallbackFn& callback) { m_AppEventCallback = callback; }
+        
+        float GetDeltaTime() const { return m_DeltaTime; }
+        float GetUnscaledDeltaTime() const { return m_UnscaledDeltaTime; }
+        
+        void SetTimeScale(float timeScale) { m_TimeScale = timeScale;}
+        float GetTimeScale() const { return m_TimeScale; }
+        
+        void SetPaused(bool paused) { m_Paused = paused; }
+        bool IsPaused() const { return m_Paused; }
 
     private:
         void OnEvent(Event& e);
@@ -89,6 +96,11 @@ namespace Lynx
         
         IGameModule* m_GameModule = nullptr;
         bool m_IsEditor = false;
+        
+        float m_TimeScale = 1.0f;
+        bool m_Paused = false;
+        float m_DeltaTime = 0.0f;
+        float m_UnscaledDeltaTime = 0.0f;
         
         friend class EditorLayer;
         friend class AssetManager;

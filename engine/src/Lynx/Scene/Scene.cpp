@@ -13,12 +13,14 @@
 #include "Components/NativeScriptComponent.h"
 #include "Lynx/Scripting/ScriptEngine.h"
 #include <glm/gtx/matrix_decompose.hpp>
+#include <Jolt/Physics/Body/BodyInterface.h>
 
 #include "SceneSerializer.h"
 #include "Components/IDComponent.h"
 #include "Components/UIComponents.h"
 #include "Lynx/Asset/Prefab.h"
 #include "Lynx/Event/AssetEvents.h"
+#include "Lynx/Physics/PhysicsSystem.h"
 
 namespace Lynx
 {
@@ -451,12 +453,12 @@ namespace Lynx
                 auto& component = uiView.get<UICanvasComponent>(entity);
                 if (component.Canvas)
                 {
-                    component.Canvas->Update(deltaTime, width, height);
+                    component.Canvas->Update(Engine::Get().GetUnscaledDeltaTime(), width, height);
                 }
             }
         }
         
-        glm::vec3 cameraPos;
+        /*glm::vec3 cameraPos;
         auto camView = m_Registry.view<TransformComponent, CameraComponent>();
         for (auto entity : camView)
         {
@@ -466,7 +468,7 @@ namespace Lynx
                 cameraPos = transform.Translation; // TODO: This is wrong if the camera entity is attached to an entity 
                 break;
             }
-        }
+        }*/
     }
 
     void Scene::OnUpdateEditor(float deltaTime, glm::vec3 cameraPos)

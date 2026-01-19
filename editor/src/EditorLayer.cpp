@@ -108,6 +108,18 @@ namespace Lynx
             else
                 OnSceneStop();
         }
+        
+        ImGui::SameLine();
+        if (state == SceneState::Edit)
+            ImGui::BeginDisabled(true);
+        bool paused = Engine::Get().IsPaused();
+        const char* pauseLabel = paused ? "Resume" : "Pause";
+        if (ImGui::Button(pauseLabel))
+        {
+            Engine::Get().SetPaused(!paused);
+        }
+        if (state == SceneState::Edit)
+            ImGui::EndDisabled();
 
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
         auto& colors = ImGui::GetStyle().Colors;

@@ -3,6 +3,7 @@
 
 #include "Components/GameComponents.h"
 #include "Lynx/Asset/AssetManager.h"
+#include "Lynx/Physics/PhysicsSystem.h"
 #include "Lynx/Scene/Components/PhysicsComponents.h"
 
 class EnemySystem
