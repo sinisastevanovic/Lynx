@@ -33,7 +33,7 @@ namespace Lynx
 
     bool Input::GetButton(const std::string& name)
     {
-        if (Engine::Get().AreEventsBlocked() || Engine::Get().IsPaused())
+        if (Engine::Get().AreEventsBlocked() || Engine::Get().IsPaused()) // TODO: Maybe add a "Execute while Paused" for the actions
             return false;
         
         if (s_ActionMappings.find(name) != s_ActionMappings.end())

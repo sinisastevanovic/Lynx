@@ -595,17 +595,20 @@ namespace Lynx
             {
                 auto& bcComp = reg.get<BoxColliderComponent>(entity);
                 json["HalfSize"] = {bcComp.HalfSize.x, bcComp.HalfSize.y, bcComp.HalfSize.z };
+                json["Offset"] = bcComp.Offset;
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
                 auto& bcComp = reg.get_or_emplace<BoxColliderComponent>(entity);
                 const auto& halfSize = json["HalfSize"];
                 bcComp.HalfSize = glm::vec3(halfSize[0], halfSize[1], halfSize[2]);
+                bcComp.Offset = json.value("Offset", glm::vec3(0.0f, 0.0f, 0.0f));
             },
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& bcComp = reg.get<BoxColliderComponent>(entity);
                 LXUI::DrawVec3Control("Half Size", bcComp.HalfSize, 0, FLT_MAX, 0.5f);
+                LXUI::DrawVec3Control("Offset", bcComp.Offset);
             });
 
         m_ComponentRegistry.RegisterCoreComponent<SphereColliderComponent>("SphereCollider",
@@ -613,16 +616,19 @@ namespace Lynx
             {
                 auto& scComp = reg.get<SphereColliderComponent>(entity);
                 json["Radius"] = scComp.Radius;
+                json["Offset"] = scComp.Offset;
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
                 auto& scComp = reg.get_or_emplace<SphereColliderComponent>(entity);
                 scComp.Radius = json["Radius"];
+                scComp.Offset = json.value("Offset", glm::vec3(0.0f, 0.0f, 0.0f));
             },
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& scComp = reg.get<SphereColliderComponent>(entity);
                 LXUI::DrawDragFloat("Radius", scComp.Radius, 0.1f, 0, FLT_MAX, 0.5f);
+                LXUI::DrawVec3Control("Offset", scComp.Offset);
             });
 
         m_ComponentRegistry.RegisterCoreComponent<CapsuleColliderComponent>("CapsuleCollider",
@@ -631,18 +637,21 @@ namespace Lynx
                 auto& ccComp = reg.get<CapsuleColliderComponent>(entity);
                 json["Radius"] = ccComp.Radius;
                 json["HalfHeight"] = ccComp.HalfHeight;
+                json["Offset"] = ccComp.Offset;
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
                 auto& ccComp = reg.get_or_emplace<CapsuleColliderComponent>(entity);
                 ccComp.Radius = json["Radius"];
                 ccComp.HalfHeight = json["HalfHeight"];
+                ccComp.Offset = json.value("Offset", glm::vec3(0.0f, 0.0f, 0.0f));
             },
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& ccComp = reg.get<CapsuleColliderComponent>(entity);
                 LXUI::DrawDragFloat("Radius", ccComp.Radius, 0.1f, 0, FLT_MAX, 0.5f);
                 LXUI::DrawDragFloat("Half Height", ccComp.HalfHeight, 0.1f, 0, FLT_MAX, 0.5f);
+                LXUI::DrawVec3Control("Offset", ccComp.Offset);
             });
 
         m_ComponentRegistry.RegisterCoreComponent<NativeScriptComponent>("NativeScript",
@@ -939,6 +948,7 @@ namespace Lynx
                     // Recursively save the entire UI Tree
                     comp.Canvas->Serialize(canvasJson);
                     json["Canvas"] = canvasJson;
+                    json["SortingOrder"] = comp.SortingOrder;
                 }
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
@@ -946,12 +956,18 @@ namespace Lynx
                 auto& comp = reg.get_or_emplace<UICanvasComponent>(entity);
                 if (json.contains("Canvas"))
                 {
+                    comp.SortingOrder = json.value("SortingOrder", 0);
                     // Create a new Canvas (which is also the root UIElement)
                     comp.Canvas = std::make_shared<UICanvas>();
                     // Recursively load the tree
                     comp.Canvas->Deserialize(json["Canvas"]);
                     comp.Canvas->OnPostLoad();
                 }
+            },
+            [](entt::registry& reg, entt::entity entity) 
+            {
+                auto& comp = reg.get_or_emplace<UICanvasComponent>(entity);
+                LXUI::DrawDragInt("Sorting Order", comp.SortingOrder, 1, 0, 1000);
             }
         );
         m_ComponentRegistry.RegisterCoreInternalOnlyComponent<PrefabComponent>("Prefab",

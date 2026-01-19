@@ -28,6 +28,7 @@ namespace Lynx
     struct BoxColliderComponent
     {
         glm::vec3 HalfSize = { 0.5f, 0.5f, 0.5f };
+        glm::vec3 Offset = { 0.0f, 0.0f, 0.0f };
 
         BoxColliderComponent() = default;
         BoxColliderComponent(const BoxColliderComponent&) = default;
@@ -36,6 +37,7 @@ namespace Lynx
     struct SphereColliderComponent
     {
         float Radius = 0.5f;
+        glm::vec3 Offset = { 0.0f, 0.0f, 0.0f };
 
         SphereColliderComponent() = default;
         SphereColliderComponent(const SphereColliderComponent&) = default;
@@ -45,6 +47,7 @@ namespace Lynx
     {
         float Radius = 0.5f;
         float HalfHeight = 0.5f;
+        glm::vec3 Offset = { 0.0f, 0.0f, 0.0f };
 
         CapsuleColliderComponent() = default;
         CapsuleColliderComponent(const CapsuleColliderComponent&) = default;

@@ -7,6 +7,7 @@ namespace Lynx
     struct UICanvasComponent
     {
         std::shared_ptr<UICanvas> Canvas;
+        int SortingOrder = 0; // Higher = Draw on top
 
         UICanvasComponent()
         {

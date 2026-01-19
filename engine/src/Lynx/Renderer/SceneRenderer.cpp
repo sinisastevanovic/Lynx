@@ -119,7 +119,11 @@ namespace Lynx
             for (auto entity : boxView)
             {
                 auto [transform, collider] = boxView.get<TransformComponent, BoxColliderComponent>(entity);
-                glm::mat4 colliderTransform = glm::translate(glm::mat4(1.0f), transform.Translation)
+                
+                glm::vec3 worldOffset = transform.Rotation * collider.Offset;
+                glm::vec3 worldPos = transform.Translation + worldOffset;
+                
+                glm::mat4 colliderTransform = glm::translate(glm::mat4(1.0f), worldPos)
                     * glm::toMat4(transform.Rotation)
                     * glm::scale(glm::mat4(1.0f), collider.HalfSize * 2.0f);
 
@@ -130,14 +134,16 @@ namespace Lynx
             for (auto entity : sphereView)
             {
                 auto [transform, collider] = sphereView.get<TransformComponent, SphereColliderComponent>(entity);
-                DebugRenderer::DrawSphere(transform.Translation, collider.Radius, debugColor);
+                glm::vec3 worldOffset = transform.Rotation * collider.Offset;
+                DebugRenderer::DrawSphere(transform.Translation + worldOffset, collider.Radius, debugColor);
             }
 
             auto capsuleView = m_Scene->Reg().view<TransformComponent, CapsuleColliderComponent>();
             for (auto entity : capsuleView)
             {
                 auto [transform, collider] = capsuleView.get<TransformComponent, CapsuleColliderComponent>(entity);
-                DebugRenderer::DrawCapsule(transform.Translation, collider.Radius, collider.HalfHeight, transform.Rotation, debugColor);
+                glm::vec3 worldOffset = transform.Rotation * collider.Offset;
+                DebugRenderer::DrawCapsule(transform.Translation + worldOffset, collider.Radius, collider.HalfHeight, transform.Rotation, debugColor);
             }
         }
         

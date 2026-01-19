@@ -10,6 +10,8 @@
 
 namespace Lynx
 {
+    struct RigidBodyComponent;
+    struct TransformComponent;
     class Prefab;
     class PhysicsSystem;
     class Entity;
@@ -61,6 +63,7 @@ namespace Lynx
 
     private:
         void UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform);
+        void CreateRuntimeBody(entt::entity entity, const TransformComponent& transform, RigidBodyComponent& rigidBody);
         
     private:
         entt::registry m_Registry;
