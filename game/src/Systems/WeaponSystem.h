@@ -52,9 +52,9 @@ public:
 private:
     static void SpawnProjectile(const std::shared_ptr<Scene>& scene, entt::entity owner, AssetManager& assetManager, glm::vec3 start, glm::vec3 target, const WeaponComponent& weapon)
     {
-        if (weapon.ProjectilePrefab.IsValid())
+        if (weapon.ProjectilePrefab)
         {
-            auto bullet = scene->InstantiatePrefab(weapon.ProjectilePrefab);
+            auto bullet = scene->InstantiatePrefab(weapon.ProjectilePrefab.Get());
             
             glm::vec3 direction = glm::normalize(target - start);
             auto& transform = bullet.GetComponent<TransformComponent>();

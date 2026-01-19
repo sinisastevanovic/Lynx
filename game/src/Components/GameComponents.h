@@ -17,13 +17,6 @@ struct EnemyComponent
     float XPValue = 10.0f;
 };
 
-struct EnemySpawnerComponent
-{
-    float SpawnRate = 1.0f;
-    float Timer = 0.0f;
-    int MaxEnemies = 50;
-};
-
 struct WeaponComponent
 {
     float FireRate = 0.5f;
@@ -31,7 +24,7 @@ struct WeaponComponent
     float Damage = 5.0f;
     float ProjectileSpeed = 20.0f;
     float CooldownTimer = 0.0f;
-    AssetHandle ProjectilePrefab = AssetHandle();
+    AssetRef<Prefab> ProjectilePrefab;
 };
 
 struct ProjectileComponent
@@ -46,15 +39,11 @@ struct ProjectileComponent
 
 struct PlayerHUDComponent
 {
-    UUID HPBarID = UUID::Null();
-    UUID HPTextID = UUID::Null();
-    UUID XPBarID = UUID::Null();
-    UUID LevelTextID = UUID::Null();
-    
-    mutable std::weak_ptr<UIImage> CachedHPBar;
-    mutable std::weak_ptr<UIImage> CachedXPBar;
-    mutable std::weak_ptr<UIText> CachedHPText;
-    mutable std::weak_ptr<UIText> CachedLevelText;
+    ElementRef<UIImage> HPBar;
+    ElementRef<UIImage> XPBar;
+    ElementRef<UIText> HPText;
+    ElementRef<UIText> LevelText;
+    ElementRef<UICanvas> LevelUpCanvas;
 };
 
 struct HealthComponent

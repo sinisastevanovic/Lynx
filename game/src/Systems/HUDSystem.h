@@ -1,5 +1,6 @@
 #pragma once
 #include "Lynx.h"
+#include "WaveSystem.h"
 #include "Components/GameComponents.h"
 #include "Lynx/UI/Widgets/UIImage.h"
 #include "Lynx/UI/Widgets/UIText.h"
@@ -9,39 +10,62 @@ class HUDSystem
 public:
     static void Update(std::shared_ptr<Scene> scene, float deltaTime)
     {
-        auto view = scene->Reg().view<PlayerHUDComponent, ExperienceComponent>();
-        
-        for (auto entity : view)
         {
-            const auto& [hud, xp] = view.get<PlayerHUDComponent, ExperienceComponent>(entity);
-            
-            std::shared_ptr<UIImage> bar = hud.CachedXPBar.lock();
-            if (!bar && hud.XPBarID.IsValid())
+            auto view = scene->Reg().view<PlayerHUDComponent, ExperienceComponent>();
+            for (auto entity : view)
             {
-                auto el = scene->FindUIElementByID(hud.XPBarID);
-                bar = std::dynamic_pointer_cast<UIImage>(el);
-                hud.CachedXPBar = bar;
-            }
+                const auto& [hud, xp] = view.get<PlayerHUDComponent, ExperienceComponent>(entity);
             
-            if (bar)
-            {
-                bar->SetFillAmount(xp.CurrentXP / xp.TargetXP);
-            }
+                if (hud.XPBar)
+                {
+                    hud.XPBar.Get(scene.get())->SetFillAmount(xp.CurrentXP / xp.TargetXP);
+                }
             
-            std::shared_ptr<UIText> text = hud.CachedLevelText.lock();
-            if (!text && hud.LevelTextID.IsValid())
-            {
-                auto el = scene->FindUIElementByID(hud.LevelTextID);
-                text = std::dynamic_pointer_cast<UIText>(el);
-                hud.CachedLevelText = text;
+                if (hud.LevelText && xp.Level != xp.LastUILevel)
+                {
+                    std::string label = "LVL " + std::to_string(xp.Level);
+                    hud.LevelText.Get(scene.get())->SetText(label);
+                    xp.LastUILevel = xp.Level;
+                }
             }
+        }
+        
+        {
+            auto view = scene->Reg().view<PlayerHUDComponent, HealthComponent>();
+            for (auto entity : view)
+            {
+                const auto& [hud, hp] = view.get<PlayerHUDComponent, HealthComponent>(entity);
             
-            if (text && xp.Level != xp.LastUILevel)
-            {
-                std::string label = "LVL " + std::to_string(xp.Level);
-                text->SetText(label);
-                xp.LastUILevel = xp.Level;
+                if (hud.HPBar)
+                {
+                    hud.HPBar.Get(scene.get())->SetFillAmount(hp.CurrentHealth / hp.MaxHealth);
+                }
+            
+                std::string label = std::to_string(hp.CurrentHealth) + "/" + std::to_string(hp.MaxHealth);
+                if (hud.HPText && hud.HPText.Get(scene.get())->GetText() != label)
+                {
+                    hud.HPText.Get(scene.get())->SetText(label);
+                }
             }
+        }
+        
+        {
+            /*auto view = scene->Reg().view<WaveManagerComponent>();
+            for (auto entity : view)
+            {
+                const auto& wave = view.get<WaveManagerComponent>(entity);
+            
+                if (wave.GameTimerText)
+                {
+                    hud.XPBar->SetFillAmount(hp.CurrentHealth / hp.MaxHealth);
+                }
+            
+                std::string label = std::to_string(hp.CurrentHealth) + "/" + std::to_string(hp.MaxHealth);
+                if (hud.HPText && hud.HPText->GetText() != label)
+                {
+                    hud.LevelText->SetText(label);
+                }
+            }*/
         }
     }
 };

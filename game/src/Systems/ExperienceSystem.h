@@ -2,6 +2,7 @@
 
 #include "Lynx.h"
 #include "Components/GameComponents.h"
+#include "Events/GameEvents.h"
 
 class ExperienceSystem
 {
@@ -18,8 +19,8 @@ public:
                 xp.CurrentXP -= xp.TargetXP;
                 xp.Level++;
                 xp.TargetXP *= 1.2f; // TODO: Use actual curve
-
-                // TODO: emit level up event and show upgrades etc
+                
+                scene->Reg().ctx().get<entt::dispatcher>().trigger<LevelUpEvent>({ entity, xp.Level });
             }
         }
     }

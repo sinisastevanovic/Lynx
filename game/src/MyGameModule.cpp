@@ -18,10 +18,12 @@
 #include "Lynx/ImGui/LXUI.h"
 #include "Lynx/Scene/Components/LuaScriptComponent.h"
 #include "Systems/ExperienceSystem.h"
+#include "Systems/GameManagerSystem.h"
 #include "Systems/HealthSystem.h"
 #include "Systems/HUDSystem.h"
 #include "Systems/LifecycleSystem.h"
 #include "Systems/PickupSystem.h"
+#include "Systems/WaveSystem.h"
 
 void MyGame::RegisterScripts(GameTypeRegistry* registry)
 {
@@ -66,26 +68,6 @@ void MyGame::RegisterComponents(GameTypeRegistry* registry)
         auto& comp = reg.get<EnemyComponent>(entity);
         LXUI::DrawDragFloat("Move Speed", comp.MoveSpeed, 0.1f, 0.0f, FLT_MAX);
         LXUI::DrawDragFloat("XPValue", comp.XPValue, 1.0f, 0.0f, FLT_MAX);
-    });
-
-    registry->RegisterComponent<EnemySpawnerComponent>("EnemySpawnerComponent",
-    [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
-    {
-        auto& comp = reg.get<EnemySpawnerComponent>(entity);
-        json["SpawnRate"] = comp.SpawnRate;
-        json["MaxEnemies"] = comp.MaxEnemies;
-    },
-    [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
-    {
-        auto& comp = reg.get_or_emplace<EnemySpawnerComponent>(entity);
-        comp.SpawnRate = json["SpawnRate"];
-        comp.MaxEnemies = json["MaxEnemies"];
-    },
-    [](entt::registry& reg, entt::entity entity)
-    {
-        auto& comp = reg.get<EnemySpawnerComponent>(entity);
-        LXUI::DrawDragFloat("SpawnRate", comp.SpawnRate, 0.1f);
-        LXUI::DrawDragInt("MaxEnemies", comp.MaxEnemies, 1);
     });
 
     registry->RegisterComponent<WeaponComponent>("Weapon Component",
@@ -239,31 +221,51 @@ void MyGame::RegisterComponents(GameTypeRegistry* registry)
     [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
     {
         auto& comp = reg.get<PlayerHUDComponent>(entity);
-        json["HPBar"] = comp.HPBarID;
-        json["HPText"] = comp.HPTextID;
-        json["XPBar"] = comp.XPBarID;
-        json["LevelText"] = comp.LevelTextID;
+        json["HPBar"] = comp.HPBar;
+        json["HPText"] = comp.HPText;
+        json["XPBar"] = comp.XPBar;
+        json["LevelText"] = comp.LevelText;
+        json["LevelUpCanavs"] = comp.LevelUpCanvas;
     },
     [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
     {
         auto& comp = reg.get_or_emplace<PlayerHUDComponent>(entity);
-        comp.HPBarID = json.value<UUID>("HPBar", UUID::Null());
-        comp.HPTextID = json.value<UUID>("HPText", UUID::Null());
-        comp.XPBarID = json.value<UUID>("XPBar", UUID::Null());
-        comp.LevelTextID = json.value<UUID>("LevelText", UUID::Null());
+        comp.HPBar = json.value("HPBar", ElementRef<UIImage>());
+        comp.HPText = json.value("HPText", ElementRef<UIText>());
+        comp.XPBar = json.value("XPBar", ElementRef<UIImage>());
+        comp.LevelText = json.value("LevelText", ElementRef<UIText>());
+        comp.LevelUpCanvas = json.value("LevelUpCanavs", ElementRef<UICanvas>());
     },
     [](entt::registry& reg, entt::entity entity)
     {
         auto& comp = reg.get<PlayerHUDComponent>(entity);
         auto scene = reg.ctx().get<Scene*>();
         
-        LXUI::DrawUIElementSelection("HP Bar", comp.HPBarID, scene);
-        LXUI::DrawUIElementSelection("HP Text", comp.HPTextID, scene);
-        LXUI::DrawUIElementSelection("XP Bar", comp.XPBarID, scene);
-        LXUI::DrawUIElementSelection("Level Text", comp.LevelTextID, scene);
+        LXUI::DrawUIElementReference("HP Bar", comp.HPBar, scene);
+        LXUI::DrawUIElementReference("HP Text", comp.HPText, scene);
+        LXUI::DrawUIElementReference("XP Bar", comp.XPBar, scene);
+        LXUI::DrawUIElementReference("Level Text", comp.LevelText, scene);
+        LXUI::DrawUIElementReference("LevelUpCanvas", comp.LevelUpCanvas, scene);
     });
     
-    
+    registry->RegisterComponent<WaveManagerComponent>("Wave Manager",
+   [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+   {
+       auto& comp = reg.get<WaveManagerComponent>(entity);
+       json["TimerTextElement"] = comp.GameTimerText;
+   },
+   [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+   {
+       auto& comp = reg.get_or_emplace<WaveManagerComponent>(entity);
+       comp.GameTimerText = json.value("TimerTextElement", ElementRef<UIText>());
+   },
+   [](entt::registry& reg, entt::entity entity)
+   {
+       auto& comp = reg.get<WaveManagerComponent>(entity);
+       auto scene = reg.ctx().get<Scene*>();
+        
+       LXUI::DrawUIElementReference("Timer Text", comp.GameTimerText, scene);
+   });
 }
 
 void MyGame::OnStart()
@@ -274,10 +276,17 @@ void MyGame::OnStart()
     
     GameConfig::LoadAssets();
     
+    GameManagerSystem::Init(scene);
+    
     DamageTextSystem::Init(scene);
 
     Input::BindAxis("MoveLeftRight", KeyCode::D, KeyCode::A);
     Input::BindAxis("MoveUpDown", KeyCode::S, KeyCode::W);
+    
+    auto gameManger = scene->CreateEntity("GameManager");
+    gameManger.AddComponent<WaveManagerComponent>();
+    
+    WaveSystem::Init();
 }
 
 void MyGame::OnUpdate(float deltaTime)
@@ -285,7 +294,8 @@ void MyGame::OnUpdate(float deltaTime)
     auto scene = Engine::Get().GetActiveScene();
     if (!scene) return;
     
-    // 1. Spawning & Movement    
+    // 1. Spawning & Movement   
+    WaveSystem::Update(scene, deltaTime);
     EnemySystem::Update(scene, deltaTime);
     PlayerSystem::Update(scene, deltaTime);
     

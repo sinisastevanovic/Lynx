@@ -2,7 +2,6 @@
 #include "Lynx.h"
 
 #include "Components/GameComponents.h"
-#include "Lynx/Asset/AssetManager.h"
 #include "Lynx/Physics/PhysicsSystem.h"
 #include "Lynx/Scene/Components/PhysicsComponents.h"
 
@@ -11,23 +10,6 @@ class EnemySystem
 public:
     static void Update(std::shared_ptr<Scene> scene, float dt)
     {
-        auto& engine = Engine::Get();
-        auto& assetManager = engine.GetAssetManager();
-
-        // --- Spawning Logic ---
-        auto spawnerView = scene->Reg().view<EnemySpawnerComponent>();
-        for (auto spawnerEntity : spawnerView)
-        {
-            auto& spawner = spawnerView.get<EnemySpawnerComponent>(spawnerEntity);
-            spawner.Timer -= dt;
-
-            if (spawner.Timer <= 0.0f)
-            {
-                SpawnEnemy(scene, assetManager);
-                spawner.Timer = spawner.SpawnRate;
-            }
-        }
-
         // --- AI / Movement Logic
         glm::vec3 playerPos = { 0, 0, 0 };
         auto playerView = scene->Reg().view<TransformComponent, PlayerComponent>();
@@ -66,43 +48,5 @@ public:
                 }
             }
         }
-    }
-
-private:
-    // TODO: Use prefabs. 
-    static void SpawnEnemy(std::shared_ptr<Scene> scene, AssetManager& assetManager)
-    {
-        // Spawn in random circle around the origin (for now)
-        // TODO: Spawn outside of camera view
-        float angle = (float)rand() / RAND_MAX * 2.0f * 3.14159f;
-        float radius = 20.0f;
-        glm::vec3 spawnPos = { cos(angle) * radius, 1.0f, sin(angle) * radius };
-
-        auto enemy = scene->CreateEntity("Enemy");
-        auto& transform = enemy.GetComponent<TransformComponent>();
-        transform.Translation = spawnPos;
-        transform.Scale = { 2.0f, 2.0f, 2.0f };
-
-        enemy.AddComponent<EnemyComponent>();
-        
-        // TODO: Maybe do it like this? So we could initialize with some stats? But maybe not, they depend on the prefab right? 
-        // static void OnEnemyCreated(entt::registry& reg, entt::entity entity) {
-        //      //Automatically add health when Enemy is created
-        //      reg.emplace<HealthComponent>(entity, 100.0f);
-        //}
-        auto& health = enemy.AddComponent<HealthComponent>();
-        health.MaxHealth = 10.0f;
-        health.CurrentHealth = health.MaxHealth;
-
-        auto& mesh = enemy.AddComponent<MeshComponent>();
-        mesh.Mesh = assetManager.GetAsset("assets/Models/Bottle/WaterBottle.gltf")->GetHandle();
-
-        auto& rb = enemy.AddComponent<RigidBodyComponent>();
-        rb.Type = RigidBodyType::Dynamic;
-        rb.LockAllRotation();
-
-        auto& collider = enemy.AddComponent<CapsuleColliderComponent>();
-        collider.Radius = 0.4f;
-        collider.HalfHeight = 0.9f;
     }
 };
