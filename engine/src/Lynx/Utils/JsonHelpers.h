@@ -5,6 +5,8 @@
 #include <glm/detail/type_quat.hpp>
 
 #include "Lynx/UUID.h"
+#include "Lynx/Asset/AssetRef.h"
+#include "Lynx/UI/Core/UIElementRef.h"
 #include "Lynx/UI/Core/UIGeometry.h"
 
 namespace glm
@@ -75,5 +77,31 @@ namespace Lynx
         thickness.Top = j.at(1).get<float>();
         thickness.Right = j.at(2).get<float>();
         thickness.Bottom = j.at(3).get<float>();
+    }
+    
+    template<typename T>
+    inline void to_json(nlohmann::json& j, const AssetRef<T>& ref)
+    {
+        j = ref.Handle;
+    }
+    
+    template<typename T>
+    inline void from_json(const nlohmann::json& j, AssetRef<T>& ref)
+    {
+        ref.Handle = j.get<AssetHandle>();
+        ref.Cached = nullptr;
+    }
+    
+    template<typename T>
+    inline void to_json(nlohmann::json& j, const ElementRef<T>& ref)
+    {
+        j = ref.ID;
+    }
+    
+    template<typename T>
+    inline void from_json(const nlohmann::json& j, ElementRef<T>& ref)
+    {
+        ref.ID = j.get<UUID>();
+        ref.Cached.reset();
     }
 }

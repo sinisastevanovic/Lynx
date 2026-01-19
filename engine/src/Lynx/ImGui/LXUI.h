@@ -2,6 +2,8 @@
 #include "Lynx/UUID.h"
 #include "Lynx/Asset/AssetTypes.h"
 #include "Lynx/Scene/Components/LuaScriptComponent.h"
+#include "Lynx/Asset/AssetRef.h"
+#include "Lynx/UI/Core/UIElementRef.h"
 #include <glm/glm.hpp>
 
 namespace Lynx
@@ -39,6 +41,32 @@ namespace Lynx
         static bool DrawUIAnchorControl(const std::string& label, UIAnchor& anchor);
         static bool DrawUIThicknessControl(const std::string& label, UIThickness& thickness);
         static bool DrawUIElementSelection(const std::string& label, UUID& id, Scene* context);
+        
+        template<typename T>
+        static bool DrawAssetReference(const std::string& label, AssetRef<T>& assetRef, std::initializer_list<AssetType> allowedTypes)
+        {
+            AssetHandle tempHandle = assetRef.Handle;
+            if (DrawAssetReference(label, tempHandle, allowedTypes))
+            {
+                assetRef.Handle = tempHandle;
+                assetRef.Cached = nullptr;
+                return true;
+            }
+            return false;
+        }
+        
+        template<typename T>
+        static bool DrawUIElementReference(const std::string& label, ElementRef<T>& elementRef, Scene* context)
+        {
+            UUID tempID = elementRef.ID;
+            if (DrawUIElementSelection(label, tempID, context))
+            {
+                elementRef.ID = tempID;
+                elementRef.Cached.reset();
+                return true;
+            }
+            return false;
+        }
     };
 }
 
