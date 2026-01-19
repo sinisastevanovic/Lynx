@@ -1,6 +1,7 @@
 #include "InspectorPanel.h"
 #include <imgui.h>
 
+#include "../Components/EditorComponents.h"
 #include "Lynx/Asset/Prefab.h"
 #include "Lynx/ImGui/LXUI.h"
 #include "Lynx/Scene/SceneSerializer.h"
@@ -106,9 +107,48 @@ namespace Lynx
                     LXUI::EndPropertyGrid();
                 }
             }
-
+            
+            if (!m_Context->Reg().all_of<EditorMetadataComponent>(m_Selection))
+            {
+                m_Context->Reg().emplace<EditorMetadataComponent>(m_Selection);
+            }
+            
+            auto& metadata = m_Context->Reg().get<EditorMetadataComponent>(m_Selection);
+            auto& order = metadata.ComponentOrder;
+            
             for (const auto& [name, info] : registeredComponents)
             {
+                if (name == "Tag" || name == "Transform" || name == "Relationship" || name == "Prefab" || name == "EditorMetadata")
+                    continue;
+                
+                if (info.has(m_Context->Reg(), m_Selection))
+                {
+                    if (std::find(order.begin(), order.end(), name) == order.end())
+                    {
+                        order.push_back(name);
+                    }
+                }
+            }
+            
+            for (auto it = order.begin(); it != order.end(); )
+            {
+                // If registry doesn't know this name OR entity doesn't have it
+                if (!registeredComponents.contains(*it) || !registeredComponents.at(*it).has(m_Context->Reg(), m_Selection))
+                {
+                    it = order.erase(it);
+                }
+                else
+                {
+                    ++it;
+                }
+            }
+            
+            for (size_t i = 0; i < order.size(); ++i)
+            {
+                std::string name = order[i];
+                
+                const auto& info = registeredComponents.at(name);
+                
                 if (name == "Tag" || name == "Transform" || name == "Relationship" || name == "Prefab")
                     continue;
                 
@@ -120,6 +160,21 @@ namespace Lynx
                 {
                     ImGui::PushID(name.c_str());
                     bool open = ImGui::CollapsingHeader(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
+                    
+                    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 40);
+                    if (ImGui::Button("^") && i > 0 )
+                    {
+                        std::swap(order[i], order[i - 1]);
+                        ImGui::PopID();
+                        break;
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("v") && i < order.size() - 1)
+                    {
+                        std::swap(order[i], order[i + 1]);
+                        ImGui::PopID();
+                        break;
+                    }
 
                     if (!internalUse && ImGui::BeginPopupContextItem("ComponentSettings"))
                     {

@@ -17,7 +17,7 @@ namespace Lynx
         
     private:
         Scene* m_Context = nullptr;
-        entt::entity m_Selection{ entt::null };
+        entt::entity m_Selection = entt::null;
         std::shared_ptr<UIElement> m_SelectedUIElement{ nullptr };
     };
 

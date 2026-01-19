@@ -6,8 +6,24 @@
 #include <imgui.h>
 
 #include "EditorLayer.h"
+#include "Components/EditorComponents.h"
 #include "ImGui/EditorTheme.h"
 #include "Lynx/Core/DllLoader.h"
+
+void RegisterEditorComponents(TypeRegistry& registry)
+{
+    registry.RegisterCoreInternalOnlyComponent<EditorMetadataComponent>("EditorMetadata",
+        [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+        {
+            auto& component = reg.get<EditorMetadataComponent>(entity);
+            json["ComponentOrder"] = component.ComponentOrder;
+        },
+        [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+        {
+            auto& component = reg.get_or_emplace<EditorMetadataComponent>(entity);
+            component.ComponentOrder = json.value<std::vector<std::string>>("ComponentOrder", {});
+        });
+}
 
 int main(int argc, char** argv)
 {
@@ -17,6 +33,9 @@ int main(int argc, char** argv)
     engine.Initialize(true);
     EditorTheme::ApplyTheme();
     engine.SetSceneState(SceneState::Edit);
+    
+    auto& registry = engine.GetComponentRegistry();
+    RegisterEditorComponents(registry);
 
     IGameModule* gameModule = nullptr;
     DestroyGameFunc destroyFunc = nullptr;
