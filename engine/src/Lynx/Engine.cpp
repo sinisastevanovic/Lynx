@@ -27,6 +27,7 @@
 #include "Scene/Components/LuaScriptComponent.h"
 #include "Scene/Components/NativeScriptComponent.h"
 #include "Scene/Components/UIComponents.h"
+#include "Scene/Components/ParticleComponents.h"
 
 
 namespace Lynx
@@ -112,22 +113,18 @@ namespace Lynx
         for (auto entity : view)
         {
             auto& mesh = view.get<MeshComponent>(entity);
-            if (mesh.Mesh)
+            if (mesh.Mesh.Get())
             {
-                auto meshasset = m_AssetManager->GetAsset<StaticMesh>(mesh.Mesh, AssetLoadMode::Blocking);
-                if (meshasset)
+                for (const auto& subMesh : mesh.Mesh->GetSubmeshes())
                 {
-                    for (const auto& subMesh : meshasset->GetSubmeshes())
-                    {
-                        if (subMesh.Material->AlbedoTexture)
-                            m_AssetManager->GetAsset<Texture>(subMesh.Material->AlbedoTexture, AssetLoadMode::Blocking);
-                        if (subMesh.Material->NormalMap)
-                            m_AssetManager->GetAsset<Texture>(subMesh.Material->NormalMap, AssetLoadMode::Blocking);
-                        if (subMesh.Material->MetallicRoughnessTexture)
-                            m_AssetManager->GetAsset<Texture>(subMesh.Material->MetallicRoughnessTexture, AssetLoadMode::Blocking);
-                        if (subMesh.Material->EmissiveTexture)
-                            m_AssetManager->GetAsset<Texture>(subMesh.Material->EmissiveTexture, AssetLoadMode::Blocking);
-                    }
+                    if (subMesh.Material->AlbedoTexture)
+                        m_AssetManager->GetAsset<Texture>(subMesh.Material->AlbedoTexture, AssetLoadMode::Blocking);
+                    if (subMesh.Material->NormalMap)
+                        m_AssetManager->GetAsset<Texture>(subMesh.Material->NormalMap, AssetLoadMode::Blocking);
+                    if (subMesh.Material->MetallicRoughnessTexture)
+                        m_AssetManager->GetAsset<Texture>(subMesh.Material->MetallicRoughnessTexture, AssetLoadMode::Blocking);
+                    if (subMesh.Material->EmissiveTexture)
+                        m_AssetManager->GetAsset<Texture>(subMesh.Material->EmissiveTexture, AssetLoadMode::Blocking);
                 }
             }
         }
@@ -513,46 +510,42 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& meshComp = reg.get<MeshComponent>(entity);
-                json["Mesh"] = (uint64_t)meshComp.Mesh;
+                json["Mesh"] = meshComp.Mesh;
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
                 auto& meshComp = reg.get_or_emplace<MeshComponent>(entity);
-                meshComp.Mesh = AssetHandle(json["Mesh"]);
+                meshComp.Mesh = json["Mesh"].get<AssetRef<StaticMesh>>();
             },
             [](entt::registry& reg, entt::entity entity)
             {
                 auto& meshComp = reg.get<MeshComponent>(entity);
                
                 LXUI::DrawAssetReference("Static Mesh", meshComp.Mesh, {AssetType::StaticMesh});
-                if (meshComp.Mesh)
+                if (meshComp.Mesh.Get())
                 {
-                    auto mesh = Engine::Get().GetAssetManager().GetAsset<StaticMesh>(meshComp.Mesh);
-                    if (mesh)
+                    auto& submeshes = meshComp.Mesh->GetSubmeshes();
+                    int index = 0;
+                    for (auto& submesh : submeshes)
                     {
-                        auto& submeshes = mesh->GetSubmeshes();
-                        int index = 0;
-                        for (auto& submesh : submeshes)
+                        if (submesh.Material)
                         {
-                            if (submesh.Material)
-                            {
-                                // TODO: Change this to work with the new table layout
-                                // TODO: actually change static meshes to use proper materials, not import generated ones!
-                                std::string matId = "Material " + std::to_string(index);
-                                ImGui::PushID(matId.c_str());
+                            // TODO: Change this to work with the new table layout
+                            // TODO: actually change static meshes to use proper materials, not import generated ones!
+                            std::string matId = "Material " + std::to_string(index);
+                            ImGui::PushID(matId.c_str());
 
-                                ImGui::Text(matId.c_str());
-                                ImGui::ColorEdit4("Albedo Color", &submesh.Material->AlbedoColor.r);
-                                ImGui::DragFloat("Metallic", &submesh.Material->Metallic);
-                                ImGui::DragFloat("Roughness", &submesh.Material->Roughness);
-                                ImGui::ColorEdit3("Emissive Color", &submesh.Material->EmissiveColor.r);
-                                ImGui::DragFloat("Emissive Strength", &submesh.Material->EmissiveStrength);
-                                ImGui::Separator();
-                                
-                                ImGui::PopID();
-                            }
-                            index++;
+                            ImGui::Text(matId.c_str());
+                            ImGui::ColorEdit4("Albedo Color", &submesh.Material->AlbedoColor.r);
+                            ImGui::DragFloat("Metallic", &submesh.Material->Metallic);
+                            ImGui::DragFloat("Roughness", &submesh.Material->Roughness);
+                            ImGui::ColorEdit3("Emissive Color", &submesh.Material->EmissiveColor.r);
+                            ImGui::DragFloat("Emissive Strength", &submesh.Material->EmissiveStrength);
+                            ImGui::Separator();
+                            
+                            ImGui::PopID();
                         }
+                        index++;
                     }
                 }
             });
@@ -696,7 +689,7 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& lscComp = reg.get<LuaScriptComponent>(entity);
-                json["Script"] = (uint64_t)lscComp.ScriptHandle;
+                json["Script"] = lscComp.Script;
 
                 if (lscComp.Self.valid())
                 {
@@ -745,9 +738,9 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
                 auto& lscComp = reg.get_or_emplace<LuaScriptComponent>(entity);
-                lscComp.ScriptHandle = AssetHandle(json["Script"]);
+                lscComp.Script = json["Script"].get<AssetRef<Script>>();
 
-                if (!lscComp.Self.valid() && lscComp.ScriptHandle.IsValid())
+                if (!lscComp.Self.valid() && lscComp.Script)
                 {
                     Scene* scene = reg.ctx().get<Scene*>();
                     if (scene)
@@ -799,12 +792,12 @@ namespace Lynx
             {
                 auto& lscComp = reg.get<LuaScriptComponent>(entity);
                 Scene* scene = reg.ctx().get<Scene*>();
-                AssetHandle scriptHandle = lscComp.ScriptHandle;
+                AssetHandle scriptHandle = lscComp.Script.Handle;
                 if (LXUI::DrawAssetReference("Script", scriptHandle, {AssetType::Script}))
                 {
                     Entity e{ entity, scene };
                     Engine::Get().GetScriptEngine()->OnScriptComponentDestroyed(e);
-                    lscComp.ScriptHandle = scriptHandle;
+                    lscComp.Script = AssetRef<Script>(scriptHandle);
                     Engine::Get().GetScriptEngine()->OnScriptComponentAdded(e);
                 }
                 
@@ -974,14 +967,14 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& comp = reg.get<PrefabComponent>(entity);
-                json["PrefabHandle"] = comp.PrefabHandle;
+                json["PrefabHandle"] = comp.Prefab;
                 json["SubEntityID"] = comp.SubEntityID;
                 //json["Overrides"] = comp.Overrides;
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
                 auto& comp = reg.get_or_emplace<PrefabComponent>(entity);
-                comp.PrefabHandle = json["PrefabHandle"].get<AssetHandle>();
+                comp.Prefab = json["PrefabHandle"].get<AssetRef<Prefab>>();
                 comp.SubEntityID = json["SubEntityID"].get<UUID>();
                 //comp.Overrides = json["Overrides"].get<std::unordered_set<std::string>>();
             }

@@ -46,7 +46,7 @@ namespace Lynx
             if (m_Context->Reg().all_of<PrefabComponent>(m_Selection))
             {
                 auto& pc = m_Context->Reg().get<PrefabComponent>(m_Selection);
-                if (pc.PrefabHandle.IsValid())
+                if (pc.Prefab)
                 {
                     ImGui::Text("Prefab Instance"); 
                     ImGui::SameLine();
@@ -60,7 +60,7 @@ namespace Lynx
                                 break;
                             if (!parent.HasComponent<PrefabComponent>())
                                 break;
-                            if (parent.GetComponent<PrefabComponent>().PrefabHandle != pc.PrefabHandle)
+                            if (parent.GetComponent<PrefabComponent>().Prefab.Handle != pc.Prefab.Handle)
                                 break;
                             
                             root = parent;
@@ -68,7 +68,7 @@ namespace Lynx
                         
                         nlohmann::json prefabJson;
                         SceneSerializer::SerializePrefab(root, prefabJson, true);
-                        std::filesystem::path filePath = Engine::Get().GetAssetManager().GetAssetPath(pc.PrefabHandle);
+                        std::filesystem::path filePath = Engine::Get().GetAssetManager().GetAssetPath(pc.Prefab.Handle);
                         std::ofstream fout(filePath);
                         fout << prefabJson.dump(4);
                         fout.close();
@@ -85,13 +85,13 @@ namespace Lynx
                                 break;
                             if (!parent.HasComponent<PrefabComponent>())
                                 break;
-                            if (parent.GetComponent<PrefabComponent>().PrefabHandle != pc.PrefabHandle)
+                            if (parent.GetComponent<PrefabComponent>().Prefab.Handle != pc.Prefab.Handle)
                                 break;
                             
                             root = parent;
                         }
                         
-                        auto prefabAsset = Engine::Get().GetAssetManager().GetAsset<Prefab>(pc.PrefabHandle);
+                        auto prefabAsset = pc.Prefab.Get();
                         auto prefabJson = prefabAsset->GetData();
                         SceneSerializer::DeserializePrefabInto(m_Context, prefabJson, root);
                     }
@@ -161,21 +161,6 @@ namespace Lynx
                     ImGui::PushID(name.c_str());
                     bool open = ImGui::CollapsingHeader(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap);
                     
-                    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 40);
-                    if (ImGui::Button("^") && i > 0 )
-                    {
-                        std::swap(order[i], order[i - 1]);
-                        ImGui::PopID();
-                        break;
-                    }
-                    ImGui::SameLine();
-                    if (ImGui::Button("v") && i < order.size() - 1)
-                    {
-                        std::swap(order[i], order[i + 1]);
-                        ImGui::PopID();
-                        break;
-                    }
-
                     if (!internalUse && ImGui::BeginPopupContextItem("ComponentSettings"))
                     {
                         if (ImGui::MenuItem("Remove Component"))
@@ -189,6 +174,21 @@ namespace Lynx
                             continue;
                         }
                         ImGui::EndPopup();
+                    }
+                    
+                    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 40);
+                    if (ImGui::Button("^") && i > 0 )
+                    {
+                        std::swap(order[i], order[i - 1]);
+                        ImGui::PopID();
+                        break;
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("v") && i < order.size() - 1)
+                    {
+                        std::swap(order[i], order[i + 1]);
+                        ImGui::PopID();
+                        break;
                     }
                     
                     ImGui::PopID();

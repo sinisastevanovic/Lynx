@@ -287,7 +287,7 @@ namespace Lynx
         
         AssetHandle prefabHandle = AssetHandle::Null();
         if (root.HasComponent<PrefabComponent>())
-            prefabHandle = root.GetComponent<PrefabComponent>().PrefabHandle;
+            prefabHandle = root.GetComponent<PrefabComponent>().Prefab.Handle;
         
         // 1. Map existing prefab children
         std::unordered_map<uint64_t, Entity> existingPrefabEntities;
@@ -298,7 +298,7 @@ namespace Lynx
             if (current.HasComponent<PrefabComponent>())
             {
                 auto& pc = current.GetComponent<PrefabComponent>();
-                if (pc.PrefabHandle == prefabHandle)
+                if (pc.Prefab.Handle == prefabHandle)
                 {
                     existingPrefabEntities[(uint64_t)pc.SubEntityID] = current;
                 }
@@ -339,7 +339,7 @@ namespace Lynx
                 // Create new (new child added to prefab)
                 currentEntity = scene->CreateEntity();
                 auto& pc = currentEntity.AddComponent<PrefabComponent>();
-                pc.PrefabHandle = prefabHandle;
+                pc.Prefab = AssetRef<Prefab>(prefabHandle);
                 pc.SubEntityID = assetID;
             }
             

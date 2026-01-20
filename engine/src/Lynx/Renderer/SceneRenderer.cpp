@@ -91,13 +91,10 @@ namespace Lynx
         for (auto entity : meshView)
         {
             auto [transform, meshComp] = meshView.get<TransformComponent, MeshComponent>(entity);
-            if (!meshComp.Mesh)
-                continue;
             
-            auto mesh = assetManager.GetAsset<StaticMesh>(meshComp.Mesh);
-            if (mesh)
+            if (meshComp.Mesh)
             {
-                AABB worldBounds = TransformAABB(mesh->GetBounds(), transform.WorldMatrix);
+                AABB worldBounds = TransformAABB(meshComp.Mesh->GetBounds(), transform.WorldMatrix);
                 // TODO: Check if this is worth it. Using these flags splits the batches up, so more draw calls, but less geometry drawn...
                 RenderFlags flags = RenderFlags::None;
                 if (camFrustum.IsOnFrustum(worldBounds))
@@ -106,7 +103,7 @@ namespace Lynx
                     flags = flags | RenderFlags::ShadowPass;
                 if (flags != RenderFlags::None)
                 {
-                    renderer.SubmitMesh(mesh, transform.WorldMatrix, flags, (int)entity);
+                    renderer.SubmitMesh(meshComp.Mesh.Get(), transform.WorldMatrix, flags, (int)entity);
                 }
             }
         }

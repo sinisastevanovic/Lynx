@@ -2,6 +2,9 @@
 
 #include "Lynx/Core.h"
 #include "Lynx/Asset/Asset.h"
+#include "Lynx/Asset/AssetRef.h"
+#include "Lynx/Asset/StaticMesh.h"
+#include "Lynx/Asset/Prefab.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -113,7 +116,7 @@ namespace Lynx
 
     struct MeshComponent
     {
-        AssetHandle Mesh = AssetHandle::Null();
+        AssetRef<StaticMesh> Mesh;
 
         MeshComponent() = default;
         MeshComponent(const MeshComponent&) = default;
@@ -142,7 +145,7 @@ namespace Lynx
     
     struct PrefabComponent
     {
-        AssetHandle PrefabHandle = AssetHandle::Null();
+        AssetRef<Prefab> Prefab;
         UUID SubEntityID = UUID::Null();
         
         //std::unordered_set<std::string> Overrides;

@@ -4,6 +4,7 @@
 
 #include "Lynx/Engine.h"
 #include "Lynx/Scene/Components/Components.h"
+#include "Lynx/Scene/Components/ParticleComponents.h"
 #include "Lynx/Scene/Scene.h"
 
 namespace Lynx
@@ -98,9 +99,9 @@ namespace Lynx
                 });
             }
 
-            if (!activeParticles.empty() && emitter.Material.IsValid())
+            if (!activeParticles.empty() && emitter.Material)
             {
-                auto mat = Engine::Get().GetAssetManager().GetAsset<Material>(emitter.Material);
+                auto mat = emitter.Material.Get();
                 if (mat)
                 {
                     Engine::Get().GetRenderer().SubmitParticles(mat.get(), activeParticles);

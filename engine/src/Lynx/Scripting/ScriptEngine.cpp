@@ -210,10 +210,10 @@ namespace Lynx
     bool ScriptEngine::InstantiateScript(Entity entity)
     {
         auto& lsc = entity.GetComponent<LuaScriptComponent>();
-        if (!lsc.ScriptHandle.IsValid())
+        if (!lsc.Script)
             return false;
         
-        auto scriptAsset = Engine::Get().GetAssetManager().GetAsset<Script>(lsc.ScriptHandle);
+        auto scriptAsset = lsc.Script.Get();
         if (!scriptAsset)
             return false;
         
@@ -278,7 +278,7 @@ namespace Lynx
             Entity entity{ entityID, m_Data->SceneContext };
             auto& lsc = entity.GetComponent<LuaScriptComponent>();
             
-            if (handle == lsc.ScriptHandle)
+            if (handle == lsc.Script.Handle)
             {
                 LX_CORE_INFO("Reloading script for Entity {0}", (uint64_t)entityID);
                 

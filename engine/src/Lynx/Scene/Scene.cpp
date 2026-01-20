@@ -174,7 +174,7 @@ namespace Lynx
                     jsonIndex++;
                     
                     auto& pc = current.AddComponent<PrefabComponent>();
-                    pc.PrefabHandle = prefab->GetHandle();
+                    pc.Prefab = prefab;
                     pc.SubEntityID = originalID;
                     
                     auto& rel = current.GetComponent<RelationshipComponent>();
@@ -503,11 +503,11 @@ namespace Lynx
                 Entity entity(entityID, this);
                 auto& pc = entity.GetComponent<PrefabComponent>();
                 
-                if (pc.PrefabHandle == event.GetHandle())
+                if (pc.Prefab.Handle == event.GetHandle())
                 {
                     Entity parent = entity.GetParent();
                     bool isRoot = true;
-                    if (parent && parent.HasComponent<PrefabComponent>() && parent.GetComponent<PrefabComponent>().PrefabHandle == pc.PrefabHandle)
+                    if (parent && parent.HasComponent<PrefabComponent>() && parent.GetComponent<PrefabComponent>().Prefab == pc.Prefab)
                     {
                         isRoot = false;
                     }

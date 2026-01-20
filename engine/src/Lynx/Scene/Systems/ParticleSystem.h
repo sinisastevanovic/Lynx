@@ -1,9 +1,10 @@
 #pragma once
-#include "Lynx/Scene/Components/ParticleComponents.h"
+
 
 namespace Lynx
 {
     class Scene;
+    class ParticleEmitterComponent;
 
     class ParticleSystem
     {

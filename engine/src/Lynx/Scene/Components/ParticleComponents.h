@@ -1,7 +1,9 @@
 #pragma once
 
-#include <glm/glm.hpp>
 #include "Lynx/UUID.h"
+#include "Lynx/Asset/AssetRef.h"
+#include "Lynx/Asset/Material.h"
+#include <glm/glm.hpp>
 
 namespace Lynx
 {
@@ -41,7 +43,7 @@ namespace Lynx
     {
         ParticleProps Properties;
 
-        AssetHandle Material = AssetHandle::Null();
+        AssetRef<Material> Material;
 
         uint32_t MaxParticles = 1000;
         float EmissionRate = 5.0f;

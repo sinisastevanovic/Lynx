@@ -84,7 +84,7 @@ namespace Lynx
                             if (newEntity)
                             {
                                 auto& pc = newEntity.AddComponent<PrefabComponent>();
-                                pc.PrefabHandle = prefabHandle;
+                                pc.Prefab = prefabHandle;
                             }
                         }*/
                     }
@@ -209,7 +209,7 @@ namespace Lynx
                         if (newEntity)
                         {
                             auto& pc = newEntity.AddComponent<PrefabComponent>();
-                            pc.PrefabHandle = prefabHandle;
+                            pc.Prefab = prefabHandle;
                         }
                     }*/
                 }

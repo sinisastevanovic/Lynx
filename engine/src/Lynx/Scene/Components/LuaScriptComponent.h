@@ -2,11 +2,14 @@
 
 #include <sol/sol.hpp>
 
+#include "Lynx/Asset/AssetRef.h"
+#include "Lynx/Asset/Script.h"
+
 namespace Lynx
 {
     struct LuaScriptComponent
     {
-        AssetHandle ScriptHandle = AssetHandle::Null();
+        AssetRef<Script> Script;
         sol::table Self;
 
         LuaScriptComponent() = default;
