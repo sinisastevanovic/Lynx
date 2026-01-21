@@ -17,10 +17,7 @@ namespace Lynx
         void Init();
         void Shutdown();
 
-        void OnEditorStart(Scene* scene);
-        void OnEditorEnd();
         void OnRuntimeStart(Scene* scene);
-        void OnRuntimeStop();
 
         void OnUpdateEntity(Entity entity, float deltaTime);
         void OnActionEvent(const std::string& action, bool pressed);
@@ -30,16 +27,15 @@ namespace Lynx
 
         void ReloadScript(AssetHandle handle);
 
-    private:
         bool InstantiateScript(Entity entity, ScriptInstance& instance);
+    private:
         void InitializeProperties(ScriptInstance& instance);
+        void ResolveScriptProperties(ScriptInstance& instance, Scene* context);
         
         template<typename... Args>
         void CallMethod(ScriptInstance& instance, const std::string& methodName, Args&&... args);
 
         struct ScriptEngineData;
         ScriptEngineData* m_Data = nullptr;
-        
-        friend class Engine;
     };
 }

@@ -20,8 +20,6 @@ namespace Lynx
 
         void OnEvent(Event& e);
         
-        entt::entity GetSelectedEntity() const { return m_SelectedEntity; }
-
     private:
         void NewScene();
         void SaveSceneAs();

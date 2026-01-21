@@ -191,25 +191,19 @@ namespace Lynx
 
     void EditorLayer::OnScenePlay()
     {
-        m_Engine->GetScriptEngine()->OnEditorEnd();
-        
-        m_SelectedEntity = entt::null;
         SceneSerializer serializer(m_EditorScene);
         std::string data = serializer.SerializeToString();
 
         m_RuntimeScene = std::make_shared<Scene>();
-        m_Engine->SetActiveScene(m_RuntimeScene);
         SceneSerializer runtimeSerializer(m_RuntimeScene);
         runtimeSerializer.DeserializeFromString(data);
 
-        m_Engine->SetSceneState(SceneState::Play);
+        m_Engine->StartPlay(m_RuntimeScene);
     }
 
     void EditorLayer::OnSceneStop()
     {
-        m_SelectedEntity = entt::null;
-        m_Engine->SetSceneState(SceneState::Edit);
-        m_Engine->SetActiveScene(m_EditorScene);
+        m_Engine->StopPlay(m_EditorScene);
         m_RuntimeScene = nullptr;
 
         m_Engine->GetRenderer().SetShowUI(m_ShowUI);
@@ -278,8 +272,7 @@ namespace Lynx
     void EditorLayer::NewScene()
     {
         m_EditorScene = std::make_shared<Scene>();
-        m_Engine->SetActiveScene(m_EditorScene);
-        m_SelectedEntity = entt::null;
+        m_Engine->LoadScene(m_EditorScene);
     }
 
     void EditorLayer::SaveSceneAs()
@@ -312,17 +305,14 @@ namespace Lynx
         if (!filepath.empty())
         {
             m_EditorScene = Engine::Get().GetAssetManager().GetAsset<Scene>(filepath, AssetLoadMode::Blocking);
-            m_Engine->GetScriptEngine()->OnEditorStart(m_EditorScene.get());
-            m_Engine->SetActiveScene(m_EditorScene);
-            m_SelectedEntity = entt::null;
+            m_Engine->LoadScene(m_EditorScene);
         }
     }
 
     void EditorLayer::OpenScene(AssetHandle handle)
     {
         m_EditorScene = Engine::Get().GetAssetManager().GetAsset<Scene>(handle, AssetLoadMode::Blocking);
-        m_Engine->SetActiveScene(m_EditorScene);
-        m_SelectedEntity = entt::null;
+        m_Engine->LoadScene(m_EditorScene);
     }
 
     void EditorLayer::OnSceneContextChanged(Scene* scene)
@@ -335,7 +325,6 @@ namespace Lynx
 
     void EditorLayer::OnSelectedEntityChanged(entt::entity entity)
     {
-        m_SelectedEntity = entity;
         for (auto& panel : m_Panels)
             panel->OnSelectedEntityChanged(entity);
     }

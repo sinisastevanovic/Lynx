@@ -507,7 +507,7 @@ namespace Lynx
         return changed;
     }
 
-    void LXUI::DrawLuaScriptSection(ScriptInstance& instance)
+    void LXUI::DrawLuaScriptSection(ScriptInstance& instance, Scene* context)
     {
         if (!instance.Self.valid())
             return;
@@ -531,6 +531,8 @@ namespace Lynx
                     std::string name = key.as<std::string>();
                     sol::table def = value.as<sol::table>();
                     std::string type = def["Type"];
+                    
+                    sol::object luaValue = instance.Self[name];
 
                     ImGui::PushID(name.c_str());
 
@@ -588,6 +590,19 @@ namespace Lynx
                         if (DrawColorControl(name.c_str(), val))
                         {
                             instance.Self[name] = val;
+                        }
+                    }
+                    else if (type == "UIButton" || type == "UIText" || type == "UIImage" || type == "UIElement")
+                    {
+                        UUID uid = UUID::Null();
+                        if (luaValue.is<UUID>())
+                            uid = luaValue.as<UUID>();
+                        else if (luaValue.is<UIElement*>())
+                            uid = luaValue.as<UIElement*>()->GetUUID();
+                        
+                        if (DrawUIElementSelection(name, uid, context))
+                        {
+                            instance.Self[name] = uid; // TODO: What if we already resolved this??
                         }
                     }
 

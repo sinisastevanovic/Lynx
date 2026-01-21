@@ -32,7 +32,6 @@ int main(int argc, char** argv)
     Engine engine;
     engine.Initialize(true);
     EditorTheme::ApplyTheme();
-    engine.SetSceneState(SceneState::Edit);
     
     auto& registry = engine.GetComponentRegistry();
     RegisterEditorComponents(registry);

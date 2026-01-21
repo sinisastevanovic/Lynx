@@ -76,6 +76,11 @@ namespace Lynx
 
         m_ScriptEngine = std::make_unique<ScriptEngine>();
         
+        if (editorMode)
+            m_SceneState = SceneState::Edit;
+        else
+            m_SceneState = SceneState::Play;
+        
         m_Scene = std::make_shared<Scene>();
         m_SceneRenderer = std::make_unique<SceneRenderer>(m_Scene);
         
@@ -98,14 +103,6 @@ namespace Lynx
             gameModule->RegisterComponents(&gameReg);
         }
         auto cubeMesh = m_AssetManager->GetDefaultCube();
-
-        if (m_Scene && m_SceneState == SceneState::Play)
-            SetSceneState(SceneState::Play);
-
-        if (m_Scene && m_SceneState == SceneState::Edit)
-        {
-            m_ScriptEngine->OnEditorStart(m_Scene.get());
-        }
 
         // Load all textures and meshes
         // TODO: This is temporary code, replace with real scene loading logic
@@ -133,6 +130,8 @@ namespace Lynx
         // This is a placeholder for the real game loop
         while (m_IsRunning)
         {
+            ProcessPendingScene();
+            
             float time = (float)glfwGetTime();
             m_UnscaledDeltaTime = time - lastFrameTime;
             lastFrameTime = time;
@@ -208,46 +207,83 @@ namespace Lynx
         m_ComponentRegistry.ClearGameScripts();
     }
 
-    void Engine::SetActiveScene(std::shared_ptr<Scene> scene)
-    {
-        if (m_Scene && m_SceneState == SceneState::Play)
-        {
-            m_Scene->OnRuntimeStop();
-        }
-        m_Scene = scene;
-        if (m_SceneRenderer)
-            m_SceneRenderer->SetScene(m_Scene);
-        
-        SetSceneState(m_SceneState);
-        ActiveSceneChangedEvent e(m_Scene);
-        OnEvent(e);
-    }
-
     void Engine::ClearActiveScene()
     {
         m_Scene.reset();
         m_Scene = std::make_shared<Scene>();
-        SetActiveScene(m_Scene);
+        SwapActiveScene(m_Scene);
     }
 
-    void Engine::SetSceneState(SceneState state)
+    void Engine::StartPlay(std::shared_ptr<Scene> runtimeScene)
     {
-        if (m_SceneState == SceneState::Play && state == SceneState::Edit && m_GameModule)
-        {
-            if (m_GameModule)
-                m_GameModule->OnShutdown();
-            m_Scene->OnRuntimeStop();
-            m_ScriptEngine->OnEditorStart(m_Scene.get());
-        }
+        if (m_SceneState == SceneState::Play)
+            return;
         
-        m_SceneState = state;
-        if (m_SceneRenderer)
-            m_SceneRenderer->SetViewportDirty(true);
+        m_SceneState = SceneState::Play;
+        SwapActiveScene(runtimeScene);
+        
+        m_ScriptEngine->OnRuntimeStart(m_Scene.get());
+        m_Scene->OnRuntimeStart();
+        if (m_GameModule)
+            m_GameModule->OnStart();
+    }
+
+    void Engine::StopPlay(std::shared_ptr<Scene> editorScene)
+    {
+        if (m_SceneState == SceneState::Edit)
+            return;
+        
+        if (m_GameModule)
+            m_GameModule->OnShutdown();
+        
+        m_Scene->OnRuntimeStop();
+        
+        m_SceneState = SceneState::Edit;
+        SwapActiveScene(editorScene);
+    }
+
+    void Engine::LoadScene(std::shared_ptr<Scene> newScene)
+    {
         if (m_SceneState == SceneState::Play)
         {
+            m_NextScene = newScene;
+        }
+        else
+        {
+            SwapActiveScene(newScene);
+        }
+    }
+
+    void Engine::LoadScene(const std::filesystem::path& path)
+    {
+        auto scene = m_AssetManager->GetAsset<Scene>(path, AssetLoadMode::Blocking);
+        if (scene)
+        {
+            LoadScene(scene);
+        }
+    }
+
+    void Engine::SwapActiveScene(std::shared_ptr<Scene> scene)
+    {
+        m_Scene = scene;
+        if (m_SceneRenderer)
+            m_SceneRenderer->SetScene(m_Scene);
+        
+        ActiveSceneChangedEvent e(m_Scene);
+        OnEvent(e);
+    }
+
+    void Engine::ProcessPendingScene()
+    {
+        if (m_NextScene)
+        {
+            m_Scene->OnRuntimeStop();
+            
+            SwapActiveScene(m_NextScene);
+            m_NextScene = nullptr;
+            
+            m_ScriptEngine->OnRuntimeStart(m_Scene.get());
             m_Scene->OnRuntimeStart();
-            if (m_GameModule)
-                m_GameModule->OnStart();
         }
     }
 
@@ -734,6 +770,13 @@ namespace Lynx
                                     glm::vec4 vec = runtimeVal.as<glm::vec4>();
                                     propsJson[name] = {vec.r, vec.g, vec.b, vec.a};
                                 }
+                                else if (type == "UIButton" || type == "UIText" || type == "UIImage" || type == "UIElement")
+                                {
+                                    if (runtimeVal.is<UUID>())
+                                        propsJson[name] = runtimeVal.as<UUID>();
+                                    else if (runtimeVal.is<UIElement*>())
+                                        propsJson[name] = runtimeVal.as<UIElement*>()->GetUUID();
+                                }
                             }
 
                             scriptJson["Properties"] = propsJson;
@@ -761,7 +804,6 @@ namespace Lynx
                         {
                             if (Engine::Get().GetScriptEngine()->InstantiateScript(e, instance))
                             {
-                                Engine::Get().GetScriptEngine()->InitializeProperties(instance);
                                 if (scriptJson.contains("Properties"))
                                 {
                                     const auto& propsJson = scriptJson["Properties"];
@@ -798,6 +840,10 @@ namespace Lynx
                                             {
                                                 const auto& jsonVal = propsJson[name];
                                                 instance.Self[name] = glm::vec4(jsonVal[0], jsonVal[1], jsonVal[2], jsonVal[3]);
+                                            }
+                                            else if (type == "UIButton" || type == "UIText" || type == "UIImage" || type == "UIElement")
+                                            {
+                                                instance.Self[name] = propsJson[name].get<UUID>();
                                             }
                                         }
                                     }
@@ -854,13 +900,12 @@ namespace Lynx
                             if (scene) // TODO: Check if properties are working correctly
                             {
                                 Engine::Get().GetScriptEngine()->InstantiateScript(e, instance);
-                                Engine::Get().GetScriptEngine()->InitializeProperties(instance);
                             }
                         }
                         
                         if (instance.Self.valid())
                         {
-                            LXUI::DrawLuaScriptSection(instance);
+                            LXUI::DrawLuaScriptSection(instance, scene);
                         }
                     }
                 }

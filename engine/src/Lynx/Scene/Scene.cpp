@@ -66,7 +66,7 @@ namespace Lynx
     {
         if (Engine::Get().GetSceneState() == SceneState::Play)
         {
-            Scene* scene = Engine::Get().GetActiveScene().get();
+            Scene* scene = registry.ctx().get<Scene*>();
             if (scene)
             {
                 Entity e{entity, scene};
@@ -79,7 +79,7 @@ namespace Lynx
     {
         if (Engine::Get().GetSceneState() == SceneState::Edit)
         {
-            Scene* scene = Engine::Get().GetActiveScene().get();
+            Scene* scene = registry.ctx().get<Scene*>();
             if (scene)
             {
                 Entity e{entity, scene};
@@ -278,8 +278,6 @@ namespace Lynx
     {
         Engine::Get().GetRenderer().SetShowUI(true);
         
-        Engine::Get().GetScriptEngine()->OnRuntimeStart(this);
-    
         {
             auto view = m_Registry.view<TransformComponent, RigidBodyComponent, RelationshipComponent>();
             std::vector<entt::entity> entitiesToDetach;
@@ -340,8 +338,6 @@ namespace Lynx
             Entity e = { entity, this };
             Engine::Get().GetScriptEngine()->OnScriptComponentDestroyed(e);
         }
-
-        Engine::Get().GetScriptEngine()->OnRuntimeStop();
 
         auto nscView = m_Registry.view<NativeScriptComponent>();
         for (auto entity : nscView)

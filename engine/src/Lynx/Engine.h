@@ -43,11 +43,14 @@ namespace Lynx
         void ClearGameTypes();
         
         std::shared_ptr<Scene> GetActiveScene() const { return m_Scene; }
-        void SetActiveScene(std::shared_ptr<Scene> scene);
         void ClearActiveScene();
+        
+        void StartPlay(std::shared_ptr<Scene> runtimeScene);
+        void StopPlay(std::shared_ptr<Scene> editorScene);
+        void LoadScene(std::shared_ptr<Scene> newScene);
+        void LoadScene(const std::filesystem::path& path);
 
         SceneState GetSceneState() const { return m_SceneState; }
-        void SetSceneState(SceneState state);
 
         void SetImGuiRenderCallback(std::function<void()> callback) { m_ImGuiCallback = callback; }
 
@@ -70,6 +73,10 @@ namespace Lynx
         void OnEvent(Event& e);
         void RegisterCoreScripts();
         void RegisterCoreComponents();
+        
+        void SwapActiveScene(std::shared_ptr<Scene> scene);
+        void ProcessPendingScene();
+        std::shared_ptr<Scene> m_NextScene = nullptr;
 
     private:
         static Engine* s_Instance;

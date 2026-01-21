@@ -6,6 +6,7 @@
 #include <sol/sol.hpp>
 
 #include "ScriptEngineData.h"
+#include "ScriptWrappers.h"
 #include "Lynx/Engine.h"
 #include "Lynx/Input.h"
 #include "Lynx/Asset/Script.h"
@@ -16,7 +17,6 @@ namespace Lynx
     struct ScriptEngine::ScriptEngineData
     {
         sol::state Lua;
-        Scene* SceneContext = nullptr;
     };
     
     ScriptEngine::ScriptEngine()
@@ -46,6 +46,8 @@ namespace Lynx
         });
 
         ScriptEngineUtils::RegisterBasicTypes(m_Data->Lua);
+        ScriptWrappers::RegisterBasicTypes(m_Data->Lua);
+        ScriptWrappers::RegisterUITypes(m_Data->Lua);
 
         m_Data->Lua.new_usertype<Entity>("Entity",
             sol::constructors<Entity(entt::entity, Scene*)>(),
@@ -116,14 +118,15 @@ namespace Lynx
         auto world = m_Data->Lua.create_named_table("World");
         world.set_function("Instantiate", [this](uint64_t prefabID, sol::optional<Entity> parent) -> Entity
         {
-            if (!this->m_Data->SceneContext)
+            auto scene = Engine::Get().GetActiveScene();
+            if (!scene)
                 return {};
             
             Entity parentEnt = {};
             if (parent)
                 parentEnt = parent.value();
             
-            return this->m_Data->SceneContext->InstantiatePrefab(AssetHandle(prefabID), parentEnt);
+            return scene->InstantiatePrefab(AssetHandle(prefabID), parentEnt);
         });
     }
 
@@ -133,22 +136,9 @@ namespace Lynx
         m_Data = nullptr;
     }
 
-    void ScriptEngine::OnEditorStart(Scene* scene)
-    {
-        LX_CORE_INFO("Script Editor start!");
-        m_Data->SceneContext = scene;
-    }
-    
-    void ScriptEngine::OnEditorEnd()
-    {
-        LX_CORE_INFO("Script Editor stop!");
-        m_Data->SceneContext = nullptr;
-    }
-
     void ScriptEngine::OnRuntimeStart(Scene* scene)
     {
         LX_CORE_INFO("Script Runtime start!");
-        m_Data->SceneContext = scene;
         auto view = scene->Reg().view<LuaScriptComponent>();
         for (auto entityID : view)
         {
@@ -159,32 +149,14 @@ namespace Lynx
                 if (!instance.Self.valid())
                 {
                     InstantiateScript(entity, instance);
-                    InitializeProperties(instance);
+                }
+                else
+                {
+                    ResolveScriptProperties(instance, scene);
                 }
                 CallMethod(instance, "OnCreate");
             }
         }
-    }
-
-    void ScriptEngine::OnRuntimeStop()
-    {
-        LX_CORE_INFO("Script Runtime stopped!");
-        if (m_Data->SceneContext)
-        {
-            auto view = m_Data->SceneContext->Reg().view<LuaScriptComponent>();
-            for (auto entityID : view)
-            {
-                auto& comp = view.get<LuaScriptComponent>(entityID);
-                for (auto& instance : comp.Scripts)
-                {
-                    if (instance.Self.valid())
-                    {
-                        CallMethod(instance, "OnDestroy");
-                    }
-                }
-            }
-        }
-        m_Data->SceneContext = nullptr;
     }
 
     void ScriptEngine::OnScriptComponentAdded(Entity entity)
@@ -195,14 +167,12 @@ namespace Lynx
         {
             if (!instance.Self.valid())
             {
-                if (InstantiateScript(entity, instance))
-                {
-                    InitializeProperties(instance);
-                    if (Engine::Get().GetSceneState() == SceneState::Play)
-                    {
-                        CallMethod(instance, "OnCreate");
-                    }
-                }
+                InstantiateScript(entity, instance);
+            }
+            
+            if (Engine::Get().GetSceneState() == SceneState::Play)
+            {
+                CallMethod(instance, "OnCreate");
             }
         }
     }
@@ -247,6 +217,13 @@ namespace Lynx
         {
             instance.Self = scriptResult.get<sol::table>();
             instance.Self["CurrentEntity"] = entity;
+            
+            InitializeProperties(instance);
+            
+            if (Engine::Get().GetSceneState() == SceneState::Play)
+            {
+                ResolveScriptProperties(instance, entity.GetScene());
+            }
             return true;
         }
         else
@@ -276,18 +253,74 @@ namespace Lynx
             }
         }
     }
-    
+
+    void ScriptEngine::ResolveScriptProperties(ScriptInstance& instance, Scene* context)
+    {
+        if (!instance.Self.valid())
+            return;
+        
+        sol::optional<sol::table> propertiesOption = instance.Self["Properties"];
+        if (!propertiesOption)
+            return;
+        
+        sol::table properties = propertiesOption.value();
+        for (auto& [key, value] : properties)
+        {
+            std::string propName = key.as<std::string>();
+            sol::table propDef = value.as<sol::table>();
+            std::string propType = propDef["Type"].get_or<std::string>("");
+            
+            sol::object currentValue = instance.Self[propName];
+            
+            if (propType == "UIButton" || propType == "UIText" || propType == "UIImage" || propType == "UIElement")
+            {
+                UUID uid = UUID::Null();
+                
+                if (currentValue.is<UUID>())
+                    uid = currentValue.as<UUID>();
+                
+                if (uid.IsValid() && context)
+                {
+                    auto element = context->FindUIElementByID(uid);
+                    if (element)
+                    {
+                        if (propType == "UIButton")
+                        {
+                            auto btn = std::dynamic_pointer_cast<UIButton>(element);
+                            if (btn) instance.Self[propName] = btn;
+                        }
+                        else if (propType == "UIText")
+                        {
+                            auto txt = std::dynamic_pointer_cast<UIText>(element);
+                            if (txt) instance.Self[propName] = txt;
+                        }
+                        else if (propType == "UIImage")
+                        {
+                            auto img = std::dynamic_pointer_cast<UIImage>(element);
+                            if (img) instance.Self[propName] = img;
+                        }
+                        else
+                        {
+                            instance.Self[propName] = element;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     void ScriptEngine::ReloadScript(AssetHandle handle)
     {
-        if (!m_Data->SceneContext)
+        auto scene = Engine::Get().GetActiveScene();
+        if (!scene)
             return;
         
         bool isRuntime = Engine::Get().GetSceneState() == SceneState::Play;
-        auto view = m_Data->SceneContext->Reg().view<LuaScriptComponent>();
+        auto view = scene->Reg().view<LuaScriptComponent>();
         
         for (auto& entityID : view)
         {
-            Entity entity{ entityID, m_Data->SceneContext };
+            Entity entity{ entityID, scene.get() };
             auto& comp = view.get<LuaScriptComponent>(entityID);
             for (auto& instance : comp.Scripts)
             {
@@ -315,7 +348,6 @@ namespace Lynx
                 
                     if (InstantiateScript(entity, instance))
                     {
-                        InitializeProperties(instance);
                         for (auto& [name, val] : backupProps)
                         {
                             sol::optional<sol::table> newProps = instance.Self["Properties"];
@@ -343,13 +375,14 @@ namespace Lynx
     
     void ScriptEngine::OnActionEvent(const std::string& action, bool pressed)
     {
-        if (!m_Data->SceneContext)
+        auto scene = Engine::Get().GetActiveScene();
+        if (!scene)
             return;
         
-        auto view = m_Data->SceneContext->Reg().view<LuaScriptComponent>();
+        auto view = scene->Reg().view<LuaScriptComponent>();
         for (auto entityID : view)
         {
-            Entity entity{ entityID, m_Data->SceneContext };
+            Entity entity{ entityID, scene.get() };
             auto& comp = view.get<LuaScriptComponent>(entityID);
             for (auto& instance : comp.Scripts)
             {
