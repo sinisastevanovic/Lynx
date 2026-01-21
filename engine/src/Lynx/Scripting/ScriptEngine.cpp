@@ -271,8 +271,8 @@ namespace Lynx
                 std::string propName = key.as<std::string>();
                 sol::table propDef = value.as<sol::table>();
                 
-                if (lsc.Self[propName] == sol::nil)
-                    lsc.Self[propName] = propDef["Default"];
+                if (instance.Self[propName] == sol::nil)
+                    instance.Self[propName] = propDef["Default"];
             }
         }
     }
