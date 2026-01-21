@@ -35,7 +35,9 @@ namespace Lynx
         
         static bool DrawComboControl(const std::string& label, int& currentItem, const std::vector<std::string>& items);
         static bool DrawAssetReference(const std::string& label, AssetHandle& currentHandle, std::initializer_list<AssetType> allowedTypes);
-        static void DrawLuaScriptSection(LuaScriptComponent* lsc);
+        static void DrawLuaScriptSection(ScriptInstance& instance);
+        
+        static bool DrawButton(const std::string& label);
         
         // UI Specific Controls
         static bool DrawUIAnchorControl(const std::string& label, UIAnchor& anchor);

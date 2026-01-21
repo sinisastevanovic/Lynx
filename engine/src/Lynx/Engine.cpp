@@ -689,119 +689,187 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& lscComp = reg.get<LuaScriptComponent>(entity);
-                json["Script"] = lscComp.Script;
-
-                if (lscComp.Self.valid())
+                nlohmann::json scriptsArray = nlohmann::json::array();
+                
+                for (const auto& instance : lscComp.Scripts)
                 {
-                    sol::optional<sol::table> propsOpt = lscComp.Self["Properties"];
-                    if (propsOpt)
+                    nlohmann::json scriptJson;
+                    scriptJson["ScriptAsset"] = instance.ScriptAsset;
+                    
+                    if (instance.Self.valid())
                     {
-                        auto propsJson = nlohmann::json::object();
-                        sol::table propsDef = propsOpt.value();
-
-                        for (auto& [key, value] : propsDef)
+                        sol::optional<sol::table> propsOpt = instance.Self["Properties"];
+                        if (propsOpt)
                         {
-                            std::string name = key.as<std::string>();
-                            sol::table def = value.as<sol::table>();
-                            std::string type = def["Type"];
+                            auto propsJson = nlohmann::json::object();
+                            sol::table propsDef = propsOpt.value();
 
-                            sol::object runtimeVal = lscComp.Self[name];
-                            if (!runtimeVal.valid())
-                                continue;
-                            
-                            // TODO: Helper for supported types? 
-                            if (type == "Float") propsJson[name] = runtimeVal.as<float>();
-                            else if (type == "Int") propsJson[name] = runtimeVal.as<int>();
-                            else if (type == "String") propsJson[name] = runtimeVal.as<std::string>();
-                            else if (type == "Bool") propsJson[name] = runtimeVal.as<bool>();
-                            else if (type == "Vec2")
+                            for (auto& [key, value] : propsDef)
                             {
-                                glm::vec2 vec = runtimeVal.as<glm::vec2>();
-                                propsJson[name] = {vec.x, vec.y};
+                                std::string name = key.as<std::string>();
+                                sol::table def = value.as<sol::table>();
+                                std::string type = def["Type"];
+
+                                sol::object runtimeVal = instance.Self[name];
+                                if (!runtimeVal.valid())
+                                    continue;
+                                
+                                // TODO: Helper for supported types? 
+                                if (type == "Float") propsJson[name] = runtimeVal.as<float>();
+                                else if (type == "Int") propsJson[name] = runtimeVal.as<int>();
+                                else if (type == "String") propsJson[name] = runtimeVal.as<std::string>();
+                                else if (type == "Bool") propsJson[name] = runtimeVal.as<bool>();
+                                else if (type == "Vec2")
+                                {
+                                    glm::vec2 vec = runtimeVal.as<glm::vec2>();
+                                    propsJson[name] = {vec.x, vec.y};
+                                }
+                                else if (type == "Vec3")
+                                {
+                                    glm::vec3 vec = runtimeVal.as<glm::vec3>();
+                                    propsJson[name] = {vec.x, vec.y, vec.z};
+                                }
+                                else if (type == "Color")
+                                {
+                                    glm::vec4 vec = runtimeVal.as<glm::vec4>();
+                                    propsJson[name] = {vec.r, vec.g, vec.b, vec.a};
+                                }
                             }
-                            else if (type == "Vec3")
-                            {
-                                glm::vec3 vec = runtimeVal.as<glm::vec3>();
-                                propsJson[name] = {vec.x, vec.y, vec.z};
-                            }
-                            else if (type == "Color")
-                            {
-                                glm::vec4 vec = runtimeVal.as<glm::vec4>();
-                                propsJson[name] = {vec.r, vec.g, vec.b, vec.a};
-                            }
+
+                            scriptJson["Properties"] = propsJson;
                         }
-
-                        json["Properties"] = propsJson;
                     }
+                    scriptsArray.push_back(scriptJson);
                 }
+                json["Scripts"] = scriptsArray;
             },
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
                 auto& lscComp = reg.get_or_emplace<LuaScriptComponent>(entity);
-                lscComp.Script = json["Script"].get<AssetRef<Script>>();
-
-                if (!lscComp.Self.valid() && lscComp.Script)
+                
+                if (json.contains("Scripts"))
                 {
                     Scene* scene = reg.ctx().get<Scene*>();
-                    if (scene)
+                    Entity e{ entity, scene };
+                    
+                    for (const auto& scriptJson : json["Scripts"])
                     {
-                        Entity e { entity, scene };
-                        Engine::Get().GetScriptEngine()->OnScriptComponentAdded(e);
-                    }
-                }
+                        ScriptInstance instance;
+                        instance.ScriptAsset = scriptJson["ScriptAsset"].get<AssetRef<Script>>();
+                        
+                        if (scene && instance.ScriptAsset)
+                        {
+                            if (Engine::Get().GetScriptEngine()->InstantiateScript(e, instance))
+                            {
+                                Engine::Get().GetScriptEngine()->InitializeProperties(instance);
+                                if (scriptJson.contains("Properties"))
+                                {
+                                    const auto& propsJson = scriptJson["Properties"];
 
-                if (!json.contains("Properties"))
-                    return;
-                
-                const auto& propsJson = json["Properties"];
-
-                std::optional<sol::table> propsOpt = lscComp.Self["Properties"];
-                if (propsOpt)
-                {
-                    sol::table propsDef = propsOpt.value();
-                    for (auto& [key, value] : propsDef)
-                    {
-                        std::string name = key.as<std::string>();
-                        if (!propsJson.contains(name))
-                            continue;
-                        sol::table def = value.as<sol::table>();
-                        std::string type = def["Type"];
-                        if (type == "Float") lscComp.Self[name] = propsJson[name].get<float>();
-                        else if (type == "Int") lscComp.Self[name] = propsJson[name].get<int>();
-                        else if (type == "String") lscComp.Self[name] = propsJson[name].get<std::string>();
-                        else if (type == "Bool") lscComp.Self[name] = propsJson[name].get<bool>();
-                        else if (type == "Vec2")
-                        {
-                            const auto& jsonVal = propsJson[name];
-                            lscComp.Self[name] = glm::vec2(jsonVal[0], jsonVal[1]);
+                                    if (!instance.Self.valid())
+                                        continue;
+                                    
+                                    std::optional<sol::table> propsOpt = instance.Self["Properties"];
+                                    if (propsOpt)
+                                    {
+                                        sol::table propsDef = propsOpt.value();
+                                        for (auto& [key, value] : propsDef)
+                                        {
+                                            std::string name = key.as<std::string>();
+                                            if (!propsJson.contains(name))
+                                                continue;
+                                            sol::table def = value.as<sol::table>();
+                                            std::string type = def["Type"];
+                                            if (type == "Float") instance.Self[name] = propsJson[name].get<float>();
+                                            else if (type == "Int") instance.Self[name] = propsJson[name].get<int>();
+                                            else if (type == "String") instance.Self[name] = propsJson[name].get<std::string>();
+                                            else if (type == "Bool") instance.Self[name] = propsJson[name].get<bool>();
+                                            else if (type == "Vec2")
+                                            {
+                                                const auto& jsonVal = propsJson[name];
+                                                instance.Self[name] = glm::vec2(jsonVal[0], jsonVal[1]);
+                                            }
+                                            else if (type == "Vec3")
+                                            {
+                                                const auto& jsonVal = propsJson[name];
+                                                instance.Self[name] = glm::vec3(jsonVal[0], jsonVal[1], jsonVal[2]);
+                                            }
+                                            else if (type == "Color")
+                                            {
+                                                const auto& jsonVal = propsJson[name];
+                                                instance.Self[name] = glm::vec4(jsonVal[0], jsonVal[1], jsonVal[2], jsonVal[3]);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        else if (type == "Vec3")
-                        {
-                            const auto& jsonVal = propsJson[name];
-                            lscComp.Self[name] = glm::vec3(jsonVal[0], jsonVal[1], jsonVal[2]);
-                        }
-                        else if (type == "Color")
-                        {
-                            const auto& jsonVal = propsJson[name];
-                            lscComp.Self[name] = glm::vec4(jsonVal[0], jsonVal[1], jsonVal[2], jsonVal[3]);
-                        }
+                        lscComp.Scripts.push_back(instance);
                     }
                 }
             },
             [](entt::registry& reg, entt::entity entity)
             {
-                auto& lscComp = reg.get<LuaScriptComponent>(entity);
+                auto& comp = reg.get<LuaScriptComponent>(entity);
                 Scene* scene = reg.ctx().get<Scene*>();
-                AssetHandle scriptHandle = lscComp.Script.Handle;
-                if (LXUI::DrawAssetReference("Script", scriptHandle, {AssetType::Script}))
+                Entity e{ entity, scene };
+                
+                for (int i = 0; i < comp.Scripts.size(); ++i)
                 {
-                    Entity e{ entity, scene };
-                    Engine::Get().GetScriptEngine()->OnScriptComponentDestroyed(e);
-                    lscComp.Script = AssetRef<Script>(scriptHandle);
-                    Engine::Get().GetScriptEngine()->OnScriptComponentAdded(e);
+                    auto& instance = comp.Scripts[i];
+                    std::string headerName;
+                    if (instance.ScriptAsset && instance.ScriptAsset.Get())
+                    {
+                        std::filesystem::path path = instance.ScriptAsset.Get()->GetFilePath();
+                        headerName = path.stem().string();
+                    }
+                    else
+                    {
+                        headerName = "Empty Script";
+                    }
+                    
+                    headerName += "##" + std::to_string(i);
+                    
+                    
+                    bool open = LXUI::PropertyGroup(headerName.c_str(), true);
+                    
+                    if (ImGui::BeginPopupContextItem())
+                    {
+                        if (ImGui::MenuItem("Remove Script"))
+                        {
+                            comp.Scripts.erase(comp.Scripts.begin() + i); // TODO: Is this sufficient? 
+                            i--;
+                            ImGui::EndPopup();
+                            continue;
+                        }
+                        ImGui::EndPopup();
+                    }
+                    
+                    if (open)
+                    {
+                        AssetHandle handle = instance.ScriptAsset.Handle;
+                        if (LXUI::DrawAssetReference("Script Asset", handle, {AssetType::Script}))
+                        {
+                            instance.ScriptAsset = AssetRef<Script>(handle);
+                            if (scene) // TODO: Check if properties are working correctly
+                            {
+                                Engine::Get().GetScriptEngine()->InstantiateScript(e, instance);
+                                Engine::Get().GetScriptEngine()->InitializeProperties(instance);
+                            }
+                        }
+                        
+                        if (instance.Self.valid())
+                        {
+                            LXUI::DrawLuaScriptSection(instance);
+                        }
+                    }
                 }
                 
-                LXUI::DrawLuaScriptSection(&lscComp);
+                if (LXUI::DrawButton("Add Script"))
+                {
+                    comp.Scripts.push_back({});
+                }
+                
             });
 
         m_ComponentRegistry.RegisterCoreComponent<DirectionalLightComponent>("DirectionalLight",

@@ -7,10 +7,18 @@
 
 namespace Lynx
 {
+    struct ScriptInstance
+    {
+        AssetRef<Script> ScriptAsset;
+        sol::table Self;
+        
+        bool IsValid() const { return ScriptAsset && Self.valid(); }
+        bool operator==(const ScriptInstance& other) const { return ScriptAsset.Handle == other.ScriptAsset.Handle; }
+    };
+    
     struct LuaScriptComponent
     {
-        AssetRef<Script> Script;
-        sol::table Self;
+        std::vector<ScriptInstance> Scripts;
 
         LuaScriptComponent() = default;
         LuaScriptComponent(const LuaScriptComponent&) = default;

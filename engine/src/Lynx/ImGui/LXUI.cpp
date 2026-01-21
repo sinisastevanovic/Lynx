@@ -507,99 +507,109 @@ namespace Lynx
         return changed;
     }
 
-    void LXUI::DrawLuaScriptSection(LuaScriptComponent* lsc)
+    void LXUI::DrawLuaScriptSection(ScriptInstance& instance)
     {
-        if (!lsc)
+        if (!instance.Self.valid())
             return;
 
-        if (lsc->Self.valid())
+        std::optional<sol::table> propsOpt = instance.Self["Properties"];
+        if (propsOpt)
         {
-            std::optional<sol::table> propsOpt = lsc->Self["Properties"];
-            if (propsOpt)
+            sol::table propsDef = propsOpt.value();
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            if (ImGui::TreeNodeEx("Properties", ImGuiTreeNodeFlags_DefaultOpen))
             {
-                sol::table propsDef = propsOpt.value();
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
-                if (ImGui::TreeNodeEx("Properties", ImGuiTreeNodeFlags_DefaultOpen))
+                
+                for (auto& [key, value] : propsDef)
                 {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    
-                    for (auto& [key, value] : propsDef)
+                    if (!key.is<std::string>())
+                        continue;
+
+                    std::string name = key.as<std::string>();
+                    sol::table def = value.as<sol::table>();
+                    std::string type = def["Type"];
+
+                    ImGui::PushID(name.c_str());
+
+                    if (type == "Float")
                     {
-                        if (!key.is<std::string>())
-                            continue;
-
-                        std::string name = key.as<std::string>();
-                        sol::table def = value.as<sol::table>();
-                        std::string type = def["Type"];
-
-                        ImGui::PushID(name.c_str());
-
-                        if (type == "Float")
+                        float val = instance.Self[name].get_or(def["Default"].get<float>());
+                        if (DrawDragFloat(name, val))
                         {
-                            float val = lsc->Self[name].get_or(def["Default"].get<float>());
-                            if (DrawDragFloat(name, val))
-                            {
-                                lsc->Self[name] = val;
-                            }
+                            instance.Self[name] = val;
                         }
-                        else if (type == "Int")
-                        {
-                            int val = lsc->Self[name].get_or(def["Default"].get<int>());
-                            if (DrawDragInt(name, val))
-                            {
-                                lsc->Self[name] = val;
-                            }
-                        }
-                        else if (type == "Bool")
-                        {
-                            bool val = lsc->Self[name].get_or(def["Default"].get<bool>());
-                            if (DrawCheckBox(name, val))
-                            {
-                                lsc->Self[name] = val;
-                            }
-                        }
-                        else if (type == "String")
-                        {
-                            
-                            std::string val = lsc->Self[name].get_or(def["Default"].get<std::string>());
-                            if (DrawTextInput(name, val))
-                            {
-                                lsc->Self[name] = val;
-                            }
-                        }
-                        else if (type == "Vec2")
-                        {
-                            glm::vec2 val = lsc->Self[name].get_or(def["Default"].get<glm::vec2>());
-                            if (DrawVec2Control(name.c_str(), val))
-                            {
-                                lsc->Self[name] = val;
-                            }
-                        }
-                        else if (type == "Vec3")
-                        {
-                            glm::vec3 val = lsc->Self[name].get_or(def["Default"].get<glm::vec3>());
-                            if (DrawVec3Control(name.c_str(), val))
-                            {
-                                lsc->Self[name] = val;
-                            }
-                        }
-                        else if (type == "Color")
-                        {
-                            glm::vec4 val = lsc->Self[name].get_or(def["Default"].get<glm::vec4>());
-                            if (DrawColorControl(name.c_str(), val))
-                            {
-                                lsc->Self[name] = val;
-                            }
-                        }
-
-                        ImGui::PopID();
                     }
-                    ImGui::TreePop();
+                    else if (type == "Int")
+                    {
+                        int val = instance.Self[name].get_or(def["Default"].get<int>());
+                        if (DrawDragInt(name, val))
+                        {
+                            instance.Self[name] = val;
+                        }
+                    }
+                    else if (type == "Bool")
+                    {
+                        bool val = instance.Self[name].get_or(def["Default"].get<bool>());
+                        if (DrawCheckBox(name, val))
+                        {
+                            instance.Self[name] = val;
+                        }
+                    }
+                    else if (type == "String")
+                    {
+                        std::string val = instance.Self[name].get_or(def["Default"].get<std::string>());
+                        if (DrawTextInput(name, val))
+                        {
+                            instance.Self[name] = val;
+                        }
+                    }
+                    else if (type == "Vec2")
+                    {
+                        glm::vec2 val = instance.Self[name].get_or(def["Default"].get<glm::vec2>());
+                        if (DrawVec2Control(name.c_str(), val))
+                        {
+                            instance.Self[name] = val;
+                        }
+                    }
+                    else if (type == "Vec3")
+                    {
+                        glm::vec3 val = instance.Self[name].get_or(def["Default"].get<glm::vec3>());
+                        if (DrawVec3Control(name.c_str(), val))
+                        {
+                            instance.Self[name] = val;
+                        }
+                    }
+                    else if (type == "Color")
+                    {
+                        glm::vec4 val = instance.Self[name].get_or(def["Default"].get<glm::vec4>());
+                        if (DrawColorControl(name.c_str(), val))
+                        {
+                            instance.Self[name] = val;
+                        }
+                    }
+
+                    ImGui::PopID();
                 }
+                ImGui::TreePop();
             }
         }
+    }
+
+    bool LXUI::DrawButton(const std::string& label)
+    {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TableNextColumn();
+        
+        bool pressed = false;
+        if (ImGui::Button(label.c_str()))
+        {
+            pressed = true;
+        }
+        return pressed;
     }
 
     bool LXUI::DrawUIAnchorControl(const std::string& label, UIAnchor& anchor)

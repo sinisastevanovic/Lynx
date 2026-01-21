@@ -250,6 +250,15 @@ namespace Lynx
             ImGui::TreePop();
         }
     }
+    
+    void RegenerateUUIDs(std::shared_ptr<UIElement> element)
+    {
+        element->SetUUID(UUID());
+        for (auto& child : element->GetChildren())
+        {
+            RegenerateUUIDs(child);
+        }
+    }
 
     void SceneHierarchyPanel::DrawUINode(std::shared_ptr<UIElement> element)
     {
@@ -370,10 +379,11 @@ namespace Lynx
             {
                 nlohmann::json data;
                 element->Serialize(data);
-                data["UUID"] = UUID();
                 
                 std::shared_ptr<UIElement> clone = UIElement::CreateFromType(data["Type"]);
                 clone->Deserialize(data);
+                
+                RegenerateUUIDs(clone);
                 
                 if (auto parent = element->GetParent())
                     parent->AddChild(clone);

@@ -36,6 +36,8 @@ namespace Lynx
         std::shared_ptr<UIElement> GetRoot() const;
         
         UUID GetUUID() const { return m_UUID; }
+        void SetUUID(UUID uuid) { m_UUID = uuid; }
+        
         std::shared_ptr<UIElement> FindElementByID(UUID id);
 
         // Layout Props
@@ -105,6 +107,7 @@ namespace Lynx
     protected:
         void MarkDirty();
         UIRect CalculateBounds(UIRect parentRect) const;
+        
 
     protected:
         std::string m_Name = "UIElement";

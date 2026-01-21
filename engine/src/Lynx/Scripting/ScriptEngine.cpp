@@ -153,13 +153,16 @@ namespace Lynx
         for (auto entityID : view)
         {
             Entity entity{ entityID, scene };
-            if (!entity.GetComponent<LuaScriptComponent>().Self.valid())
+            auto& comp = view.get<LuaScriptComponent>(entityID);
+            for (auto& instance : comp.Scripts)
             {
-                InstantiateScript(entity);
-                InitializeProperties(entity);
+                if (!instance.Self.valid())
+                {
+                    InstantiateScript(entity, instance);
+                    InitializeProperties(instance);
+                }
+                CallMethod(instance, "OnCreate");
             }
-
-            CallMethod(entity, "OnCreate");
         }
     }
 
@@ -171,10 +174,13 @@ namespace Lynx
             auto view = m_Data->SceneContext->Reg().view<LuaScriptComponent>();
             for (auto entityID : view)
             {
-                Entity entity{ entityID, m_Data->SceneContext };
-                if (entity.GetComponent<LuaScriptComponent>().Self.valid())
+                auto& comp = view.get<LuaScriptComponent>(entityID);
+                for (auto& instance : comp.Scripts)
                 {
-                    CallMethod(entity, "OnDestroy");
+                    if (instance.Self.valid())
+                    {
+                        CallMethod(instance, "OnDestroy");
+                    }
                 }
             }
         }
@@ -184,36 +190,43 @@ namespace Lynx
     void ScriptEngine::OnScriptComponentAdded(Entity entity)
     {
         LX_CORE_INFO("Script Component Added!");
-        if (!InstantiateScript(entity))
-            return;
-        
-        InitializeProperties(entity);
-        
-        if (Engine::Get().GetSceneState() == SceneState::Play)
+        auto& comp = entity.GetComponent<LuaScriptComponent>();
+        for (auto& instance : comp.Scripts)
         {
-            CallMethod(entity, "OnCreate");
+            if (!instance.Self.valid())
+            {
+                if (InstantiateScript(entity, instance))
+                {
+                    InitializeProperties(instance);
+                    if (Engine::Get().GetSceneState() == SceneState::Play)
+                    {
+                        CallMethod(instance, "OnCreate");
+                    }
+                }
+            }
         }
     }
 
     void ScriptEngine::OnScriptComponentDestroyed(Entity entity)
     {
         LX_CORE_INFO("Script Component Removed!");
-        if (Engine::Get().GetSceneState() == SceneState::Play)
+        auto& comp = entity.GetComponent<LuaScriptComponent>();
+        for (auto& instance : comp.Scripts)
         {
-            CallMethod(entity, "OnDestroy");
+            if (Engine::Get().GetSceneState() == SceneState::Play)
+            {
+                CallMethod(instance, "OnDestroy");
+            }
+            instance.Self = sol::nil;
         }
-        
-        auto& lsc = entity.GetComponent<LuaScriptComponent>();
-        lsc.Self = sol::nil;
     }
 
-    bool ScriptEngine::InstantiateScript(Entity entity)
+    bool ScriptEngine::InstantiateScript(Entity entity, ScriptInstance& instance)
     {
-        auto& lsc = entity.GetComponent<LuaScriptComponent>();
-        if (!lsc.Script)
+        if (!instance.ScriptAsset)
             return false;
         
-        auto scriptAsset = lsc.Script.Get();
+        auto scriptAsset = instance.ScriptAsset.Get();
         if (!scriptAsset)
             return false;
         
@@ -232,8 +245,8 @@ namespace Lynx
         sol::protected_function_result scriptResult = result();
         if (scriptResult.valid())
         {
-            lsc.Self = scriptResult.get<sol::table>();
-            lsc.Self["CurrentEntity"] = entity;
+            instance.Self = scriptResult.get<sol::table>();
+            instance.Self["CurrentEntity"] = entity;
             return true;
         }
         else
@@ -244,13 +257,12 @@ namespace Lynx
         }
     }
 
-    void ScriptEngine::InitializeProperties(Entity entity)
+    void ScriptEngine::InitializeProperties(ScriptInstance& instance)
     {
-        auto& lsc = entity.GetComponent<LuaScriptComponent>();
-        if (!lsc.Self.valid())
+        if (!instance.Self.valid())
             return;
         
-        sol::optional<sol::table> propertiesOption = lsc.Self["Properties"];
+        sol::optional<sol::table> propertiesOption = instance.Self["Properties"];
         if (propertiesOption)
         {
             sol::table properties = propertiesOption.value();
@@ -276,43 +288,45 @@ namespace Lynx
         for (auto& entityID : view)
         {
             Entity entity{ entityID, m_Data->SceneContext };
-            auto& lsc = entity.GetComponent<LuaScriptComponent>();
-            
-            if (handle == lsc.Script.Handle)
+            auto& comp = view.get<LuaScriptComponent>(entityID);
+            for (auto& instance : comp.Scripts)
             {
-                LX_CORE_INFO("Reloading script for Entity {0}", (uint64_t)entityID);
-                
-                std::unordered_map<std::string, sol::object> backupProps;
-                if (lsc.Self.valid())
+                if (handle == instance.ScriptAsset.Handle)
                 {
-                    sol::optional<sol::table> propsOpt = lsc.Self["Properties"];
-                    if (propsOpt)
+                    LX_CORE_INFO("Reloading script for Entity {0}", (uint64_t)entityID);
+                
+                    std::unordered_map<std::string, sol::object> backupProps;
+                    if (instance.Self.valid())
                     {
-                        for (auto& [key, value] : propsOpt.value())
+                        sol::optional<sol::table> propsOpt = instance.Self["Properties"];
+                        if (propsOpt)
                         {
-                            std::string name = key.as<std::string>();
-                            sol::object val = lsc.Self[name];
-                            if (val.valid()) backupProps[name] = val;
+                            for (auto& [key, value] : propsOpt.value())
+                            {
+                                std::string name = key.as<std::string>();
+                                sol::object val = instance.Self[name];
+                                if (val.valid()) backupProps[name] = val;
+                            }
                         }
-                    }
 
-                    if (isRuntime) 
-                        CallMethod(entity, "OnDestroy");
-                }
-                
-                if (InstantiateScript(entity))
-                {
-                    InitializeProperties(entity);
-                    for (auto& [name, val] : backupProps)
-                    {
-                        sol::optional<sol::table> newProps = lsc.Self["Properties"];
-                        if (newProps && newProps.value()[name].valid())
-                        {
-                            lsc.Self[name] = val;
-                        }
+                        if (isRuntime) 
+                            CallMethod(instance, "OnDestroy");
                     }
-                    if (isRuntime) 
-                        CallMethod(entity, "OnCreate");
+                
+                    if (InstantiateScript(entity, instance))
+                    {
+                        InitializeProperties(instance);
+                        for (auto& [name, val] : backupProps)
+                        {
+                            sol::optional<sol::table> newProps = instance.Self["Properties"];
+                            if (newProps && newProps.value()[name].valid())
+                            {
+                                instance.Self[name] = val;
+                            }
+                        }
+                        if (isRuntime) 
+                            CallMethod(instance, "OnCreate");
+                    }
                 }
             }
         }
@@ -320,7 +334,11 @@ namespace Lynx
     
     void ScriptEngine::OnUpdateEntity(Entity entity, float deltaTime)
     {
-        CallMethod(entity, "OnUpdate", deltaTime);
+        auto& comp = entity.GetComponent<LuaScriptComponent>();
+        for (auto& instance : comp.Scripts)
+        {
+            CallMethod(instance, "OnUpdate", deltaTime);
+        }
     }
     
     void ScriptEngine::OnActionEvent(const std::string& action, bool pressed)
@@ -332,21 +350,24 @@ namespace Lynx
         for (auto entityID : view)
         {
             Entity entity{ entityID, m_Data->SceneContext };
-            CallMethod(entity, "OnInput", action, pressed);
+            auto& comp = view.get<LuaScriptComponent>(entityID);
+            for (auto& instance : comp.Scripts)
+            {
+                CallMethod(instance, "OnInput", action, pressed);
+            }
         }
     }
     
     template <typename ... Args>
-    void ScriptEngine::CallMethod(Entity entity, const std::string& methodName, Args&&... args)
+    void ScriptEngine::CallMethod(ScriptInstance& instance, const std::string& methodName, Args&&... args)
     {
-        auto& lsc = entity.GetComponent<LuaScriptComponent>();
-        if (!lsc.Self.valid())
+        if (!instance.Self.valid())
             return;
         
-        sol::protected_function func = lsc.Self[methodName];
+        sol::protected_function func = instance.Self[methodName];
         if (func.valid())
         {
-            auto result = func(lsc.Self, std::forward<Args>(args)...);
+            auto result = func(instance.Self, std::forward<Args>(args)...);
             if (!result.valid())
             {
                 sol::error err = result;

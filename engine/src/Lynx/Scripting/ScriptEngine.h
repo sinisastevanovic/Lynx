@@ -1,10 +1,13 @@
 #pragma once
 
+
 #include "Lynx/Scene/Scene.h"
 #include "Lynx/Scene/Entity.h"
 
 namespace Lynx
 {
+    struct ScriptInstance;
+
     class LX_API ScriptEngine
     {
     public:
@@ -28,13 +31,15 @@ namespace Lynx
         void ReloadScript(AssetHandle handle);
 
     private:
-        bool InstantiateScript(Entity entity);
-        void InitializeProperties(Entity entity);
+        bool InstantiateScript(Entity entity, ScriptInstance& instance);
+        void InitializeProperties(ScriptInstance& instance);
         
         template<typename... Args>
-        void CallMethod(Entity entity, const std::string& methodName, Args&&... args);
+        void CallMethod(ScriptInstance& instance, const std::string& methodName, Args&&... args);
 
         struct ScriptEngineData;
         ScriptEngineData* m_Data = nullptr;
+        
+        friend class Engine;
     };
 }
