@@ -16,7 +16,6 @@
 
 #include "Components/TestNativeScript.h"
 #include "Lynx/ImGui/LXUI.h"
-#include "Lynx/Scene/Components/LuaScriptComponent.h"
 #include "Systems/ExperienceSystem.h"
 #include "Systems/GameManagerSystem.h"
 #include "Systems/HealthSystem.h"
@@ -37,17 +36,40 @@ void MyGame::RegisterComponents(GameTypeRegistry* registry)
     [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
     {
         auto& playerComponent = reg.get<PlayerComponent>(entity);
-        json["MoveSpeed"] = playerComponent.MoveSpeed;
+        json["PlayerIndex"] = playerComponent.PlayerIndex;
     },
     [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
     {
         auto& playerComponent = reg.get_or_emplace<PlayerComponent>(entity);
-        playerComponent.MoveSpeed = json["MoveSpeed"];
+        playerComponent.PlayerIndex = json.value("PlayerIndex", 0);
     },
     [](entt::registry& reg, entt::entity entity)
     {
         auto& player = reg.get<PlayerComponent>(entity);
-        LXUI::DrawDragFloat("Move Speed", player.MoveSpeed, 0.1f);
+        LXUI::DrawDragInt("PlayerIndex", player.PlayerIndex, 1, 0, 10);
+    });
+    
+    registry->RegisterComponent<CharacterStatsComponent>("Character Stats",
+    [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+    {
+        auto& comp = reg.get<CharacterStatsComponent>(entity);
+        json["MoveSpeed"] = comp.MoveSpeed;
+        json["Strength"] = comp.Strength;
+        json["MagnetRadius"] = comp.MagnetRadius;
+    },
+    [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+    {
+        auto& comp = reg.get_or_emplace<CharacterStatsComponent>(entity);
+        comp.MoveSpeed = json["MoveSpeed"];
+        comp.Strength = json["Strength"];
+        comp.MagnetRadius = json["MagnetRadius"];
+    },
+    [](entt::registry& reg, entt::entity entity)
+    {
+        auto& comp = reg.get<CharacterStatsComponent>(entity);
+        LXUI::DrawDragFloat("MoveSpeed", comp.MoveSpeed, 0.1f, 0, FLT_MAX);
+        LXUI::DrawDragFloat("Strength", comp.Strength, 0.1f, 0, FLT_MAX);
+        LXUI::DrawDragFloat("MagnetRadius", comp.MagnetRadius, 0.1f, 0, FLT_MAX);
     });
 
     registry->RegisterComponent<EnemyComponent>("Enemy Component",
@@ -200,20 +222,17 @@ void MyGame::RegisterComponents(GameTypeRegistry* registry)
     [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
     {
         auto& comp = reg.get<MagnetComponent>(entity);
-        json["Radius"] = comp.Radius;
         json["Strength"] = comp.Strength;
     },
     [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
     {
         auto& comp = reg.get_or_emplace<MagnetComponent>(entity);
-        comp.Radius = json.value("Radius", 3.0f);
         comp.Strength = json.value("Strength", 10.0f);
     },
     [](entt::registry& reg, entt::entity entity)
     {
         auto& comp = reg.get<MagnetComponent>(entity);
         
-        LXUI::DrawDragFloat("Radius", comp.Radius, 0.1f, 0.0f, FLT_MAX);
         LXUI::DrawDragFloat("Strength", comp.Strength, 0.1f, 0.0f, FLT_MAX);
     });
     
@@ -250,22 +269,22 @@ void MyGame::RegisterComponents(GameTypeRegistry* registry)
     
     registry->RegisterComponent<WaveManagerComponent>("Wave Manager",
    [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
-   {
-       auto& comp = reg.get<WaveManagerComponent>(entity);
-       json["TimerTextElement"] = comp.GameTimerText;
-   },
-   [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
-   {
-       auto& comp = reg.get_or_emplace<WaveManagerComponent>(entity);
-       comp.GameTimerText = json.value("TimerTextElement", ElementRef<UIText>());
-   },
-   [](entt::registry& reg, entt::entity entity)
-   {
-       auto& comp = reg.get<WaveManagerComponent>(entity);
-       auto scene = reg.ctx().get<Scene*>();
-        
-       LXUI::DrawUIElementReference("Timer Text", comp.GameTimerText, scene);
-   });
+       {
+           auto& comp = reg.get<WaveManagerComponent>(entity);
+           json["TimerTextElement"] = comp.GameTimerText;
+       },
+       [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+       {
+           auto& comp = reg.get_or_emplace<WaveManagerComponent>(entity);
+           comp.GameTimerText = json.value("TimerTextElement", ElementRef<UIText>());
+       },
+       [](entt::registry& reg, entt::entity entity)
+       {
+           auto& comp = reg.get<WaveManagerComponent>(entity);
+           auto scene = reg.ctx().get<Scene*>();
+            
+           LXUI::DrawUIElementReference("Timer Text", comp.GameTimerText, scene);
+       });
 }
 
 void MyGame::OnStart()
@@ -279,7 +298,7 @@ void MyGame::OnStart()
     GameManagerSystem::Init(scene);
     
     DamageTextSystem::Init(scene);
-
+    
     Input::BindAxis("MoveLeftRight", KeyCode::D, KeyCode::A);
     Input::BindAxis("MoveUpDown", KeyCode::S, KeyCode::W);
     

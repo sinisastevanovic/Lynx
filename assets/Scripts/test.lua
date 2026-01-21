@@ -2,12 +2,22 @@ return {
     Properties = {
         Speed = { Default = 5.0, Type = "Float" },
         Name = { Default = "Hero", Type = "String" },
-        Test = { Default = Vec3(0, 5, 0), Type = "Vec3" }
+        Test = { Default = Vec3(0, 5, 0), Type = "Vec3" },
+        Image = { Type = "UIImage", Default = nil },
+        Button = { Type = "UIButton", Default = nil },
+        Text = { Type = "UIText", Default = nil }
     },
 
     OnCreate = function(self)
         print("Lua script created!")
         local transform = self.CurrentEntity.Transform
+        if self.Image then
+            self.Image:SetVisible(false)
+            print("Image set invisible")
+        end
+        if self.Text then
+            self.Text:SetText("Hello123!")
+        end
         print("Initial Position: " .. transform.Translation.x .. ", " .. transform.Translation.y)
     end,
 

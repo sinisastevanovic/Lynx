@@ -22,12 +22,12 @@ public:
     {
         auto& reg = scene->Reg();
         
-        auto playerView = reg.view<TransformComponent, MagnetComponent, ExperienceComponent, HealthComponent>();
+        auto playerView = reg.view<TransformComponent, MagnetComponent, ExperienceComponent, HealthComponent, CharacterStatsComponent>();
         auto pickupView = reg.view<TransformComponent, PickupComponent>();
         
         for (auto playerEntity : playerView)
         {
-            auto [pTrans, magnet, xpComp, hpComp] = playerView.get(playerEntity);
+            auto [pTrans, magnet, xpComp, hpComp, stats] = playerView.get(playerEntity);
             glm::vec3 pPos = pTrans.GetWorldTranslation();
             
             for (auto pickupEntity : pickupView)
@@ -36,7 +36,7 @@ public:
                 
                 glm::vec3 pickupPos = pickupTrans.GetWorldTranslation();
                 float distSq = glm::distance2(pPos, pickupPos);
-                if (pickup.Magnetic && ((pickup.IsMagnetized && pickup.MagentizedBy == playerEntity) || (!pickup.IsMagnetized && distSq < (magnet.Radius * magnet.Radius))))
+                if (pickup.Magnetic && ((pickup.IsMagnetized && pickup.MagentizedBy == playerEntity) || (!pickup.IsMagnetized && distSq < (stats.MagnetRadius * stats.MagnetRadius))))
                 {
                     pickup.IsMagnetized = true;
                     pickup.MagentizedBy = playerEntity;

@@ -3,14 +3,11 @@
 #include "Lynx/Scene/Components/LuaScriptComponent.h"
 #include "Lynx/Scene/Components/Components.h"
 
-#include <sol/sol.hpp>
-
-#include "ScriptEngineData.h"
 #include "ScriptWrappers.h"
 #include "Lynx/Engine.h"
-#include "Lynx/Input.h"
 #include "Lynx/Asset/Script.h"
-#include "Lynx/Renderer/DebugRenderer.h"
+#include "Lynx/UI/Widgets/UIButton.h"
+#include "Lynx/UI/Widgets/UIText.h"
 
 namespace Lynx
 {
@@ -45,93 +42,19 @@ namespace Lynx
             LX_CORE_INFO("[LUA] {0}", message);
         });
 
-        ScriptEngineUtils::RegisterBasicTypes(m_Data->Lua);
+        // Use the new split registration functions
         ScriptWrappers::RegisterBasicTypes(m_Data->Lua);
+        ScriptWrappers::RegisterMath(m_Data->Lua);
+        ScriptWrappers::RegisterCoreTypes(m_Data->Lua);
         ScriptWrappers::RegisterUITypes(m_Data->Lua);
-
-        m_Data->Lua.new_usertype<Entity>("Entity",
-            sol::constructors<Entity(entt::entity, Scene*)>(),
-            "GetID", &Entity::GetUUID,
-            "Transform", sol::property(
-                [](Entity& entity) -> TransformComponent&
-                {
-                    return entity.GetComponent<TransformComponent>();
-                }
-            ),
-            "MeshComponent", sol::property(
-                [](Entity& entity) -> MeshComponent*
-                {
-                    if (entity.HasComponent<MeshComponent>())
-                        return &entity.GetComponent<MeshComponent>();
-                    return nullptr;
-                }
-            )
-        );
-
-        m_Data->Lua.new_usertype<TransformComponent>("Transform",
-            "Translation", &TransformComponent::Translation,
-            "Scale", &TransformComponent::Scale,
-            "Rotation", sol::property(
-                [](TransformComponent& t) { return t.GetRotationDegrees(); },
-                [](TransformComponent& t, const glm::vec3& degrees) { t.SetRotionDegrees(degrees); }
-            ),
-            "RotationQuat", &TransformComponent::Rotation
-        );
-
-        m_Data->Lua.new_usertype<MeshComponent>("MeshComponent",
-            "MeshHandle", &MeshComponent::Mesh
-        );
-
-        m_Data->Lua.new_usertype<Input>("Input",
-            "GetButton", &Input::GetButton,
-            "GetAxis", &Input::GetAxis
-        );
-
-        // --- DEBUG ---
-        auto debug = m_Data->Lua.create_named_table("Debug");
-        debug.set_function("DrawLine", [](glm::vec3 start, glm::vec3 end, glm::vec4 color)
-        {
-            DebugRenderer::DrawLine(start, end, color); 
-        });
-
-        debug.set_function("DrawBox", sol::overload(
-            [](glm::vec3 min, glm::vec3 max, glm::vec4 color) {
-                DebugRenderer::DrawBox(min, max, color);
-            },
-            [](glm::vec3 center, glm::vec3 size, glm::quat rotation, glm::vec4 color) {
-                // Wait, we need to construct the matrix for the OBB version
-                glm::mat4 transform = glm::translate(glm::mat4(1.0f), center)
-                    * glm::toMat4(rotation)
-                    * glm::scale(glm::mat4(1.0f), size);
-                DebugRenderer::DrawBox(transform, color);
-            }
-        ));
-
-        debug.set_function("DrawSphere", [](glm::vec3 center, float radius, glm::vec4 color) {
-            DebugRenderer::DrawSphere(center, radius, color);
-        });
-
-        debug.set_function("DrawCapsule", [](glm::vec3 center, float radius, float height, glm::quat rotation, glm::vec4 color) {
-            DebugRenderer::DrawCapsule(center, radius, height * 0.5f, rotation, color); // Note: Height/2 conversion?
-        });
-        
-        auto world = m_Data->Lua.create_named_table("World");
-        world.set_function("Instantiate", [this](uint64_t prefabID, sol::optional<Entity> parent) -> Entity
-        {
-            auto scene = Engine::Get().GetActiveScene();
-            if (!scene)
-                return {};
-            
-            Entity parentEnt = {};
-            if (parent)
-                parentEnt = parent.value();
-            
-            return scene->InstantiatePrefab(AssetHandle(prefabID), parentEnt);
-        });
+        ScriptWrappers::RegisterGameTypes(m_Data->Lua);
+        ScriptWrappers::RegisterInput(m_Data->Lua);
+        ScriptWrappers::RegisterDebug(m_Data->Lua);
     }
 
     void ScriptEngine::Shutdown()
     {
+        if (m_Data) m_Data->Lua.collect_garbage();
         delete m_Data;
         m_Data = nullptr;
     }
@@ -309,6 +232,29 @@ namespace Lynx
         }
     }
 
+    void ScriptEngine::DispatchGlobalEvent(Scene* scene, const std::string& name, std::function<void(sol::protected_function, sol::table)> caller)
+    {
+        if (!scene)
+            return;
+        
+        auto view = scene->Reg().view<LuaScriptComponent>();
+        for (auto entityID : view)
+        {
+            auto& comp = view.get<LuaScriptComponent>(entityID);
+            for (auto& instance : comp.Scripts)
+            {
+                if (instance.Self.valid())
+                {
+                    sol::protected_function func = instance.Self[name];
+                    if (func.valid())
+                    {
+                        caller(func, instance.Self);
+                    }
+                }
+            }
+        }
+    }
+
     void ScriptEngine::ReloadScript(AssetHandle handle)
     {
         auto scene = Engine::Get().GetActiveScene();
@@ -390,7 +336,7 @@ namespace Lynx
             }
         }
     }
-    
+
     template <typename ... Args>
     void ScriptEngine::CallMethod(ScriptInstance& instance, const std::string& methodName, Args&&... args)
     {

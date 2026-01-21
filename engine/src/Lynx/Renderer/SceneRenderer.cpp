@@ -15,6 +15,7 @@ namespace Lynx
     void SceneRenderer::SetScene(std::shared_ptr<Scene> scene)
     {
         m_Scene = scene;
+        m_ViewportDirty = true;
     }
 
     void SceneRenderer::SetViewportSize(uint32_t width, uint32_t height)

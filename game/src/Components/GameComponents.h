@@ -4,11 +4,19 @@ namespace Lynx
 {
     class UIText;
     class UIImage;
+    class UIButton;
 }
 
 struct PlayerComponent
 {
+    int PlayerIndex = 0;
+};
+
+struct CharacterStatsComponent
+{
+    float Strength = 1.0f;
     float MoveSpeed = 5.0f;
+    float MagnetRadius = 3.0f;
 };
 
 struct EnemyComponent
@@ -74,7 +82,6 @@ struct PickupComponent
 
 struct MagnetComponent
 {
-    float Radius = 3.0f;
     float Strength = 10.0f;
 };
 

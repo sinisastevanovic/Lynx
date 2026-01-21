@@ -20,7 +20,9 @@ public:
                 xp.Level++;
                 xp.TargetXP *= 1.2f; // TODO: Use actual curve
                 
+                Entity e{entity, scene.get()};
                 scene->Reg().ctx().get<entt::dispatcher>().trigger<LevelUpEvent>({ entity, xp.Level });
+                Engine::Get().GetScriptEngine()->OnGlobalEvent(scene.get(), "OnLevelUp", e, xp.Level);
             }
         }
     }

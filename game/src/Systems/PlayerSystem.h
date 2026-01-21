@@ -10,10 +10,10 @@ public:
     static void Update(std::shared_ptr<Scene> scene, float dt)
     {
         auto& bodyInterface = scene->GetPhysicsSystem().GetBodyInterface();
-        auto view = scene->Reg().view<TransformComponent, PlayerComponent, RigidBodyComponent>();
+        auto view = scene->Reg().view<TransformComponent, PlayerComponent, RigidBodyComponent, CharacterStatsComponent>();
         for (auto entity : view)
         {
-            auto [transform, player, rb] = view.get<TransformComponent, PlayerComponent, RigidBodyComponent>(entity);
+            auto [transform, player, rb, stats] = view.get(entity);
 
             glm::vec3 velocity = { 0.0f, 0.0f, 0.0f };
 
@@ -26,7 +26,7 @@ public:
 
             if (glm::length(velocity) > 0.0f)
             {
-                velocity = glm::normalize(velocity) * player.MoveSpeed;
+                velocity = glm::normalize(velocity) * stats.MoveSpeed;
 
                 float targetAngle = atan2(velocity.x, velocity.z);
                 transform.Rotation = glm::angleAxis(targetAngle, glm::vec3(0, 1, 0));

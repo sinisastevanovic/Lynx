@@ -29,6 +29,7 @@ namespace Lynx
         
         void Initialize(bool editorMode = false);
         void Run(IGameModule* gameModule);
+        void PreGameShutdown();
         void Shutdown();
 
         inline Window& GetWindow() { return *m_Window; }

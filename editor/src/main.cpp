@@ -67,8 +67,7 @@ int main(int argc, char** argv)
         editorLayer.OnDetach();
     }
     
-    engine.ClearActiveScene();
-    engine.GetAssetManager().UnloadAllGameAssets();
+    engine.PreGameShutdown();
 
     if (gameModule && destroyFunc)
     {

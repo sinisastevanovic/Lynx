@@ -184,6 +184,13 @@ namespace Lynx
         }
     }
 
+    void Engine::PreGameShutdown()
+    {
+        ClearActiveScene();
+        m_AssetManager->UnloadAllGameAssets();
+        m_ScriptEngine.reset();
+    }
+
     void Engine::Shutdown()
     {
         LX_CORE_INFO("Shutting down...");
@@ -191,9 +198,9 @@ namespace Lynx
             m_Scene->OnRuntimeStop();
 
         m_SceneRenderer.reset();
+        m_ScriptEngine.reset();
         m_Scene.reset();
         
-        m_ScriptEngine.reset();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
         m_AssetManager.reset();

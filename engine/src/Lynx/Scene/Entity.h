@@ -19,7 +19,6 @@ namespace Lynx
         {
             if (HasComponent<T>())
             {
-                LX_CORE_WARN("Entity already has component!");
                 return GetComponent<T>();
             }
             return m_Scene->m_Registry.emplace<T>(m_EntityHandle, std::forward<Args>(args)...);
