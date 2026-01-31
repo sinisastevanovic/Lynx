@@ -47,6 +47,9 @@ namespace Lynx
         uint32_t m_LastViewportWidth = 0, m_LastViewportHeight = 0;
 
         bool m_ShowUI = true;
+        
+        bool m_InputCapturedByGame = false;
+        CursorMode m_LastCursorMode = CursorMode::Normal;
     };
 }
 

@@ -76,6 +76,36 @@ namespace Lynx
                 * rotation
                 * glm::scale(glm::mat4(1.0f), Scale);
         }
+        
+        glm::vec3 GetForward() const
+        {
+            return glm::rotate(Rotation, glm::vec3(0.0f, 0.0f, 1.0f));
+        }
+        
+        glm::vec3 GetUp() const
+        {
+            return glm::rotate(Rotation, glm::vec3(0.0f, 1.0f, 0.0f));
+        }
+        
+        glm::vec3 GetRight() const
+        {
+            return glm::rotate(Rotation, glm::vec3(1.0f, 0.0f, 0.0f));
+        }
+        
+        glm::vec3 GetWorldForward() const
+        {
+            return glm::normalize(glm::vec3(WorldMatrix[2]));
+        }
+        
+        glm::vec3 GetWorldUp() const
+        {
+            return glm::normalize(glm::vec3(WorldMatrix[1]));
+        }
+        
+        glm::vec3 GetWorldRight() const
+        {
+            return glm::normalize(glm::vec3(WorldMatrix[0]));
+        }
 
         glm::vec3 GetRotationDegrees() const
         {

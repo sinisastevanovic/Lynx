@@ -19,6 +19,7 @@ namespace Lynx
         glm::vec2 GetSize() const { return m_Bounds[1] - m_Bounds[0]; }
         bool IsFocused() const { return m_IsFocused; }
         bool IsHovered() const { return m_IsHovered; }
+        bool IsClicked() const { return m_IsClicked; }
 
     private:
         entt::entity m_Selection{ entt::null };
@@ -29,6 +30,7 @@ namespace Lynx
         glm::vec2 m_Bounds[2];
         bool m_IsFocused = false;
         bool m_IsHovered = false;
+        bool m_IsClicked = false;
     };
 
 }

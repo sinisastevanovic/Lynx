@@ -14,20 +14,39 @@ public:
         for (auto entity : view)
         {
             auto [transform, player, rb, stats] = view.get(entity);
-
+            
+            glm::vec3 camForward = { 0, 0, 1 };
+            glm::vec3 camRight = { 1, 0, 0 };
+            
+            auto cameraView = scene->Reg().view<TransformComponent, CameraComponent>();
+            for (auto camEntity : cameraView)
+            {
+                if (cameraView.get<CameraComponent>(camEntity).Primary)
+                {
+                    // TODO: Add GetForwardVector and GetRightVector and GetUpVector to TransformComponent
+                    auto& ct = cameraView.get<TransformComponent>(camEntity);
+                    camForward = ct.GetForward();
+                    camForward.y = 0;
+                    camForward = glm::normalize(camForward);
+                    
+                    camRight = ct.GetRight();
+                    camRight.y = 0;
+                    camRight = glm::normalize(camRight);
+                    break;
+                }
+            }
+            
+            glm::vec3 moveDir = { 0.0f, 0.0f, 0.0f };
+            moveDir += camForward * Input::GetAxis("MoveUpDown");
+            moveDir += camRight * Input::GetAxis("MoveLeftRight");
+            
             glm::vec3 velocity = { 0.0f, 0.0f, 0.0f };
 
-            velocity.z += Input::GetAxis("MoveUpDown");
-            velocity.x += Input::GetAxis("MoveLeftRight");
-            /*if (Input::IsKeyPressed(KeyCode::W)) velocity.z -= 1.0f;
-            if (Input::IsKeyPressed(KeyCode::S)) velocity.z += 1.0f;
-            if (Input::IsKeyPressed(KeyCode::A)) velocity.x -= 1.0f;
-            if (Input::IsKeyPressed(KeyCode::D)) velocity.x += 1.0f;*/
-
-            if (glm::length(velocity) > 0.0f)
+            if (glm::length(moveDir) > 0.001f)
             {
-                velocity = glm::normalize(velocity) * stats.MoveSpeed;
-
+                moveDir = glm::normalize(moveDir);
+                velocity = moveDir * stats.MoveSpeed;
+                
                 float targetAngle = atan2(velocity.x, velocity.z);
                 transform.Rotation = glm::angleAxis(targetAngle, glm::vec3(0, 1, 0));
             }

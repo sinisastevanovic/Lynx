@@ -20,6 +20,7 @@ namespace Lynx
 
         m_IsFocused = ImGui::IsWindowFocused();
         m_IsHovered = ImGui::IsWindowHovered();
+        m_IsClicked = m_IsHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
 
         Engine::Get().SetBlockEvents(!m_IsFocused);
         Engine::Get().GetEditorCamera().SetViewportFocused(m_IsHovered && m_IsFocused);

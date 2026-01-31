@@ -49,7 +49,21 @@ namespace Lynx
         return nullptr;
 #endif
     }
-    
+
+    void Window::SetCursorMode(CursorMode mode)
+    {
+        int glfwMode = GLFW_CURSOR_NORMAL;
+        switch (mode)
+        {
+            case CursorMode::Normal: glfwMode = GLFW_CURSOR_NORMAL; break;
+            case CursorMode::Hidden: glfwMode = GLFW_CURSOR_HIDDEN; break;
+            case CursorMode::Locked: glfwMode = GLFW_CURSOR_DISABLED; break;
+        }
+        
+        m_CursorMode = mode;
+        glfwSetInputMode(m_Window, GLFW_CURSOR, glfwMode);
+    }
+
     Window::Window(const WindowProps& props)
     {
         m_Data.Title = props.Title;
@@ -124,7 +138,7 @@ namespace Lynx
         glfwSetCursorPosCallback(m_Window, [](GLFWwindow* window, double xpos, double ypos)
         {
             WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
-            Input::SetMousePosition(xpos, ypos);
+            Input::SetMousePositionInternal(xpos, ypos);
             MouseMovedEvent event(xpos, ypos);
             data.EventCallback(event);
         });

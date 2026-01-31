@@ -174,6 +174,7 @@ namespace Lynx
                 m_Scene->UpdateGlobalTransforms();
                 m_SceneRenderer->RenderRuntime(m_DeltaTime);
             }
+            Input::OnUpdate();
         }
 
         if (m_Scene && m_SceneState == SceneState::Play)
@@ -314,13 +315,6 @@ namespace Lynx
                     this->OnEvent(e);
                     m_ScriptEngine->OnActionEvent(action, true);
                 }
-            }
-            
-            if (event.GetKeyCode() == KeyCode::Escape)
-            {
-                LX_CORE_WARN("Escape key pressed via event, closing application.");
-                m_IsRunning = false;
-                return true; 
             }
             return false;
         });

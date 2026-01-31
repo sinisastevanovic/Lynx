@@ -10,12 +10,17 @@ namespace Lynx
 struct PlayerComponent
 {
     int PlayerIndex = 0;
+    
+    int JumpsRemaining = 0;
+    bool IsGrounded = false;
 };
 
 struct CharacterStatsComponent
 {
     float Strength = 1.0f;
     float MoveSpeed = 5.0f;
+    float JumpForce = 5.0f;
+    int MaxJumpCount = 2; // TODO: 1 is default
     float MagnetRadius = 3.0f;
 };
 
@@ -86,3 +91,23 @@ struct MagnetComponent
 };
 
 struct DeadTag {};
+
+struct SpringArmComponent // TODO: Maybe move to engine?
+{
+    float TargetArmLength = 15.0f;
+    glm::vec3 TargetOffset = { 0.0f, 1.5f, 0.0f };
+    
+    float Pitch = 20.0f;
+    float Yaw = 0.0f;
+    
+    float SensitivityX = 0.15f;
+    float SensitivityY = 0.15f;
+    
+    float MinPitch = -10.0f;
+    float MaxPitch = 85.0f;
+    
+    float LerpSpeed = 10.0f;
+    
+    glm::vec2 LastMousePos = { 0.0f, 0.0f };
+    bool IsFirstUpdate = true;
+};

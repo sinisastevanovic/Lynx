@@ -67,6 +67,7 @@ namespace Lynx
         void SetTimeScale(float timeScale) { m_TimeScale = timeScale;}
         float GetTimeScale() const { return m_TimeScale; }
         
+        // TODO: We have to differentiate between pausing in game and in editor? 
         void SetPaused(bool paused) { m_Paused = paused; }
         bool IsPaused() const { return m_Paused; }
 

@@ -16,11 +16,21 @@ namespace Lynx
         }
     };
 
+   
+
     std::unordered_map<std::string, std::vector<KeyCode>> Input::s_ActionMappings;
     std::unordered_map<std::string, std::vector<AxisBinding>> Input::s_AxisBindings;
+    
+    glm::vec2 Input::s_ViewPortOffset = { 0.0f, 0.0f };
 
     static InputState s_State;
+    static glm::vec2 s_MouseDelta = { 0, 0 };
 
+    void Input::OnUpdate()
+    {
+        s_MouseDelta = { 0, 0 };
+    }
+    
     void Input::BindAction(const std::string& name, KeyCode key)
     {
         s_ActionMappings[name].push_back(key);
@@ -87,7 +97,24 @@ namespace Lynx
 
     glm::vec2 Input::GetMousePosition()
     {
-        return { s_State.MouseX, s_State.MouseY };
+        return { s_State.MouseX - s_ViewPortOffset.x, s_State.MouseY - s_ViewPortOffset.y };
+    }
+
+    glm::vec2 Input::GetMouseDelta()
+    {
+        if (Engine::Get().AreEventsBlocked() || Engine::Get().IsPaused())
+            return { 0.0f, 0.0f };
+        return s_MouseDelta;
+    }
+
+    void Input::SetCursorMode(CursorMode mode)
+    {
+        Engine::Get().GetWindow().SetCursorMode(mode);
+    }
+
+    CursorMode Input::GetCursorMode()
+    {
+        return Engine::Get().GetWindow().GetCursorMode();
     }
 
     float Input::GetMouseX()
@@ -108,9 +135,15 @@ namespace Lynx
         }
     }
 
-    void Input::SetMousePosition(double x, double y)
+    void Input::SetMousePositionInternal(double x, double y)
     {
+        double dx = x - s_State.MouseX;
+        double dy = y - s_State.MouseY;
+        
         s_State.MouseX = x;
         s_State.MouseY = y;
+        
+        s_MouseDelta.x += (float)dx;
+        s_MouseDelta.y += (float)dy;
     }
 }

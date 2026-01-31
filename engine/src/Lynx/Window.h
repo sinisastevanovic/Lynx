@@ -20,6 +20,13 @@ namespace Lynx
             : Title(title), Width(width), Height(height) {}
     };
     
+    enum class CursorMode
+    {
+        Normal = 0,
+        Hidden = 1,
+        Locked = 2
+    };
+    
     class Window
     {
     public:
@@ -39,6 +46,9 @@ namespace Lynx
 
         GLFWwindow* GetNativeWindow() const { return m_Window; }
         void* GetNativeWindowHandle() const;
+        
+        void SetCursorMode(CursorMode mode);
+        CursorMode GetCursorMode() const { return m_CursorMode; }
 
         static std::unique_ptr<Window> Create(const WindowProps& props = WindowProps());
 
@@ -55,6 +65,6 @@ namespace Lynx
         };
 
         WindowData m_Data;
-    
+        CursorMode m_CursorMode;
     };
 }

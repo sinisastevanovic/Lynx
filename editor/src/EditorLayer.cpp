@@ -167,6 +167,16 @@ namespace Lynx
 
     void EditorLayer::OnImGuiRender()
     {
+        ImGuiIO& io = ImGui::GetIO();
+        if (Input::GetCursorMode() == CursorMode::Locked)
+        {
+            io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
+        }
+        else
+        {
+            io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
+        }
+        
         DrawToolBar();
         for (auto& panel : m_Panels)
         {
@@ -175,6 +185,12 @@ namespace Lynx
         
         if (m_ViewportPanel)
         {
+            if (m_ViewportPanel->IsClicked() && !m_InputCapturedByGame && Engine::Get().GetSceneState() == SceneState::Play)
+            {
+                m_InputCapturedByGame = true;
+                Input::SetCursorMode(m_LastCursorMode);
+            }
+            
             glm::vec2 size = m_ViewportPanel->GetSize();
             if (size.x > 0 && size.y > 0 && 
                 (glm::epsilonNotEqual(size.x, (float)m_LastViewportWidth, glm::epsilon<float>()) 
@@ -186,6 +202,9 @@ namespace Lynx
                 ViewportResizeEvent e(m_LastViewportWidth, m_LastViewportHeight);
                 m_Engine->OnEvent(e);
             }
+            
+            glm::vec2 viewportPos = m_ViewportPanel->GetPos();
+            Input::SetViewportOffset(viewportPos.x, viewportPos.y);
         }
     }
 
@@ -199,6 +218,9 @@ namespace Lynx
         runtimeSerializer.DeserializeFromString(data);
 
         m_Engine->StartPlay(m_RuntimeScene);
+        
+        m_InputCapturedByGame = true;
+        ImGui::SetWindowFocus("Viewport");
     }
 
     void EditorLayer::OnSceneStop()
@@ -207,6 +229,10 @@ namespace Lynx
         m_RuntimeScene = nullptr;
 
         m_Engine->GetRenderer().SetShowUI(m_ShowUI);
+        
+        m_InputCapturedByGame = false;
+        m_LastCursorMode = CursorMode::Normal;
+        m_Engine->SetPaused(false);
     }
 
     void EditorLayer::OnEvent(Event& e)
@@ -242,6 +268,15 @@ namespace Lynx
 
         dispatcher.Dispatch<KeyPressedEvent>([this](KeyPressedEvent& e)
         {
+            if (e.GetKeyCode() == KeyCode::F1 && Input::IsKeyPressed(KeyCode::LeftShift) && m_InputCapturedByGame)
+            {
+                m_InputCapturedByGame = false;
+                m_LastCursorMode = Input::GetCursorMode();
+                Input::SetCursorMode(CursorMode::Normal);
+                ImGui::SetWindowFocus("Scene Hierarchy");
+                return true;
+            }
+            
             if (m_ViewportPanel->IsHovered())
             {
                 if (m_Engine->GetActiveScene())

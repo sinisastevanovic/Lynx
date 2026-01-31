@@ -24,7 +24,10 @@ namespace Lynx
         {
             lua.new_usertype<Input>("Input",
                 "GetButton", &Input::GetButton,
-                "GetAxis", &Input::GetAxis
+                "GetAxis", &Input::GetAxis,
+                "GetMousePosition", &Input::GetMousePosition,
+                "HideMouse", [](){ Input::SetCursorMode(CursorMode::Locked); },
+                "ShowMouse", [](){ Input::SetCursorMode(CursorMode::Normal); }
             );
         }
     }
