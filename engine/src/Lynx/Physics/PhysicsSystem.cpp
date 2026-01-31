@@ -3,6 +3,8 @@
 #include <cstdarg>
 #include <Jolt/Core/Factory.h>
 #include <Jolt/RegisterTypes.h>
+#include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/CastResult.h>
 
 namespace Lynx
 {
@@ -115,7 +117,8 @@ namespace Lynx
     };
 #endif // JPH_ENABLE_ASSERTS
 
-    PhysicsSystem::PhysicsSystem()
+    PhysicsSystem::PhysicsSystem(Scene* owner)
+        : m_OwnerScene(owner)
     {
         // TODO: maybe remove init and shutdown and move to constructor destructor..
         JPH::RegisterDefaultAllocator();
@@ -171,6 +174,40 @@ namespace Lynx
         m_BPLayerInterface = nullptr;
         m_ObjectVsBroadPhaseLayerFilter = nullptr;
         m_ObjectLayerPairFilter = nullptr;
+    }
+
+    RaycastHit PhysicsSystem::CastRay(const glm::vec3& origin, const glm::vec3& direction, float maxDistance, JPH::BodyID ignoreBodyID)
+    {
+        RaycastHit result;
+        
+        JPH::Vec3 start = { origin.x, origin.y, origin.z };
+        JPH::Vec3 dir = { direction.x * maxDistance, direction.y * maxDistance, direction.z * maxDistance };
+        JPH::RRayCast ray(start, dir);
+        JPH::RayCastResult hit;
+        
+        JPH::IgnoreSingleBodyFilter bodyFilter{ignoreBodyID};
+        
+        const JPH::NarrowPhaseQuery& query = m_JoltPhysicsSystem.GetNarrowPhaseQuery();
+        
+        if (query.CastRay(ray, hit, {}, {}, bodyFilter))
+        {
+            result.Hit = true;
+            result.Distance = hit.mFraction * maxDistance;
+            
+            JPH::Vec3 hitPoint = ray.GetPointOnRay(hit.mFraction);
+            result.Point = { hitPoint.GetX(), hitPoint.GetY(), hitPoint.GetZ() };
+            
+            JPH::BodyLockRead lock(m_JoltPhysicsSystem.GetBodyLockInterface(), hit.mBodyID);
+            if (lock.Succeeded())
+            {
+                const JPH::Body& body = lock.GetBody();
+                JPH::Vec3 normal = body.GetWorldSpaceSurfaceNormal(hit.mSubShapeID2, ray.GetPointOnRay(hit.mFraction));
+                result.Normal = { normal.GetX(), normal.GetY(), normal.GetZ() };
+                result.Entity = { (entt::entity)body.GetUserData(), m_OwnerScene };
+            }
+        }
+        
+        return result;
     }
 
     void PhysicsSystem::Simulate(float deltaTime)

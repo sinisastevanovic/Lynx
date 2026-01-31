@@ -13,18 +13,29 @@
 
 namespace Lynx
 {
+    struct RaycastHit
+    {
+        bool Hit = false;
+        float Distance = 0.0f;
+        glm::vec3 Point = { 0.0f, 0.0f, 0.0f };
+        glm::vec3 Normal = { 0.0f, 0.0f, 0.0f };
+        Entity Entity;
+    };
+    
     class LX_API PhysicsSystem
     {
     public:
-        PhysicsSystem();
+        PhysicsSystem(Scene* owner);
         ~PhysicsSystem();
 
-        void Simulate(float deltaTime);
-
+        RaycastHit CastRay(const glm::vec3& origin, const glm::vec3& direction, float maxDistance, JPH::BodyID ignoreBodyID = JPH::BodyID(0xFFFFFFFF));
+        
         JPH::PhysicsSystem& GetJoltSystem() { return m_JoltPhysicsSystem; }
         JPH::BodyInterface& GetBodyInterface() { return m_JoltPhysicsSystem.GetBodyInterface(); }
 
     private:
+        void Simulate(float deltaTime);
+        
         // TODO:
         // We need to hold these implementations to keep Jolt happy
         // We will define these hidden classes in the .cpp file to keep the header clean,
@@ -37,5 +48,9 @@ namespace Lynx
         JPH::PhysicsSystem m_JoltPhysicsSystem;
         JPH::TempAllocatorImpl* m_TempAllocator = nullptr;
         JPH::JobSystemThreadPool* m_JobSystem = nullptr;
+        
+        Scene* m_OwnerScene = nullptr;
+        
+        friend class Scene;
     };
 }

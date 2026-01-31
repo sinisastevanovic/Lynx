@@ -98,7 +98,7 @@ namespace Lynx
         m_Registry.on_destroy<NativeScriptComponent>().connect<&OnNativeScriptComponentDestroyed>();
         m_Registry.on_destroy<LuaScriptComponent>().connect<&OnLuaScriptComponentDestroyed>();
         
-        m_PhysicsSystem = std::make_unique<PhysicsSystem>();
+        m_PhysicsSystem = std::make_unique<PhysicsSystem>(this);
     }
 
     Scene::~Scene()
@@ -256,6 +256,7 @@ namespace Lynx
         JPH::Quat rot(transform.Rotation.x, transform.Rotation.y, transform.Rotation.z, transform.Rotation.w);
 
         JPH::BodyCreationSettings bodySettings(finalShape, pos, rot, motion, layer);
+        bodySettings.mUserData = (uint64_t)entity;
 
         JPH::EAllowedDOFs allowedDOFs = JPH::EAllowedDOFs::All;
         if (rigidBody.LockRotationX)

@@ -368,9 +368,10 @@ void MyGame::OnStart()
 
     Input::BindAxis("MoveLeftRight", KeyCode::D, KeyCode::A);
     Input::BindAxis("MoveUpDown", KeyCode::S, KeyCode::W);
+    Input::BindAction("Jump", KeyCode::Space);
 
-    auto gameManger = scene->CreateEntity("GameManager");
-    gameManger.AddComponent<WaveManagerComponent>();
+    /*auto gameManger = scene->CreateEntity("GameManager");
+    gameManger.AddComponent<WaveManagerComponent>();*/
 
     WaveSystem::Init();
     Input::SetCursorMode(CursorMode::Locked);

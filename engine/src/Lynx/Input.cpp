@@ -33,7 +33,7 @@ namespace Lynx
     
     void Input::BindAction(const std::string& name, KeyCode key)
     {
-        s_ActionMappings[name].push_back(key);
+        s_ActionMappings[name].push_back(key); // TODO: Support more than one key for a action.
     }
 
     void Input::BindAxis(const std::string& name, KeyCode posKey, KeyCode negKey)

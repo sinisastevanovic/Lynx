@@ -2,6 +2,7 @@
 #include "Lynx.h"
 
 #include "Components/GameComponents.h"
+#include "Lynx/Renderer/DebugRenderer.h"
 #include "Lynx/Scene/Components/PhysicsComponents.h"
 
 class PlayerSystem
@@ -50,11 +51,14 @@ public:
                 float targetAngle = atan2(velocity.x, velocity.z);
                 transform.Rotation = glm::angleAxis(targetAngle, glm::vec3(0, 1, 0));
             }
+            
+            glm::vec3 currVel = { 0.0f, 0.0f, 0.0f };
 
             if (rb.RuntimeBodyCreated)
             {
                 JPH::BodyID bodyID = rb.BodyId;
                 JPH::Vec3 currentVel = bodyInterface.GetLinearVelocity(bodyID);
+                currVel = { currentVel.GetX(), currentVel.GetY(), currentVel.GetZ() }; // TODO: We should not need to handle these jolt types in game code...
 
                 JPH::Vec3 newVel(velocity.x, currentVel.GetY(), velocity.z);
                 JPH::Quat joltRot(transform.Rotation.x, transform.Rotation.y, transform.Rotation.z, transform.Rotation.w);
@@ -63,6 +67,45 @@ public:
                 bodyInterface.SetLinearVelocity(bodyID, newVel);
                 bodyInterface.SetRotation(rb.BodyId, joltRot, JPH::EActivation::Activate);
             }
+            
+            auto& physicsSystem = scene->GetPhysicsSystem();
+            static bool s_JumpButtonHeld = false;
+            
+            float rayLength = 0.25f;
+            glm::vec3 rayOrigin = transform.Translation;
+            glm::vec3 rayDir = { 0, -1, 0 };
+            
+            RaycastHit hit = physicsSystem.CastRay(rayOrigin, rayDir, rayLength, rb.BodyId);
+            if (hit.Hit && currVel.y <= 0.01f)
+            {
+                player.IsGrounded = true;
+                player.JumpsRemaining = stats.MaxJumpCount;
+                DebugRenderer::DrawLine(rayOrigin, hit.Point, {0, 1, 0, 1});
+            }
+            else
+            {
+                player.IsGrounded = false;
+                DebugRenderer::DrawLine(rayOrigin, rayOrigin + rayDir * rayLength, { 1, 0, 0, 1});
+            }
+            
+            bool jumpPressed = Input::GetButton("Jump");
+            if (jumpPressed && !s_JumpButtonHeld)
+            {
+                if (player.JumpsRemaining > 0)
+                {
+                    if (rb.RuntimeBodyCreated)
+                    {
+                        JPH::BodyID bodyID = rb.BodyId;
+                        JPH::Vec3 currentVel = bodyInterface.GetLinearVelocity(bodyID);
+                        
+                        bodyInterface.SetLinearVelocity(bodyID, JPH::Vec3(currentVel.GetX(), stats.JumpForce, currentVel.GetZ()));
+                        player.JumpsRemaining--;
+                        player.IsGrounded = false;
+                    }
+                }
+            }
+            
+            s_JumpButtonHeld = jumpPressed;
         }
     }
 };

@@ -120,7 +120,8 @@ namespace Lynx
         renderData.IndexCount += vertices.size();
 
         // Clear lines for next frame
-        DebugRenderer::Clear();
+        float dt = Engine::Get().GetDeltaTime();
+        DebugRenderer::EndFrame(dt);
     }
 
 }
