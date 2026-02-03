@@ -9,6 +9,7 @@
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
 
 #include "Components/LuaScriptComponent.h"
 #include "Components/NativeScriptComponent.h"
@@ -49,6 +50,17 @@ namespace Lynx
 
             bodyInterface.RemoveBody(rb.BodyId);
             bodyInterface.DestroyBody(rb.BodyId);
+        }
+    }
+    
+    static void OnCharacterControllerDestroyed(entt::registry& registry, entt::entity entity)
+    {
+        auto& ch = registry.get<CharacterControllerComponent>(entity);
+        if (ch.RuntimeCreated && ch.Character)
+        {
+            delete ch.Character;
+            ch.Character = nullptr;
+            ch.RuntimeCreated = false;
         }
     }
 
@@ -97,6 +109,7 @@ namespace Lynx
         m_Registry.on_destroy<RigidBodyComponent>().connect<&OnRigidBodyComponentDestroyed>();
         m_Registry.on_destroy<NativeScriptComponent>().connect<&OnNativeScriptComponentDestroyed>();
         m_Registry.on_destroy<LuaScriptComponent>().connect<&OnLuaScriptComponentDestroyed>();
+        m_Registry.on_destroy<CharacterControllerComponent>().connect<&OnCharacterControllerDestroyed>();
         
         m_PhysicsSystem = std::make_unique<PhysicsSystem>(this);
     }
@@ -109,11 +122,15 @@ namespace Lynx
     Entity Scene::CreateEntity(const std::string& name)
     {
         Entity entity = { m_Registry.create(), this };
-        entity.AddComponent<IDComponent>();
+        auto& idComp = entity.AddComponent<IDComponent>();
         entity.AddComponent<TransformComponent>();
         entity.AddComponent<RelationshipComponent>();
         auto& tag = entity.AddComponent<TagComponent>();
         tag.Tag = name.empty() ? "Entity" : name;
+        
+        m_EntityMap[idComp.ID] = entity;
+        Emit<EntityCreatedEvent>(entity);
+        
         return entity;
     }
 
@@ -139,7 +156,42 @@ namespace Lynx
         }
         
         DetachEntity(entity);
+        
+        Entity e(entity, this);
+        Emit<EntityDestroyedEvent>(e);
+        auto& idComp = m_Registry.get<IDComponent>(entity);
+        m_EntityMap.erase(idComp.ID);
         m_Registry.destroy(entity);
+    }
+    
+    void Scene::DestroyEntity(Entity entity, bool excludeChildren)
+    {
+        DestroyEntity(entity.GetHandle(), excludeChildren);
+    }
+
+    void Scene::DestroyEntityDeferred(entt::entity entity, bool excludeChildren)
+    {
+        if (!m_Registry.valid(entity))
+            return;
+        
+        if (!excludeChildren)
+        {
+            auto& rel = m_Registry.get<RelationshipComponent>(entity);
+            entt::entity child = rel.FirstChild;
+            while (child != entt::null)
+            {
+                entt::entity nextChild = m_Registry.get<RelationshipComponent>(child).NextSibling;
+                DestroyEntityDeferred(entity, excludeChildren);
+                child = nextChild;
+            }
+        }
+        
+        m_DestroyQueue.push_back(entity);
+    }
+
+    void Scene::DestroyEntityDeferred(Entity entity, bool excludeChildren)
+    {
+        DestroyEntityDeferred(entity.GetHandle(), excludeChildren);
     }
 
     Entity Scene::InstantiatePrefab(std::shared_ptr<Prefab> prefab)
@@ -173,7 +225,7 @@ namespace Lynx
                     UUID originalID = entitiesJson[jsonIndex]["ID"].get<UUID>();
                     jsonIndex++;
                     
-                    auto& pc = current.AddComponent<PrefabComponent>();
+                    auto& pc = current.AddOrReplaceComponent<PrefabComponent>();
                     pc.Prefab = prefab;
                     pc.SubEntityID = originalID;
                     
@@ -197,7 +249,32 @@ namespace Lynx
         auto prefabAsset = Engine::Get().GetAssetManager().GetAsset<Prefab>(prefab, AssetLoadMode::Blocking);
         return InstantiatePrefab(prefabAsset, parent);
     }
-    
+
+    Entity Scene::FindEntityByName(const std::string& name)
+    {
+        if (name.empty())
+            return {};
+        
+        auto view = m_Registry.view<TagComponent>();
+        for (auto entity : view)
+        {
+            if (view.get<TagComponent>(entity).Tag == name)
+            {
+                return { entity, this };
+            }
+        }
+        
+        return {};
+    }
+
+    Entity Scene::FindEntityByUUID(UUID uuid)
+    {
+        if (m_EntityMap.find(uuid) != m_EntityMap.end())
+            return {m_EntityMap.at(uuid), this};
+        
+        return {};
+    }
+
     void Scene::CreateRuntimeBody(entt::entity entity, const TransformComponent& transform, RigidBodyComponent& rigidBody)
     {
         JPH::BodyInterface& bodyInterface = m_PhysicsSystem->GetBodyInterface();
@@ -275,8 +352,62 @@ namespace Lynx
         rigidBody.RuntimeBodyCreated = true;
     }
 
+    void Scene::CreateRuntimeCharacter(entt::entity entity, const TransformComponent& transform, struct CharacterControllerComponent& character)
+    {
+        JPH::ShapeRefC innerShape;
+        float offsetY = 0.0f;
+        
+        if (m_Registry.all_of<CapsuleColliderComponent>(entity))
+        {
+            auto& collider = m_Registry.get<CapsuleColliderComponent>(entity);
+            float effectiveRadius = collider.Radius - character.CharacterPadding;
+            float halfHeight = collider.HalfHeight - collider.Radius;
+            if (halfHeight <= 0.0f)
+                halfHeight = 0.01f;
+            
+            innerShape = new JPH::CapsuleShape(halfHeight, effectiveRadius);
+            offsetY = collider.Offset.y;
+        }
+        else
+        {
+            LX_CORE_WARN("CharacterController requires a CapsuleCollider! Defaulting.");
+            innerShape = new JPH::CapsuleShape(0.5f, 0.5f);
+        }
+        
+        JPH::Ref<JPH::CharacterVirtualSettings> settings = new JPH::CharacterVirtualSettings();
+        settings->mShape = innerShape;
+        settings->mMaxSlopeAngle = glm::radians(character.MaxSlopeAngle);
+        settings->mMaxStrength = character.MaxStrength;
+        settings->mCharacterPadding = character.CharacterPadding;
+       // settings->mStepHeight = character.StepHeight;
+        settings->mSupportingVolume = JPH::Plane(JPH::Vec3::sAxisY(), -1.0f * character.CharacterPadding); // TODO:??
+        
+        JPH::Vec3 position(transform.Translation.x, transform.Translation.y + offsetY, transform.Translation.z);
+        JPH::Quat rotation(transform.Rotation.x, transform.Rotation.y, transform.Rotation.z, transform.Rotation.w);
+        
+        auto& physSystem = m_PhysicsSystem->GetJoltSystem();
+        
+        character.Character = new JPH::CharacterVirtual(settings, position, rotation, (uint64_t)entity, &physSystem); // TODO: When to delete?
+        character.RuntimeCreated = true;
+    }
+
+    void Scene::ProcessDestroyQueue()
+    {
+        for (auto entity : m_DestroyQueue)
+        {
+            Entity e(entity, this);
+            Emit<EntityDestroyedEvent>(e);
+            auto& idComp = m_Registry.get<IDComponent>(entity);
+            m_EntityMap.erase(idComp.ID);
+            m_Registry.destroy(entity);
+        }
+        m_DestroyQueue.clear();
+    }
+
     void Scene::OnRuntimeStart()
     {
+        m_GameSystems.Init(*this);
+        
         Engine::Get().GetRenderer().SetShowUI(true);
         
         {
@@ -308,6 +439,16 @@ namespace Lynx
                 CreateRuntimeBody(entity, transform, rb);
             }
         }
+        
+        auto charView = m_Registry.view<TransformComponent, CharacterControllerComponent>();
+        for (auto entity : charView)
+        {
+            auto [transform, ch] = charView.get(entity);
+            if (!ch.RuntimeCreated)
+            {
+                CreateRuntimeCharacter(entity, transform, ch);
+            }
+        }
 
         auto nscView = m_Registry.view<NativeScriptComponent>();
         for (auto entity : nscView)
@@ -328,11 +469,15 @@ namespace Lynx
             Engine::Get().GetScriptEngine()->OnScriptComponentAdded(e);
         }*/
         
+        m_GameSystems.SceneStart(*this);
+        
         UpdateGlobalTransforms();
     }
 
     void Scene::OnRuntimeStop()
     {
+        m_GameSystems.SceneStop(*this);
+        
         auto luaView = m_Registry.view<LuaScriptComponent>();
         for (auto entity : luaView)
         {
@@ -364,12 +509,24 @@ namespace Lynx
                 rb.RuntimeBodyCreated = false;
             }
         }
+        
+        auto charView = m_Registry.view<CharacterControllerComponent>();
+        for (auto entity : charView)
+        {
+            auto& ch = charView.get<CharacterControllerComponent>(entity);
+            if (ch.Character)
+            {
+                delete ch.Character;
+                ch.Character = nullptr;
+                ch.RuntimeCreated = false;
+            }
+        }
+        
+        m_GameSystems.Shutdown(*this);
     }
 
     void Scene::OnUpdateRuntime(float deltaTime)
     {
-        m_PhysicsSystem->Simulate(deltaTime);
-        
         auto luaView = m_Registry.view<LuaScriptComponent>();
         for (auto entity : luaView)
         {
@@ -412,6 +569,29 @@ namespace Lynx
                 }
             }
         }
+        
+        auto charView = m_Registry.view<TransformComponent, CharacterControllerComponent, CapsuleColliderComponent>();
+        for (auto entity : charView)
+        {
+            auto [transform, character, capsule] = charView.get<TransformComponent, CharacterControllerComponent, CapsuleColliderComponent>(entity);
+            if (!character.RuntimeCreated)
+            {
+                CreateRuntimeCharacter(entity, transform, character);
+            }
+            
+            if (character.Character)
+            {
+                character.Character->SetLinearVelocity(JPH::Vec3(character.TargetVelocity.x, character.TargetVelocity.y, character.TargetVelocity.z));
+                m_PhysicsSystem->UpdateCharacter(character.Character, deltaTime);
+                JPH::Vec3 pos = character.Character->GetPosition();
+                glm::vec3 physicsPos = { pos.GetX(), pos.GetY(), pos.GetZ() };
+                
+                float offsetY = capsule.Offset.y;
+                transform.Translation = physicsPos - (transform.Rotation * glm::vec3(0, offsetY, 0));
+            }
+        }
+        
+        m_PhysicsSystem->Simulate(deltaTime);
 
         auto& renderer = Engine::Get().GetRenderer();
         if (renderer.GetShowUI())
@@ -447,6 +627,22 @@ namespace Lynx
                 break;
             }
         }*/
+        
+        m_GameSystems.Update(*this, deltaTime);
+    }
+
+    void Scene::OnFixedUpdate(float fixedDeltaTime)
+    {
+        m_GameSystems.FixedUpdate(*this, fixedDeltaTime);
+    }
+
+    void Scene::OnLateUpdate(float deltaTime)
+    {
+        m_GameSystems.LateUpdate(*this, deltaTime);
+        
+        UpdateGlobalTransforms();
+        ProcessDestroyQueue();
+        DispatchEvents();
     }
 
     void Scene::OnUpdateEditor(float deltaTime, glm::vec3 cameraPos)

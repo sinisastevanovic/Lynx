@@ -4,6 +4,11 @@
 #include <Jolt/Physics/Body/BodyID.h>
 #include <glm/glm.hpp>
 
+namespace JPH
+{
+    class CharacterVirtual;
+}
+
 namespace Lynx
 {
     enum class RigidBodyType { Static, Dynamic, Kinematic };
@@ -51,5 +56,23 @@ namespace Lynx
 
         CapsuleColliderComponent() = default;
         CapsuleColliderComponent(const CapsuleColliderComponent&) = default;
+    };
+    
+    struct CharacterControllerComponent
+    {
+        float MaxSlopeAngle = 45.0f;
+        float MaxStrength = 100.0f;
+        float CharacterPadding = 0.02f;
+        float StepHeight = 0.4f; // TODO: ??
+        float Gravity = -20.0f;
+        
+        JPH::CharacterVirtual* Character = nullptr;
+        bool RuntimeCreated = false;
+        
+        glm::vec3 TargetVelocity = { 0.0f, 0.0f, 0.0f };
+        bool JumpRequested = false; // TODO: ??
+        
+        CharacterControllerComponent() = default;
+        CharacterControllerComponent(const CharacterControllerComponent&) = default;
     };
 }

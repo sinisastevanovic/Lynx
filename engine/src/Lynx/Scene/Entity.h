@@ -11,72 +11,68 @@ namespace Lynx
     public:
         Entity() = default;
         Entity(entt::entity handle, Scene* scene)
-            : m_EntityHandle(handle), m_Scene(scene) {}
+            : m_Handle(handle), m_Scene(scene) {}
         Entity(const Entity& other) = default;
 
         template<typename T, typename... Args>
         T& AddComponent(Args&&... args)
         {
-            if (HasComponent<T>())
-            {
-                return GetComponent<T>();
-            }
-            return m_Scene->m_Registry.emplace<T>(m_EntityHandle, std::forward<Args>(args)...);
+            LX_ASSERT(!HasComponent<T>(), "Entity already has component!");
+            return m_Scene->Reg().emplace<T>(m_Handle, std::forward<Args>(args)...);
+        }
+        
+        template<typename T, typename... Args>
+        T& AddOrReplaceComponent(Args&&... args)
+        {
+            return m_Scene->Reg().emplace_or_replace<T>(m_Handle, std::forward<Args>(args)...);
         }
 
         template<typename T>
         T& GetComponent()
         {
-            if (!HasComponent<T>())
-            {
-                LX_CORE_ERROR("Entity does not have component!");
-                // Throw or handle?
-            }
-            return m_Scene->m_Registry.get<T>(m_EntityHandle);
+            LX_ASSERT(HasComponent<T>(), "Entity does not have component!");
+            return m_Scene->Reg().get<T>(m_Handle);
         }
         
         template<typename T>
         const T& GetComponent() const
         {
-            if (!HasComponent<T>())
-            {
-                LX_CORE_ERROR("Entity does not have component!");
-                // Throw or handle?
-            }
-            return m_Scene->m_Registry.get<T>(m_EntityHandle);
+            LX_ASSERT(HasComponent<T>(), "Entity does not have component!");
+            return m_Scene->Reg().get<T>(m_Handle);
+        }
+        
+        template<typename T>
+        T* TryGetComponent()
+        {
+            return m_Scene->Reg().try_get<T>(m_Handle);
         }
 
         template<typename T>
         bool HasComponent() const
         {
-            return m_Scene->m_Registry.all_of<T>(m_EntityHandle);
+            return m_Scene->Reg().all_of<T>(m_Handle);
         }
 
         template<typename T>
         void RemoveComponent()
         {
-            if (!HasComponent<T>())
-            {
-                LX_CORE_WARN("Entity does not have component!");
-                return;
-            }
-            m_Scene->m_Registry.remove<T>(m_EntityHandle);
+            m_Scene->Reg().remove<T>(m_Handle);
         }
 
         void AttachEntity(Entity parent, bool keepWorld = true)
         {
             if (keepWorld)
-                m_Scene->AttachEntityKeepWorld(m_EntityHandle, parent);
+                m_Scene->AttachEntityKeepWorld(m_Handle, parent);
             else
-                m_Scene->AttachEntity(m_EntityHandle, parent);
+                m_Scene->AttachEntity(m_Handle, parent);
         }
 
         void DetachEntity(bool keepWorld = true)
         {
             if (keepWorld)
-                m_Scene->DetachEntityKeepWorld(m_EntityHandle);
+                m_Scene->DetachEntityKeepWorld(m_Handle);
             else
-                m_Scene->DetachEntity(m_EntityHandle);
+                m_Scene->DetachEntity(m_Handle);
         }
         
         bool HasParent() const;
@@ -89,16 +85,26 @@ namespace Lynx
         {
             return m_Scene;
         }
+        
+        entt::entity GetHandle() const
+        {
+            return m_Handle;
+        }
 
         UUID GetUUID() const;
+        
+        bool IsValid() const
+        {
+            return m_Handle != entt::null && m_Scene != nullptr && m_Scene->Reg().valid(m_Handle);
+        }
 
-        operator bool() const { return m_EntityHandle != entt::null; }
-        operator entt::entity() const { return m_EntityHandle; }
-        operator uint32_t() const { return (uint32_t)m_EntityHandle; }
+        operator bool() const { return IsValid(); }
+        operator entt::entity() const { return m_Handle; }
+        operator uint32_t() const { return (uint32_t)m_Handle; }
 
         bool operator==(const Entity& other) const
         {
-            return m_EntityHandle == other.m_EntityHandle && m_Scene == other.m_Scene;
+            return m_Handle == other.m_Handle && m_Scene == other.m_Scene;
         }
 
         bool operator!=(const Entity& other) const
@@ -107,7 +113,10 @@ namespace Lynx
         }
 
     private:
-        entt::entity m_EntityHandle{ entt::null };
+        entt::entity m_Handle{ entt::null };
         Scene* m_Scene = nullptr;
     };
+    
+    struct EntityCreatedEvent { Entity entity; };
+    struct EntityDestroyedEvent { Entity entity; };
 }

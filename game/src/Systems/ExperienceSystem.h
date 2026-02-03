@@ -9,7 +9,7 @@ class ExperienceSystem
 public:
     static void Update(std::shared_ptr<Scene> scene, float deltaTime)
     {
-        auto view = scene->Reg().view<ExperienceComponent>();
+        auto view = scene->View<ExperienceComponent>();
         for (auto entity : view)
         {
             auto& xp = view.get<ExperienceComponent>(entity);
@@ -21,8 +21,8 @@ public:
                 xp.TargetXP *= 1.2f; // TODO: Use actual curve
                 
                 Entity e{entity, scene.get()};
-                scene->Reg().ctx().get<entt::dispatcher>().trigger<LevelUpEvent>({ entity, xp.Level });
-                Engine::Get().GetScriptEngine()->OnGlobalEvent(scene.get(), "OnLevelUp", e, xp.Level);
+                scene->Emit<LevelUpEvent>(entity, xp.Level);
+                Engine::Get().GetScriptEngine()->OnGlobalEvent(scene.get(), "OnLevelUp", e, xp.Level); // TODO: Script code should use the event dispatcher too!
             }
         }
     }

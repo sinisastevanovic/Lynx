@@ -126,6 +126,10 @@ namespace Lynx
             }
         }
 
+        const float fixedTimestep = 1.0f / 60.0f;
+        const int maxSubSteps = 8;
+        float accumulator = 0.0f;
+        
         float lastFrameTime = (float)glfwGetTime();
         // This is a placeholder for the real game loop
         while (m_IsRunning)
@@ -135,6 +139,9 @@ namespace Lynx
             float time = (float)glfwGetTime();
             m_UnscaledDeltaTime = time - lastFrameTime;
             lastFrameTime = time;
+            
+            m_UnscaledDeltaTime = std::min(m_UnscaledDeltaTime, fixedTimestep * maxSubSteps);
+            accumulator += m_UnscaledDeltaTime;
             
             m_DeltaTime = m_Paused ? 0.0f : m_UnscaledDeltaTime * m_TimeScale;
             
@@ -171,7 +178,13 @@ namespace Lynx
                 if (gameModule)
                     gameModule->OnUpdate(m_DeltaTime);
                 
-                m_Scene->UpdateGlobalTransforms();
+                while (accumulator >= fixedTimestep)
+                {
+                    m_Scene->OnFixedUpdate(fixedTimestep);
+                    accumulator -= fixedTimestep;
+                }
+                
+                m_Scene->OnLateUpdate(m_DeltaTime);
                 m_SceneRenderer->RenderRuntime(m_DeltaTime);
             }
             Input::OnUpdate();
@@ -1091,6 +1104,35 @@ namespace Lynx
                 comp.Prefab = json["PrefabHandle"].get<AssetRef<Prefab>>();
                 comp.SubEntityID = json["SubEntityID"].get<UUID>();
                 //comp.Overrides = json["Overrides"].get<std::unordered_set<std::string>>();
+            }
+        );
+        m_ComponentRegistry.RegisterCoreComponent<CharacterControllerComponent>("CharacterController",
+            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+            {
+                auto& comp = reg.get<CharacterControllerComponent>(entity);
+                json["MaxSlopeAngle"] = comp.MaxSlopeAngle;
+                json["MaxStrength"] = comp.MaxStrength;
+                json["CharacterPadding"] = comp.CharacterPadding;
+                json["StepHeight"] = comp.StepHeight;
+                json["Gravity"] = comp.Gravity;
+            },
+            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+            {
+                auto& comp = reg.get_or_emplace<CharacterControllerComponent>(entity);
+                comp.MaxSlopeAngle = json.value("MaxSlopeAngle", 0.0f);
+                comp.MaxStrength = json.value("MaxStrength", 0.0f);
+                comp.CharacterPadding = json.value("CharacterPadding", 0.0f);
+                comp.StepHeight = json.value("StepHeight", 0.0f);
+                comp.Gravity = json.value("Gravity", 0.0f);
+            },
+            [](entt::registry& reg, entt::entity entity) 
+            {
+                auto& comp = reg.get_or_emplace<CharacterControllerComponent>(entity);
+                LXUI::DrawDragFloat("MaxSlopeAngle", comp.MaxSlopeAngle, 0.5f, 0.0f, 90.0f);
+                LXUI::DrawDragFloat("MaxStrength", comp.MaxStrength, 0.5f, 0.0f, FLT_MAX);
+                LXUI::DrawDragFloat("CharacterPadding", comp.CharacterPadding, 0.01f, 0.0f, FLT_MAX);
+                LXUI::DrawDragFloat("StepHeight", comp.StepHeight, 0.01f, 0.0f, FLT_MAX);
+                LXUI::DrawDragFloat("Gravity", comp.Gravity, 0.1f);
             }
         );
     }

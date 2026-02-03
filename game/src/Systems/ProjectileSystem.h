@@ -11,7 +11,6 @@ public:
     {
         auto bulletView = scene->Reg().view<TransformComponent, ProjectileComponent>();
 
-        std::vector<entt::entity> bulletsToDestroy;
         for (auto entity : bulletView)
         {
             auto [transform, projectile] = bulletView.get<TransformComponent, ProjectileComponent>(entity);
@@ -20,7 +19,7 @@ public:
             projectile.Lifetime -= dt;
             if (projectile.Lifetime <= 0.0f)
             {
-                bulletsToDestroy.push_back(entity);
+                scene->DestroyEntityDeferred(entity);
                 continue;
             }
 
@@ -42,16 +41,10 @@ public:
 
                     DamageTextSystem::Spawn(targetTransform.Translation, (int)(projectile.Damage));
 
-                    bulletsToDestroy.push_back(entity);
+                    scene->DestroyEntityDeferred(entity);
                     break;
                 }
             }
-        }
-
-        for (auto e : bulletsToDestroy)
-        {
-            if (scene->Reg().valid(e))
-                scene->DestroyEntity(e);
         }
     }
 };

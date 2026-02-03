@@ -11,7 +11,7 @@ public:
     static void Update(std::shared_ptr<Scene> scene, float deltaTime)
     {
         {
-            auto view = scene->Reg().view<PlayerHUDComponent, ExperienceComponent>();
+            auto view = scene->View<PlayerHUDComponent, ExperienceComponent>();
             for (auto entity : view)
             {
                 const auto& [hud, xp] = view.get<PlayerHUDComponent, ExperienceComponent>(entity);
@@ -31,7 +31,7 @@ public:
         }
         
         {
-            auto view = scene->Reg().view<PlayerHUDComponent, HealthComponent>();
+            auto view = scene->View<PlayerHUDComponent, HealthComponent>();
             for (auto entity : view)
             {
                 const auto& [hud, hp] = view.get<PlayerHUDComponent, HealthComponent>(entity);
@@ -50,7 +50,7 @@ public:
         }
         
         {
-            /*auto view = scene->Reg().view<WaveManagerComponent>();
+            /*auto view = scene->View<WaveManagerComponent>();
             for (auto entity : view)
             {
                 const auto& wave = view.get<WaveManagerComponent>(entity);

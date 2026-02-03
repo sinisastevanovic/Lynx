@@ -12,7 +12,7 @@ public:
     {
         // --- AI / Movement Logic
         glm::vec3 playerPos = { 0, 0, 0 };
-        auto playerView = scene->Reg().view<TransformComponent, PlayerComponent>();
+        auto playerView = scene->View<TransformComponent, PlayerComponent>();
         for (auto pEntity : playerView)
         {
             playerPos = playerView.get<TransformComponent>(pEntity).Translation;
@@ -20,7 +20,7 @@ public:
         }
 
         auto& bodyInterface = scene->GetPhysicsSystem().GetBodyInterface();
-        auto enemyView = scene->Reg().view<TransformComponent, EnemyComponent, RigidBodyComponent>();
+        auto enemyView = scene->View<TransformComponent, EnemyComponent, RigidBodyComponent>();
         for (auto eEntity : enemyView)
         {
             auto [transform, enemy, rb] = enemyView.get<TransformComponent, EnemyComponent, RigidBodyComponent>(eEntity);

@@ -16,7 +16,7 @@ public:
         glm::vec3 targetPos = { 0, 0, 0 };
         bool targetFound = false;
         
-        auto playerView = scene->Reg().view<TransformComponent, PlayerComponent>();
+        auto playerView = scene->View<TransformComponent, PlayerComponent>();
         for (auto entity : playerView)
         {
             targetPos = playerView.get<TransformComponent>(entity).Translation;
@@ -28,7 +28,7 @@ public:
             return;
         
         // Update cameras
-        auto cameraView = scene->Reg().view<TransformComponent, CameraComponent, SpringArmComponent>();
+        auto cameraView = scene->View<TransformComponent, CameraComponent, SpringArmComponent>();
         for (auto entity : cameraView)
         {
             auto [transform, camera, spring] = cameraView.get<TransformComponent, CameraComponent, SpringArmComponent>(entity);

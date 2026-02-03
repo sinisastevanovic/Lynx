@@ -56,7 +56,7 @@ public:
                             break;
                     }
                         
-                    scene->DestroyEntity(pickupEntity);
+                    scene->DestroyEntityDeferred(pickupEntity);
                 }
             }
         }

@@ -13,6 +13,7 @@ struct PlayerComponent
     
     int JumpsRemaining = 0;
     bool IsGrounded = false;
+    float JumpCooldown = 0.0f;
 };
 
 struct CharacterStatsComponent

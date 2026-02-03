@@ -19,7 +19,7 @@ class DamageTextSystem
 public:
     static void Init(std::shared_ptr<Scene> scene)
     {
-        auto view = scene->Reg().view<UICanvasComponent>();
+        auto view = scene->View<UICanvasComponent>();
         for (auto e : view)
         {
             s_Canvas = view.get<UICanvasComponent>(e).Canvas;

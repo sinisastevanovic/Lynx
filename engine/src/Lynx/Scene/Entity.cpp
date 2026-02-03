@@ -28,9 +28,9 @@ namespace Lynx
     void Entity::SetVisibility(bool visible)
     {
         if (visible && HasComponent<DisabledComponent>())
-            m_Scene->m_Registry.remove<DisabledComponent>(m_EntityHandle);
+            m_Scene->Reg().remove<DisabledComponent>(m_Handle);
         else if (!visible && !HasComponent<DisabledComponent>())
-            m_Scene->m_Registry.emplace<DisabledComponent>(m_EntityHandle);
+            m_Scene->Reg().emplace<DisabledComponent>(m_Handle);
     }
 
     UUID Entity::GetUUID() const

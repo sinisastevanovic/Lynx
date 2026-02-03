@@ -3,6 +3,7 @@
 #include <cstdarg>
 #include <Jolt/Core/Factory.h>
 #include <Jolt/RegisterTypes.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 
@@ -223,5 +224,20 @@ namespace Lynx
         //const int cIntegrationSubSteps = 1; // TODO: What about this?
 
         m_JoltPhysicsSystem.Update(deltaTime, cCollisionSteps, m_TempAllocator, m_JobSystem);
+    }
+
+    void PhysicsSystem::UpdateCharacter(JPH::CharacterVirtual* character, float deltaTime)
+    {
+        JPH::BroadPhaseLayerFilter bpFilter;
+        JPH::ObjectLayerFilter objFilter;
+        
+        JPH::Vec3 gravity = m_JoltPhysicsSystem.GetGravity();
+        
+        character->Update(deltaTime, 
+            gravity, 
+            m_JoltPhysicsSystem.GetDefaultBroadPhaseLayerFilter(Layers::MOVABLE), 
+            m_JoltPhysicsSystem.GetDefaultLayerFilter(Layers::MOVABLE), 
+            {}, {}, 
+            *m_TempAllocator);
     }
 }

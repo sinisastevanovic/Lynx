@@ -107,7 +107,7 @@ namespace Lynx
         {
             if (m_Context->Reg().valid(m_DeferredDeletion))
             {
-                m_Context->DestroyEntity(m_DeferredDeletion);
+                m_Context->DestroyEntity(m_DeferredDeletion); // TODO: No need for that, we now have deferred deletion in scene? 
                 if (m_Selection == m_DeferredDeletion)
                     OnSelectionChangedCallback(entt::null);
             }

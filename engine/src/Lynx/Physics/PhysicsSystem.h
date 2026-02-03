@@ -11,6 +11,11 @@
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 
+namespace JPH
+{
+    class CharacterVirtual;
+}
+
 namespace Lynx
 {
     struct RaycastHit
@@ -35,6 +40,7 @@ namespace Lynx
 
     private:
         void Simulate(float deltaTime);
+        void UpdateCharacter(JPH::CharacterVirtual* character, float deltaTime);
         
         // TODO:
         // We need to hold these implementations to keep Jolt happy
