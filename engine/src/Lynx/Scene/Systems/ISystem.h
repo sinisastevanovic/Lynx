@@ -2,6 +2,7 @@
 
 namespace Lynx
 {
+    class Scene;
     class LX_API ISystem
     {
     public:

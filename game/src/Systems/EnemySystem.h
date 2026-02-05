@@ -2,25 +2,27 @@
 #include "Lynx.h"
 
 #include "Components/GameComponents.h"
-#include "Lynx/Physics/PhysicsSystem.h"
+#include "Lynx/Physics/PhysicsWorld.h"
 #include "Lynx/Scene/Components/PhysicsComponents.h"
 
-class EnemySystem
+class EnemySystem : public ISystem
 {
 public:
-    static void Update(std::shared_ptr<Scene> scene, float dt)
+    std::string GetName() const override { return "EnemySystem"; }
+
+    void OnFixedUpdate(Scene& scene, float fixedDeltaTime) override
     {
         // --- AI / Movement Logic
         glm::vec3 playerPos = { 0, 0, 0 };
-        auto playerView = scene->View<TransformComponent, PlayerComponent>();
+        auto playerView = scene.View<TransformComponent, PlayerComponent>();
         for (auto pEntity : playerView)
         {
             playerPos = playerView.get<TransformComponent>(pEntity).Translation;
             break;
         }
 
-        auto& bodyInterface = scene->GetPhysicsSystem().GetBodyInterface();
-        auto enemyView = scene->View<TransformComponent, EnemyComponent, RigidBodyComponent>();
+        auto& physics = scene.GetPhysicsWorldChecked();
+        auto enemyView = scene.View<TransformComponent, EnemyComponent, RigidBodyComponent>();
         for (auto eEntity : enemyView)
         {
             auto [transform, enemy, rb] = enemyView.get<TransformComponent, EnemyComponent, RigidBodyComponent>(eEntity);
@@ -35,17 +37,13 @@ public:
                 float targetAngle = atan2(direction.x, direction.z);
                 transform.Rotation = glm::angleAxis(targetAngle, glm::vec3(0, 1, 0));
 
-                if (rb.RuntimeBodyCreated)
-                {
-                    JPH::Vec3 currentVel = bodyInterface.GetLinearVelocity(rb.BodyId);
-                    JPH::Vec3 newVel(direction.x * enemy.MoveSpeed, currentVel.GetY(), direction.z * enemy.MoveSpeed);
-
-                    bodyInterface.ActivateBody(rb.BodyId);
-                    bodyInterface.SetLinearVelocity(rb.BodyId, newVel);
-
-                    JPH::Quat joltRot(transform.Rotation.x, transform.Rotation.y, transform.Rotation.z, transform.Rotation.w);
-                    bodyInterface.SetRotation(rb.BodyId, joltRot, JPH::EActivation::Activate);
-                }
+                // For Kinematic bodies, we MUST update the transform.Translation.
+                // The PhysicsSystem will then sync this to the physics body.
+                transform.Translation += direction * enemy.MoveSpeed * fixedDeltaTime;
+                
+                // Optional: We can still update physics rotation directly for better responsiveness 
+                // but SyncTransformsToPhysics will do it anyway.
+                physics.Activate(rb.BodyId);
             }
         }
     }

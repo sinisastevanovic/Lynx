@@ -46,7 +46,7 @@ namespace Lynx
     {
         for (auto& system : m_Systems)
         {
-            system->OnUpdate(scene, fixedDeltaTime);
+            system->OnFixedUpdate(scene, fixedDeltaTime);
         }
     }
 
@@ -54,7 +54,7 @@ namespace Lynx
     {
         for (auto& system : m_Systems)
         {
-            system->OnUpdate(scene, deltaTime);
+            system->OnLateUpdate(scene, deltaTime);
         }
     }
 }

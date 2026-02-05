@@ -1,62 +1,54 @@
 #pragma once
 
-#include "Lynx/Core.h"
-#include "PhysicsLayers.h"
-
-#include <Jolt/Jolt.h>
-#include <Jolt/RegisterTypes.h>
-#include <Jolt/Core/Factory.h>
-#include <Jolt/Core/TempAllocator.h>
-#include <Jolt/Core/JobSystemThreadPool.h>
-#include <Jolt/Physics/PhysicsSettings.h>
-#include <Jolt/Physics/PhysicsSystem.h>
-
-namespace JPH
-{
-    class CharacterVirtual;
-}
+#include "Lynx/Scene/Systems/ISystem.h"
+#include "PhysicsTypes.h"
+#include <unordered_set>
+#include <vector>
 
 namespace Lynx
 {
-    struct RaycastHit
-    {
-        bool Hit = false;
-        float Distance = 0.0f;
-        glm::vec3 Point = { 0.0f, 0.0f, 0.0f };
-        glm::vec3 Normal = { 0.0f, 0.0f, 0.0f };
-        Entity Entity;
-    };
-    
-    class LX_API PhysicsSystem
+    class Scene;
+    class PhysicsSystem : public ISystem
     {
     public:
-        PhysicsSystem(Scene* owner);
-        ~PhysicsSystem();
-
-        RaycastHit CastRay(const glm::vec3& origin, const glm::vec3& direction, float maxDistance, JPH::BodyID ignoreBodyID = JPH::BodyID(0xFFFFFFFF));
+        std::string GetName() const override { return "PhysicsSystem"; }
         
-        JPH::PhysicsSystem& GetJoltSystem() { return m_JoltPhysicsSystem; }
-        JPH::BodyInterface& GetBodyInterface() { return m_JoltPhysicsSystem.GetBodyInterface(); }
-
+        void OnInit(Scene& scene) override;
+        void OnSceneStart(Scene& scene) override;
+        void OnShutdown(Scene& scene) override;
+        void OnFixedUpdate(Scene& scene, float fixedDeltaTime) override;
+        
     private:
-        void Simulate(float deltaTime);
-        void UpdateCharacter(JPH::CharacterVirtual* character, float deltaTime);
+        // Component lifecycle callbacks
+        void OnRigidBodyAdded(entt::registry& registry, entt::entity entity);
+        void OnRigidBodyRemoved(entt::registry& registry, entt::entity entity);
+        void OnCharacterControllerAdded(entt::registry& registry, entt::entity entity);
+        void OnCharacterControllerRemoved(entt::registry& registry, entt::entity entity);
         
-        // TODO:
-        // We need to hold these implementations to keep Jolt happy
-        // We will define these hidden classes in the .cpp file to keep the header clean,
-        // so we use void* or unique_ptr pimpl style, or just forward declare them if we want type safety.
-        // For simplicity in learning, we will declare pointers here and define classes in .cpp.
-        class BPLayerInterfaceImpl* m_BPLayerInterface = nullptr;
-        class ObjectVsBroadPhaseLayerFilterImpl* m_ObjectVsBroadPhaseLayerFilter = nullptr;
-        class ObjectLayerPairFilterImpl* m_ObjectLayerPairFilter = nullptr;
-
-        JPH::PhysicsSystem m_JoltPhysicsSystem;
-        JPH::TempAllocatorImpl* m_TempAllocator = nullptr;
-        JPH::JobSystemThreadPool* m_JobSystem = nullptr;
+        // Collider Callbacks
+        void OnBoxColliderAdded(entt::registry& registry, entt::entity entity);
+        void OnSphereColliderAdded(entt::registry& registry, entt::entity entity);
+        void OnCapsuleColliderAdded(entt::registry& registry, entt::entity entity);
+        void OnMeshColliderAdded(entt::registry& registry, entt::entity entity);
         
-        Scene* m_OwnerScene = nullptr;
+        // Internal Helpers
+        void TryCreateRigidBody(Scene& scene, entt::entity entity);
+        void CreateCharacterController(Scene& scene, entt::entity entity);
         
-        friend class Scene;
+        void UpdateCharacters(Scene& scene, float fixedDt);
+        void SyncTransformsToPhysics(Scene& scene, float fixedDeltaTime);
+        void SyncTransformsFromPhysics(Scene& scene);
+        void ProcessCollisionEvents(Scene& scene);
+        void SavePhysicsState(Scene& scene);
+        
+        // Entities waiting for colliders before creating rigid body
+        std::unordered_set<entt::entity> m_PendingRigidBodies;
+        
+        // Bodies/Characters to destroy at end of step
+        std::vector<BodyId> m_BodiesToDestroy;
+        std::vector<CharacterId> m_CharactersToDestroy;
+        
+        Scene* m_Scene = nullptr;
     };
+
 }

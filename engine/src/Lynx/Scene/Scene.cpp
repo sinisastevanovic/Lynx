@@ -4,25 +4,17 @@
 #include "Entity.h"
 #include "Lynx/Engine.h"
 
-#include <Jolt/Physics/Collision/Shape/BoxShape.h>
-#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
-#include <Jolt/Physics/Collision/Shape/SphereShape.h>
-#include <Jolt/Physics/Body/BodyCreationSettings.h>
-#include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
-#include <Jolt/Physics/Character/CharacterVirtual.h>
-
 #include "Components/LuaScriptComponent.h"
 #include "Components/NativeScriptComponent.h"
 #include "Lynx/Scripting/ScriptEngine.h"
 #include <glm/gtx/matrix_decompose.hpp>
-#include <Jolt/Physics/Body/BodyInterface.h>
 
 #include "SceneSerializer.h"
 #include "Components/IDComponent.h"
 #include "Components/UIComponents.h"
 #include "Lynx/Asset/Prefab.h"
 #include "Lynx/Event/AssetEvents.h"
-#include "Lynx/Physics/PhysicsSystem.h"
+#include "Lynx/Physics/PhysicsWorld.h"
 
 namespace Lynx
 {
@@ -38,30 +30,6 @@ namespace Lynx
         transform.Translation = translation;
         transform.Rotation = rotation;
         transform.Scale = scale;
-    }
-    
-    static void OnRigidBodyComponentDestroyed(entt::registry& registry, entt::entity entity)
-    {
-        auto& rb = registry.get<RigidBodyComponent>(entity);
-        if (rb.RuntimeBodyCreated)
-        {
-            Scene* scene = registry.ctx().get<Scene*>();
-            auto& bodyInterface = scene->GetPhysicsSystem().GetBodyInterface();
-
-            bodyInterface.RemoveBody(rb.BodyId);
-            bodyInterface.DestroyBody(rb.BodyId);
-        }
-    }
-    
-    static void OnCharacterControllerDestroyed(entt::registry& registry, entt::entity entity)
-    {
-        auto& ch = registry.get<CharacterControllerComponent>(entity);
-        if (ch.RuntimeCreated && ch.Character)
-        {
-            delete ch.Character;
-            ch.Character = nullptr;
-            ch.RuntimeCreated = false;
-        }
     }
 
     static void OnNativeScriptComponentDestroyed(entt::registry& registry, entt::entity entity)
@@ -106,17 +74,14 @@ namespace Lynx
         m_Registry.ctx().emplace<Scene*>(this);
         m_Registry.ctx().emplace<entt::dispatcher>();
         
-        m_Registry.on_destroy<RigidBodyComponent>().connect<&OnRigidBodyComponentDestroyed>();
         m_Registry.on_destroy<NativeScriptComponent>().connect<&OnNativeScriptComponentDestroyed>();
         m_Registry.on_destroy<LuaScriptComponent>().connect<&OnLuaScriptComponentDestroyed>();
-        m_Registry.on_destroy<CharacterControllerComponent>().connect<&OnCharacterControllerDestroyed>();
         
-        m_PhysicsSystem = std::make_unique<PhysicsSystem>(this);
     }
 
     Scene::~Scene()
     {
-        m_PhysicsSystem.reset();
+        m_PhysicsWorld.reset();
     }
 
     Entity Scene::CreateEntity(const std::string& name)
@@ -275,7 +240,7 @@ namespace Lynx
         return {};
     }
 
-    void Scene::CreateRuntimeBody(entt::entity entity, const TransformComponent& transform, RigidBodyComponent& rigidBody)
+    /*void Scene::CreateRuntimeBody(entt::entity entity, const TransformComponent& transform, RigidBodyComponent& rigidBody)
     {
         JPH::BodyInterface& bodyInterface = m_PhysicsSystem->GetBodyInterface();
         JPH::ShapeRefC innerShape;
@@ -326,13 +291,13 @@ namespace Lynx
         }
         
         // TODO: Add kinematic!
-        JPH::ObjectLayer layer = (rigidBody.Type == RigidBodyType::Static) ? Layers::STATIC : Layers::MOVABLE;
+        JPH::ObjectLayer Layer = (rigidBody.Type == RigidBodyType::Static) ? Layers::STATIC : Layers::MOVABLE;
         JPH::EMotionType motion = (rigidBody.Type == RigidBodyType::Static) ? JPH::EMotionType::Static : JPH::EMotionType::Dynamic;
 
         JPH::Vec3 pos(transform.Translation.x, transform.Translation.y, transform.Translation.z);
         JPH::Quat rot(transform.Rotation.x, transform.Rotation.y, transform.Rotation.z, transform.Rotation.w);
 
-        JPH::BodyCreationSettings bodySettings(finalShape, pos, rot, motion, layer);
+        JPH::BodyCreationSettings bodySettings(finalShape, pos, rot, motion, Layer);
         bodySettings.mUserData = (uint64_t)entity;
 
         JPH::EAllowedDOFs allowedDOFs = JPH::EAllowedDOFs::All;
@@ -389,7 +354,7 @@ namespace Lynx
         
         character.Character = new JPH::CharacterVirtual(settings, position, rotation, (uint64_t)entity, &physSystem); // TODO: When to delete?
         character.RuntimeCreated = true;
-    }
+    }*/
 
     void Scene::ProcessDestroyQueue()
     {
@@ -406,7 +371,10 @@ namespace Lynx
 
     void Scene::OnRuntimeStart()
     {
+        m_PhysicsWorld = std::make_unique<PhysicsWorld>();
+        
         m_GameSystems.Init(*this);
+        m_PhysicsSystem.OnInit(*this);
         
         Engine::Get().GetRenderer().SetShowUI(true);
         
@@ -430,26 +398,6 @@ namespace Lynx
             }
         }
 
-        auto view = m_Registry.view<TransformComponent, RigidBodyComponent>();
-        for (auto entity : view)
-        {
-            auto [transform, rb] = view.get<TransformComponent, RigidBodyComponent>(entity);
-            if (!rb.RuntimeBodyCreated)
-            {
-                CreateRuntimeBody(entity, transform, rb);
-            }
-        }
-        
-        auto charView = m_Registry.view<TransformComponent, CharacterControllerComponent>();
-        for (auto entity : charView)
-        {
-            auto [transform, ch] = charView.get(entity);
-            if (!ch.RuntimeCreated)
-            {
-                CreateRuntimeCharacter(entity, transform, ch);
-            }
-        }
-
         auto nscView = m_Registry.view<NativeScriptComponent>();
         for (auto entity : nscView)
         {
@@ -461,15 +409,9 @@ namespace Lynx
                 nsc.Instance->OnCreate();
             }
         }
-
-        /*auto luaView = m_Registry.view<LuaScriptComponent>();
-        for (auto entity : luaView)
-        {
-            Entity e = { entity, this };
-            Engine::Get().GetScriptEngine()->OnScriptComponentAdded(e);
-        }*/
         
         m_GameSystems.SceneStart(*this);
+        m_PhysicsSystem.OnSceneStart(*this);
         
         UpdateGlobalTransforms();
     }
@@ -496,33 +438,10 @@ namespace Lynx
             }
         }
         
-        JPH::BodyInterface& bodyInterface = m_PhysicsSystem->GetBodyInterface();
-
-        auto view = m_Registry.view<RigidBodyComponent>();
-        for (auto entity : view)
-        {
-            auto& rb = view.get<RigidBodyComponent>(entity);
-            if (rb.RuntimeBodyCreated)
-            {
-                bodyInterface.RemoveBody(rb.BodyId);
-                bodyInterface.DestroyBody(rb.BodyId);
-                rb.RuntimeBodyCreated = false;
-            }
-        }
-        
-        auto charView = m_Registry.view<CharacterControllerComponent>();
-        for (auto entity : charView)
-        {
-            auto& ch = charView.get<CharacterControllerComponent>(entity);
-            if (ch.Character)
-            {
-                delete ch.Character;
-                ch.Character = nullptr;
-                ch.RuntimeCreated = false;
-            }
-        }
-        
+        m_PhysicsSystem.OnShutdown(*this); // TODO: Do the bodies get destroyed correctly??
         m_GameSystems.Shutdown(*this);
+        
+        m_PhysicsWorld.reset();
     }
 
     void Scene::OnUpdateRuntime(float deltaTime)
@@ -544,55 +463,6 @@ namespace Lynx
             }
         }
         
-        JPH::BodyInterface& bodyInterface = m_PhysicsSystem->GetBodyInterface();
-
-        // Sync physics -> transforms
-        auto view = m_Registry.view<TransformComponent, RigidBodyComponent, RelationshipComponent>();
-        for (auto entity : view)
-        {
-            auto [transform, rb, rel] = view.get<TransformComponent, RigidBodyComponent, RelationshipComponent>(entity);
-            
-            if (!rb.RuntimeBodyCreated)
-            {
-                CreateRuntimeBody(entity, transform, rb);
-            }
-            
-            if (rb.RuntimeBodyCreated && rb.Type == RigidBodyType::Dynamic)
-            {
-                if (bodyInterface.IsAdded(rb.BodyId) && bodyInterface.IsActive(rb.BodyId))
-                {
-                    JPH::Vec3 pos = bodyInterface.GetPosition(rb.BodyId);
-                    JPH::Quat rot = bodyInterface.GetRotation(rb.BodyId);
-
-                    transform.Translation = { pos.GetX(), pos.GetY(), pos.GetZ() };
-                    transform.Rotation = glm::quat(rot.GetW(), rot.GetX(), rot.GetY(), rot.GetZ());
-                }
-            }
-        }
-        
-        auto charView = m_Registry.view<TransformComponent, CharacterControllerComponent, CapsuleColliderComponent>();
-        for (auto entity : charView)
-        {
-            auto [transform, character, capsule] = charView.get<TransformComponent, CharacterControllerComponent, CapsuleColliderComponent>(entity);
-            if (!character.RuntimeCreated)
-            {
-                CreateRuntimeCharacter(entity, transform, character);
-            }
-            
-            if (character.Character)
-            {
-                character.Character->SetLinearVelocity(JPH::Vec3(character.TargetVelocity.x, character.TargetVelocity.y, character.TargetVelocity.z));
-                m_PhysicsSystem->UpdateCharacter(character.Character, deltaTime);
-                JPH::Vec3 pos = character.Character->GetPosition();
-                glm::vec3 physicsPos = { pos.GetX(), pos.GetY(), pos.GetZ() };
-                
-                float offsetY = capsule.Offset.y;
-                transform.Translation = physicsPos - (transform.Rotation * glm::vec3(0, offsetY, 0));
-            }
-        }
-        
-        m_PhysicsSystem->Simulate(deltaTime);
-
         auto& renderer = Engine::Get().GetRenderer();
         if (renderer.GetShowUI())
         {
@@ -634,6 +504,7 @@ namespace Lynx
     void Scene::OnFixedUpdate(float fixedDeltaTime)
     {
         m_GameSystems.FixedUpdate(*this, fixedDeltaTime);
+        m_PhysicsSystem.OnFixedUpdate(*this, fixedDeltaTime);
     }
 
     void Scene::OnLateUpdate(float deltaTime)

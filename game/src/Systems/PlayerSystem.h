@@ -1,5 +1,4 @@
 #pragma once
-#include <Jolt/Physics/Character/CharacterVirtual.h>
 
 #include "Lynx.h"
 
@@ -12,16 +11,15 @@ class PlayerSystem
 public:
     static void Update(std::shared_ptr<Scene> scene, float dt)
     {
-        // --- Setup ---
-        auto& physicsSystem = scene->GetPhysicsSystem();
-        auto& bodyInterface = physicsSystem.GetBodyInterface();
+        /*// --- Setup ---
+        auto& physics = scene->GetPhysicsWorldChecked();
         static bool s_JumpButtonHeld = false; // TODO: Other solution in input class maybe? Probably just use events?
         
         auto view = scene->Reg().view<TransformComponent, PlayerComponent, CharacterControllerComponent, CharacterStatsComponent>();
         for (auto entity : view)
         {
             auto [transform, player, controller, stats] = view.get(entity);
-            if (!controller.Character)
+            if (controller.CharacterId == INVALID_CHARACTER)
                 continue;
             
             // --- Movement Input (Horizontal) ---
@@ -58,13 +56,12 @@ public:
                 transform.Rotation = glm::angleAxis(targetAngle, glm::vec3(0.0f, 1.0f, 0.0f));
             }
             
-            JPH::Vec3 currentPhysicsVel = controller.Character->GetLinearVelocity();
-            float currentY = currentPhysicsVel.GetY();
+            glm::vec3 currentPhysicsVel = controller.Velocity;
+            float currentY = currentPhysicsVel.y;
             float gravity = controller.Gravity;
             float targetY = currentY + (gravity * dt);
             
-            
-            bool isGrounded = controller.Character->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround;
+            bool isGrounded = controller.GroundState == GroundState::Grounded;
             player.IsGrounded = isGrounded;
             
             if (isGrounded)
@@ -85,10 +82,10 @@ public:
             }
             s_JumpButtonHeld = jumpPressed;
             
-            JPH::Vec3 finalVel(targetHorizontalVel.x, targetY, targetHorizontalVel.z);
+            glm::vec3 finalVel(targetHorizontalVel.x, targetY, targetHorizontalVel.z);
             
-            controller.TargetVelocity = { targetHorizontalVel.x, targetY, targetHorizontalVel.z };
-            //controller.Character->SetLinearVelocity(targetVel);
-        }
+            controller.DesiredVelocity = finalVel;
+            //controller.Character->SetLinearVelocity(targetVel);*/
+        //}
     }
 };

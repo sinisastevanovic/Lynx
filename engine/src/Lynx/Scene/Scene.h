@@ -4,18 +4,19 @@
 #include <entt/entt.hpp>
 #include <glm/fwd.hpp>
 
+#include "Entity.h"
 #include "Lynx/Asset/Asset.h"
 #include "Lynx/Event/Event.h"
+#include "Lynx/Physics/PhysicsSystem.h"
 #include "Systems/ParticleSystem.h"
 #include "Systems/SystemManager.h"
 
 namespace Lynx
 {
+    class PhysicsWorld;
     struct RigidBodyComponent;
     struct TransformComponent;
     class Prefab;
-    class PhysicsSystem;
-    class Entity;
     
     class LX_API Scene : public Asset, public std::enable_shared_from_this<Scene>
     {
@@ -58,6 +59,18 @@ namespace Lynx
         auto Group()
         {
             return m_Registry.group<Components...>();
+        }
+        
+        template <typename... Components, typename Func>
+        void ForEach(Func&& func)
+        {
+            auto view = m_Registry.view<Components...>();
+            
+            view.each([&](auto entityID, auto&... components)
+            {
+                Entity entityWrapper(entityID, this);
+                func(entityWrapper, components...);
+            });
         }
         
         entt::registry& Reg() { return m_Registry; }
@@ -112,7 +125,8 @@ namespace Lynx
             return m_GameSystems.RemoveSystem<T>();
         }
         
-        PhysicsSystem& GetPhysicsSystem() { return *m_PhysicsSystem; }
+        PhysicsWorld* GetPhysicsWorld() { return m_PhysicsWorld.get(); }
+        PhysicsWorld& GetPhysicsWorldChecked() { LX_ASSERT(m_PhysicsWorld, "PhysicsWorld only available in player mode!"); return *m_PhysicsWorld; }
         ParticleSystem* GetParticleSystem() { return &m_ParticleSystem; }
 
         static AssetType GetAssetType() { return AssetType::Scene; }
@@ -137,22 +151,21 @@ namespace Lynx
 
     private:
         void UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform);
-        void CreateRuntimeBody(entt::entity entity, const TransformComponent& transform, RigidBodyComponent& rigidBody);
-        void CreateRuntimeCharacter(entt::entity entity, const TransformComponent& transform, struct CharacterControllerComponent& character);
         void ProcessDestroyQueue();
         
     private:
         entt::registry m_Registry;
         entt::dispatcher m_Dispatcher;
         
-        std::unique_ptr<PhysicsSystem> m_PhysicsSystem;
         ParticleSystem m_ParticleSystem;
+        std::unique_ptr<PhysicsWorld> m_PhysicsWorld;
+        PhysicsSystem m_PhysicsSystem;
         
         SystemManager m_GameSystems;
         
         std::vector<entt::entity> m_DestroyQueue;
         
-        std::unordered_map<UUID, entt::entity> m_EntityMap; // TODO: Implement this!
+        std::unordered_map<UUID, entt::entity> m_EntityMap;
 
         friend class SceneHierarchyPanel; // For editor later
         friend class SceneSerializer;

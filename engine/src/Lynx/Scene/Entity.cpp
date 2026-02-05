@@ -1,9 +1,31 @@
 #include "Entity.h"
+#include "Scene.h"
 #include "Components/Components.h"
 #include "Lynx/Scene/Components/IDComponent.h"
 
 namespace Lynx
 {
+    Entity::Entity(entt::entity handle, Scene* scene)
+        : m_Handle(handle), m_Scene(scene), m_Registry(&m_Scene->Reg())
+    {
+    }
+
+    void Entity::AttachEntity(Entity parent, bool keepWorld)
+    {
+        if (keepWorld)
+            m_Scene->AttachEntityKeepWorld(m_Handle, parent);
+        else
+            m_Scene->AttachEntity(m_Handle, parent);
+    }
+
+    void Entity::DetachEntity(bool keepWorld)
+    {
+        if (keepWorld)
+            m_Scene->DetachEntityKeepWorld(m_Handle);
+        else
+            m_Scene->DetachEntity(m_Handle);
+    }
+
     bool Entity::HasParent() const
     {
         return GetComponent<RelationshipComponent>().Parent != entt::null;

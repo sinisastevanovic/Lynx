@@ -13,14 +13,14 @@ namespace Lynx
         void SetViewportSize(uint32_t width, uint32_t height);
         
         void RenderEditor(EditorCamera& camera, float deltaTime);
-        void RenderRuntime(float deltaTime);
+        void RenderRuntime(float deltaTime, float physicsAlpha);
         
         // TODO: We should have some kind of editor view options structure
         void SetShowColliders(bool show) { m_ShowColliders = show; }
         bool GetShowColliders() const { return m_ShowColliders; }
         
     private:
-        void SubmitScene(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPos, float deltaTime, bool isEditor);
+        void SubmitScene(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPos, float deltaTime, bool isEditor, float physicsAlpha = 0.0f);
         void SetViewportDirty(bool dirty) { m_ViewportDirty = true; }
         
     private:

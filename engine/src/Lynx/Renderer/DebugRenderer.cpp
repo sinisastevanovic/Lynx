@@ -92,7 +92,8 @@ namespace Lynx
         const int segments = 16;
         const float step = glm::pi<float>() / segments;
         
-        float realHalfHeight = std::max(halfHeight - radius, 0.0f);
+       // float realHalfHeight = std::max(halfHeight - radius, 0.0f);
+        float realHalfHeight = halfHeight;
 
         glm::vec3 up = rotation * glm::vec3(0, 1, 0);
         glm::vec3 right = rotation * glm::vec3(1, 0, 0);

@@ -2,6 +2,8 @@
 #include <Lynx.h>
 #include <Lynx/GameModule.h>
 
+#include "Systems/CharacterMovementSystem.h"
+
 class MyGame : public IGameModule
 {
 public:
@@ -12,5 +14,5 @@ public:
     virtual void OnShutdown() override;
     
 private:
-    std::shared_ptr<Material> m_ParticleMat;
+    //CharacterMovementSystem m_CharacterMovementSystem; // TODO: add to real game systems!
 };

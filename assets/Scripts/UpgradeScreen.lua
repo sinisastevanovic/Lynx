@@ -43,6 +43,7 @@ return {
     OnLevelUp = function(self, player, level)
         print("Level Up! " .. level)
         Game.SetPaused(true)
+        Input.ShowMouse()
 
         self.Container:SetVisible(true)
 
@@ -63,5 +64,6 @@ return {
         print("Selected Upgrade " .. upgrade.Name)
         self.Container:SetVisible(false)
         Game.SetPaused(false)
+        Input.HideMouse()
     end
 }

@@ -36,6 +36,10 @@ namespace Lynx
         glm::vec3 Scale = { 1.0f, 1.0f, 1.0f };
 
         glm::mat4 WorldMatrix = glm::mat4(1.0f);
+        
+        // For physics interpolation
+        glm::vec3 PreviousTranslation{0.0f};
+        glm::quat PreviousRotation{1.0f, 0.0f, 0.0f, 0.0f};
 
         TransformComponent() = default;
         TransformComponent(const TransformComponent&) = default;
@@ -126,6 +130,25 @@ namespace Lynx
         void SetRotationEuler(const glm::vec3& rotation)
         {
             Rotation = glm::quat(rotation);
+        }
+        
+        glm::vec3 GetPhysicsInterpolatedTranslation(float alpha) const
+        {
+            return glm::mix(PreviousTranslation, Translation, alpha);
+        }
+        
+        glm::quat GetPhysicsInterpolatedRotation(float alpha) const
+        {
+            return glm::slerp(PreviousRotation, Rotation, alpha);
+        }
+        
+        glm::mat4 GetPhysicsInterpolatedTransform(float alpha) const
+        {
+            glm::mat4 rotation = glm::toMat4(GetPhysicsInterpolatedRotation(alpha));
+
+            return glm::translate(glm::mat4(1.0f), GetPhysicsInterpolatedTranslation(alpha))
+                * rotation
+                * glm::scale(glm::mat4(1.0f), Scale);
         }
     };
 

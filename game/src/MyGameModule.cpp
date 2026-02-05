@@ -53,27 +53,18 @@ void MyGame::RegisterComponents(GameTypeRegistry* registry)
          [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
          {
              auto& comp = reg.get<CharacterStatsComponent>(entity);
-             json["MoveSpeed"] = comp.MoveSpeed;
-             json["JumpForce"] = comp.JumpForce;
-             json["MaxJumpCount"] = comp.MaxJumpCount;
              json["Strength"] = comp.Strength;
              json["MagnetRadius"] = comp.MagnetRadius;
          },
          [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
          {
              auto& comp = reg.get_or_emplace<CharacterStatsComponent>(entity);
-             comp.MoveSpeed = json["MoveSpeed"];
-             comp.JumpForce = json.value("JumpForce", 5.0f);
-             comp.MaxJumpCount = json.value("MaxJumpCount", 1);
              comp.Strength = json["Strength"];
              comp.MagnetRadius = json["MagnetRadius"];
          },
          [](entt::registry& reg, entt::entity entity)
          {
              auto& comp = reg.get<CharacterStatsComponent>(entity);
-             LXUI::DrawDragFloat("MoveSpeed", comp.MoveSpeed, 0.1f, 0, FLT_MAX);
-             LXUI::DrawDragFloat("JumpForce", comp.JumpForce, 0.1f, 0.0f, FLT_MAX);
-             LXUI::DrawDragInt("MaxJumpCount", comp.MaxJumpCount, 1, 0, 99);
              LXUI::DrawDragFloat("Strength", comp.Strength, 0.1f, 0, FLT_MAX);
              LXUI::DrawDragFloat("MagnetRadius", comp.MagnetRadius, 0.1f, 0, FLT_MAX);
          });
@@ -352,6 +343,45 @@ void MyGame::RegisterComponents(GameTypeRegistry* registry)
             LXUI::DrawDragFloat("MaxPitch", comp.MaxPitch, 0.5f, 0.0f, FLT_MAX);
             LXUI::DrawDragFloat("LerpSpeed", comp.LerpSpeed, 0.5f, 0.0f, FLT_MAX);
         });
+    
+    registry->RegisterComponent<CharacterMovementComponent>("Character Movement",
+        [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
+        {
+            auto& comp = reg.get<CharacterMovementComponent>(entity);
+            json["MoveSpeed"] = comp.MoveSpeed;
+            json["AirControlFactor"] = comp.AirControlFactor;
+            json["JumpVelocity"] = comp.JumpVelocity;
+            json["MaxJumpCount"] = comp.MaxJumpCount;
+            json["CoyoteTime"] = comp.CoyoteTime;
+            json["JumpBufferTime"] = comp.JumpBufferTime;
+            json["JumpCutMultiplier"] = comp.JumpCutMultiplier;
+            json["FallGravityMultiplier"] = comp.FallGravityMultiplier;
+        },
+        [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
+        {
+            auto& comp = reg.get_or_emplace<CharacterMovementComponent>(entity);
+            comp.MoveSpeed = json.value("MoveSpeed", 0.0f);
+            comp.AirControlFactor = json.value("AirControlFactor", 0.0f);
+            comp.JumpVelocity = json.value("JumpVelocity", 0.0f);
+            comp.MaxJumpCount = json.value("MaxJumpCount", 0);
+            comp.CoyoteTime = json.value("CoyoteTime", 0.0f);
+            comp.JumpBufferTime = json.value("JumpBufferTime", 0.0f);
+            comp.JumpCutMultiplier = json.value("JumpCutMultiplier", 0.0f);
+            comp.FallGravityMultiplier = json.value("FallGravityMultiplier", 0.0f);
+        },
+        [](entt::registry& reg, entt::entity entity)
+        {
+            auto& comp = reg.get<CharacterMovementComponent>(entity);
+
+            LXUI::DrawDragFloat("MoveSpeed", comp.MoveSpeed, 0.1f, 0.0f, FLT_MAX);
+            LXUI::DrawDragFloat("AirControlFactor", comp.AirControlFactor, 0.1f);
+            LXUI::DrawDragFloat("JumpVelocity", comp.JumpVelocity, 0.1f, 0.0f, FLT_MAX);
+            LXUI::DrawDragInt("MaxJumpCount", comp.MaxJumpCount, 1, 0, 999);
+            LXUI::DrawDragFloat("CoyoteTime", comp.CoyoteTime, 0.01f, 0.0f, FLT_MAX);
+            LXUI::DrawDragFloat("JumpBufferTime", comp.JumpBufferTime, 0.01f, 0.0f, FLT_MAX);
+            LXUI::DrawDragFloat("JumpCutMultiplier", comp.JumpCutMultiplier, 0.01f, 0.0f, FLT_MAX);
+            LXUI::DrawDragFloat("FallGravityMultiplier", comp.FallGravityMultiplier, 0.1f, 0.0f, FLT_MAX);
+        });
 }
 
 void MyGame::OnStart()
@@ -375,6 +405,9 @@ void MyGame::OnStart()
 
     WaveSystem::Init();
     Input::SetCursorMode(CursorMode::Locked);
+    
+    scene->AddSystem<CharacterMovementSystem>();
+    scene->AddSystem<EnemySystem>();
 }
 
 void MyGame::OnUpdate(float deltaTime)
@@ -384,8 +417,9 @@ void MyGame::OnUpdate(float deltaTime)
 
     // 1. Spawning & Movement   
     WaveSystem::Update(scene, deltaTime);
-    EnemySystem::Update(scene, deltaTime);
-    PlayerSystem::Update(scene, deltaTime);
+    //EnemySystem::Update(scene, deltaTime);
+    //PlayerSystem::Update(scene, deltaTime);
+    //m_CharacterMovementSystem.OnUpdate(*scene.get(), deltaTime);
 
     // 2. Combat & Action
     WeaponSystem::Update(scene, deltaTime);

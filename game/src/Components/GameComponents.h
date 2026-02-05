@@ -10,18 +10,39 @@ namespace Lynx
 struct PlayerComponent
 {
     int PlayerIndex = 0;
+};
+
+struct CharacterMovementComponent
+{
+    // Movement
+    float MoveSpeed = 5.0f;
+    float AirControlFactor = 0.3f;
     
+    // Jump
+    float JumpVelocity = 8.0f;
+    int MaxJumpCount = 2; // TODO: 1 default
+    float CoyoteTime = 0.1f; // Grace period after leaving ground
+    float JumpBufferTime = 0.1f; // Buffer jump input before landing
+    
+    // Advanced jump feel
+    float JumpCutMultiplier = 0.5f; // Velocity multiplier when releasing jump early
+    float FallGravityMultiplier = 1.5f; // Heavier gravity when falling
+    
+    // Runtime state
     int JumpsRemaining = 0;
-    bool IsGrounded = false;
-    float JumpCooldown = 0.0f;
+    float TimeSinceGrounded = 0.0f;
+    float TimeSinceJumpPressed = 1000.0f;
+    bool JumpHeld = false;
+    bool WasGrounded = false;
+
+    // Input State (Synced from OnUpdate)
+    glm::vec3 InputDirection = glm::vec3(0.0f);
+    bool JumpInput = false;
 };
 
 struct CharacterStatsComponent
 {
     float Strength = 1.0f;
-    float MoveSpeed = 5.0f;
-    float JumpForce = 5.0f;
-    int MaxJumpCount = 2; // TODO: 1 is default
     float MagnetRadius = 3.0f;
 };
 
