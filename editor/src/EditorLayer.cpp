@@ -29,6 +29,8 @@ namespace Lynx
 
     void EditorLayer::OnAttach()
     {
+        ApplyDefaultLayoutIfNone();
+
         auto entityCallack = [this](entt::entity entity)
         {
             this->OnSelectedEntityChanged(entity);
@@ -344,6 +346,24 @@ namespace Lynx
     {
         m_EditorScene = Engine::Get().GetAssetManager().GetAsset<Scene>(handle, AssetLoadMode::Blocking);
         m_Engine->LoadScene(m_EditorScene);
+    }
+
+    void EditorLayer::ApplyDefaultLayoutIfNone()
+    {
+        // ImGui reads the layout file of the project on the first frame, which has not happened yet.
+        // A project opened for the first time has no such file, and would start with every panel undocked.
+        const char* projectLayoutFile = ImGui::GetIO().IniFilename;
+        if (projectLayoutFile && std::filesystem::exists(projectLayoutFile))
+            return;
+
+        const std::filesystem::path defaultLayoutFile = m_Engine->GetContentPaths().EngineResource("Editor/DefaultLayout.ini");
+        if (!std::filesystem::exists(defaultLayoutFile))
+        {
+            LX_ERROR("Default editor layout not found: {0}", defaultLayoutFile.string());
+            return;
+        }
+
+        ImGui::LoadIniSettingsFromDisk(defaultLayoutFile.string().c_str());
     }
 
     void EditorLayer::OpenStartScene()
