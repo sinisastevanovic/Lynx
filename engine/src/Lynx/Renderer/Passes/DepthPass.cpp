@@ -34,7 +34,7 @@ namespace Lynx
             .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(SamplerSettings())));
         m_OpaqueBindingSet = ctx.Device->createBindingSet(bsDesc, m_MaterialBindingLayout);
 
-        m_PipelineState.SetPath("engine/resources/Shaders/DepthOnly.glsl");
+        m_PipelineState.SetShader("Shaders/DepthOnly.glsl");
         m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
             this->CreatePipelines(ctx, shader);

@@ -30,7 +30,7 @@ namespace Lynx
         vbDesc.keepInitialState = true;
         m_VertexBuffer = ctx.Device->createBuffer(vbDesc);
 
-        m_PipelineState.SetPath("engine/resources/Shaders/DebugLine.glsl");
+        m_PipelineState.SetShader("Shaders/DebugLine.glsl");
         m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
             this->CreatePipeline(ctx, shader);

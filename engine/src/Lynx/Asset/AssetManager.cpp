@@ -15,8 +15,8 @@
 
 namespace Lynx
 {
-    AssetManager::AssetManager(AssetRegistry* registy)
-        : m_AssetRegistry(registy)
+    AssetManager::AssetManager(AssetRegistry* registry, const ContentPaths& contentPaths)
+        : m_AssetRegistry(registry), m_ContentPaths(contentPaths)
     {
         GetDefaultTexture();
         GetWhiteTexture();
@@ -204,21 +204,10 @@ namespace Lynx
         
         for (auto it = m_LoadedAssets.begin(); it != m_LoadedAssets.end();)
         {
-            auto asset = it->second;
-            bool isEngine = false;
-            
-            std::string path = asset->GetFilePath();
-            if (path.find("engine/resources") != std::string::npos)
-                isEngine = true;
-            
-            if (!isEngine)
-            {
-                it = m_LoadedAssets.erase(it);
-            }
-            else
-            {
+            if (m_ContentPaths.IsEngineResource(it->second->GetFilePath()))
                 ++it;
-            }
+            else
+                it = m_LoadedAssets.erase(it);
         }
     }
 
@@ -283,32 +272,32 @@ namespace Lynx
 
     std::shared_ptr<Texture> AssetManager::GetDefaultTexture()
     {
-        auto asset = GetAsset("engine/resources/T_DefaultChecker.png", AssetLoadMode::Blocking);
+        auto asset = GetAsset(m_ContentPaths.EngineResource("T_DefaultChecker.png"), AssetLoadMode::Blocking);
         return std::static_pointer_cast<Texture>(asset);
     }
 
     std::shared_ptr<Texture> AssetManager::GetWhiteTexture()
     {
-        auto asset = GetAsset("engine/resources/T_White.png", AssetLoadMode::Blocking);
+        auto asset = GetAsset(m_ContentPaths.EngineResource("T_White.png"), AssetLoadMode::Blocking);
         return std::static_pointer_cast<Texture>(asset);
     }
 
     std::shared_ptr<Texture> AssetManager::GetErrorTexture()
     {
-        auto asset = GetAsset("engine/resources/T_Error.png", AssetLoadMode::Blocking);
+        auto asset = GetAsset(m_ContentPaths.EngineResource("T_Error.png"), AssetLoadMode::Blocking);
         return std::static_pointer_cast<Texture>(asset);
     }
 
 
     std::shared_ptr<StaticMesh> AssetManager::GetDefaultCube()
     {
-        auto asset = GetAsset("engine/resources/SM_DefaultCube.gltf", AssetLoadMode::Blocking);
+        auto asset = GetAsset(m_ContentPaths.EngineResource("SM_DefaultCube.gltf"), AssetLoadMode::Blocking);
         return std::static_pointer_cast<StaticMesh>(asset);
     }
 
     std::shared_ptr<Font> AssetManager::GetDefaultFont()
     {
-        auto asset = GetAsset("engine/resources/Fonts/OpenSans/OpenSans-Regular.lxfont", AssetLoadMode::Blocking);
+        auto asset = GetAsset(m_ContentPaths.EngineResource("Fonts/OpenSans/OpenSans-Regular.lxfont"), AssetLoadMode::Blocking);
         return std::static_pointer_cast<Font>(asset);
     }
 

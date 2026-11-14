@@ -68,7 +68,7 @@ namespace Lynx
             .setBindingOffsets({ 0, 0, 0, 0 });
         m_MaterialBindingLayout = ctx.Device->createBindingLayout(materialLayoutDesc);
 
-        m_PipelineState.SetPath("engine/resources/Shaders/Particle.glsl");
+        m_PipelineState.SetShader("Shaders/Particle.glsl");
         m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
             CreatePipelines(ctx, shader);

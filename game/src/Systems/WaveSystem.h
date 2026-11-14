@@ -28,8 +28,8 @@ public:
     {
         auto& am = Engine::Get().GetAssetManager();
         
-        auto small = am.GetAsset<Prefab>("assets/Prefabs/Enemy_Small.lxprefab");
-        auto big = am.GetAsset<Prefab>("assets/Prefabs/Enemy_Big.lxprefab");
+        auto small = am.GetProjectAsset<Prefab>("Prefabs/Enemy_Small.lxprefab");
+        auto big = am.GetProjectAsset<Prefab>("Prefabs/Enemy_Big.lxprefab");
         
         Waves = {
             { 0.0f, 30.0f, 2.0f, small },

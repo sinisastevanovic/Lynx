@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AssetMetadata.h"
+#include "Lynx/Core/ContentPaths.h"
 #include "Lynx/Utils/FileWatcher.h"
 
 namespace Lynx
@@ -20,9 +21,10 @@ namespace Lynx
     class LX_API AssetRegistry
     {
     public:
-        AssetRegistry() = default;
+        explicit AssetRegistry(const ContentPaths& contentPaths);
 
-        void LoadRegistry(const std::filesystem::path& projectAssetDir, const std::filesystem::path& engineResourceDir);
+        // Scans the engine resources and the project assets, and starts watching both for changes.
+        void LoadRegistry();
 
         const AssetMetadata& Get(AssetHandle handle) const;
         const AssetMetadata& Get(const std::filesystem::path& assetPath) const;
@@ -51,7 +53,10 @@ namespace Lynx
         void OnAssetRenamed(const std::filesystem::path& oldPath, const std::filesystem::path& newPath);
 
     private:
+        const ContentPaths& m_ContentPaths;
+
         std::unordered_map<AssetHandle, AssetMetadata> m_AssetMetadata;
+        // Keyed by normalized absolute path, see ContentPaths::Normalize.
         std::map<std::filesystem::path, AssetHandle> m_PathToHandle;
 
         AssetMetadata m_NullMetadata;

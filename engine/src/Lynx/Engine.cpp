@@ -34,7 +34,7 @@ namespace Lynx
 {
     Engine* Engine::s_Instance = nullptr;
     
-    void Engine::Initialize(bool editorMode)
+    void Engine::Initialize(const std::filesystem::path& projectDir, bool editorMode)
     {
         s_Instance = this;
         m_IsEditor = editorMode;
@@ -47,9 +47,11 @@ namespace Lynx
         m_Window = Window::Create();
         m_Window->SetEventCallback([this](Event& event){ this->OnEvent(event); });
 
-        m_AssetRegistry = std::make_unique<AssetRegistry>();
-        m_AssetRegistry->LoadRegistry("assets", "engine/resources");
-        m_AssetManager = std::make_unique<AssetManager>(m_AssetRegistry.get());
+        m_ContentPaths = std::make_unique<ContentPaths>(ContentPaths::DefaultEngineResourceDir(), projectDir);
+
+        m_AssetRegistry = std::make_unique<AssetRegistry>(*m_ContentPaths);
+        m_AssetRegistry->LoadRegistry();
+        m_AssetManager = std::make_unique<AssetManager>(m_AssetRegistry.get(), *m_ContentPaths);
         
         m_EditorCamera = EditorCamera(45.0f, (float)m_Window->GetWidth() / (float)m_Window->GetHeight(), 0.1f, 1000.0f);
 
@@ -63,10 +65,11 @@ namespace Lynx
         
         ImFontConfig fontConfig;
         fontConfig.GlyphOffset.y = -2.0f;
-        ImFont* font = io.Fonts->AddFontFromFileTTF("engine/resources/Fonts/OpenSans/OpenSans-Regular.ttf", 18.0f, &fontConfig);
+        const std::string fontPath = m_ContentPaths->EngineResource("Fonts/OpenSans/OpenSans-Regular.ttf").string();
+        ImFont* font = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f, &fontConfig);
         if (font == nullptr)
         {
-            LX_CORE_ERROR("Failed to load ImGui font: engine/resources/Fonts/OpenSans/OpenSans-Regular.ttf");
+            LX_CORE_ERROR("Failed to load ImGui font: {0}", fontPath);
             io.Fonts->AddFontDefault();
         }
         

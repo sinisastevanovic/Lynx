@@ -30,8 +30,8 @@ namespace Lynx
             .setBindingOffsets({0, 0, 0, 0});
         m_MaterialBindingLayout = ctx.Device->createBindingLayout(matLayoutDesc);
 
-        std::string shaderPath = ctx.PresentationFramebufferInfo.colorFormats.size() > 1 ? "engine/resources/Shaders/StandardEditor.glsl" : "engine/resources/Shaders/Standard.glsl";
-        m_PipelineState.SetPath(shaderPath);
+        const bool hasEntityIdTarget = ctx.PresentationFramebufferInfo.colorFormats.size() > 1;
+        m_PipelineState.SetShader(hasEntityIdTarget ? "Shaders/StandardEditor.glsl" : "Shaders/Standard.glsl");
         m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
             this->CreatePipelines(ctx, shader);

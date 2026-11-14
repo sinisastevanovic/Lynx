@@ -30,10 +30,13 @@ namespace Lynx
     }
     
     AssetBrowserPanel::AssetBrowserPanel(const std::function<void(AssetHandle)>& selectionChangedCallback)
-        : OnSelectedAssetChangedCallback(selectionChangedCallback), m_BaseDirectory("assets"), m_CurrentDirectory(m_BaseDirectory)
+        : OnSelectedAssetChangedCallback(selectionChangedCallback),
+          m_BaseDirectory(Engine::Get().GetContentPaths().ProjectAssets()),
+          m_CurrentDirectory(m_BaseDirectory)
     {
-        m_DirectoryIcon = Engine::Get().GetAssetManager().GetAsset<Texture>("engine/resources/Icons/DirectoryIcon_128px.png", AssetLoadMode::Blocking);
-        m_FileIcon = Engine::Get().GetAssetManager().GetAsset<Texture>("engine/resources/Icons/FileIcon_128px.png", AssetLoadMode::Blocking);
+        auto& assetManager = Engine::Get().GetAssetManager();
+        m_DirectoryIcon = assetManager.GetEngineAsset<Texture>("Icons/DirectoryIcon_128px.png", AssetLoadMode::Blocking);
+        m_FileIcon = assetManager.GetEngineAsset<Texture>("Icons/FileIcon_128px.png", AssetLoadMode::Blocking);
     }
 
     void AssetBrowserPanel::OnImGuiRender()

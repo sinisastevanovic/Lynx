@@ -32,7 +32,7 @@ namespace Lynx
 
         commandList->beginMarker("MipMapGen_Blit");
 
-        auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/Blit.glsl");
+        auto shader = Engine::Get().GetAssetManager().GetEngineAsset<Shader>("Shaders/Blit.glsl");
         if (!m_BindingLayout) Init(m_Device); // Ensure layout exists
 
         auto pipeline = GetCachedPipeline(desc.format);
@@ -81,7 +81,7 @@ namespace Lynx
         if (m_PipelineCache.contains(format))
             return m_PipelineCache[format];
 
-        auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/Blit.glsl");
+        auto shader = Engine::Get().GetAssetManager().GetEngineAsset<Shader>("Shaders/Blit.glsl");
 
         nvrhi::FramebufferInfo fbInfo;
         fbInfo.addColorFormat(format); // The key variation

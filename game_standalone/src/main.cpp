@@ -11,7 +11,8 @@ int main(int argc, char** argv)
     // No DLLs! We create the game instance directly from its class.
     MyGame myGame;
 
-    engine.Initialize();
+    // The project is the folder the game is started in, until projects get their own file.
+    engine.Initialize(std::filesystem::current_path());
 
     engine.Run(&myGame);
 

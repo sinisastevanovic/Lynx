@@ -31,13 +31,13 @@ namespace Lynx
           
         m_BindingLayout = ctx.Device->createBindingLayout(layoutDesc);
 
-        m_StandardPipelineState.SetPath("engine/resources/Shaders/UI_Standard.glsl");
+        m_StandardPipelineState.SetShader("Shaders/UI_Standard.glsl");
         m_StandardPipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
             m_StandardPipeline = this->CreatePipeline(ctx, shader, false);
         });
 
-        m_TextPipelineState.SetPath("engine/resources/Shaders/UI_Text.glsl");
+        m_TextPipelineState.SetShader("Shaders/UI_Text.glsl");
         m_TextPipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
             m_TextPipeline = this->CreatePipeline(ctx, shader, true);

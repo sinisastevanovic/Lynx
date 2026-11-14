@@ -40,7 +40,7 @@ namespace Lynx
             .setKeepInitialState(true);
         m_NullTexture = m_Device->createTexture(nullDesc);
 
-        m_PipelineState.SetPath("engine/resources/Shaders/MipMapGen.glsl");
+        m_PipelineState.SetShader("Shaders/MipMapGen.glsl");
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader)
         {
             this->CreatePipeline(shader);

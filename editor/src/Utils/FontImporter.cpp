@@ -11,7 +11,6 @@
 #include <fstream>
 
 #include "Lynx/Utils/JsonHelpers.h"
-#include "Lynx/Utils/PathUtils.h"
 
 namespace Lynx
 {
@@ -95,7 +94,7 @@ namespace Lynx
 
         msdfgen::BitmapConstRef<byte, 3> bitmap = generator.atlasStorage();
         std::filesystem::path texturePath = outputDir / (fontName + ".png");
-        std::string tempPath = (PathUtils::GetTmpPath() / (fontName + ".png")).string();
+        std::string tempPath = (Engine::Get().GetContentPaths().TempDirectory() / (fontName + ".png")).string();
 
         msdfgen::savePng(bitmap, tempPath.c_str());
 

@@ -9,35 +9,38 @@
 
 namespace Lynx
 {
-    void AssetRegistry::LoadRegistry(const std::filesystem::path& projectAssetDir, const std::filesystem::path& engineResourceDir)
+    AssetRegistry::AssetRegistry(const ContentPaths& contentPaths)
+        : m_ContentPaths(contentPaths)
+    {
+    }
+
+    void AssetRegistry::LoadRegistry()
     {
         m_AssetMetadata.clear();
         m_PathToHandle.clear();
         m_FileWatchers.clear();
 
-        auto createWatcher = [this](const std::filesystem::path& dir)
+        auto scanAndWatch = [this](const char* label, const std::filesystem::path& directory)
         {
-            if (!std::filesystem::exists(dir))
+            if (!std::filesystem::exists(directory))
+            {
+                LX_CORE_ERROR("AssetRegistry: {0} directory does not exist: {1}", label, directory.string());
                 return;
+            }
 
-            m_FileWatchers.push_back(std::make_unique<FileWatcher>(dir, [this](FileAction action, const std::filesystem::path& path,
+            LX_CORE_INFO("AssetRegistry: Scanning {0} at {1}", label, directory.string());
+            ScanDirectory(directory);
+
+            m_FileWatchers.push_back(std::make_unique<FileWatcher>(directory, [this](FileAction action, const std::filesystem::path& path,
                 const std::filesystem::path& newPath)
             {
                 std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-                m_FileEvents.push_back({action, path, newPath});
+                m_FileEvents.push_back({ action, ContentPaths::Normalize(path), newPath.empty() ? newPath : ContentPaths::Normalize(newPath) });
             }));
         };
 
-        if (std::filesystem::exists(engineResourceDir))
-        {
-            LX_CORE_INFO("AssetRegistry: Scanning Engine Resources at {0}", engineResourceDir.string());
-            ScanDirectory(engineResourceDir);
-            createWatcher(engineResourceDir);
-        }
-        
-        LX_CORE_INFO("AssetRegistry: Scanning Project Assets at {0}", projectAssetDir.string());
-        ScanDirectory(projectAssetDir);
-        createWatcher(projectAssetDir);
+        scanAndWatch("Engine Resources", m_ContentPaths.EngineResources());
+        scanAndWatch("Project Assets", m_ContentPaths.ProjectAssets());
     }
 
     void AssetRegistry::UpdateMetadata(AssetHandle handle, std::shared_ptr<AssetSpecification> spec)
@@ -216,8 +219,6 @@ namespace Lynx
 
     void AssetRegistry::ProcessFile(const std::filesystem::path& path, std::shared_ptr<AssetSpecification> specification)
     {
-        // TODO: ensure the path is either inside the engines resources folder or games asset folder
-        // Also, we probably shouldn't work with absolute paths? Maybe like unreal ("GAME/Meshes/..." and "ENGINE/Meshes/...")?
         std::filesystem::path metaPath = path.string() + ".lxmeta";
 
         AssetMetadata metadata;
@@ -362,8 +363,9 @@ namespace Lynx
     const AssetMetadata& AssetRegistry::Get(const std::filesystem::path& assetPath) const
     {
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-        if (m_PathToHandle.contains(assetPath))
-            return Get(m_PathToHandle.at(assetPath));
+        auto it = m_PathToHandle.find(ContentPaths::Normalize(assetPath));
+        if (it != m_PathToHandle.end())
+            return Get(it->second);
         return m_NullMetadata;
     }
 
@@ -376,7 +378,7 @@ namespace Lynx
     bool AssetRegistry::Contains(const std::filesystem::path& assetPath) const
     {
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-        return m_PathToHandle.contains(assetPath);
+        return m_PathToHandle.contains(ContentPaths::Normalize(assetPath));
     }
 
     AssetHandle AssetRegistry::ImportAsset(const std::filesystem::path& assetPath)
@@ -384,8 +386,9 @@ namespace Lynx
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         if (AssetUtils::IsAssetExtensionSupported(assetPath))
         {
-            ProcessFile(assetPath);
-            return m_PathToHandle[assetPath];
+            const std::filesystem::path normalizedPath = ContentPaths::Normalize(assetPath);
+            ProcessFile(normalizedPath);
+            return m_PathToHandle[normalizedPath];
         }
         return AssetHandle::Null();
     }
@@ -396,11 +399,11 @@ namespace Lynx
         if (AssetUtils::IsAssetExtensionSupported(tempPath))
         {
             // TODO: Tell filewatchers to ignore events
-            m_IgnoreFileChanges = destinationPath;
-            std::filesystem::rename(tempPath, destinationPath);
-            ProcessFile(destinationPath, specification);
-            return m_PathToHandle[destinationPath];
-            
+            const std::filesystem::path normalizedDestination = ContentPaths::Normalize(destinationPath);
+            m_IgnoreFileChanges = normalizedDestination;
+            std::filesystem::rename(tempPath, normalizedDestination);
+            ProcessFile(normalizedDestination, specification);
+            return m_PathToHandle[normalizedDestination];
         }
         return AssetHandle::Null();
     }

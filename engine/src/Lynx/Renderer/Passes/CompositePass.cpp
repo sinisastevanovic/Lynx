@@ -24,7 +24,7 @@ namespace Lynx
             .setBindingOffsets({0, 0, 0, 0});
         m_BindingLayout = ctx.Device->createBindingLayout(layoutDesc);
 
-        m_PipelineState.SetPath("engine/resources/Shaders/Composite.glsl");
+        m_PipelineState.SetShader("Shaders/Composite.glsl");
         m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
             this->CreatePipeline(ctx, shader);

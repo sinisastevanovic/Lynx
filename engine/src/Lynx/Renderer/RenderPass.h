@@ -2,6 +2,8 @@
 #include <nvrhi/nvrhi.h>
 #include <glm/glm.hpp>
 
+#include <filesystem>
+
 #include "Lynx/Asset/StaticMesh.h"
 #include "Lynx/Asset/TextureSpecification.h"
 
@@ -167,17 +169,16 @@ namespace Lynx
         virtual void Execute(RenderContext& ctx, RenderData& renderData) = 0;
     };
 
+    // Rebuilds a pass's pipelines whenever its shader is loaded or hot-reloaded.
     class PipelineState
     {
     public:
-        PipelineState() = default;
-        PipelineState(const std::string& shaderPath) : m_Path(shaderPath) {}
-
-        void SetPath(const std::string& path) { m_Path = path; }
+        // The path is relative to the engine resource directory, e.g. "Shaders/Bloom.glsl".
+        void SetShader(const std::filesystem::path& engineShaderPath) { m_ShaderPath = engineShaderPath; }
         bool Update(std::function<void(std::shared_ptr<Shader>)> builder);
-        
+
     private:
-        std::string m_Path;
+        std::filesystem::path m_ShaderPath;
         uint32_t m_Version = -1;
     };
 }

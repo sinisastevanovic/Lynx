@@ -11,7 +11,7 @@ public:
         auto& am = Engine::Get().GetAssetManager();
         
         {
-            auto asset = am.GetAsset<Prefab>("assets/Prefabs/XPOrb.lxprefab");
+            auto asset = am.GetProjectAsset<Prefab>("Prefabs/XPOrb.lxprefab");
             if (asset)
                 XPOrbPrefab = asset;
         }

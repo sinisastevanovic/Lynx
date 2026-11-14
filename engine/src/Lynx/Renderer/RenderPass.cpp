@@ -7,7 +7,7 @@ namespace Lynx
 {
     bool PipelineState::Update(std::function<void(std::shared_ptr<Shader>)> builder)
     {
-        auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>(m_Path);
+        auto shader = Engine::Get().GetAssetManager().GetEngineAsset<Shader>(m_ShaderPath);
         if (shader && shader->GetVersion() != m_Version)
         {
             builder(shader);

@@ -4,7 +4,7 @@
 #include "Asset.h"
 #include "Texture.h"
 #include "StaticMesh.h"
-#include "Lynx/Utils/PathUtils.h"
+#include "Lynx/Core/ContentPaths.h"
 #include <queue>
 
 namespace Lynx
@@ -23,7 +23,7 @@ namespace Lynx
     class LX_API AssetManager
     {
     public:
-        AssetManager(AssetRegistry* registy);
+        AssetManager(AssetRegistry* registry, const ContentPaths& contentPaths);
 
         // Returns the asset if loaded. If not loaded, uses Registry to find path, loads it, caches it, returns it.
         std::shared_ptr<Asset> GetAsset(AssetHandle handle, AssetLoadMode mode = AssetLoadMode::Async, std::function<void(AssetHandle)> onLoaded = nullptr);
@@ -49,6 +49,20 @@ namespace Lynx
                 return std::static_pointer_cast<T>(asset);
 
             return GetErrorAsset<T>();
+        }
+
+        // Loads an asset that ships with the engine. The path is relative to the engine resource directory.
+        template<typename T>
+        std::shared_ptr<T> GetEngineAsset(const std::filesystem::path& relativePath, AssetLoadMode mode = AssetLoadMode::Async)
+        {
+            return GetAsset<T>(m_ContentPaths.EngineResource(relativePath), mode);
+        }
+
+        // Loads an asset of the current project. The path is relative to the project asset directory.
+        template<typename T>
+        std::shared_ptr<T> GetProjectAsset(const std::filesystem::path& relativePath, AssetLoadMode mode = AssetLoadMode::Async)
+        {
+            return GetAsset<T>(m_ContentPaths.ProjectAsset(relativePath), mode);
         }
 
         AssetHandle GetAssetHandle(const std::filesystem::path& path) const;
@@ -80,7 +94,8 @@ namespace Lynx
   
     private:
         AssetRegistry* m_AssetRegistry = nullptr;
-        
+        const ContentPaths& m_ContentPaths;
+
         std::unordered_map<AssetHandle, std::shared_ptr<Asset>> m_LoadedAssets;
         
         mutable std::mutex m_AssetsMutex;

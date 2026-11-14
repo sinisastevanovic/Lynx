@@ -12,6 +12,7 @@ target_compile_definitions(engine PRIVATE
     VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
     "IMGUI_API=__declspec(dllexport)"
     GLM_FORCE_DEPTH_ZERO_TO_ONE
+    "LX_ENGINE_RESOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/resources\""
 )
 
 find_package(Lua REQUIRED)

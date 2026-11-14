@@ -30,7 +30,8 @@ int main(int argc, char** argv)
     std::cout << "--- Starting Editor ---" << std::endl;
 
     Engine engine;
-    engine.Initialize(true);
+    // The project is the folder the editor is started in, until projects get their own file.
+    engine.Initialize(std::filesystem::current_path(), true);
     EditorTheme::ApplyTheme();
     
     auto& registry = engine.GetComponentRegistry();

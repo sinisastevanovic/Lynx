@@ -2,6 +2,7 @@
 #include "TypeRegistry.h"
 #include "Window.h"
 #include "Asset/AssetManager.h"
+#include "Core/ContentPaths.h"
 #include "Renderer/Renderer.h"
 #include "Event/Event.h"
 #include "Lynx/Renderer/EditorCamera.h"
@@ -27,12 +28,14 @@ namespace Lynx
     public:
         static Engine& Get() { return *s_Instance; }
         
-        void Initialize(bool editorMode = false);
+        // projectDir is the root folder of the game project; its assets are loaded from there.
+        void Initialize(const std::filesystem::path& projectDir, bool editorMode = false);
         void Run(IGameModule* gameModule);
         void PreGameShutdown();
         void Shutdown();
 
         inline Window& GetWindow() { return *m_Window; }
+        const ContentPaths& GetContentPaths() const { return *m_ContentPaths; }
         AssetManager& GetAssetManager() { return *m_AssetManager; }
         AssetRegistry& GetAssetRegistry() { return *m_AssetRegistry; }
         Renderer& GetRenderer() { return *m_Renderer; }
@@ -83,6 +86,9 @@ namespace Lynx
     private:
         static Engine* s_Instance;
         
+        // Declared before the asset registry and manager, which hold references to it.
+        std::unique_ptr<ContentPaths> m_ContentPaths;
+
         std::unique_ptr<Window> m_Window;
         std::unique_ptr<Renderer> m_Renderer;
         std::unique_ptr<AssetManager> m_AssetManager;

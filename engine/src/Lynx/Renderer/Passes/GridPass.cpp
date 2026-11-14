@@ -24,7 +24,7 @@ namespace Lynx
             .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer));
         m_BindingSet = ctx.Device->createBindingSet(bsDesc, m_BindingLayout);
 
-        m_PipelineState.SetPath("engine/resources/Shaders/Grid.glsl");
+        m_PipelineState.SetShader("Shaders/Grid.glsl");
         m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
             this->CreatePipeline(ctx, shader);

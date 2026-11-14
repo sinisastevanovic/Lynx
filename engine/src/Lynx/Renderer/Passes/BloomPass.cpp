@@ -13,7 +13,7 @@ namespace Lynx
 
     void BloomPass::Init(RenderContext& ctx)
     {
-        auto shader = Engine::Get().GetAssetManager().GetAsset<Shader>("engine/resources/Shaders/Bloom.glsl");
+        auto shader = Engine::Get().GetAssetManager().GetEngineAsset<Shader>("Shaders/Bloom.glsl");
 
         m_BindingLayout = ctx.Device->createBindingLayout(nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::Pixel)
@@ -25,7 +25,7 @@ namespace Lynx
 
         m_Sampler = SamplerCache::Get()->GetSampler(SamplerSettings{TextureWrap::Clamp, TextureFilter::Bilinear});
 
-        m_PipelineState.SetPath("engine/resources/Shaders/Bloom.glsl");
+        m_PipelineState.SetShader("Shaders/Bloom.glsl");
         m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
         {
             this->CreatePipeline(ctx, shader);
