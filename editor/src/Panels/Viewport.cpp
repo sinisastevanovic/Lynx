@@ -25,7 +25,7 @@ namespace Lynx
         Engine::Get().SetBlockEvents(!m_IsFocused);
         Engine::Get().GetEditorCamera().SetViewportFocused(m_IsHovered && m_IsFocused);
 
-        if (m_IsFocused && Engine().Get().GetSceneState() != SceneState::Play)
+        if (m_IsFocused && Engine::Get().GetSceneState() != SceneState::Play)
         {
             if (ImGui::IsKeyPressed(ImGuiKey_Q)) m_CurrentGizmoOperation = -1;
             if (ImGui::IsKeyPressed(ImGuiKey_W)) m_CurrentGizmoOperation = ImGuizmo::TRANSLATE;
@@ -169,7 +169,7 @@ namespace Lynx
             }
         }
 
-        if (m_Selection != entt::null && m_CurrentGizmoOperation != -1 && Engine().Get().GetSceneState() != SceneState::Play)
+        if (m_Selection != entt::null && m_CurrentGizmoOperation != -1 && Engine::Get().GetSceneState() != SceneState::Play)
         {
             ImGuizmo::BeginFrame();
             ImGuizmo::SetOrthographic(false);

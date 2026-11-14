@@ -178,6 +178,7 @@ namespace Lynx
     void EditorLayer::OnImGuiRender()
     {
         TrackWindowBounds();
+        ClearSelectionIfDestroyed();
 
         ImGuiIO& io = ImGui::GetIO();
         if (Input::GetCursorMode() == CursorMode::Locked)
@@ -424,8 +425,21 @@ namespace Lynx
             panel->OnSceneContextChanged(scene);
     }
 
+    void EditorLayer::ClearSelectionIfDestroyed()
+    {
+        // The game can destroy the selected entity while playing, and deleting a parent takes its children along.
+        // The panels keep using the selection, so it is dropped here before any of them draws.
+        if (m_SelectedEntity == entt::null)
+            return;
+
+        const std::shared_ptr<Scene> scene = m_Engine->GetActiveScene();
+        if (!scene || !scene->Reg().valid(m_SelectedEntity))
+            OnSelectedEntityChanged(entt::null);
+    }
+
     void EditorLayer::OnSelectedEntityChanged(entt::entity entity)
     {
+        m_SelectedEntity = entity;
         for (auto& panel : m_Panels)
             panel->OnSelectedEntityChanged(entity);
     }

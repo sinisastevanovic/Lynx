@@ -32,6 +32,7 @@ namespace Lynx
         std::filesystem::path EditorStateFile() const;
         void RestoreWindowState();
         void TrackWindowBounds();
+        void ClearSelectionIfDestroyed();
 
         void OnSceneContextChanged(Scene* scene);
         void OnSelectedEntityChanged(entt::entity entity);
