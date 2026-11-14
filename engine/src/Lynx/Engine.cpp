@@ -638,139 +638,43 @@ namespace Lynx
                 }
             });
 
-        m_ComponentRegistry.RegisterCoreComponent<RigidBodyComponent>("RigidBody",
-            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
-            {
-                auto& rbComp = reg.get<RigidBodyComponent>(entity);
-                json["Type"] = rbComp.Type;
-                json["Mass"] = rbComp.Mass;
-                json["Friction"] = rbComp.Friction;
-                json["Restitution"] = rbComp.Restitution;
-                json["LinearDamping"] = rbComp.LinearDamping;
-                json["AngularDamping"] = rbComp.AngularDamping;
-                json["GravityFactor"] = rbComp.GravityFactor;
-                json["MotionQuality"] = rbComp.MotionQuality;
-                json["Layer"] = rbComp.Layer;
-                json["LockRotationX"] = rbComp.LockRotationX;
-                json["LockRotationY"] = rbComp.LockRotationY;
-                json["LockRotationZ"] = rbComp.LockRotationZ;
-            },
-            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
-            {
-                auto& rbComp = reg.get_or_emplace<RigidBodyComponent>(entity);
-                rbComp.Type = json["Type"];
-                rbComp.Mass = json.value("Mass", 1.0f);
-                rbComp.Friction = json.value("Friction", 0.5f);
-                rbComp.Restitution = json.value("Restitution", 1.0f);
-                rbComp.LinearDamping = json.value("LinearDamping", 1.0f);
-                rbComp.AngularDamping = json.value("AngularDamping", 1.0f);
-                rbComp.GravityFactor = json.value("GravityFactor", 1.0f);
-                rbComp.MotionQuality = (MotionQuality)json.value("MotionQuality", 0);
-                rbComp.Layer = json.value("Layer", 0);
-                rbComp.LockRotationX = json["LockRotationX"];
-                rbComp.LockRotationY = json["LockRotationY"];
-                rbComp.LockRotationZ = json["LockRotationZ"];
-            },
-            [](entt::registry& reg, entt::entity entity)
-            {
-                auto& rbComp = reg.get<RigidBodyComponent>(entity);
-                
-                std::vector<std::string> typeItems = { "Static", "Dynamic", "Kinematic" };
-                int currType = (int)rbComp.Type;
-                if (LXUI::DrawComboControl("Type", currType, typeItems))
-                {
-                    rbComp.Type = (BodyType)currType;
-                }
+        m_ComponentRegistry.RegisterCoreComponent<RigidBodyComponent>("RigidBody", [](FieldList<RigidBodyComponent>& fields)
+        {
+            fields.Add("Type", &RigidBodyComponent::Type).Names({ "Static", "Dynamic", "Kinematic" });
+            fields.Add("Mass", &RigidBodyComponent::Mass);
+            fields.Add("Friction", &RigidBodyComponent::Friction);
+            fields.Add("Restitution", &RigidBodyComponent::Restitution);
+            fields.Add("LinearDamping", &RigidBodyComponent::LinearDamping);
+            fields.Add("AngularDamping", &RigidBodyComponent::AngularDamping);
+            fields.Add("GravityFactor", &RigidBodyComponent::GravityFactor);
+            fields.Add("MotionQuality", &RigidBodyComponent::MotionQuality).Names({ "Discrete", "Continuous" });
+            fields.Add("Layer", &RigidBodyComponent::Layer).HideInEditor();
+            fields.Add("LockRotationX", &RigidBodyComponent::LockRotationX);
+            fields.Add("LockRotationY", &RigidBodyComponent::LockRotationY);
+            fields.Add("LockRotationZ", &RigidBodyComponent::LockRotationZ);
+        });
 
-                LXUI::DrawDragFloat("Mass", rbComp.Mass);
-                LXUI::DrawDragFloat("Friction", rbComp.Friction);
-                LXUI::DrawDragFloat("Restitution", rbComp.Restitution);
-                LXUI::DrawDragFloat("LinearDamping", rbComp.LinearDamping);
-                LXUI::DrawDragFloat("AngularDamping", rbComp.AngularDamping);
-                LXUI::DrawDragFloat("GravityFactor", rbComp.GravityFactor);
-                std::vector<std::string> motionQualityItems = { "Discrete", "Continuous" };
-                int currMotionQuality = (int)rbComp.MotionQuality;
-                if (LXUI::DrawComboControl("MotionQuality", currMotionQuality, motionQualityItems))
-                {
-                    rbComp.MotionQuality = (MotionQuality)currMotionQuality;
-                }
-                // TODO: layers
-                LXUI::DrawCheckBox("LockRotationX", rbComp.LockRotationX);
-                LXUI::DrawCheckBox("LockRotationY", rbComp.LockRotationY);
-                LXUI::DrawCheckBox("LockRotationZ", rbComp.LockRotationZ);
-            });
+        m_ComponentRegistry.RegisterCoreComponent<BoxColliderComponent>("BoxCollider", [](FieldList<BoxColliderComponent>& fields)
+        {
+            fields.Add("HalfSize", &BoxColliderComponent::HalfSize).Label("Half Size").Range(0.0f, FLT_MAX);
+            fields.Add("Offset", &BoxColliderComponent::Offset);
+            fields.Add("IsTrigger", &BoxColliderComponent::IsTrigger);
+        });
 
-        m_ComponentRegistry.RegisterCoreComponent<BoxColliderComponent>("BoxCollider",
-            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
-            {
-                auto& bcComp = reg.get<BoxColliderComponent>(entity);
-                json["HalfSize"] = {bcComp.HalfSize.x, bcComp.HalfSize.y, bcComp.HalfSize.z };
-                json["Offset"] = bcComp.Offset;
-                json["IsTrigger"] = bcComp.IsTrigger;
-            },
-            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
-            {
-                auto& bcComp = reg.get_or_emplace<BoxColliderComponent>(entity);
-                bcComp.HalfSize = json.value("HalfSize", glm::vec3(0.0f, 0.0f, 0.0f));
-                bcComp.Offset = json.value("Offset", glm::vec3(0.0f, 0.0f, 0.0f));
-                bcComp.IsTrigger = json.value("IsTrigger", false);
-            },
-            [](entt::registry& reg, entt::entity entity)
-            {
-                auto& bcComp = reg.get<BoxColliderComponent>(entity);
-                LXUI::DrawVec3Control("Half Size", bcComp.HalfSize, 0, FLT_MAX, 0.5f);
-                LXUI::DrawVec3Control("Offset", bcComp.Offset);
-                LXUI::DrawCheckBox("IsTrigger", bcComp.IsTrigger);
-            });
+        m_ComponentRegistry.RegisterCoreComponent<SphereColliderComponent>("SphereCollider", [](FieldList<SphereColliderComponent>& fields)
+        {
+            fields.Add("Radius", &SphereColliderComponent::Radius).DragSpeed(0.1f).Range(0.0f, FLT_MAX);
+            fields.Add("Offset", &SphereColliderComponent::Offset);
+            fields.Add("IsTrigger", &SphereColliderComponent::IsTrigger);
+        });
 
-        m_ComponentRegistry.RegisterCoreComponent<SphereColliderComponent>("SphereCollider",
-            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
-            {
-                auto& scComp = reg.get<SphereColliderComponent>(entity);
-                json["Radius"] = scComp.Radius;
-                json["Offset"] = scComp.Offset;
-                json["IsTrigger"] = scComp.IsTrigger;
-            },
-            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
-            {
-                auto& scComp = reg.get_or_emplace<SphereColliderComponent>(entity);
-                scComp.Radius = json["Radius"];
-                scComp.Offset = json.value("Offset", glm::vec3(0.0f, 0.0f, 0.0f));
-                scComp.IsTrigger = json.value("IsTrigger", false);
-            },
-            [](entt::registry& reg, entt::entity entity)
-            {
-                auto& scComp = reg.get<SphereColliderComponent>(entity);
-                LXUI::DrawDragFloat("Radius", scComp.Radius, 0.1f, 0, FLT_MAX, 0.5f);
-                LXUI::DrawVec3Control("Offset", scComp.Offset);
-                LXUI::DrawCheckBox("IsTrigger", scComp.IsTrigger);
-            });
-
-        m_ComponentRegistry.RegisterCoreComponent<CapsuleColliderComponent>("CapsuleCollider",
-            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
-            {
-                auto& ccComp = reg.get<CapsuleColliderComponent>(entity);
-                json["Radius"] = ccComp.Radius;
-                json["HalfHeight"] = ccComp.HalfHeight;
-                json["Offset"] = ccComp.Offset;
-                json["IsTrigger"] = ccComp.IsTrigger;
-            },
-            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
-            {
-                auto& ccComp = reg.get_or_emplace<CapsuleColliderComponent>(entity);
-                ccComp.Radius = json["Radius"];
-                ccComp.HalfHeight = json["HalfHeight"];
-                ccComp.Offset = json.value("Offset", glm::vec3(0.0f, 0.0f, 0.0f));
-                ccComp.IsTrigger = json.value("IsTrigger", false);
-            },
-            [](entt::registry& reg, entt::entity entity)
-            {
-                auto& ccComp = reg.get<CapsuleColliderComponent>(entity);
-                LXUI::DrawDragFloat("Radius", ccComp.Radius, 0.1f, 0, FLT_MAX, 0.5f);
-                LXUI::DrawDragFloat("Half Height", ccComp.HalfHeight, 0.1f, 0, FLT_MAX, 0.5f);
-                LXUI::DrawVec3Control("Offset", ccComp.Offset);
-                LXUI::DrawCheckBox("IsTrigger", ccComp.IsTrigger);
-            });
+        m_ComponentRegistry.RegisterCoreComponent<CapsuleColliderComponent>("CapsuleCollider", [](FieldList<CapsuleColliderComponent>& fields)
+        {
+            fields.Add("Radius", &CapsuleColliderComponent::Radius).DragSpeed(0.1f).Range(0.0f, FLT_MAX);
+            fields.Add("HalfHeight", &CapsuleColliderComponent::HalfHeight).Label("Half Height").DragSpeed(0.1f).Range(0.0f, FLT_MAX);
+            fields.Add("Offset", &CapsuleColliderComponent::Offset);
+            fields.Add("IsTrigger", &CapsuleColliderComponent::IsTrigger);
+        });
 
         m_ComponentRegistry.RegisterCoreComponent<NativeScriptComponent>("NativeScript",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
@@ -1006,29 +910,12 @@ namespace Lynx
                 
             });
 
-        m_ComponentRegistry.RegisterCoreComponent<DirectionalLightComponent>("DirectionalLight",
-            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
-            {
-                auto& light = reg.get<DirectionalLightComponent>(entity);
-                json["Color"] = { light.Color.r, light.Color.g, light.Color.b };
-                json["Intensity"] = light.Intensity;
-                json["CastShadows"] = light.CastShadows;
-            },
-            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
-            {
-                auto& light = reg.get<DirectionalLightComponent>(entity);
-                const auto& color = json["Color"];
-                light.Color = glm::vec3(color[0], color[1], color[2]);
-                light.Intensity = json["Intensity"];
-                light.CastShadows = json["CastShadows"];
-            },
-            [](entt::registry& reg, entt::entity entity)
-            {
-                auto& light = reg.get<DirectionalLightComponent>(entity);
-                LXUI::DrawColor3Control("Color", light.Color);
-                LXUI::DrawDragFloat("Intensity", light.Intensity, 0.1f, 0, 10000);
-                LXUI::DrawCheckBox("CastShadows", light.CastShadows);
-            });
+        m_ComponentRegistry.RegisterCoreComponent<DirectionalLightComponent>("DirectionalLight", [](FieldList<DirectionalLightComponent>& fields)
+        {
+            fields.Add("Color", &DirectionalLightComponent::Color).AsColor();
+            fields.Add("Intensity", &DirectionalLightComponent::Intensity).DragSpeed(0.1f).Range(0.0f, 10000.0f);
+            fields.Add("CastShadows", &DirectionalLightComponent::CastShadows);
+        });
 
         m_ComponentRegistry.RegisterCoreComponent<ParticleEmitterComponent>("ParticleEmitter",
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
@@ -1181,46 +1068,18 @@ namespace Lynx
                 //comp.Overrides = json["Overrides"].get<std::unordered_set<std::string>>();
             }
         );
-        m_ComponentRegistry.RegisterCoreComponent<CharacterControllerComponent>("CharacterController",
-            [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
-            {
-                auto& comp = reg.get<CharacterControllerComponent>(entity);
-                json["CapsuleRadius"] = comp.CapsuleRadius;
-                json["CapsuleHalfHeight"] = comp.CapsuleHalfHeight;
-                json["MaxSlopeAngle"] = comp.MaxSlopeAngle;
-                json["Mass"] = comp.Mass;
-                json["MaxStrength"] = comp.MaxStrength;
-                json["CharacterPadding"] = comp.CharacterPadding;
-                json["StepHeight"] = comp.StepHeight;
-                json["Gravity"] = comp.Gravity;
-                json["Layer"] = comp.Layer;
-            },
-            [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
-            {
-                auto& comp = reg.get_or_emplace<CharacterControllerComponent>(entity);
-                comp.CapsuleRadius = json.value("CapsuleRadius", 0.0f);
-                comp.CapsuleHalfHeight = json.value("CapsuleHalfHeight", 0.0f);
-                comp.MaxSlopeAngle = json.value("MaxSlopeAngle", 0.0f);
-                comp.Mass = json.value("Mass", 0.0f);
-                comp.MaxStrength = json.value("MaxStrength", 0.0f);
-                comp.CharacterPadding = json.value("CharacterPadding", 0.0f);
-                comp.StepHeight = json.value("StepHeight", 0.0f);
-                comp.Gravity = json.value("Gravity", 0.0f);
-                comp.Layer = json.value("Layer", 0);
-            },
-            [](entt::registry& reg, entt::entity entity) 
-            {
-                auto& comp = reg.get_or_emplace<CharacterControllerComponent>(entity);
-                LXUI::DrawDragFloat("CapsuleRadius", comp.CapsuleRadius, 0.1f);
-                LXUI::DrawDragFloat("CapsuleHalfHeight", comp.CapsuleHalfHeight, 0.1f);
-                LXUI::DrawDragFloat("MaxSlopeAngle", comp.MaxSlopeAngle, 0.5f, 0.0f, 90.0f);
-                LXUI::DrawDragFloat("Mass", comp.Mass, 0.5f, 0.0f, 90.0f);
-                LXUI::DrawDragFloat("MaxStrength", comp.MaxStrength, 0.5f, 0.0f, FLT_MAX);
-                LXUI::DrawDragFloat("CharacterPadding", comp.CharacterPadding, 0.01f, 0.0f, FLT_MAX);
-                LXUI::DrawDragFloat("StepHeight", comp.StepHeight, 0.01f, 0.0f, FLT_MAX);
-                LXUI::DrawDragFloat("Gravity", comp.Gravity, 0.1f);
-                // TODO: Layer
-            }
-        );
+
+        m_ComponentRegistry.RegisterCoreComponent<CharacterControllerComponent>("CharacterController", [](FieldList<CharacterControllerComponent>& fields)
+        {
+            fields.Add("CapsuleRadius", &CharacterControllerComponent::CapsuleRadius).DragSpeed(0.1f);
+            fields.Add("CapsuleHalfHeight", &CharacterControllerComponent::CapsuleHalfHeight).DragSpeed(0.1f);
+            fields.Add("MaxSlopeAngle", &CharacterControllerComponent::MaxSlopeAngle).DragSpeed(0.5f).Range(0.0f, 90.0f);
+            fields.Add("Mass", &CharacterControllerComponent::Mass).DragSpeed(0.5f).Range(0.0f, 90.0f);
+            fields.Add("MaxStrength", &CharacterControllerComponent::MaxStrength).DragSpeed(0.5f).Range(0.0f, FLT_MAX);
+            fields.Add("CharacterPadding", &CharacterControllerComponent::CharacterPadding).DragSpeed(0.01f).Range(0.0f, FLT_MAX);
+            fields.Add("StepHeight", &CharacterControllerComponent::StepHeight).DragSpeed(0.01f).Range(0.0f, FLT_MAX);
+            fields.Add("Gravity", &CharacterControllerComponent::Gravity).DragSpeed(0.1f);
+            fields.Add("Layer", &CharacterControllerComponent::Layer).HideInEditor();
+        });
     }
 }

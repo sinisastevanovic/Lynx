@@ -1,4 +1,5 @@
 #include "InspectorPanel.h"
+#include "FieldInspector.h"
 #include <imgui.h>
 
 #include "../Components/EditorComponents.h"
@@ -200,6 +201,14 @@ namespace Lynx
                             LXUI::BeginPropertyGrid();
                             ImGui::PushID(name.c_str());
                             info.drawUI(m_Context->Reg(), m_Selection);
+                            ImGui::PopID();
+                            LXUI::EndPropertyGrid();
+                        }
+                        else if (!info.fields.empty())
+                        {
+                            LXUI::BeginPropertyGrid();
+                            ImGui::PushID(name.c_str());
+                            DrawFields(info.fields, info.get(m_Context->Reg(), m_Selection), m_Context);
                             ImGui::PopID();
                             LXUI::EndPropertyGrid();
                         }

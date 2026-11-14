@@ -9,6 +9,7 @@
 #include <vector>
 #include <map>
 
+#include "Reflection/FieldSerialization.h"
 #include "Scene/Components/NativeScriptComponent.h"
 
 namespace Lynx
@@ -20,9 +21,18 @@ namespace Lynx
     using SerializeComponentFunc = std::function<void(entt::registry&, entt::entity, nlohmann::json&)>;
     using DeserializeComponentFunc = std::function<void(entt::registry&, entt::entity, const nlohmann::json&)>;
 
+    template <typename T>
+    using DescribeFieldsFunc = std::function<void(FieldList<T>&)>;
+
     struct ComponentInfo
     {
         std::string name;
+
+        // Set for a component registered with a field list. Its serialize and deserialize functions are
+        // generated from the fields, and the editor draws the fields itself when drawUI is empty.
+        std::vector<FieldInfo> fields;
+        std::function<void*(entt::registry&, entt::entity)> get;
+
         AddComponentFunc add;
         HasComponentFunc has;
         RemoveComponentFunc remove;
@@ -66,6 +76,13 @@ namespace Lynx
         void RegisterCoreInternalOnlyComponent(const std::string& name, SerializeComponentFunc serFunc, DeserializeComponentFunc deserFunc)
         {
             RegisterInternal<T>(name, serFunc, deserFunc, nullptr, true, true);
+        }
+
+        // Registers a component whose saving, loading and inspector are generated from its fields. See Reflection/Field.h.
+        template <typename T>
+        void RegisterCoreComponent(const std::string& name, const DescribeFieldsFunc<T>& describeFields)
+        {
+            RegisterWithFields<T>(name, describeFields, true);
         }
 
         template <typename T>
@@ -178,6 +195,35 @@ namespace Lynx
         }
 
         template <typename T>
+        void RegisterWithFields(const std::string& name, const DescribeFieldsFunc<T>& describeFields, bool isCore)
+        {
+            FieldList<T> fieldList;
+            describeFields(fieldList);
+
+            // Shared by the two functions below, which outlive this call.
+            const auto fields = std::make_shared<const std::vector<FieldInfo>>(fieldList.Take());
+            ValidateFields(name, *fields);
+
+            RegisterInternal<T>(name,
+                [fields](entt::registry& registry, entt::entity entity, nlohmann::json& json)
+                {
+                    WriteFields(*fields, &registry.get<T>(entity), json);
+                },
+                [fields](entt::registry& registry, entt::entity entity, const nlohmann::json& json)
+                {
+                    ReadFields(*fields, &registry.get_or_emplace<T>(entity), json);
+                },
+                nullptr, isCore, false);
+
+            ComponentInfo& info = m_RegisteredComponents[name];
+            info.fields = *fields;
+            info.get = [](entt::registry& registry, entt::entity entity) -> void*
+            {
+                return registry.try_get<T>(entity);
+            };
+        }
+
+        template <typename T>
         void RegisterScriptInternal(const std::string& name, bool isCore)
         {
             ScriptInfo info;
@@ -215,6 +261,13 @@ namespace Lynx
             m_Registry.RegisterInternal<T>(name, serFunc, deserFunc, nullptr, false, false);
         }
         
+        // Registers a component whose saving, loading and inspector are generated from its fields. See Reflection/Field.h.
+        template <typename T>
+        void RegisterComponent(const std::string& name, const DescribeFieldsFunc<T>& describeFields)
+        {
+            m_Registry.RegisterWithFields<T>(name, describeFields, false);
+        }
+
         template <typename T>
         void RegisterScript(const std::string& name)
         {
