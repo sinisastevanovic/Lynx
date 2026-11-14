@@ -51,6 +51,8 @@ namespace Lynx
 
         m_ContentPaths = std::make_unique<ContentPaths>(ContentPaths::DefaultEngineResourceDir(), m_Project.RootDirectory, m_Project.AssetDirectory);
 
+        m_ShaderCache = std::make_unique<ShaderCache>(m_ContentPaths->TempDirectory() / "ShaderCache");
+
         m_AssetRegistry = std::make_unique<AssetRegistry>(*m_ContentPaths);
         m_AssetRegistry->LoadRegistry();
         m_AssetManager = std::make_unique<AssetManager>(m_AssetRegistry.get(), *m_ContentPaths);

@@ -8,6 +8,7 @@
 #include "Event/Event.h"
 #include "Lynx/Renderer/EditorCamera.h"
 #include "Renderer/SceneRenderer.h"
+#include "Renderer/ShaderCache.h"
 #include "Scripting/ScriptEngine.h"
 
 namespace Lynx
@@ -40,6 +41,7 @@ namespace Lynx
         inline Window& GetWindow() { return *m_Window; }
         const Project& GetProject() const { return m_Project; }
         const ContentPaths& GetContentPaths() const { return *m_ContentPaths; }
+        const ShaderCache& GetShaderCache() const { return *m_ShaderCache; }
         AssetManager& GetAssetManager() { return *m_AssetManager; }
         AssetRegistry& GetAssetRegistry() { return *m_AssetRegistry; }
         Renderer& GetRenderer() { return *m_Renderer; }
@@ -101,6 +103,7 @@ namespace Lynx
 
         // Declared before the asset registry and manager, which hold references to it.
         std::unique_ptr<ContentPaths> m_ContentPaths;
+        std::unique_ptr<ShaderCache> m_ShaderCache;
 
         std::unique_ptr<Window> m_Window;
         std::unique_ptr<Renderer> m_Renderer;
