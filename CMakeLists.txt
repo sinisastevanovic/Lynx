@@ -1,5 +1,10 @@
 # Set the minimum required version of CMake
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.20)
+
+# Only when the engine is built on its own. A game project that includes the engine chooses its own configurations.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Build configurations" FORCE)
+endif()
 
 # Define the project
 project(LynxEngine VERSION 0.1.0)
@@ -39,6 +44,11 @@ FetchContent_Declare(
     GIT_TAG v1.3
 )
 
+# The engine renders through Vulkan only.
+set(NVRHI_WITH_DX11 OFF CACHE BOOL "" FORCE)
+set(NVRHI_WITH_DX12 OFF CACHE BOOL "" FORCE)
+set(NVRHI_INSTALL OFF CACHE BOOL "" FORCE)
+
 FetchContent_MakeAvailable(nvrhi)
 FetchContent_MakeAvailable(imgui)
 
@@ -50,6 +60,10 @@ set(MSDFGEN_BUILD_STANDALONE OFF CACHE BOOL "" FORCE)
 set(MSDFGEN_DYNAMIC_RUNTIME ON CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(msdf-atlas-gen)
+
+# Keep third-party targets and CMake's own targets out of the way in the IDE.
+set_target_properties(nvrhi nvrhi_vk msdf-atlas-gen msdfgen-core msdfgen-ext PROPERTIES FOLDER "ThirdParty")
+set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "CMake")
 
 # This enables vcpkg's manifest mode. It will automatically download
 # and build the libraries listed in vcpkg.json.

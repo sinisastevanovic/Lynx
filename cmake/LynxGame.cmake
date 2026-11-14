@@ -52,6 +52,9 @@ function(lynx_add_game name)
         RUNTIME_OUTPUT_DIRECTORY "${engine_output_dir}"
     )
 
+    # The game is developed in <name>Code. The other two are thin launchers around it.
+    set_target_properties(${name}Module ${name} PROPERTIES FOLDER "Launchers")
+
     # The editor loads the module at run time, so nothing links the two together.
     # The dependency makes building the editor also rebuild the game it is about to open.
     if(TARGET editor)
