@@ -60,7 +60,9 @@ namespace Lynx
     void PhysicsSystem::OnFixedUpdate(Scene& scene, float fixedDeltaTime)
     {
         auto& physics = scene.GetPhysicsWorldChecked();
-        
+
+        CreatePendingRigidBodies(scene);
+
         for (BodyId id : m_BodiesToDestroy)
         {
             physics.DestroyBody(id);
@@ -219,6 +221,26 @@ namespace Lynx
         m_PendingRigidBodies.erase(entity);
     }
 
+    void PhysicsSystem::CreatePendingRigidBodies(Scene& scene)
+    {
+        auto& registry = scene.Reg();
+
+        // TryCreateRigidBody removes an entity from the set once its body exists, so the loop runs over a copy.
+        const std::vector<entt::entity> pending(m_PendingRigidBodies.begin(), m_PendingRigidBodies.end());
+        for (entt::entity entity : pending)
+        {
+            // An entity that was destroyed, or a collider without a rigid body, has nothing to wait for.
+            // Adding a rigid body later puts the entity back into the set.
+            if (!registry.valid(entity) || !registry.all_of<RigidBodyComponent>(entity))
+            {
+                m_PendingRigidBodies.erase(entity);
+                continue;
+            }
+
+            TryCreateRigidBody(scene, entity);
+        }
+    }
+
     void PhysicsSystem::CreateCharacterController(Scene& scene, entt::entity entity)
     {
         auto& registry = scene.Reg();
@@ -238,7 +260,7 @@ namespace Lynx
         desc.CapsuleHalfHeight = cc.CapsuleHalfHeight;
         desc.CapsuleRadius = cc.CapsuleRadius;
         desc.Mass = cc.Mass;
-        desc.MaxSlopeAngle = cc.MaxSlopeAngle;
+        desc.MaxSlopeAngle = glm::radians(cc.MaxSlopeAngle); // The component holds degrees.
         desc.MaxStrength = cc.MaxStrength;
         desc.Layer = cc.Layer;
         desc.Entity = entity;

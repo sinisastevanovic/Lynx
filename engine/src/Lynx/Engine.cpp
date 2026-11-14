@@ -139,10 +139,11 @@ namespace Lynx
             lastFrameTime = time;
             
             m_UnscaledDeltaTime = std::min(m_UnscaledDeltaTime, fixedTimestep * maxSubSteps);
-            if (m_SceneState == SceneState::Play)
-                accumulator += m_UnscaledDeltaTime;
-            
             m_DeltaTime = m_Paused ? 0.0f : m_UnscaledDeltaTime * m_TimeScale;
+
+            // Fixed steps follow game time, so pausing the game and the time scale apply to physics too.
+            if (m_SceneState == SceneState::Play)
+                accumulator += m_DeltaTime;
             
             if (m_Window->ShouldClose())
                 m_IsRunning = false;

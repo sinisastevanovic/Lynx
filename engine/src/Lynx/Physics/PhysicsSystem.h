@@ -33,6 +33,7 @@ namespace Lynx
         
         // Internal Helpers
         void TryCreateRigidBody(Scene& scene, entt::entity entity);
+        void CreatePendingRigidBodies(Scene& scene);
         void CreateCharacterController(Scene& scene, entt::entity entity);
         
         void UpdateCharacters(Scene& scene, float fixedDt);
