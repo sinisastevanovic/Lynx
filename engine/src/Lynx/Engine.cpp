@@ -89,9 +89,6 @@ namespace Lynx
 
         m_Scene = std::make_shared<Scene>();
         m_SceneRenderer = std::make_unique<SceneRenderer>(m_Scene);
-        
-        m_Window->SetVSync(true);
-
     }
 
     void Engine::SetGameModule(IGameModule* gameModule)

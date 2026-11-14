@@ -57,6 +57,11 @@ namespace Lynx
         void OnResize(uint32_t width, uint32_t height);
         void EnsureEditorViewport(uint32_t width, uint32_t height);
 
+        // With VSync on, frames are presented in step with the display refresh.
+        // Off presents as fast as the GPU allows, without tearing where the driver supports it.
+        void SetVSync(bool enabled);
+        bool IsVSync() const { return m_VSync; }
+
         void BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, float deltaTime, bool editMode = false);
         void EndScene();
         
@@ -101,6 +106,9 @@ namespace Lynx
         void InitVulkan(GLFWwindow* window);
         void InitNVRHI();
         void InitBuffers();
+        void CreateSwapchain(uint32_t fallbackWidth, uint32_t fallbackHeight);
+        void CreateSwapchainFramebuffers();
+        void RecreateSwapchain(uint32_t width, uint32_t height);
         void CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height);
         void PrepareDrawCalls();
 
@@ -150,6 +158,7 @@ namespace Lynx
         bool m_ShowColliders = false;
         bool m_ShowUI = true;
         bool m_FXAAEnabled = true;
+        bool m_VSync = true;
         float m_MaxAnisotropy = 16.0f;
 
         RenderStats m_Stats;

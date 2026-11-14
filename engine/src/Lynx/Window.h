@@ -47,8 +47,6 @@ namespace Lynx
 
         void OnUpdate();
         void SetEventCallback(const EventCallbackFn& callback);
-        void SetVSync(bool enabled);
-        bool IsVSync() const;
 
         uint32_t GetWidth() const { return m_Data.Width; }
         uint32_t GetHeight() const { return m_Data.Height; }
@@ -80,7 +78,6 @@ namespace Lynx
             std::string Title;
             uint32_t Width;
             uint32_t Height;
-            bool VSync;
             EventCallbackFn EventCallback;
         };
 

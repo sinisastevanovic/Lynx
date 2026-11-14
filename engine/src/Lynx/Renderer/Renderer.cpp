@@ -99,6 +99,26 @@ namespace Lynx
         }
     }
     
+    namespace
+    {
+        vk::PresentModeKHR ChoosePresentMode(vk::PhysicalDevice physicalDevice, vk::SurfaceKHR surface, bool vsync)
+        {
+            // FIFO waits for the display refresh, and every Vulkan implementation supports it.
+            if (vsync)
+                return vk::PresentModeKHR::eFifo;
+
+            // Without VSync, mailbox is preferred because it does not tear. Immediate does.
+            const std::vector<vk::PresentModeKHR> supportedModes = physicalDevice.getSurfacePresentModesKHR(surface);
+            for (vk::PresentModeKHR preferredMode : { vk::PresentModeKHR::eMailbox, vk::PresentModeKHR::eImmediate })
+            {
+                if (std::find(supportedModes.begin(), supportedModes.end(), preferredMode) != supportedModes.end())
+                    return preferredMode;
+            }
+
+            return vk::PresentModeKHR::eFifo;
+        }
+    }
+
     struct Renderer::VulkanState
     {
         vk::Instance Instance;
@@ -466,10 +486,40 @@ namespace Lynx
 
         m_VulkanState->GraphicsQueue = m_VulkanState->Device.getQueue(m_VulkanState->GraphicsQueueFamily, 0);
         
-        // 6. Swapchain
-        vk::SurfaceCapabilitiesKHR caps = m_VulkanState->PhysicalDevice.getSurfaceCapabilitiesKHR(m_VulkanState->Surface);
-        m_VulkanState->SwapchainExtent = caps.currentExtent;
+        // 6. Swapchain, its images and the per-image semaphores
         m_VulkanState->SwapchainFormat = vk::Format::eB8G8R8A8Unorm; // Forced simplified format
+
+        int framebufferWidth = 0;
+        int framebufferHeight = 0;
+        glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
+        CreateSwapchain(static_cast<uint32_t>(framebufferWidth), static_cast<uint32_t>(framebufferHeight));
+
+        // 7. Per-frame sync objects
+        m_VulkanState->ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        m_VulkanState->InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
+        vk::SemaphoreCreateInfo semInfo;
+        vk::FenceCreateInfo fenceInfo;
+        fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            m_VulkanState->ImageAvailableSemaphores[i] = m_VulkanState->Device.createSemaphore(semInfo);
+            m_VulkanState->InFlightFences[i] = m_VulkanState->Device.createFence(fenceInfo);
+        }
+    }
+
+    void Renderer::CreateSwapchain(uint32_t fallbackWidth, uint32_t fallbackHeight)
+    {
+        vk::SurfaceCapabilitiesKHR caps = m_VulkanState->PhysicalDevice.getSurfaceCapabilitiesKHR(m_VulkanState->Surface);
+
+        // Some surfaces leave the extent to the application and report it as UINT32_MAX.
+        m_VulkanState->SwapchainExtent = caps.currentExtent;
+        if (m_VulkanState->SwapchainExtent.width == UINT32_MAX)
+        {
+            m_VulkanState->SwapchainExtent.width = fallbackWidth;
+            m_VulkanState->SwapchainExtent.height = fallbackHeight;
+        }
 
         vk::SwapchainCreateInfoKHR swapInfo;
         swapInfo.surface = m_VulkanState->Surface;
@@ -481,32 +531,64 @@ namespace Lynx
         swapInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
         swapInfo.preTransform = caps.currentTransform;
         swapInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-        swapInfo.presentMode = vk::PresentModeKHR::eFifo;
+        swapInfo.presentMode = ChoosePresentMode(m_VulkanState->PhysicalDevice, m_VulkanState->Surface, m_VSync);
         swapInfo.clipped = VK_TRUE;
-        m_VulkanState->Swapchain = m_VulkanState->Device.createSwapchainKHR(swapInfo);
 
-        // 7. Get Images
+        m_VulkanState->Swapchain = m_VulkanState->Device.createSwapchainKHR(swapInfo);
+        LX_CORE_INFO("Swapchain created: {0}x{1}, present mode {2}", swapInfo.imageExtent.width, swapInfo.imageExtent.height, vk::to_string(swapInfo.presentMode));
         m_VulkanState->SwapchainImages = m_VulkanState->Device.getSwapchainImagesKHR(m_VulkanState->Swapchain);
-        
-        // 8. Sync Objects
-        m_VulkanState->ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        m_VulkanState->InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-        m_VulkanState->RenderFinishedSemaphores.resize(m_VulkanState->SwapchainImages.size());
 
         vk::SemaphoreCreateInfo semInfo;
-        vk::FenceCreateInfo fenceInfo;
-        fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
+        m_VulkanState->RenderFinishedSemaphores.resize(m_VulkanState->SwapchainImages.size());
+        for (vk::Semaphore& semaphore : m_VulkanState->RenderFinishedSemaphores)
+            semaphore = m_VulkanState->Device.createSemaphore(semInfo);
+    }
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    void Renderer::CreateSwapchainFramebuffers()
+    {
+        for (auto vkImage : m_VulkanState->SwapchainImages)
         {
-            m_VulkanState->ImageAvailableSemaphores[i] = m_VulkanState->Device.createSemaphore(semInfo);
-            m_VulkanState->InFlightFences[i] = m_VulkanState->Device.createFence(fenceInfo);
-        }
+            nvrhi::TextureDesc desc;
+            desc.width = m_VulkanState->SwapchainExtent.width;
+            desc.height = m_VulkanState->SwapchainExtent.height;
+            desc.format = nvrhi::Format::BGRA8_UNORM;
+            desc.isRenderTarget = true;
+            desc.initialState = nvrhi::ResourceStates::Present;
+            desc.keepInitialState = true;
 
-        for (size_t i = 0; i < m_VulkanState->RenderFinishedSemaphores.size(); i++)
-        {
-            m_VulkanState->RenderFinishedSemaphores[i] = m_VulkanState->Device.createSemaphore(semInfo);
+            nvrhi::TextureHandle texture = m_NvrhiDevice->createHandleForNativeTexture(nvrhi::ObjectTypes::VK_Image, (VkImage)vkImage, desc);
+            nvrhi::FramebufferDesc fbDesc;
+            fbDesc.addColorAttachment(texture);
+            m_SwapchainFramebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
         }
+    }
+
+    void Renderer::RecreateSwapchain(uint32_t width, uint32_t height)
+    {
+        m_VulkanState->Device.waitIdle();
+
+        for (auto& sem : m_VulkanState->RenderFinishedSemaphores)
+            m_VulkanState->Device.destroySemaphore(sem);
+
+        m_SwapchainFramebuffers.clear();
+        m_CurrentFrameData.TargetFramebuffer = nullptr;
+        m_VulkanState->SwapchainImages.clear();
+
+        m_VulkanState->Device.destroySwapchainKHR(m_VulkanState->Swapchain);
+
+        CreateSwapchain(width, height);
+        CreateSwapchainFramebuffers();
+    }
+
+    void Renderer::SetVSync(bool enabled)
+    {
+        if (m_VSync == enabled)
+            return;
+
+        m_VSync = enabled;
+
+        // The present mode is fixed when a swapchain is created, so changing it needs a new swapchain.
+        RecreateSwapchain(m_VulkanState->SwapchainExtent.width, m_VulkanState->SwapchainExtent.height);
     }
 
     void Renderer::InitNVRHI()
@@ -528,21 +610,7 @@ namespace Lynx
             m_NvrhiDevice = nvrhiValidationLayer;
         }*/
 
-        for (auto vkImage : m_VulkanState->SwapchainImages)
-        {
-            nvrhi::TextureDesc desc;
-            desc.width = m_VulkanState->SwapchainExtent.width;
-            desc.height = m_VulkanState->SwapchainExtent.height;
-            desc.format = nvrhi::Format::BGRA8_UNORM;
-            desc.isRenderTarget = true;
-            desc.initialState = nvrhi::ResourceStates::Present;
-            desc.keepInitialState = true;
-
-            nvrhi::TextureHandle texture = m_NvrhiDevice->createHandleForNativeTexture(nvrhi::ObjectTypes::VK_Image, (VkImage)vkImage, desc);
-            nvrhi::FramebufferDesc fbDesc;
-            fbDesc.addColorAttachment(texture);
-            m_SwapchainFramebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
-        }
+        CreateSwapchainFramebuffers();
 
         // 3. Create Command List
         m_CommandList = m_NvrhiDevice->createCommandList();
@@ -1017,69 +1085,7 @@ namespace Lynx
     {
         if (width == 0 || height == 0) return;
 
-        m_VulkanState->Device.waitIdle();
-
-        for (auto& sem : m_VulkanState->RenderFinishedSemaphores)
-            m_VulkanState->Device.destroySemaphore(sem);
-
-        m_SwapchainFramebuffers.clear();
-        m_CurrentFrameData.TargetFramebuffer = nullptr;
-        
-        // We don't strictly need to clear the vector of vk::Image handles, 
-        // as getSwapchainImagesKHR will overwrite it, but it's cleaner.
-        m_VulkanState->SwapchainImages.clear();
-
-        m_VulkanState->Device.destroySwapchainKHR(m_VulkanState->Swapchain);
-
-        // Recreate Swapchain
-        vk::SurfaceCapabilitiesKHR caps = m_VulkanState->PhysicalDevice.getSurfaceCapabilitiesKHR(m_VulkanState->Surface);
-        m_VulkanState->SwapchainExtent = caps.currentExtent;
-        // If extent is undefined (0xFFFFFFFF), use window size
-        if (m_VulkanState->SwapchainExtent.width == UINT32_MAX)
-        {
-            m_VulkanState->SwapchainExtent.width = width;
-            m_VulkanState->SwapchainExtent.height = height;
-        }
-
-        vk::SwapchainCreateInfoKHR swapInfo;
-        swapInfo.surface = m_VulkanState->Surface;
-        swapInfo.minImageCount = 2;
-        swapInfo.imageFormat = m_VulkanState->SwapchainFormat;
-        swapInfo.imageColorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
-        swapInfo.imageExtent = m_VulkanState->SwapchainExtent;
-        swapInfo.imageArrayLayers = 1;
-        swapInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
-        swapInfo.preTransform = caps.currentTransform;
-        swapInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-        swapInfo.presentMode = vk::PresentModeKHR::eFifo;
-        swapInfo.clipped = VK_TRUE;
-        
-        m_VulkanState->Swapchain = m_VulkanState->Device.createSwapchainKHR(swapInfo);
-        m_VulkanState->SwapchainImages = m_VulkanState->Device.getSwapchainImagesKHR(m_VulkanState->Swapchain);
-
-        m_VulkanState->RenderFinishedSemaphores.resize(m_VulkanState->SwapchainImages.size());
-        vk::SemaphoreCreateInfo semInfo;
-        for (size_t i = 0; i < m_VulkanState->RenderFinishedSemaphores.size(); i++)
-        {
-            m_VulkanState->RenderFinishedSemaphores[i] = m_VulkanState->Device.createSemaphore(semInfo);
-        }
-
-        // Recreate NVRHI Resources
-        for (auto vkImage : m_VulkanState->SwapchainImages)
-        {
-            nvrhi::TextureDesc desc;
-            desc.width = m_VulkanState->SwapchainExtent.width;
-            desc.height = m_VulkanState->SwapchainExtent.height;
-            desc.format = nvrhi::Format::BGRA8_UNORM;
-            desc.isRenderTarget = true;
-            desc.initialState = nvrhi::ResourceStates::Present;
-            desc.keepInitialState = true;
-
-            nvrhi::TextureHandle texture = m_NvrhiDevice->createHandleForNativeTexture(nvrhi::ObjectTypes::VK_Image, (VkImage)vkImage, desc);
-            nvrhi::FramebufferDesc fbDesc;
-            fbDesc.addColorAttachment(texture);
-            m_SwapchainFramebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
-        }
+        RecreateSwapchain(width, height);
 
         //EnsureEditorViewport(width, height);
     }

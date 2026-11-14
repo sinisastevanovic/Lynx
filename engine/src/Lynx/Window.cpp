@@ -113,7 +113,6 @@ namespace Lynx
         LX_ASSERT(m_Window, "Failed to create GLFW window!");
 
         glfwSetWindowUserPointer(m_Window, &m_Data);
-        //SetVSync(true);
 
         glfwSetWindowSizeCallback(m_Window, [](GLFWwindow* window, int width, int height)
         {
@@ -219,21 +218,6 @@ namespace Lynx
     void Window::SetEventCallback(const EventCallbackFn& callback)
     {
         m_Data.EventCallback = callback;
-    }
-
-    void Window::SetVSync(bool enabled)
-    {
-        if (enabled)
-            glfwSwapInterval(1);
-        else
-            glfwSwapInterval(0);
-
-        m_Data.VSync = enabled;
-    }
-
-    bool Window::IsVSync() const
-    {
-        return m_Data.VSync;
     }
 
     bool Window::ShouldClose()

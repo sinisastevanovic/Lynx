@@ -12,6 +12,14 @@ namespace Lynx
         {
             auto& renderer = Engine::Get().GetRenderer();
             auto& bloom = renderer.GetBloomSettings();
+
+            if (ImGui::CollapsingHeader("Display", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool vsync = renderer.IsVSync();
+                if (ImGui::Checkbox("VSync", &vsync))
+                    renderer.SetVSync(vsync);
+            }
+
             if (ImGui::CollapsingHeader("Bloom", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 ImGui::Checkbox("Enabled", &bloom.Enabled);
