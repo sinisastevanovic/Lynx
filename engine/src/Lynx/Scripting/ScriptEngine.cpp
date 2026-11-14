@@ -33,10 +33,14 @@ namespace Lynx
 
         m_Data->Lua.set_function("print", [](sol::variadic_args args)
         {
+            // Lua's own tostring handles every value. Reading an argument as a string directly
+            // fails for tables, booleans and nil.
+            sol::protected_function toString = sol::state_view(args.lua_state())["tostring"];
+
             std::string message;
             for (auto arg : args)
             {
-                message += arg.as<std::string>() + "\t";
+                message += toString(arg.get<sol::object>()).get<std::string>() + "\t";
             }
 
             LX_CORE_INFO("[LUA] {0}", message);

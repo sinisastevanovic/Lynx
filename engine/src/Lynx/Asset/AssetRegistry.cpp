@@ -73,7 +73,7 @@ namespace Lynx
             // Ignore temp files
             if (event.Path.extension() == ".tmp" || event.Path.extension() == ".bak")
                 continue;
-            if (event.Action == FileAction::Renamed && (event.NewPath.extension() == "tmp" || event.NewPath.extension() == ".bak"))
+            if (event.Action == FileAction::Renamed && (event.NewPath.extension() == ".tmp" || event.NewPath.extension() == ".bak"))
                 continue;
             
             if (event.Path.extension() == ".lxmeta")

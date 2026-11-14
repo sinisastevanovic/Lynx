@@ -11,8 +11,8 @@ namespace Lynx
         ScriptableEntity* Instance = nullptr;
         std::string ScriptName;
 
-        ScriptableEntity* (*InstantiateScript)();
-        void (*DestroyScript)(NativeScriptComponent*);
+        ScriptableEntity* (*InstantiateScript)() = nullptr;
+        void (*DestroyScript)(NativeScriptComponent*) = nullptr;
 
         static LX_API std::string GetScriptName(std::type_index type);
 
