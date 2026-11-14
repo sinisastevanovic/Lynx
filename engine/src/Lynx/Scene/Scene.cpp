@@ -18,6 +18,19 @@
 
 namespace Lynx
 {
+    namespace
+    {
+        bool IsSameOrAncestorOf(entt::registry& registry, entt::entity candidate, entt::entity entity)
+        {
+            for (entt::entity current = entity; current != entt::null; current = registry.get<RelationshipComponent>(current).Parent)
+            {
+                if (current == candidate)
+                    return true;
+            }
+            return false;
+        }
+    }
+
     static void SetTransformFromMatrix(TransformComponent& transform, const glm::mat4& matrix)
     {
         glm::vec3 scale;
@@ -138,20 +151,9 @@ namespace Lynx
     {
         if (!m_Registry.valid(entity))
             return;
-        
-        if (!excludeChildren)
-        {
-            auto& rel = m_Registry.get<RelationshipComponent>(entity);
-            entt::entity child = rel.FirstChild;
-            while (child != entt::null)
-            {
-                entt::entity nextChild = m_Registry.get<RelationshipComponent>(child).NextSibling;
-                DestroyEntityDeferred(entity, excludeChildren);
-                child = nextChild;
-            }
-        }
-        
-        m_DestroyQueue.push_back(entity);
+
+        // The children are handled when the queue is processed, by the same code as an immediate destroy.
+        m_DestroyQueue.push_back({ entity, excludeChildren });
     }
 
     void Scene::DestroyEntityDeferred(Entity entity, bool excludeChildren)
@@ -358,15 +360,15 @@ namespace Lynx
 
     void Scene::ProcessDestroyQueue()
     {
-        for (auto entity : m_DestroyQueue)
-        {
-            Entity e(entity, this);
-            Emit<EntityDestroyedEvent>(e);
-            auto& idComp = m_Registry.get<IDComponent>(entity);
-            m_EntityMap.erase(idComp.ID);
-            m_Registry.destroy(entity);
-        }
+        // Destroying an entity emits an event, and a listener may queue further entities.
+        // Those go into a fresh queue, for the next call.
+        const std::vector<PendingDestroy> queue = std::move(m_DestroyQueue);
         m_DestroyQueue.clear();
+
+        // DestroyEntity ignores an entity that is already gone, such as one queued twice
+        // or a child that went with its parent earlier in this loop.
+        for (const PendingDestroy& pending : queue)
+            DestroyEntity(pending.Entity, pending.ExcludeChildren);
     }
 
     void Scene::OnRuntimeStart()
@@ -593,16 +595,23 @@ namespace Lynx
 
     void Scene::AttachEntity(entt::entity child, entt::entity parent)
     {
-        DetachEntity(child);
-
-        auto& childRel = m_Registry.get<RelationshipComponent>(child);
-        childRel.Parent = parent;
-
+        // Every check comes before the first change, so a refused attach leaves the hierarchy as it was.
         if (m_Registry.all_of<RigidBodyComponent>(child))
         {
             LX_CORE_WARN("Cannot attach an entity that has a RigidBodyComponent!");
             return;
         }
+
+        if (IsSameOrAncestorOf(m_Registry, child, parent))
+        {
+            LX_CORE_WARN("Cannot attach an entity to itself or to one of its own descendants.");
+            return;
+        }
+
+        DetachEntity(child);
+
+        auto& childRel = m_Registry.get<RelationshipComponent>(child);
+        childRel.Parent = parent;
 
         auto& parentRel = m_Registry.get<RelationshipComponent>(parent);
         if (parentRel.FirstChild == entt::null)
@@ -742,15 +751,16 @@ namespace Lynx
 
     void Scene::UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform)
     {
-        auto& transform = m_Registry.get<TransformComponent>(entity);
-        auto& rel = m_Registry.get<RelationshipComponent>(entity);
+        // Updates the entity and the siblings after it. Siblings are walked in a loop and only children
+        // recurse, so the stack depth is the depth of the hierarchy and not the number of siblings.
+        for (entt::entity current = entity; current != entt::null; current = m_Registry.get<RelationshipComponent>(current).NextSibling)
+        {
+            auto& transform = m_Registry.get<TransformComponent>(current);
+            transform.WorldMatrix = parentTransform * transform.GetTransform();
 
-        transform.WorldMatrix = parentTransform * transform.GetTransform();
-
-        if (rel.NextSibling != entt::null)
-            UpdateEntityTransform(rel.NextSibling, parentTransform);
-
-        if (rel.FirstChild != entt::null)
-            UpdateEntityTransform(rel.FirstChild, transform.WorldMatrix);
+            const entt::entity firstChild = m_Registry.get<RelationshipComponent>(current).FirstChild;
+            if (firstChild != entt::null)
+                UpdateEntityTransform(firstChild, transform.WorldMatrix);
+        }
     }
 }

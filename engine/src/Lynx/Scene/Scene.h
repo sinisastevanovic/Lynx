@@ -163,7 +163,12 @@ namespace Lynx
         
         SystemManager m_GameSystems;
         
-        std::vector<entt::entity> m_DestroyQueue;
+        struct PendingDestroy
+        {
+            entt::entity Entity;
+            bool ExcludeChildren;
+        };
+        std::vector<PendingDestroy> m_DestroyQueue;
         
         std::unordered_map<UUID, entt::entity> m_EntityMap;
 
