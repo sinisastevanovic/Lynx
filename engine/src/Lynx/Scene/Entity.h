@@ -2,6 +2,7 @@
 
 #include "entt/entt.hpp"
 #include "Lynx/Log.h"
+#include "Lynx/UUID.h"
 
 namespace Lynx
 {

@@ -219,19 +219,16 @@ namespace Lynx
 
         void OnContactAdded(
             const JPH::CharacterVirtual* character,
-            const JPH::BodyID& bodyID2,
-            const JPH::SubShapeID& subShapeID2,
-            JPH::RVec3Arg contactPosition,
-            JPH::Vec3Arg contactNormal,
+            const JPH::CharacterContact& contact,
             JPH::CharacterContactSettings& settings
         ) override {
             CharacterCollision col;
             col.CharacterA = character->GetID().GetValue();
             col.CharacterEntity = static_cast<entt::entity>(character->GetUserData());
-            col.BodyA = bodyID2.GetIndexAndSequenceNumber();
+            col.BodyA = contact.mBodyB.GetIndexAndSequenceNumber();
             //col.OtherEntity = TODO:!!
-            col.ContactPoint = ToGLM(contactPosition);
-            col.ContactNormal = ToGLM(contactNormal);
+            col.ContactPoint = ToGLM(contact.mPosition);
+            col.ContactNormal = ToGLM(contact.mContactNormal);
 
             std::lock_guard lock(Mutex);
             Collisions.push_back(col);
