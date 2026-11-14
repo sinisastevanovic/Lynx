@@ -104,6 +104,7 @@ namespace Lynx
         // Declared before the asset registry and manager, which hold references to it.
         std::unique_ptr<ContentPaths> m_ContentPaths;
         std::unique_ptr<ShaderCache> m_ShaderCache;
+        std::string m_ImGuiLayoutFile;
 
         std::unique_ptr<Window> m_Window;
         std::unique_ptr<Renderer> m_Renderer;

@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Core.h"
+#include <filesystem>
 #include <memory>
 
 #ifdef _MSC_VER
@@ -19,7 +20,8 @@ namespace Lynx
     class LX_API Log
     {
     public:
-        static void Init();
+        // Logs to the console and to logFile, which is overwritten on every start.
+        static void Init(const std::filesystem::path& logFile);
         static void Shutdown();
 
         static std::shared_ptr<spdlog::logger>& GetCoreLogger() { return s_CoreLogger; }

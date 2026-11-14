@@ -40,7 +40,9 @@ namespace Lynx
         s_Instance = this;
         m_IsEditor = editorMode;
         m_Project = project;
-        Log::Init();
+        m_ContentPaths = std::make_unique<ContentPaths>(ContentPaths::DefaultEngineResourceDir(), m_Project.RootDirectory, m_Project.AssetDirectory);
+
+        Log::Init(m_ContentPaths->TempDirectory() / "engine.log");
         LX_CORE_INFO("Initializing project '{0}' at {1}", m_Project.Name, m_Project.RootDirectory.string());
 
         RegisterCoreScripts();
@@ -48,8 +50,6 @@ namespace Lynx
 
         m_Window = Window::Create();
         m_Window->SetEventCallback([this](Event& event){ this->OnEvent(event); });
-
-        m_ContentPaths = std::make_unique<ContentPaths>(ContentPaths::DefaultEngineResourceDir(), m_Project.RootDirectory, m_Project.AssetDirectory);
 
         m_ShaderCache = std::make_unique<ShaderCache>(m_ContentPaths->TempDirectory() / "ShaderCache");
 
@@ -66,6 +66,10 @@ namespace Lynx
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+
+        // ImGui keeps the pointer, so the string has to outlive the context.
+        m_ImGuiLayoutFile = (m_ContentPaths->TempDirectory() / "imgui.ini").string();
+        io.IniFilename = m_ImGuiLayoutFile.c_str();
         
         ImFontConfig fontConfig;
         fontConfig.GlyphOffset.y = -2.0f;

@@ -23,8 +23,9 @@ namespace Lynx
 
         bool IsEngineResource(const std::filesystem::path& path) const;
 
-        // Scratch space inside the project, created on first use. It shares a volume
-        // with the project assets, so a finished file can be moved into place with a rename.
+        // Folder inside the project for files that are local to this machine and not versioned:
+        // the log, the editor layout, the shader cache and import scratch files. Created on first use.
+        // It shares a volume with the project assets, so a finished file can be moved into place with a rename.
         std::filesystem::path TempDirectory() const;
 
         // Absolute, with "." and ".." resolved and separators unified,
