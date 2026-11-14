@@ -19,8 +19,9 @@ int main(int argc, char** argv)
     MyGame myGame;
 
     engine.Initialize(*project);
+    engine.SetGameModule(&myGame);
 
-    engine.Run(&myGame);
+    engine.Run();
 
     engine.Shutdown();
     std::cout << "--- Game Finished ---" << std::endl;

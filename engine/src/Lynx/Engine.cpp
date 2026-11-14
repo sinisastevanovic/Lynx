@@ -92,20 +92,22 @@ namespace Lynx
 
     }
 
-    void Engine::Run(IGameModule* gameModule)
+    void Engine::SetGameModule(IGameModule* gameModule)
+    {
+        m_GameModule = gameModule;
+
+        GameTypeRegistry gameRegistry(m_ComponentRegistry);
+        m_GameModule->RegisterScripts(&gameRegistry);
+        m_GameModule->RegisterComponents(&gameRegistry);
+    }
+
+    void Engine::Run()
     {
         LX_CORE_INFO("Starting main loop...");
         
         ViewportResizeEvent e(m_Window->GetWidth(), m_Window->GetHeight());
         OnEvent(e);
 
-        if (gameModule)
-        {
-            m_GameModule = gameModule;
-            GameTypeRegistry gameReg(m_ComponentRegistry);
-            gameModule->RegisterScripts(&gameReg);
-            gameModule->RegisterComponents(&gameReg);
-        }
         auto cubeMesh = m_AssetManager->GetDefaultCube();
 
         // Load all textures and meshes
@@ -180,8 +182,8 @@ namespace Lynx
             else if (m_SceneState == SceneState::Play)
             {
                 m_Scene->OnUpdateRuntime(m_DeltaTime);
-                if (gameModule)
-                    gameModule->OnUpdate(m_DeltaTime);
+                if (m_GameModule)
+                    m_GameModule->OnUpdate(m_DeltaTime);
                 
                 while (accumulator >= fixedTimestep)
                 {
@@ -200,8 +202,8 @@ namespace Lynx
         if (m_Scene && m_SceneState == SceneState::Play)
         {
             m_Scene->OnRuntimeStop();
-            if (gameModule)
-                gameModule->OnShutdown();
+            if (m_GameModule)
+                m_GameModule->OnShutdown();
         }
     }
 
@@ -233,6 +235,7 @@ namespace Lynx
     {
         m_ComponentRegistry.ClearGameComponents();
         m_ComponentRegistry.ClearGameScripts();
+        m_GameModule = nullptr;
     }
 
     void Engine::ClearActiveScene()

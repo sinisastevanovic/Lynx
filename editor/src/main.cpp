@@ -60,6 +60,9 @@ int main(int argc, char** argv)
         LX_CORE_INFO("Game DLL loaded.");
     }
 
+    if (gameModule)
+        engine.SetGameModule(gameModule);
+
     {
         EditorLayer editorLayer(&engine);
         editorLayer.OnAttach();
@@ -72,7 +75,7 @@ int main(int argc, char** argv)
             editorLayer.OnImGuiRender();
         });
         
-        engine.Run(gameModule);
+        engine.Run();
 
         editorLayer.OnDetach();
     }

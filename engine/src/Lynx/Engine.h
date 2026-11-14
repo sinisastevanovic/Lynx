@@ -30,7 +30,10 @@ namespace Lynx
         static Engine& Get() { return *s_Instance; }
         
         void Initialize(const Project& project, bool editorMode = false);
-        void Run(IGameModule* gameModule);
+        // Registers the game's components and scripts. Call it before any scene is loaded:
+        // a scene drops the components whose types are not registered yet.
+        void SetGameModule(IGameModule* gameModule);
+        void Run();
         void PreGameShutdown();
         void Shutdown();
 
