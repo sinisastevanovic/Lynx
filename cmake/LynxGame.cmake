@@ -33,6 +33,9 @@ function(lynx_add_game name)
     add_library(${name}Code STATIC ${ARG_SOURCES})
     target_include_directories(${name}Code PUBLIC ${ARG_INCLUDE_DIRECTORIES})
     target_link_libraries(${name}Code PUBLIC engine)
+    if(MSVC)
+        target_compile_options(${name}Code PRIVATE /MP)
+    endif()
 
     add_library(${name}Module SHARED "${LYNX_LAUNCH_SOURCE_DIR}/GameModuleExports.cpp")
     target_link_libraries(${name}Module PRIVATE ${name}Code)
@@ -40,6 +43,14 @@ function(lynx_add_game name)
     add_executable(${name} "${LYNX_LAUNCH_SOURCE_DIR}/StandaloneMain.cpp")
     target_link_libraries(${name} PRIVATE ${name}Code)
     set_target_properties(${name} PROPERTIES VS_DEBUGGER_COMMAND_ARGUMENTS "\"${project_file}\"")
+
+    # The editor finds the module next to its own executable, and the game finds the engine DLL the same way.
+    get_target_property(engine_output_dir engine RUNTIME_OUTPUT_DIRECTORY)
+    set_target_properties(${name}Code ${name}Module ${name} PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY "${engine_output_dir}"
+        LIBRARY_OUTPUT_DIRECTORY "${engine_output_dir}"
+        RUNTIME_OUTPUT_DIRECTORY "${engine_output_dir}"
+    )
 
     # The editor loads the module at run time, so nothing links the two together.
     # The dependency makes building the editor also rebuild the game it is about to open.

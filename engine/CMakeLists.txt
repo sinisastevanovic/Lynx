@@ -6,6 +6,9 @@ file(GLOB_RECURSE ENGINE_SOURCES
 
 add_library(engine SHARED ${ENGINE_SOURCES})
 
+# Engine headers need C++23, so everything that includes them does too.
+target_compile_features(engine PUBLIC cxx_std_23)
+
 target_compile_definitions(engine
     PRIVATE
         LX_BUILD_DLL

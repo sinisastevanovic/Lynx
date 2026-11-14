@@ -1,6 +1,0 @@
-{
-    "Name": "MyGame",
-    "AssetDirectory": "assets",
-    "StartScene": "Scenes/MainScene.lxscene",
-    "GameModule": "MyGameModule"
-}
