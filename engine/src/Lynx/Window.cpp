@@ -213,4 +213,14 @@ namespace Lynx
     {
         return glfwWindowShouldClose(m_Window);
     }
+
+    void Window::Maximize()
+    {
+        glfwMaximizeWindow(m_Window);
+    }
+
+    bool Window::IsMaximized() const
+    {
+        return glfwGetWindowAttrib(m_Window, GLFW_MAXIMIZED) == GLFW_TRUE;
+    }
 }

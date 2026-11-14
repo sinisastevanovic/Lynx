@@ -1,4 +1,5 @@
 #include "EditorLayer.h"
+#include "EditorState.h"
 
 #include <imgui.h>
 #include <glm/ext/scalar_constants.hpp>
@@ -30,6 +31,9 @@ namespace Lynx
     void EditorLayer::OnAttach()
     {
         ApplyDefaultLayoutIfNone();
+
+        if (EditorState::Load(EditorStateFile()).WindowMaximized)
+            m_Engine->GetWindow().Maximize();
 
         auto entityCallack = [this](entt::entity entity)
         {
@@ -63,6 +67,10 @@ namespace Lynx
 
     void EditorLayer::OnDetach()
     {
+        EditorState state;
+        state.WindowMaximized = m_Engine->GetWindow().IsMaximized();
+        state.Save(EditorStateFile());
+
         m_EditorScene.reset();
         m_RuntimeScene.reset();
         m_Panels.clear();
@@ -346,6 +354,11 @@ namespace Lynx
     {
         m_EditorScene = Engine::Get().GetAssetManager().GetAsset<Scene>(handle, AssetLoadMode::Blocking);
         m_Engine->LoadScene(m_EditorScene);
+    }
+
+    std::filesystem::path EditorLayer::EditorStateFile() const
+    {
+        return m_Engine->GetContentPaths().TempDirectory() / "EditorState.json";
     }
 
     void EditorLayer::ApplyDefaultLayoutIfNone()

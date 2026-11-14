@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 
+#include "Core.h"
 #include "Event/Event.h"
 
 struct GLFWwindow;
@@ -27,7 +28,7 @@ namespace Lynx
         Locked = 2
     };
     
-    class Window
+    class LX_API Window
     {
     public:
         using EventCallbackFn = std::function<void(Event&)>;
@@ -43,6 +44,9 @@ namespace Lynx
         uint32_t GetWidth() const { return m_Data.Width; }
         uint32_t GetHeight() const { return m_Data.Height; }
         bool ShouldClose();
+
+        void Maximize();
+        bool IsMaximized() const;
 
         GLFWwindow* GetNativeWindow() const { return m_Window; }
         void* GetNativeWindowHandle() const;

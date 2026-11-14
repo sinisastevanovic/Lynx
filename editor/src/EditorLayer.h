@@ -28,6 +28,7 @@ namespace Lynx
         void OpenScene(AssetHandle handle);
         void OpenStartScene();
         void ApplyDefaultLayoutIfNone();
+        std::filesystem::path EditorStateFile() const;
 
         void OnSceneContextChanged(Scene* scene);
         void OnSelectedEntityChanged(entt::entity entity);
