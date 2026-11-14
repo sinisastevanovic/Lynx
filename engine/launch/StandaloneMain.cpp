@@ -1,11 +1,12 @@
+// Compiled into the standalone executable of every game by lynx_add_game.
+
 #include <Lynx/Engine.h>
-#include <MyGameModule.h>
+#include <Lynx/GameModule.h>
+
 #include <iostream>
 
 int main(int argc, char** argv)
 {
-    std::cout << "--- Starting Standalone Game ---" << std::endl;
-
     const auto project = Lynx::Project::LoadFromCommandLine(argc, argv);
     if (!project)
     {
@@ -14,16 +15,14 @@ int main(int argc, char** argv)
     }
 
     Lynx::Engine engine;
-    
-    // No DLLs! We create the game instance directly from its class.
-    MyGame myGame;
-
     engine.Initialize(*project);
-    engine.SetGameModule(&myGame);
+
+    Lynx::IGameModule* gameModule = LynxCreateGameModule();
+    engine.SetGameModule(gameModule);
 
     engine.Run();
 
     engine.Shutdown();
-    std::cout << "--- Game Finished ---" << std::endl;
+    LynxDestroyGameModule(gameModule);
     return 0;
 }

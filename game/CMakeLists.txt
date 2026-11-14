@@ -4,14 +4,8 @@ file(GLOB_RECURSE GAME_SOURCES
     "src/*.h"
 )
 
-add_library(game STATIC ${GAME_SOURCES})
-
-target_include_directories(game PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
+lynx_add_game(MyGame
+    PROJECT_FILE "${CMAKE_SOURCE_DIR}/MyGame.lxproj"
+    SOURCES ${GAME_SOURCES}
+    INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
-
-target_include_directories(game PRIVATE
-    ${imgui_SOURCE_DIR}
-)
-
-target_link_libraries(game PUBLIC engine)

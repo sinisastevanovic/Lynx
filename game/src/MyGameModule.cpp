@@ -446,3 +446,5 @@ void MyGame::OnShutdown()
     DamageTextSystem::Shutdown();
     // Engine::Get().GetAssetManager().UnloadAsset(m_ParticleMat->GetHandle()); // TODO: This is temporary!! We need a way to clear all runtime game assets. 
 }
+
+LX_GAME_MODULE(MyGame)

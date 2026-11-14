@@ -6,21 +6,29 @@ file(GLOB_RECURSE ENGINE_SOURCES
 
 add_library(engine SHARED ${ENGINE_SOURCES})
 
-target_compile_definitions(engine PRIVATE 
-    LX_BUILD_DLL
-    GLFW_STATIC
-    VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
-    "IMGUI_API=__declspec(dllexport)"
-    GLM_FORCE_DEPTH_ZERO_TO_ONE
-    "LX_ENGINE_RESOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/resources\""
+target_compile_definitions(engine
+    PRIVATE
+        LX_BUILD_DLL
+        GLFW_STATIC
+        VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
+        "IMGUI_API=__declspec(dllexport)"
+        "LX_ENGINE_RESOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/resources\""
+    # Everything that uses the engine must see the same GLM depth range.
+    PUBLIC
+        GLM_FORCE_DEPTH_ZERO_TO_ONE
+    # ImGui is compiled into the engine DLL, so users of the engine import it from there.
+    INTERFACE
+        "IMGUI_API=__declspec(dllimport)"
 )
 
 find_package(Lua REQUIRED)
 
-target_include_directories(engine PRIVATE
-    ${imgui_SOURCE_DIR}
-    ${imgui_SOURCE_DIR}/backends
-    ${LUA_INCLUDE_DIR}
+target_include_directories(engine
+    PUBLIC
+        ${imgui_SOURCE_DIR}
+    PRIVATE
+        ${imgui_SOURCE_DIR}/backends
+        ${LUA_INCLUDE_DIR}
 )
 
 target_sources(engine PRIVATE

@@ -62,8 +62,8 @@ set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE 
 
 # Add the subdirectories. CMake will process the CMakeLists.txt in each.
 # The order matters as it defines dependencies.
+include(cmake/LynxGame.cmake)
+
 add_subdirectory(engine)
 add_subdirectory(editor)
 add_subdirectory(game)
-add_subdirectory(game_dll)
-add_subdirectory(game_standalone)
