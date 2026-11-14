@@ -212,14 +212,17 @@ namespace Lynx
         if (m_SceneState == SceneState::Play)
             EndPlay();
 
+        // Teardown order matters. Scenes hold Lua objects in their script components, so every scene,
+        // including the scene assets cached by the asset manager, has to go before the script engine.
+        // Assets hold GPU resources, so the asset manager has to go before the renderer.
         m_SceneRenderer.reset();
-        // The scene goes first: its script components hold Lua objects that need the script engine to release.
+        m_NextScene.reset();
         m_Scene.reset();
+        m_AssetManager.reset();
         m_ScriptEngine.reset();
-        
+
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
-        m_AssetManager.reset();
         m_Renderer.reset();
         Log::Shutdown();
     }
