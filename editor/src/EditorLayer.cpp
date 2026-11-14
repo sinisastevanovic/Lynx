@@ -212,13 +212,7 @@ namespace Lynx
 
     void EditorLayer::OnScenePlay()
     {
-        SceneSerializer serializer(m_EditorScene);
-        std::string data = serializer.SerializeToString();
-
-        m_RuntimeScene = std::make_shared<Scene>();
-        SceneSerializer runtimeSerializer(m_RuntimeScene);
-        runtimeSerializer.DeserializeFromString(data);
-
+        m_RuntimeScene = SceneSerializer::Duplicate(m_EditorScene);
         m_Engine->StartPlay(m_RuntimeScene);
         
         m_InputCapturedByGame = true;

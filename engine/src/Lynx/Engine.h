@@ -53,8 +53,13 @@ namespace Lynx
         std::shared_ptr<Scene> GetActiveScene() const { return m_Scene; }
         void ClearActiveScene();
         
+        // The engine starts in Edit state. Play begins and ends only through these calls.
         void StartPlay(std::shared_ptr<Scene> runtimeScene);
         void StopPlay(std::shared_ptr<Scene> editorScene);
+
+        // Loads the project's start scene and plays a copy of it. This is how a standalone game,
+        // which has no editor to press Play, gets into Play state. Returns false if the scene cannot be loaded.
+        bool PlayStartScene();
         void LoadScene(std::shared_ptr<Scene> newScene);
         void LoadScene(const std::filesystem::path& path);
 
@@ -85,6 +90,8 @@ namespace Lynx
         
         void SwapActiveScene(std::shared_ptr<Scene> scene);
         void ProcessPendingScene();
+        void StartSceneRuntime();
+        void EndPlay();
         std::shared_ptr<Scene> m_NextScene = nullptr;
 
     private:
@@ -110,7 +117,7 @@ namespace Lynx
 
         std::function<void()> m_ImGuiCallback;
 
-        SceneState m_SceneState = SceneState::Play;
+        SceneState m_SceneState = SceneState::Edit;
 
         bool m_BlockEvents = false;
         EventCallbackFn m_AppEventCallback;

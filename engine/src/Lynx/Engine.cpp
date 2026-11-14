@@ -9,6 +9,7 @@
 #include "Log.h"
 #include "Renderer/Renderer.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneSerializer.h"
 #include "Scene/Components/Components.h"
 #include "Event/KeyEvent.h"
 #include "Event/WindowEvent.h"
@@ -79,12 +80,7 @@ namespace Lynx
         m_Renderer->Init();
 
         m_ScriptEngine = std::make_unique<ScriptEngine>();
-        
-        if (editorMode)
-            m_SceneState = SceneState::Edit;
-        else
-            m_SceneState = SceneState::Play;
-        
+
         m_Scene = std::make_shared<Scene>();
         m_SceneRenderer = std::make_unique<SceneRenderer>(m_Scene);
         
@@ -199,12 +195,8 @@ namespace Lynx
             Input::OnUpdate();
         }
 
-        if (m_Scene && m_SceneState == SceneState::Play)
-        {
-            m_Scene->OnRuntimeStop();
-            if (m_GameModule)
-                m_GameModule->OnShutdown();
-        }
+        if (m_SceneState == SceneState::Play)
+            EndPlay();
     }
 
     void Engine::PreGameShutdown()
@@ -217,12 +209,13 @@ namespace Lynx
     void Engine::Shutdown()
     {
         LX_CORE_INFO("Shutting down...");
-        if (m_SceneState == SceneState::Play && m_Scene)
-            m_Scene->OnRuntimeStop();
+        if (m_SceneState == SceneState::Play)
+            EndPlay();
 
         m_SceneRenderer.reset();
-        m_ScriptEngine.reset();
+        // The scene goes first: its script components hold Lua objects that need the script engine to release.
         m_Scene.reset();
+        m_ScriptEngine.reset();
         
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
@@ -252,9 +245,8 @@ namespace Lynx
         
         m_SceneState = SceneState::Play;
         SwapActiveScene(runtimeScene);
-        
-        m_ScriptEngine->OnRuntimeStart(m_Scene.get());
-        m_Scene->OnRuntimeStart();
+
+        StartSceneRuntime();
         if (m_GameModule)
             m_GameModule->OnStart();
     }
@@ -263,14 +255,45 @@ namespace Lynx
     {
         if (m_SceneState == SceneState::Edit)
             return;
-        
+
+        EndPlay();
+        SwapActiveScene(editorScene);
+    }
+
+    bool Engine::PlayStartScene()
+    {
+        const std::filesystem::path& startScene = m_Project.StartScene;
+        if (startScene.empty())
+        {
+            LX_CORE_ERROR("Project '{0}' does not name a start scene.", m_Project.Name);
+            return false;
+        }
+
+        const AssetHandle handle = m_AssetManager->GetAssetHandle(startScene);
+        if (!handle.IsValid())
+        {
+            LX_CORE_ERROR("Start scene of project '{0}' not found: {1}", m_Project.Name, startScene.string());
+            return false;
+        }
+
+        auto scene = m_AssetManager->GetAsset<Scene>(handle, AssetLoadMode::Blocking);
+        StartPlay(SceneSerializer::Duplicate(scene));
+        return true;
+    }
+
+    void Engine::StartSceneRuntime()
+    {
+        m_ScriptEngine->OnRuntimeStart(m_Scene.get());
+        m_Scene->OnRuntimeStart();
+    }
+
+    void Engine::EndPlay()
+    {
         if (m_GameModule)
             m_GameModule->OnShutdown();
-        
+
         m_Scene->OnRuntimeStop();
-        
         m_SceneState = SceneState::Edit;
-        SwapActiveScene(editorScene);
     }
 
     void Engine::LoadScene(std::shared_ptr<Scene> newScene)
@@ -312,9 +335,8 @@ namespace Lynx
             
             SwapActiveScene(m_NextScene);
             m_NextScene = nullptr;
-            
-            m_ScriptEngine->OnRuntimeStart(m_Scene.get());
-            m_Scene->OnRuntimeStart();
+
+            StartSceneRuntime();
         }
     }
 

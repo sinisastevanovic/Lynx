@@ -25,6 +25,15 @@ namespace Lynx
         return SerializeToJson().dump();
     }
 
+    std::shared_ptr<Scene> SceneSerializer::Duplicate(const std::shared_ptr<Scene>& source)
+    {
+        const std::string serialized = SceneSerializer(source).SerializeToString();
+
+        auto copy = std::make_shared<Scene>();
+        SceneSerializer(copy).DeserializeFromString(serialized);
+        return copy;
+    }
+
     bool SceneSerializer::Deserialize(const std::string& filepath)
     {
         std::ifstream stream(filepath);

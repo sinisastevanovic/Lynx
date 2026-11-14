@@ -14,7 +14,10 @@ namespace Lynx
         std::string SerializeToString();
         bool Deserialize(const std::string& filepath);
         bool DeserializeFromString(const std::string& serialized);
-        
+
+        // Returns an independent copy of the scene. Playing a copy keeps the original as it was authored.
+        static std::shared_ptr<Scene> Duplicate(const std::shared_ptr<Scene>& source);
+
         static void SerializePrefab(Entity entity, nlohmann::json& outJson, bool usePrefabIDs);
         static Entity DeserializePrefab(Scene* scene, nlohmann::json& json, Entity parent = {});
         static void DeserializePrefabInto(Scene* scene, nlohmann::json& json, Entity root);

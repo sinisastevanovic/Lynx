@@ -20,9 +20,11 @@ int main(int argc, char** argv)
     Lynx::IGameModule* gameModule = LynxCreateGameModule();
     engine.SetGameModule(gameModule);
 
-    engine.Run();
+    const bool isPlaying = engine.PlayStartScene();
+    if (isPlaying)
+        engine.Run();
 
     engine.Shutdown();
     LynxDestroyGameModule(gameModule);
-    return 0;
+    return isPlaying ? 0 : 1;
 }
