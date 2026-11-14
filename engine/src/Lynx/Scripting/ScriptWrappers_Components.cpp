@@ -86,7 +86,9 @@ namespace Lynx
                 case FieldKind::Color3:    return Expect<glm::vec3>(field, value, "a Vec3");
                 case FieldKind::Vec4:
                 case FieldKind::Color4:    return Expect<glm::vec4>(field, value, "a Color");
+                case FieldKind::Quat:      return Expect<glm::quat>(field, value, "a Quat");
                 case FieldKind::String:    return Expect<std::string>(field, value, "a string");
+                case FieldKind::UUID:
                 case FieldKind::Asset:
                 case FieldKind::UIElement:
                     // Scripts hold asset handles and element IDs either as a UUID or as the number behind it.

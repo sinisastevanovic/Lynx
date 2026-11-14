@@ -21,7 +21,9 @@ namespace Lynx
                 case FieldKind::Color3:    return std::get<glm::vec3>(value);
                 case FieldKind::Vec4:
                 case FieldKind::Color4:    return std::get<glm::vec4>(value);
+                case FieldKind::Quat:      return std::get<glm::quat>(value);
                 case FieldKind::String:    return std::get<std::string>(value);
+                case FieldKind::UUID:
                 case FieldKind::Asset:
                 case FieldKind::UIElement: return std::get<UUID>(value);
             }
@@ -42,7 +44,9 @@ namespace Lynx
                 case FieldKind::Color3:    return json.get<glm::vec3>();
                 case FieldKind::Vec4:
                 case FieldKind::Color4:    return json.get<glm::vec4>();
+                case FieldKind::Quat:      return json.get<glm::quat>();
                 case FieldKind::String:    return json.get<std::string>();
+                case FieldKind::UUID:
                 case FieldKind::Asset:
                 case FieldKind::UIElement: return json.get<UUID>();
             }

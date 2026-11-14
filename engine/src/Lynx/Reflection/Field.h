@@ -5,6 +5,7 @@
 #include "Lynx/Asset/AssetTypes.h"
 
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include <concepts>
 #include <functional>
@@ -39,15 +40,17 @@ namespace Lynx
         Vec4,
         Color3,
         Color4,
+        Quat,   // A rotation. The editor shows it as Euler angles in degrees.
         String,
         Enum,
+        UUID,   // An identifier the engine assigns. Saved, but not edited by hand.
         Asset,
         UIElement
     };
 
     // The value of any field, in the one representation the generic code works with:
     // integers and enums as int64_t, references to assets and UI elements as their UUID.
-    using FieldValue = std::variant<bool, int64_t, float, glm::vec2, glm::vec3, glm::vec4, std::string, UUID>;
+    using FieldValue = std::variant<bool, int64_t, float, glm::vec2, glm::vec3, glm::vec4, glm::quat, std::string, UUID>;
 
     struct FieldInfo
     {
@@ -119,7 +122,9 @@ namespace Lynx
         template<> struct Adapter<glm::vec2> : DirectAdapter<glm::vec2, FieldKind::Vec2> {};
         template<> struct Adapter<glm::vec3> : DirectAdapter<glm::vec3, FieldKind::Vec3> {};
         template<> struct Adapter<glm::vec4> : DirectAdapter<glm::vec4, FieldKind::Vec4> {};
+        template<> struct Adapter<glm::quat> : DirectAdapter<glm::quat, FieldKind::Quat> {};
         template<> struct Adapter<std::string> : DirectAdapter<std::string, FieldKind::String> {};
+        template<> struct Adapter<UUID> : DirectAdapter<UUID, FieldKind::UUID> {};
 
         template<typename Asset>
         struct Adapter<AssetRef<Asset>>

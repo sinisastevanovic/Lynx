@@ -87,8 +87,6 @@ namespace Lynx
 
     private:
         void OnEvent(Event& e);
-        void RegisterCoreScripts();
-        void RegisterCoreComponents();
         
         void SwapActiveScene(std::shared_ptr<Scene> scene);
         void ProcessPendingScene();

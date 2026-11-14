@@ -10,6 +10,27 @@
 
 namespace Lynx
 {
+    namespace
+    {
+        // Draws the body of a component: its own inspector if the editor registered one, otherwise its fields.
+        // Returns false if the component has neither.
+        bool DrawComponentBody(const std::string& name, const ComponentInfo& info, Scene* scene, entt::entity entity)
+        {
+            if (!info.drawUI && info.fields.empty())
+                return false;
+
+            LXUI::BeginPropertyGrid();
+            ImGui::PushID(name.c_str());
+            if (info.drawUI)
+                info.drawUI(scene->Reg(), entity);
+            else
+                DrawFields(info.fields, info.get(scene->Reg(), entity), scene);
+            ImGui::PopID();
+            LXUI::EndPropertyGrid();
+            return true;
+        }
+    }
+
     void InspectorPanel::OnImGuiRender()
     {
         ImGui::Begin("Inspector");
@@ -102,11 +123,7 @@ namespace Lynx
             if (m_Context->Reg().all_of<TransformComponent>(m_Selection))
             {
                 if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
-                {
-                    LXUI::BeginPropertyGrid();
-                    registeredComponents.at("Transform").drawUI(m_Context->Reg(), m_Selection);
-                    LXUI::EndPropertyGrid();
-                }
+                    DrawComponentBody("Transform", registeredComponents.at("Transform"), m_Context, m_Selection);
             }
             
             if (!m_Context->Reg().all_of<EditorMetadataComponent>(m_Selection))
@@ -154,7 +171,7 @@ namespace Lynx
                     continue;
                 
                 bool internalUse = info.InternalUseOnly;
-                if (!info.drawUI && internalUse)
+                if (!info.drawUI && info.fields.empty() && internalUse)
                     continue;
                 
                 if (info.has(m_Context->Reg(), m_Selection))
@@ -194,30 +211,11 @@ namespace Lynx
                     
                     ImGui::PopID();
 
-                    if (open)
+                    if (open && !DrawComponentBody(name, info, m_Context, m_Selection))
                     {
-                        if (info.drawUI)
-                        {
-                            LXUI::BeginPropertyGrid();
-                            ImGui::PushID(name.c_str());
-                            info.drawUI(m_Context->Reg(), m_Selection);
-                            ImGui::PopID();
-                            LXUI::EndPropertyGrid();
-                        }
-                        else if (!info.fields.empty())
-                        {
-                            LXUI::BeginPropertyGrid();
-                            ImGui::PushID(name.c_str());
-                            DrawFields(info.fields, info.get(m_Context->Reg(), m_Selection), m_Context);
-                            ImGui::PopID();
-                            LXUI::EndPropertyGrid();
-                        }
-                        else
-                        {
-                            ImGui::BeginDisabled(true);
-                            ImGui::Text("No Editor UI implemented.");
-                            ImGui::EndDisabled();
-                        }
+                        ImGui::BeginDisabled(true);
+                        ImGui::Text("No Editor UI implemented.");
+                        ImGui::EndDisabled();
                     }
                 }
             }

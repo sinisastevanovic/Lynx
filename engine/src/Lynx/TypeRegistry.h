@@ -82,7 +82,28 @@ namespace Lynx
         template <typename T>
         void RegisterCoreComponent(const std::string& name, const DescribeFieldsFunc<T>& describeFields)
         {
-            RegisterWithFields<T>(name, describeFields, true);
+            RegisterWithFields<T>(name, describeFields, true, false);
+        }
+
+        // Like RegisterCoreComponent, for a component every entity has and the user cannot add or remove.
+        template <typename T>
+        void RegisterCoreInternalOnlyComponent(const std::string& name, const DescribeFieldsFunc<T>& describeFields)
+        {
+            RegisterWithFields<T>(name, describeFields, true, true);
+        }
+
+        // Replaces how the editor draws a component. The editor uses this for the components
+        // whose inspector is more than a list of fields, so that their UI code is not part of the engine.
+        void SetComponentInspector(const std::string& name, DrawComponentUIFunc drawUI)
+        {
+            const auto it = m_RegisteredComponents.find(name);
+            if (it == m_RegisteredComponents.end())
+            {
+                LX_CORE_ERROR("Cannot set an inspector for '{0}': no such component is registered.", name);
+                return;
+            }
+
+            it->second.drawUI = std::move(drawUI);
         }
 
         template <typename T>
@@ -195,7 +216,7 @@ namespace Lynx
         }
 
         template <typename T>
-        void RegisterWithFields(const std::string& name, const DescribeFieldsFunc<T>& describeFields, bool isCore)
+        void RegisterWithFields(const std::string& name, const DescribeFieldsFunc<T>& describeFields, bool isCore, bool internalUseOnly)
         {
             FieldList<T> fieldList;
             describeFields(fieldList);
@@ -213,7 +234,7 @@ namespace Lynx
                 {
                     ReadFields(*fields, &registry.get_or_emplace<T>(entity), json);
                 },
-                nullptr, isCore, false);
+                nullptr, isCore, internalUseOnly);
 
             ComponentInfo& info = m_RegisteredComponents[name];
             info.fields = *fields;
@@ -265,7 +286,7 @@ namespace Lynx
         template <typename T>
         void RegisterComponent(const std::string& name, const DescribeFieldsFunc<T>& describeFields)
         {
-            m_Registry.RegisterWithFields<T>(name, describeFields, false);
+            m_Registry.RegisterWithFields<T>(name, describeFields, false, false);
         }
 
         template <typename T>

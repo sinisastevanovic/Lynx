@@ -7,6 +7,7 @@
 
 #include "EditorLayer.h"
 #include "Components/EditorComponents.h"
+#include "Inspectors/CoreComponentInspectors.h"
 #include "ImGui/EditorTheme.h"
 #include "Lynx/Core/DllLoader.h"
 
@@ -41,6 +42,7 @@ int main(int argc, char** argv)
     EditorTheme::ApplyTheme();
     
     auto& registry = engine.GetComponentRegistry();
+    RegisterCoreComponentInspectors(registry);
     RegisterEditorComponents(registry);
 
     IGameModule* gameModule = nullptr;

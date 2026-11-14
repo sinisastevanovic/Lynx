@@ -42,8 +42,22 @@ namespace Lynx
                 case FieldKind::Color4:
                     return LXUI::DrawColorControl(field.Label, std::get<glm::vec4>(value));
 
+                case FieldKind::Quat:
+                {
+                    glm::vec3 degrees = glm::degrees(glm::eulerAngles(std::get<glm::quat>(value)));
+                    if (!LXUI::DrawVec3Control(field.Label, degrees, field.Min, field.Max))
+                        return false;
+
+                    value = glm::quat(glm::radians(degrees));
+                    return true;
+                }
+
                 case FieldKind::String:
                     return LXUI::DrawTextInput(field.Label, std::get<std::string>(value));
+
+                case FieldKind::UUID:
+                    // Identifiers are assigned by the engine and not edited by hand.
+                    return false;
 
                 case FieldKind::Enum:
                 {
