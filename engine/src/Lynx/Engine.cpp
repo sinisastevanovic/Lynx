@@ -34,12 +34,13 @@ namespace Lynx
 {
     Engine* Engine::s_Instance = nullptr;
     
-    void Engine::Initialize(const std::filesystem::path& projectDir, bool editorMode)
+    void Engine::Initialize(const Project& project, bool editorMode)
     {
         s_Instance = this;
         m_IsEditor = editorMode;
+        m_Project = project;
         Log::Init();
-        LX_CORE_INFO("Initializing...");
+        LX_CORE_INFO("Initializing project '{0}' at {1}", m_Project.Name, m_Project.RootDirectory.string());
 
         RegisterCoreScripts();
         RegisterCoreComponents();
@@ -47,7 +48,7 @@ namespace Lynx
         m_Window = Window::Create();
         m_Window->SetEventCallback([this](Event& event){ this->OnEvent(event); });
 
-        m_ContentPaths = std::make_unique<ContentPaths>(ContentPaths::DefaultEngineResourceDir(), projectDir);
+        m_ContentPaths = std::make_unique<ContentPaths>(ContentPaths::DefaultEngineResourceDir(), m_Project.RootDirectory, m_Project.AssetDirectory);
 
         m_AssetRegistry = std::make_unique<AssetRegistry>(*m_ContentPaths);
         m_AssetRegistry->LoadRegistry();

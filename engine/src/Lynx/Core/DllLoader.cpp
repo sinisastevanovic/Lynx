@@ -9,6 +9,15 @@
 
 namespace Lynx
 {
+    std::string DllLoader::PlatformFileName(const std::string& moduleName)
+    {
+#if defined(_WIN32)
+        return moduleName + ".dll";
+#else
+        return "lib" + moduleName + ".so";
+#endif
+    }
+
     DllHandle DllLoader::Load(const std::string& path)
     {
         DllHandle handle;

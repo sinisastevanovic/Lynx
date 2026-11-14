@@ -26,6 +26,7 @@ namespace Lynx
         void SaveScene();
         void OpenScene();
         void OpenScene(AssetHandle handle);
+        void OpenStartScene();
 
         void OnSceneContextChanged(Scene* scene);
         void OnSelectedEntityChanged(entt::entity entity);

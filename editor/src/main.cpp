@@ -29,9 +29,15 @@ int main(int argc, char** argv)
 {
     std::cout << "--- Starting Editor ---" << std::endl;
 
+    const auto project = Project::LoadFromCommandLine(argc, argv);
+    if (!project)
+    {
+        std::cerr << project.error() << std::endl;
+        return 1;
+    }
+
     Engine engine;
-    // The project is the folder the editor is started in, until projects get their own file.
-    engine.Initialize(std::filesystem::current_path(), true);
+    engine.Initialize(*project, true);
     EditorTheme::ApplyTheme();
     
     auto& registry = engine.GetComponentRegistry();
@@ -40,7 +46,10 @@ int main(int argc, char** argv)
     IGameModule* gameModule = nullptr;
     DestroyGameFunc destroyFunc = nullptr;
     
-    DllHandle gameDLL = DllLoader::Load("game_dll.dll");
+    DllHandle gameDLL;
+    if (!project->GameModule.empty())
+        gameDLL = DllLoader::Load(DllLoader::PlatformFileName(project->GameModule));
+
     if (gameDLL.IsValid())
     {
         auto createFunc = DllLoader::GetSymbol<CreateGameFunc>(gameDLL, "CreateGameModule");

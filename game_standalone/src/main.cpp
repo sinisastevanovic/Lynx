@@ -6,13 +6,19 @@ int main(int argc, char** argv)
 {
     std::cout << "--- Starting Standalone Game ---" << std::endl;
 
+    const auto project = Lynx::Project::LoadFromCommandLine(argc, argv);
+    if (!project)
+    {
+        std::cerr << project.error() << std::endl;
+        return 1;
+    }
+
     Lynx::Engine engine;
     
     // No DLLs! We create the game instance directly from its class.
     MyGame myGame;
 
-    // The project is the folder the game is started in, until projects get their own file.
-    engine.Initialize(std::filesystem::current_path());
+    engine.Initialize(*project);
 
     engine.Run(&myGame);
 

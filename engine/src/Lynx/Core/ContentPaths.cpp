@@ -4,14 +4,13 @@ namespace Lynx
 {
     namespace
     {
-        const char* const s_ProjectAssetFolder = "assets";
         const char* const s_ProjectTempFolder = "temp";
     }
 
-    ContentPaths::ContentPaths(const std::filesystem::path& engineResourceDir, const std::filesystem::path& projectDir)
+    ContentPaths::ContentPaths(const std::filesystem::path& engineResourceDir, const std::filesystem::path& projectRootDir, const std::filesystem::path& projectAssetDir)
         : m_EngineResources(Normalize(engineResourceDir)),
-          m_ProjectRoot(Normalize(projectDir)),
-          m_ProjectAssets(m_ProjectRoot / s_ProjectAssetFolder)
+          m_ProjectRoot(Normalize(projectRootDir)),
+          m_ProjectAssets(Normalize(projectAssetDir))
     {
     }
 

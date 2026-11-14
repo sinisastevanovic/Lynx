@@ -55,6 +55,8 @@ namespace Lynx
         m_Engine->SetAppEventCallback([this](Event& e) { OnEvent(e); });
 
         OnSceneContextChanged(m_EditorScene.get());
+
+        OpenStartScene();
     }
 
     void EditorLayer::OnDetach()
@@ -348,6 +350,22 @@ namespace Lynx
     {
         m_EditorScene = Engine::Get().GetAssetManager().GetAsset<Scene>(handle, AssetLoadMode::Blocking);
         m_Engine->LoadScene(m_EditorScene);
+    }
+
+    void EditorLayer::OpenStartScene()
+    {
+        const std::filesystem::path& startScene = m_Engine->GetProject().StartScene;
+        if (startScene.empty())
+            return;
+
+        const AssetHandle handle = m_Engine->GetAssetManager().GetAssetHandle(startScene);
+        if (!handle.IsValid())
+        {
+            LX_ERROR("Start scene of project '{0}' not found: {1}", m_Engine->GetProject().Name, startScene.string());
+            return;
+        }
+
+        OpenScene(handle);
     }
 
     void EditorLayer::OnSceneContextChanged(Scene* scene)

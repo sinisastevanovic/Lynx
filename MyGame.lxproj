@@ -1,0 +1,6 @@
+{
+    "Name": "MyGame",
+    "AssetDirectory": "assets",
+    "StartScene": "Scenes/MainScene.lxscene",
+    "GameModule": "game_dll"
+}

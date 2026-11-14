@@ -12,7 +12,7 @@ namespace Lynx
     class LX_API ContentPaths
     {
     public:
-        ContentPaths(const std::filesystem::path& engineResourceDir, const std::filesystem::path& projectDir);
+        ContentPaths(const std::filesystem::path& engineResourceDir, const std::filesystem::path& projectRootDir, const std::filesystem::path& projectAssetDir);
 
         const std::filesystem::path& EngineResources() const { return m_EngineResources; }
         const std::filesystem::path& ProjectRoot() const { return m_ProjectRoot; }

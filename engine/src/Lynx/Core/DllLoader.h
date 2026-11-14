@@ -14,6 +14,9 @@ namespace Lynx
     class LX_API DllLoader
     {
     public:
+        // Turns a module name into the file name of a shared library on this platform, e.g. "game" into "game.dll".
+        static std::string PlatformFileName(const std::string& moduleName);
+
         static DllHandle Load(const std::string& path);
         static void Unload(DllHandle handle);
         
