@@ -19,6 +19,13 @@ namespace Lynx
             return key == "ID" || key == "Relationship";
         }
 
+        // The editor keeps its own data on entities, under names that start with "Editor". A game runs
+        // without the editor, so it carries that data along untouched, and that is no reason for a warning.
+        bool IsEditorOnlyKey(const std::string& key)
+        {
+            return key.starts_with("Editor");
+        }
+
         // Adds every component in entityJson to the entity. Components of unregistered types are kept
         // in an UnregisteredDataComponent, and their names are added to unregisteredTypes.
         void DeserializeComponents(entt::registry& registry, entt::entity entity, const nlohmann::json& entityJson, std::set<std::string>& unregisteredTypes)
@@ -36,7 +43,8 @@ namespace Lynx
                 if (it == registeredComponents.end())
                 {
                     registry.get_or_emplace<UnregisteredDataComponent>(entity).SerializedByName[key] = value.dump();
-                    unregisteredTypes.insert(key);
+                    if (!IsEditorOnlyKey(key))
+                        unregisteredTypes.insert(key);
                     continue;
                 }
 
