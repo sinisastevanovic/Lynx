@@ -1,5 +1,4 @@
 #include "EditorLayer.h"
-#include "EditorState.h"
 
 #include <imgui.h>
 #include <glm/ext/scalar_constants.hpp>
@@ -32,8 +31,8 @@ namespace Lynx
     {
         ApplyDefaultLayoutIfNone();
 
-        if (EditorState::Load(EditorStateFile()).WindowMaximized)
-            m_Engine->GetWindow().Maximize();
+        m_State = EditorState::Load(EditorStateFile());
+        RestoreWindowState();
 
         auto entityCallack = [this](entt::entity entity)
         {
@@ -67,9 +66,8 @@ namespace Lynx
 
     void EditorLayer::OnDetach()
     {
-        EditorState state;
-        state.WindowMaximized = m_Engine->GetWindow().IsMaximized();
-        state.Save(EditorStateFile());
+        m_State.WindowMaximized = m_Engine->GetWindow().IsMaximized();
+        m_State.Save(EditorStateFile());
 
         m_EditorScene.reset();
         m_RuntimeScene.reset();
@@ -179,6 +177,8 @@ namespace Lynx
 
     void EditorLayer::OnImGuiRender()
     {
+        TrackWindowBounds();
+
         ImGuiIO& io = ImGui::GetIO();
         if (Input::GetCursorMode() == CursorMode::Locked)
         {
@@ -359,6 +359,27 @@ namespace Lynx
     std::filesystem::path EditorLayer::EditorStateFile() const
     {
         return m_Engine->GetContentPaths().TempDirectory() / "EditorState.json";
+    }
+
+    void EditorLayer::RestoreWindowState()
+    {
+        Window& window = m_Engine->GetWindow();
+
+        // The bounds first, so that un-maximizing later returns the window to where it was.
+        if (m_State.WindowBounds)
+            window.SetBounds(*m_State.WindowBounds);
+
+        if (m_State.WindowMaximized)
+            window.Maximize();
+    }
+
+    void EditorLayer::TrackWindowBounds()
+    {
+        // A maximized or minimized window reports those bounds, not the ones to come back to,
+        // so the bounds are recorded while the window is in neither state.
+        const Window& window = m_Engine->GetWindow();
+        if (!window.IsMaximized() && !window.IsMinimized())
+            m_State.WindowBounds = window.GetBounds();
     }
 
     void EditorLayer::ApplyDefaultLayoutIfNone()

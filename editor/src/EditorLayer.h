@@ -1,6 +1,7 @@
 #pragma once
 #include <Lynx.h>
 
+#include "EditorState.h"
 #include "Panels/EditorPanel.h"
 
 namespace Lynx
@@ -29,6 +30,8 @@ namespace Lynx
         void OpenStartScene();
         void ApplyDefaultLayoutIfNone();
         std::filesystem::path EditorStateFile() const;
+        void RestoreWindowState();
+        void TrackWindowBounds();
 
         void OnSceneContextChanged(Scene* scene);
         void OnSelectedEntityChanged(entt::entity entity);
@@ -36,6 +39,7 @@ namespace Lynx
         void OnSelectedUIElementChanged(std::shared_ptr<UIElement> uiElement);
         
         Engine* m_Engine;
+        EditorState m_State;
 
         std::vector<std::unique_ptr<EditorPanel>> m_Panels;
         class Viewport* m_ViewportPanel = nullptr;

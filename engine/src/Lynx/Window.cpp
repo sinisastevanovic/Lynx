@@ -17,6 +17,33 @@
 
 namespace Lynx
 {
+    namespace
+    {
+        // A window can be grabbed and moved if its top edge is on a monitor and enough of it is visible there.
+        bool IsReachableOnAMonitor(const WindowBounds& bounds)
+        {
+            const int minimumVisibleSize = 100;
+            if (bounds.Width < minimumVisibleSize || bounds.Height < minimumVisibleSize)
+                return false;
+
+            int monitorCount = 0;
+            GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
+            for (int i = 0; i < monitorCount; ++i)
+            {
+                int areaX, areaY, areaWidth, areaHeight;
+                glfwGetMonitorWorkarea(monitors[i], &areaX, &areaY, &areaWidth, &areaHeight);
+
+                const int visibleWidth = std::min(bounds.X + bounds.Width, areaX + areaWidth) - std::max(bounds.X, areaX);
+                const bool topEdgeIsOnMonitor = bounds.Y >= areaY && bounds.Y <= areaY + areaHeight - minimumVisibleSize;
+
+                if (visibleWidth >= minimumVisibleSize && topEdgeIsOnMonitor)
+                    return true;
+            }
+
+            return false;
+        }
+    }
+
     static KeyCode GLFWToEngineKeyCode(int glfwKey)
     {
         return static_cast<KeyCode>(glfwKey);
@@ -222,5 +249,28 @@ namespace Lynx
     bool Window::IsMaximized() const
     {
         return glfwGetWindowAttrib(m_Window, GLFW_MAXIMIZED) == GLFW_TRUE;
+    }
+
+    bool Window::IsMinimized() const
+    {
+        return glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED) == GLFW_TRUE;
+    }
+
+    WindowBounds Window::GetBounds() const
+    {
+        WindowBounds bounds;
+        glfwGetWindowPos(m_Window, &bounds.X, &bounds.Y);
+        glfwGetWindowSize(m_Window, &bounds.Width, &bounds.Height);
+        return bounds;
+    }
+
+    bool Window::SetBounds(const WindowBounds& bounds)
+    {
+        if (!IsReachableOnAMonitor(bounds))
+            return false;
+
+        glfwSetWindowPos(m_Window, bounds.X, bounds.Y);
+        glfwSetWindowSize(m_Window, bounds.Width, bounds.Height);
+        return true;
     }
 }
