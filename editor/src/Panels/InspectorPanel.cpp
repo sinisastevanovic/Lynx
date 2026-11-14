@@ -213,6 +213,14 @@ namespace Lynx
                 }
             }
 
+            if (const auto* unregistered = m_Context->Reg().try_get<UnregisteredDataComponent>(m_Selection))
+            {
+                ImGui::Separator();
+                ImGui::TextDisabled("Inactive, type not registered:");
+                for (const auto& [name, serialized] : unregistered->SerializedByName)
+                    ImGui::BulletText("%s", name.c_str());
+            }
+
             ImGui::Separator();
             if (ImGui::Button("Add Component"))
                 ImGui::OpenPopup("Add Component");

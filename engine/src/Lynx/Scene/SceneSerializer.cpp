@@ -2,6 +2,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <set>
+
 #include "Entity.h"
 #include "Components/Components.h"
 #include "Components/IDComponent.h"
@@ -9,6 +11,57 @@
 
 namespace Lynx
 {
+    namespace
+    {
+        // Entity keys that are not components: the ID, and the parent link the serializer resolves itself.
+        bool IsStructuralKey(const std::string& key)
+        {
+            return key == "ID" || key == "Relationship";
+        }
+
+        // Adds every component in entityJson to the entity. Components of unregistered types are kept
+        // in an UnregisteredDataComponent, and their names are added to unregisteredTypes.
+        void DeserializeComponents(entt::registry& registry, entt::entity entity, const nlohmann::json& entityJson, std::set<std::string>& unregisteredTypes)
+        {
+            const auto& registeredComponents = Engine::Get().GetComponentRegistry().GetRegisteredComponents();
+
+            registry.remove<UnregisteredDataComponent>(entity);
+
+            for (const auto& [key, value] : entityJson.items())
+            {
+                if (IsStructuralKey(key))
+                    continue;
+
+                auto it = registeredComponents.find(key);
+                if (it == registeredComponents.end())
+                {
+                    registry.get_or_emplace<UnregisteredDataComponent>(entity).SerializedByName[key] = value.dump();
+                    unregisteredTypes.insert(key);
+                    continue;
+                }
+
+                const ComponentInfo& info = it->second;
+                if (info.deserialize)
+                {
+                    info.add(registry, entity);
+                    info.deserialize(registry, entity, value);
+                }
+            }
+        }
+
+        void WarnAboutUnregisteredTypes(const std::set<std::string>& unregisteredTypes)
+        {
+            if (unregisteredTypes.empty())
+                return;
+
+            std::string names;
+            for (const std::string& name : unregisteredTypes)
+                names += (names.empty() ? "" : ", ") + name;
+
+            LX_CORE_WARN("Loaded components of unregistered types: {0}. They are inactive, and are kept and saved back unchanged. Is the game module loaded?", names);
+        }
+    }
+
     SceneSerializer::SceneSerializer(const std::shared_ptr<Scene>& scene)
         : m_Scene(scene)
     {
@@ -67,6 +120,7 @@ namespace Lynx
         LX_CORE_INFO("Deserializing scene: {}", sceneName);
 
         std::unordered_map<uint64_t, entt::entity> uuidMap;
+        std::set<std::string> unregisteredTypes;
 
         auto entities = sceneJson["Entities"];
         if (entities.is_array())
@@ -81,21 +135,11 @@ namespace Lynx
                 
                 idComp.ID = UUID(uuid);
 
-                const auto& registeredComponents = Engine::Get().GetComponentRegistry().GetRegisteredComponents();
-                for (auto& [key, value] : entityJson.items())
-                {
-                    if (registeredComponents.find(key) != registeredComponents.end())
-                    {
-                        const auto& info = registeredComponents.at(key);
-                        if (info.deserialize)
-                        {
-                            info.add(m_Scene->Reg(), newEntity);
-                            info.deserialize(m_Scene->Reg(), newEntity, value);
-                        }
-                    }
-                }
+                DeserializeComponents(m_Scene->Reg(), newEntity, entityJson, unregisteredTypes);
             }
         }
+
+        WarnAboutUnregisteredTypes(unregisteredTypes);
 
         for (auto& entityJson : entities)
         {
@@ -150,6 +194,16 @@ namespace Lynx
             }
         }
         
+        if (current.HasComponent<UnregisteredDataComponent>())
+        {
+            for (const auto& [name, serialized] : current.GetComponent<UnregisteredDataComponent>().SerializedByName)
+            {
+                // A type that got registered since the load has a live component, which was written above.
+                if (!entityJson.contains(name))
+                    entityJson[name] = nlohmann::json::parse(serialized);
+            }
+        }
+
         {
             auto& rel = current.GetComponent<RelationshipComponent>();
             if (rel.Parent != entt::null)
@@ -218,6 +272,7 @@ namespace Lynx
         std::unordered_map<uint64_t, uint64_t> oldToNewUUID; // Maps OLD UUID -> NEW UUID (for fixing refs)
 
         Entity rootEntity; // The first entity in the list is always the root (based on serialization order)
+        std::set<std::string> unregisteredTypes;
 
         // Pass 1: Create all entities with NEW UUIDs and deserialize components
         bool isFirst = true;
@@ -238,23 +293,10 @@ namespace Lynx
                 isFirst = false;
             }
 
-            // Deserialize Components
-            const auto& registeredComponents = Engine::Get().GetComponentRegistry().GetRegisteredComponents();
-            for (auto& [key, value] : entityJson.items())
-            {
-                if (key == "ID") continue;
-
-                if (registeredComponents.find(key) != registeredComponents.end())
-                {
-                    const auto& info = registeredComponents.at(key);
-                    if (info.deserialize)
-                    {
-                        info.add(scene->Reg(), newEntity);
-                        info.deserialize(scene->Reg(), newEntity, value);
-                    }
-                }
-            }
+            DeserializeComponents(scene->Reg(), newEntity, entityJson, unregisteredTypes);
         }
+
+        WarnAboutUnregisteredTypes(unregisteredTypes);
 
         // Pass 2: Reconstruct Hierarchy (Fix Parent/Child)
         for (auto& entityJson : entities)
@@ -326,8 +368,8 @@ namespace Lynx
         
         // 2. Deserialize & Update
         std::unordered_map<UUID, Entity> loadedMap;
-        
-        bool isFirst = true;
+        std::set<std::string> unregisteredTypes;
+
         const auto registeredComponents = Engine::Get().GetComponentRegistry().GetRegisteredComponents();
         for (auto& entityJson : entities)
         {
@@ -354,22 +396,10 @@ namespace Lynx
             
             loadedMap[assetID] = currentEntity;
             existingPrefabEntities.erase(assetID);
-            for (auto& [key, value] : entityJson.items())
-            {
-                if (key == "ID" || key == "Relationship")
-                    continue;
-                
-                if (registeredComponents.find(key) != registeredComponents.end())
-                {
-                    const auto& info = registeredComponents.at(key);
-                    if (info.deserialize)
-                    {
-                        info.add(scene->Reg(), currentEntity);
-                        info.deserialize(scene->Reg(), currentEntity, value);
-                    }
-                }
-            }
+            DeserializeComponents(scene->Reg(), currentEntity, entityJson, unregisteredTypes);
         }
+
+        WarnAboutUnregisteredTypes(unregisteredTypes);
         
         // 3. Fix Hierarchy
         for (auto& entityJson : entities)

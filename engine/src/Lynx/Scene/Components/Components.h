@@ -12,6 +12,7 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 
+#include <map>
 #include <string>
 #include <glm/gtx/matrix_decompose.hpp>
 
@@ -186,6 +187,14 @@ namespace Lynx
     };
     
     struct DisabledComponent {}; // TODO: We need to check where to actually exclude entities with this component. Should this be visibility only? Or fully disabled?
+
+    // Component data whose type was not registered when the entity was loaded, for example because
+    // the game module was missing. It is kept as JSON text per component name and written back on
+    // save, so loading and saving a scene never deletes data the engine does not understand.
+    struct UnregisteredDataComponent
+    {
+        std::map<std::string, std::string> SerializedByName;
+    };
 
     struct MeshComponent
     {
