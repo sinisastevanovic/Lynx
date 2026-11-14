@@ -1,0 +1,30 @@
+{
+    "AlbedoColor": [
+        1.0,
+        0.46975088119506836,
+        0.0,
+        1.0
+    ],
+    "AlphaCutoff": 0.5,
+    "EmissiveColor": [
+        0.17647051811218262,
+        1.0,
+        0.0
+    ],
+    "EmissiveStrength": 35.0,
+    "Metallic": 0.0,
+    "Mode": 3,
+    "Roughness": 0.5,
+    "Textures": {
+        "Albedo": 7526697754564204173,
+        "Emissive": 0,
+        "MetallicRoughness": 0,
+        "Normal": 0,
+        "Occlusion": 0
+    },
+    "Tiling": [
+        5.0,
+        5.0
+    ],
+    "UseNormalMap": false
+}

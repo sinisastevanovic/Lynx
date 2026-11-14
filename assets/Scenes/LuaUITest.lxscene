@@ -1,0 +1,302 @@
+{
+    "Entities": [
+        {
+            "Camera": {
+                "FixedAspectRatio": false,
+                "Primary": true,
+                "SceneCamera": {
+                    "OrthographicFar": 1.0,
+                    "OrthographicNear": -1.0,
+                    "OrthographicSize": 10.0,
+                    "PerspectiveFOV": 0.7853981852531433,
+                    "PerspectiveFar": 1000.0,
+                    "PerspectiveNear": 0.009999999776482582,
+                    "ProjectionType": 0
+                }
+            },
+            "EditorMetadata": {
+                "ComponentOrder": [
+                    "UICanvas",
+                    "LuaScript",
+                    "Camera"
+                ]
+            },
+            "ID": 8736426583940129982,
+            "LuaScript": {
+                "Scripts": [
+                    {
+                        "Properties": {
+                            "Button": 13421435662221855117,
+                            "Image": 14135935198400993730,
+                            "Name": "Hero",
+                            "Speed": 5.0,
+                            "Test": [
+                                0.0,
+                                5.0,
+                                0.0
+                            ],
+                            "Text": 4263616248080881655
+                        },
+                        "ScriptAsset": 1649232168466803063
+                    }
+                ]
+            },
+            "Tag": {
+                "Tag": "Empty Entity"
+            },
+            "Transform": {
+                "Rotation": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "Translation": [
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            },
+            "UICanvas": {
+                "Canvas": {
+                    "Anchor": [
+                        0.0,
+                        0.0,
+                        1.0,
+                        1.0
+                    ],
+                    "Children": [
+                        {
+                            "Anchor": [
+                                0.5,
+                                0.5,
+                                0.5,
+                                0.5
+                            ],
+                            "Border": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "Children": [],
+                            "ClipChildren": false,
+                            "Enabled": true,
+                            "FillAmount": 1.0,
+                            "FillMethod": 0,
+                            "HitTestVisible": false,
+                            "HorizontalAlignment": 3,
+                            "ImageType": 0,
+                            "Material": 0,
+                            "Name": "Image",
+                            "Offset": [
+                                0.0,
+                                0.0
+                            ],
+                            "Opacity": 1.0,
+                            "Padding": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "Pivot": [
+                                0.5,
+                                0.5
+                            ],
+                            "Size": [
+                                100.0,
+                                100.0
+                            ],
+                            "Texture": 0,
+                            "Tint": [
+                                1.0,
+                                1.0,
+                                1.0,
+                                1.0
+                            ],
+                            "Type": "UIImage",
+                            "UUID": 14135935198400993730,
+                            "VerticalAlignment": 3,
+                            "Visibility": 0
+                        },
+                        {
+                            "Anchor": [
+                                0.5,
+                                0.5,
+                                0.5,
+                                0.5
+                            ],
+                            "Border": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "BtnDisabled": [
+                                0.4000000059604645,
+                                0.4000000059604645,
+                                0.4000000059604645,
+                                1.0
+                            ],
+                            "BtnHovered": [
+                                0.800000011920929,
+                                0.800000011920929,
+                                0.800000011920929,
+                                1.0
+                            ],
+                            "BtnNormal": [
+                                1.0,
+                                1.0,
+                                1.0,
+                                1.0
+                            ],
+                            "BtnPressed": [
+                                0.6000000238418579,
+                                0.6000000238418579,
+                                0.6000000238418579,
+                                1.0
+                            ],
+                            "Children": [],
+                            "ClipChildren": false,
+                            "Enabled": true,
+                            "FillAmount": 1.0,
+                            "FillMethod": 0,
+                            "HitTestVisible": true,
+                            "HorizontalAlignment": 3,
+                            "ImageType": 0,
+                            "Material": 0,
+                            "Name": "Button",
+                            "Offset": [
+                                2.0,
+                                140.0
+                            ],
+                            "Opacity": 1.0,
+                            "Padding": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "Pivot": [
+                                0.5,
+                                0.5
+                            ],
+                            "Size": [
+                                120.0,
+                                40.0
+                            ],
+                            "Texture": 0,
+                            "Tint": [
+                                0.6000000238418579,
+                                0.6000000238418579,
+                                0.6000000238418579,
+                                1.0
+                            ],
+                            "Type": "UIButton",
+                            "UUID": 13421435662221855117,
+                            "VerticalAlignment": 3,
+                            "Visibility": 0
+                        },
+                        {
+                            "Alignment": 0,
+                            "Anchor": [
+                                0.5,
+                                0.5,
+                                0.5,
+                                0.5
+                            ],
+                            "AutoWrap": false,
+                            "Children": [],
+                            "ClipChildren": false,
+                            "Color": [
+                                1.0,
+                                1.0,
+                                1.0,
+                                1.0
+                            ],
+                            "Enabled": true,
+                            "Font": 1403325133360733589,
+                            "FontSize": 24.0,
+                            "HitTestVisible": false,
+                            "HorizontalAlignment": 3,
+                            "Name": "Text",
+                            "Offset": [
+                                182.0,
+                                0.0
+                            ],
+                            "Opacity": 1.0,
+                            "OutlineColor": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                1.0
+                            ],
+                            "OutlineWidth": 0.0,
+                            "Padding": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "Pivot": [
+                                0.5,
+                                0.5
+                            ],
+                            "Size": [
+                                100.0,
+                                100.0
+                            ],
+                            "Text": "New Text",
+                            "Type": "UIText",
+                            "UUID": 4263616248080881655,
+                            "VAlignment": 0,
+                            "VerticalAlignment": 3,
+                            "Visibility": 0
+                        }
+                    ],
+                    "ClipChildren": false,
+                    "Enabled": true,
+                    "HitTestVisible": false,
+                    "HorizontalAlignment": 3,
+                    "Name": "Canvas",
+                    "Offset": [
+                        0.0,
+                        0.0
+                    ],
+                    "Opacity": 1.0,
+                    "Padding": [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "Pivot": [
+                        0.5,
+                        0.5
+                    ],
+                    "RefRes": [
+                        1920.0,
+                        1080.0
+                    ],
+                    "ScaleMode": 1,
+                    "Size": [
+                        0.0,
+                        0.0
+                    ],
+                    "Type": "UICanvas",
+                    "UUID": 14490537671601382961,
+                    "VerticalAlignment": 3,
+                    "Visibility": 0
+                },
+                "SortingOrder": 0
+            }
+        }
+    ],
+    "Scene": "Untitled"
+}

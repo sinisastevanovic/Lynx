@@ -1,0 +1,76 @@
+{
+    "Entities": [
+        {
+            "CapsuleCollider": {
+                "HalfHeight": 0.30000001192092896,
+                "IsTrigger": false,
+                "Offset": [
+                    0.0,
+                    0.5,
+                    0.0
+                ],
+                "Radius": 0.4000000059604645
+            },
+            "EditorMetadata": {
+                "ComponentOrder": [
+                    "Enemy Component",
+                    "Health Component",
+                    "RigidBody",
+                    "CapsuleCollider",
+                    "Mesh"
+                ]
+            },
+            "Enemy Component": {
+                "MoveSpeed": 5.0,
+                "XPValue": 50.0
+            },
+            "Health Component": {
+                "CurrHealth": 10.0,
+                "MaxHealth": 10.0
+            },
+            "ID": 9879258274545108795,
+            "Mesh": {
+                "Mesh": 12807539922488813831
+            },
+            "Prefab": {
+                "PrefabHandle": 12964955710258684788,
+                "SubEntityID": 9879258274545108795
+            },
+            "RigidBody": {
+                "AngularDamping": 1.0,
+                "Friction": 0.5,
+                "GravityFactor": 1.0,
+                "Layer": 0,
+                "LinearDamping": 1.0,
+                "LockRotationX": true,
+                "LockRotationY": true,
+                "LockRotationZ": true,
+                "Mass": 1.0,
+                "MotionQuality": 0,
+                "Restitution": 1.0,
+                "Type": 2
+            },
+            "Tag": {
+                "Tag": "Enemy_Small"
+            },
+            "Transform": {
+                "Rotation": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Scale": [
+                    0.5,
+                    0.5,
+                    0.5
+                ],
+                "Translation": [
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            }
+        }
+    ]
+}

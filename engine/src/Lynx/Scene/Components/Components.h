@@ -34,6 +34,8 @@ namespace Lynx
         glm::vec3 Translation = { 0.0f, 0.0f, 0.0f };
         glm::quat Rotation = { 1.0f, 0.0f, 0.0f, 0.0f };
         glm::vec3 Scale = { 1.0f, 1.0f, 1.0f };
+        
+        bool IsDirty = true;
 
         glm::mat4 WorldMatrix = glm::mat4(1.0f);
         
@@ -150,6 +152,24 @@ namespace Lynx
                 * rotation
                 * glm::scale(glm::mat4(1.0f), Scale);
         }
+    };
+    
+    struct WorldTransformComponent
+    {
+        glm::vec3 WorldPosition = {0.0f, 0.0f, 0.0f};
+        glm::quat WorldRotation = {1.0f, 0.0f, 0.0f, 0.0f};
+        glm::vec3 WorldScale = {1.0f, 1.0f, 1.0f};
+        
+        glm::mat4 WorldMatrix{1.0f};
+    };
+    
+    struct PhysicsStateComponent
+    {
+        glm::vec3 PrevPosition;
+        glm::quat PrevRotation;
+        
+        glm::vec3 CurrPosition;
+        glm::quat CurrRotation;
     };
 
     struct RelationshipComponent

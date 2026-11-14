@@ -10,3 +10,5 @@ build/
 *.sln
 
 Roadmap.md
+*.log
+*.lnk

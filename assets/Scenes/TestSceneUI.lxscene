@@ -1,0 +1,642 @@
+{
+    "Entities": [
+        {
+            "ID": 1324375408475153494,
+            "Relationship": null,
+            "Tag": {
+                "Tag": "MainMenu"
+            },
+            "Transform": {
+                "Rotation": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "Translation": [
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            },
+            "UICanvas": {
+                "Canvas": {
+                    "Anchor": [
+                        0.0,
+                        0.0,
+                        1.0,
+                        1.0
+                    ],
+                    "Children": [
+                        {
+                            "Anchor": [
+                                0.0,
+                                0.0,
+                                1.0,
+                                1.0
+                            ],
+                            "Border": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "Children": [
+                                {
+                                    "Anchor": [
+                                        0.5,
+                                        0.5,
+                                        0.5,
+                                        0.5
+                                    ],
+                                    "Border": [
+                                        0.0,
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    "Children": [
+                                        {
+                                            "Anchor": [
+                                                0.0,
+                                                0.0,
+                                                1.0,
+                                                1.0
+                                            ],
+                                            "Children": [
+                                                {
+                                                    "Anchor": [
+                                                        0.5,
+                                                        0.5,
+                                                        0.5,
+                                                        0.5
+                                                    ],
+                                                    "Border": [
+                                                        0.0,
+                                                        0.0,
+                                                        0.0,
+                                                        0.0
+                                                    ],
+                                                    "Children": [],
+                                                    "Color": [
+                                                        0.20000000298023224,
+                                                        0.6000000238418579,
+                                                        0.20000000298023224,
+                                                        1.0
+                                                    ],
+                                                    "HorizontalAlignment": 3,
+                                                    "ImageType": 0,
+                                                    "Material": 0,
+                                                    "Name": "Btn_Stretch",
+                                                    "Offset": [
+                                                        0.0,
+                                                        0.0
+                                                    ],
+                                                    "Opacity": 1.0,
+                                                    "Pivot": [
+                                                        0.5,
+                                                        0.5
+                                                    ],
+                                                    "Size": [
+                                                        0.0,
+                                                        50.0
+                                                    ],
+                                                    "Texture": 0,
+                                                    "Type": "UIImage",
+                                                    "VerticalAlignment": 3,
+                                                    "Visibility": 0
+                                                },
+                                                {
+                                                    "Anchor": [
+                                                        0.5,
+                                                        0.5,
+                                                        0.5,
+                                                        0.5
+                                                    ],
+                                                    "Border": [
+                                                        0.0,
+                                                        0.0,
+                                                        0.0,
+                                                        0.0
+                                                    ],
+                                                    "Children": [],
+                                                    "Color": [
+                                                        0.6000000238418579,
+                                                        0.20000000298023224,
+                                                        0.20000000298023224,
+                                                        1.0
+                                                    ],
+                                                    "HorizontalAlignment": 0,
+                                                    "ImageType": 0,
+                                                    "Material": 0,
+                                                    "Name": "Btn_Left",
+                                                    "Offset": [
+                                                        0.0,
+                                                        0.0
+                                                    ],
+                                                    "Opacity": 1.0,
+                                                    "Pivot": [
+                                                        0.5,
+                                                        0.5
+                                                    ],
+                                                    "Size": [
+                                                        150.0,
+                                                        50.0
+                                                    ],
+                                                    "Texture": 0,
+                                                    "Type": "UIImage",
+                                                    "VerticalAlignment": 3,
+                                                    "Visibility": 0
+                                                },
+                                                {
+                                                    "Anchor": [
+                                                        0.5,
+                                                        0.5,
+                                                        0.5,
+                                                        0.5
+                                                    ],
+                                                    "Border": [
+                                                        0.0,
+                                                        0.0,
+                                                        0.0,
+                                                        0.0
+                                                    ],
+                                                    "Children": [],
+                                                    "Color": [
+                                                        0.20000000298023224,
+                                                        0.20000000298023224,
+                                                        0.6000000238418579,
+                                                        1.0
+                                                    ],
+                                                    "HorizontalAlignment": 1,
+                                                    "ImageType": 0,
+                                                    "Material": 0,
+                                                    "Name": "Btn_Center",
+                                                    "Offset": [
+                                                        0.0,
+                                                        0.0
+                                                    ],
+                                                    "Opacity": 1.0,
+                                                    "Pivot": [
+                                                        0.5,
+                                                        0.5
+                                                    ],
+                                                    "Size": [
+                                                        150.0,
+                                                        50.0
+                                                    ],
+                                                    "Texture": 0,
+                                                    "Type": "UIImage",
+                                                    "VerticalAlignment": 3,
+                                                    "Visibility": 0
+                                                },
+                                                {
+                                                    "Anchor": [
+                                                        0.5,
+                                                        0.5,
+                                                        0.5,
+                                                        0.5
+                                                    ],
+                                                    "Border": [
+                                                        0.0,
+                                                        0.0,
+                                                        0.0,
+                                                        0.0
+                                                    ],
+                                                    "Children": [],
+                                                    "Color": [
+                                                        0.6000000238418579,
+                                                        0.6000000238418579,
+                                                        0.20000000298023224,
+                                                        1.0
+                                                    ],
+                                                    "HorizontalAlignment": 2,
+                                                    "ImageType": 0,
+                                                    "Material": 0,
+                                                    "Name": "Btn_Right",
+                                                    "Offset": [
+                                                        0.0,
+                                                        0.0
+                                                    ],
+                                                    "Opacity": 1.0,
+                                                    "Pivot": [
+                                                        0.5,
+                                                        0.5
+                                                    ],
+                                                    "Size": [
+                                                        150.0,
+                                                        50.0
+                                                    ],
+                                                    "Texture": 0,
+                                                    "Type": "UIImage",
+                                                    "VerticalAlignment": 3,
+                                                    "Visibility": 0
+                                                }
+                                            ],
+                                            "HorizontalAlignment": 3,
+                                            "Name": "ButtonStack",
+                                            "Offset": [
+                                                0.0,
+                                                0.0
+                                            ],
+                                            "Opacity": 1.0,
+                                            "Orientation": 0,
+                                            "Pivot": [
+                                                0.5,
+                                                0.5
+                                            ],
+                                            "Size": [
+                                                0.0,
+                                                0.0
+                                            ],
+                                            "Spacing": 15.0,
+                                            "Type": "StackPanel",
+                                            "VerticalAlignment": 3,
+                                            "Visibility": 0
+                                        }
+                                    ],
+                                    "Color": [
+                                        0.20000000298023224,
+                                        0.20000000298023224,
+                                        0.20000000298023224,
+                                        0.8999999761581421
+                                    ],
+                                    "HorizontalAlignment": 3,
+                                    "ImageType": 0,
+                                    "Material": 0,
+                                    "Name": "MenuWindow",
+                                    "Offset": [
+                                        0.0,
+                                        0.0
+                                    ],
+                                    "Opacity": 1.0,
+                                    "Pivot": [
+                                        0.5,
+                                        0.5
+                                    ],
+                                    "Size": [
+                                        400.0,
+                                        500.0
+                                    ],
+                                    "Texture": 0,
+                                    "Type": "UIImage",
+                                    "VerticalAlignment": 3,
+                                    "Visibility": 0
+                                }
+                            ],
+                            "Color": [
+                                0.10000000149011612,
+                                0.10000000149011612,
+                                0.20000000298023224,
+                                1.0
+                            ],
+                            "HorizontalAlignment": 3,
+                            "ImageType": 0,
+                            "Material": 0,
+                            "Name": "Background",
+                            "Offset": [
+                                0.0,
+                                0.0
+                            ],
+                            "Opacity": 1.0,
+                            "Pivot": [
+                                0.5,
+                                0.5
+                            ],
+                            "Size": [
+                                100.0,
+                                100.0
+                            ],
+                            "Texture": 0,
+                            "Type": "UIImage",
+                            "VerticalAlignment": 3,
+                            "Visibility": 0
+                        }
+                    ],
+                    "HorizontalAlignment": 3,
+                    "Name": "Canvas",
+                    "Offset": [
+                        0.0,
+                        0.0
+                    ],
+                    "Opacity": 1.0,
+                    "Pivot": [
+                        0.5,
+                        0.5
+                    ],
+                    "RefRes": [
+                        1920.0,
+                        1080.0
+                    ],
+                    "ScaleMode": 1,
+                    "Size": [
+                        0.0,
+                        0.0
+                    ],
+                    "Type": "UICanvas",
+                    "VerticalAlignment": 3,
+                    "Visibility": 0
+                }
+            }
+        },
+        {
+            "EnemySpawnerComponent": {
+                "MaxEnemies": 50,
+                "SpawnRate": 1.0
+            },
+            "ID": 12564177470564414483,
+            "Relationship": null,
+            "Tag": {
+                "Tag": "Spawner"
+            },
+            "Transform": {
+                "Rotation": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "Translation": [
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            }
+        },
+        {
+            "ID": 11877764755763997047,
+            "ParticleEmitter": {
+                "DepthSorting": false,
+                "EmissionRate": 50.0,
+                "IsLooping": true,
+                "Material": 711149926622598171,
+                "MaxParticles": 1000,
+                "Properties": {
+                    "ColorBegin": [
+                        0.9960784316062927,
+                        0.8313725590705872,
+                        0.48235294222831726,
+                        1.0
+                    ],
+                    "ColorEnd": [
+                        0.9960784316062927,
+                        0.4274509847164154,
+                        0.16078431904315948,
+                        0.0
+                    ],
+                    "LifeTime": 1.5,
+                    "Position": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "SizeBegin": 0.5,
+                    "SizeEnd": 0.10000000149011612,
+                    "SizeVariation": 0.20000000298023224,
+                    "Velocity": [
+                        0.0,
+                        2.0,
+                        0.0
+                    ],
+                    "VelocityVariation": [
+                        0.5,
+                        1.0,
+                        0.5
+                    ]
+                }
+            },
+            "Relationship": null,
+            "Tag": {
+                "Tag": "Campfire Particle"
+            },
+            "Transform": {
+                "Rotation": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "Translation": [
+                    0.0,
+                    1.0,
+                    0.0
+                ]
+            }
+        },
+        {
+            "BoxCollider": {
+                "HalfSize": [
+                    0.10000000149011612,
+                    0.30000001192092896,
+                    0.10000000149011612
+                ]
+            },
+            "ID": 6352338650978271310,
+            "Mesh": {
+                "Mesh": 18426084358712183908
+            },
+            "Relationship": null,
+            "RigidBody": {
+                "LockRotationX": false,
+                "LockRotationY": false,
+                "LockRotationZ": false,
+                "Type": 1
+            },
+            "Tag": {
+                "Tag": "Bottle"
+            },
+            "Transform": {
+                "Rotation": [
+                    0.7701511383056641,
+                    0.42073550820350647,
+                    0.42073550820350647,
+                    -0.22984886169433594
+                ],
+                "Scale": [
+                    2.0,
+                    2.0,
+                    2.0
+                ],
+                "Translation": [
+                    0.0,
+                    10.0,
+                    0.0
+                ]
+            }
+        },
+        {
+            "BoxCollider": {
+                "HalfSize": [
+                    50.0,
+                    0.5,
+                    50.0
+                ]
+            },
+            "ID": 14841585613187993720,
+            "Mesh": {
+                "Mesh": 1803605728040638312
+            },
+            "Relationship": null,
+            "RigidBody": {
+                "LockRotationX": false,
+                "LockRotationY": false,
+                "LockRotationZ": false,
+                "Type": 0
+            },
+            "Tag": {
+                "Tag": "Floor"
+            },
+            "Transform": {
+                "Rotation": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Scale": [
+                    100.0,
+                    1.0,
+                    100.0
+                ],
+                "Translation": [
+                    0.0,
+                    -2.0,
+                    0.0
+                ]
+            }
+        },
+        {
+            "ID": 16352147204105886142,
+            "LuaScript": {
+                "Properties": {},
+                "Script": 1649232168466803063
+            },
+            "Mesh": {
+                "Mesh": 6445558890857315942
+            },
+            "Relationship": null,
+            "Tag": {
+                "Tag": "Test"
+            },
+            "Transform": {
+                "Rotation": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Scale": [
+                    0.009999999776482582,
+                    0.009999999776482582,
+                    0.009999999776482582
+                ],
+                "Translation": [
+                    0.0,
+                    2.0,
+                    0.0
+                ]
+            }
+        },
+        {
+            "CapsuleCollider": {
+                "HalfHeight": 1.0,
+                "Radius": 0.5
+            },
+            "ID": 9147438486789239731,
+            "Mesh": {
+                "Mesh": 6445558890857315942
+            },
+            "Player Component": {
+                "MoveSpeed": 5.0
+            },
+            "Relationship": null,
+            "RigidBody": {
+                "LockRotationX": true,
+                "LockRotationY": true,
+                "LockRotationZ": true,
+                "Type": 1
+            },
+            "Tag": {
+                "Tag": "Player"
+            },
+            "Transform": {
+                "Rotation": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Scale": [
+                    0.009999999776482582,
+                    0.009999999776482582,
+                    0.009999999776482582
+                ],
+                "Translation": [
+                    0.0,
+                    2.0,
+                    0.0
+                ]
+            },
+            "Weapon Component": {
+                "Damage": 5.0,
+                "FireRate": 0.5,
+                "ProjectileSpeed": 20.0,
+                "Range": 5.0
+            }
+        },
+        {
+            "Camera": {
+                "FixedAspectRatio": false,
+                "Primary": true,
+                "SceneCamera": {
+                    "OrthographicFar": 1.0,
+                    "OrthographicNear": -1.0,
+                    "OrthographicSize": 10.0,
+                    "PerspectiveFOV": 0.7853981852531433,
+                    "PerspectiveFar": 1000.0,
+                    "PerspectiveNear": 0.009999999776482582,
+                    "ProjectionType": 0
+                }
+            },
+            "ID": 13280625500388297857,
+            "Relationship": null,
+            "Tag": {
+                "Tag": "Camera"
+            },
+            "Transform": {
+                "Rotation": [
+                    0.8660253882408142,
+                    -0.5,
+                    -0.0,
+                    -0.0
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "Translation": [
+                    0.0,
+                    15.0,
+                    10.0
+                ]
+            }
+        }
+    ],
+    "Scene": "Untitled"
+}
