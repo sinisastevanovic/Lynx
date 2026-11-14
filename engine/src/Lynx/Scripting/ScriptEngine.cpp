@@ -46,6 +46,7 @@ namespace Lynx
         ScriptWrappers::RegisterBasicTypes(m_Data->Lua);
         ScriptWrappers::RegisterMath(m_Data->Lua);
         ScriptWrappers::RegisterCoreTypes(m_Data->Lua);
+        ScriptWrappers::RegisterComponentAccess(m_Data->Lua);
         ScriptWrappers::RegisterUITypes(m_Data->Lua);
         ScriptWrappers::RegisterGameTypes(m_Data->Lua);
         ScriptWrappers::RegisterInput(m_Data->Lua);
