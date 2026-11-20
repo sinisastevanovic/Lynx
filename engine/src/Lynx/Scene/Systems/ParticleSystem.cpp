@@ -1,7 +1,5 @@
 #include "ParticleSystem.h"
 
-#include <random>
-
 #include "Lynx/Engine.h"
 #include "Lynx/Scene/Components/Components.h"
 #include "Lynx/Scene/Components/ParticleComponents.h"
@@ -9,18 +7,11 @@
 
 namespace Lynx
 {
-    // TODO: Create Random class for engine
-    static float RandomFloat()
+    float ParticleSystem::RandomRange(float min, float max)
     {
-        static std::random_device rd;
-        static std::mt19937 mt(rd());
-        static std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-        return dist(mt);
-    }
-
-    static float RandomRange(float min, float max)
-    {
-        return min + RandomFloat() * (max - min);
+        // The generator's raw value is scaled by hand: the standard distributions may differ between compilers.
+        const float unit = static_cast<float>(m_Random()) / static_cast<float>(std::mt19937::max());
+        return min + unit * (max - min);
     }
     
     void ParticleSystem::OnUpdate(float ts, Scene* scene, const glm::vec3& cameraPos)
