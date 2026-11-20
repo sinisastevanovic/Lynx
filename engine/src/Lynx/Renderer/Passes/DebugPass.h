@@ -1,32 +1,35 @@
 #pragma once
-#include "Lynx/Renderer/RenderPass.h"
+#include "Lynx/Renderer/Graph/RenderGraph.h"
 
 namespace Lynx
 {
-    class DebugPass : public RenderPass
+    // Draws the frame's debug lines into the scene, hidden where the scene is in front of them.
+    class DebugPass : public VulkanPass
     {
     public:
-        DebugPass() = default;
-        virtual ~DebugPass() = default;
-        
+        DebugPass();
+        ~DebugPass() override;
+
         void Init(RenderContext& ctx) override;
-        void Execute(RenderContext& ctx, RenderData& renderData) override;
-    private:
-        void CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader);
+        bool Declare(const RenderContext& ctx, const RenderData& renderData, PassResources& resources) override;
+        void Execute(vk::CommandBuffer commands, RenderData& renderData) override;
 
     private:
-        nvrhi::GraphicsPipelineHandle m_Pipeline;
-        nvrhi::BindingLayoutHandle m_BindingLayout;
-        nvrhi::BindingSetHandle m_BindingSet;
+        void CreatePipeline(const Shader& shader);
 
-        nvrhi::BufferHandle m_VertexBuffer;
-        PipelineState m_PipelineState;
-
+    private:
         struct LineVertex
         {
             glm::vec3 Position;
             glm::vec4 Color;
         };
+
+        struct VulkanObjects;
+        std::unique_ptr<VulkanObjects> m_Vulkan;
+
+        PipelineState m_PipelineState;
+
+        // Kept between frames for its memory.
+        std::vector<LineVertex> m_Vertices;
     };
 }
-

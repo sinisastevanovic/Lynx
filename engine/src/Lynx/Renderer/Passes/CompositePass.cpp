@@ -4,6 +4,7 @@
 #include "Lynx/Log.h"
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/SamplerCache.h"
+#include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
 #include "Lynx/Renderer/Vulkan/ShaderLayout.h"
 
 #include <vulkan/vulkan.hpp>
@@ -113,55 +114,12 @@ namespace Lynx
         m_BoundSceneColor = nullptr;
         m_BoundBloom = nullptr;
 
-        // A pipeline keeps nothing of the modules it was made from, so they only live until it exists.
-        const vk::ShaderModule vertexModule = CreateShaderModule(device, *vertexCode);
-        const vk::ShaderModule fragmentModule = CreateShaderModule(device, *fragmentCode);
-        const vk::PipelineShaderStageCreateInfo stages[] = {
-            { {}, vk::ShaderStageFlagBits::eVertex, vertexModule, "main" },
-            { {}, vk::ShaderStageFlagBits::eFragment, fragmentModule, "main" },
-        };
-
-        // The vertex shader makes a triangle that covers the screen from the vertex index alone.
-        const vk::PipelineVertexInputStateCreateInfo vertexInput;
-        const vk::PipelineInputAssemblyStateCreateInfo inputAssembly({}, vk::PrimitiveTopology::eTriangleList);
-
-        // Viewport and scissor follow the target's size, which changes with the window.
-        const vk::PipelineViewportStateCreateInfo viewport({}, 1, nullptr, 1, nullptr);
-        const vk::DynamicState dynamicStates[] = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-        const vk::PipelineDynamicStateCreateInfo dynamicState({}, dynamicStates);
-
-        vk::PipelineRasterizationStateCreateInfo rasterization;
-        rasterization.polygonMode = vk::PolygonMode::eFill;
-        rasterization.cullMode = vk::CullModeFlagBits::eNone;
-        rasterization.lineWidth = 1.0f;
-
-        const vk::PipelineMultisampleStateCreateInfo multisample({}, vk::SampleCountFlagBits::e1);
-        const vk::PipelineDepthStencilStateCreateInfo depthStencil;
-
-        vk::PipelineColorBlendAttachmentState blendAttachment;
-        blendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-        const vk::PipelineColorBlendStateCreateInfo blend({}, VK_FALSE, vk::LogicOp::eCopy, blendAttachment);
-
-        // No render pass object: the pass names its target when it starts rendering.
-        const vk::PipelineRenderingCreateInfo rendering(0, TargetFormat);
-
-        vk::GraphicsPipelineCreateInfo pipelineInfo;
-        pipelineInfo.pNext = &rendering;
-        pipelineInfo.setStages(stages);
-        pipelineInfo.pVertexInputState = &vertexInput;
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewport;
-        pipelineInfo.pRasterizationState = &rasterization;
-        pipelineInfo.pMultisampleState = &multisample;
-        pipelineInfo.pDepthStencilState = &depthStencil;
-        pipelineInfo.pColorBlendState = &blend;
-        pipelineInfo.pDynamicState = &dynamicState;
-        pipelineInfo.layout = m_Vulkan->PipelineLayout;
-
-        m_Vulkan->Pipeline = device.createGraphicsPipeline(nullptr, pipelineInfo).value;
-
-        device.destroyShaderModule(vertexModule);
-        device.destroyShaderModule(fragmentModule);
+        // The vertex shader makes a triangle that covers the screen from the vertex index alone, so there are no vertex attributes.
+        GraphicsPipelineDesc desc;
+        desc.Program = program.get();
+        desc.Layout = m_Vulkan->PipelineLayout;
+        desc.ColorFormat = TargetFormat;
+        m_Vulkan->Pipeline = CreateGraphicsPipeline(device, desc);
     }
 
     void CompositePass::BindInputs(nvrhi::ITexture* sceneColor, nvrhi::ITexture* bloom)
@@ -218,7 +176,7 @@ namespace Lynx
         return true;
     }
 
-    void CompositePass::Execute(vk::CommandBuffer commands, const RenderData& renderData)
+    void CompositePass::Execute(vk::CommandBuffer commands, RenderData& renderData)
     {
         commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->Pipeline);
         commands.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_Vulkan->PipelineLayout, 0, m_Vulkan->DescriptorSet, nullptr);

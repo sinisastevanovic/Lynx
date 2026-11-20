@@ -1,0 +1,54 @@
+#pragma once
+
+#include "Lynx/Renderer/Shader/ShaderProgram.h"
+
+#include <vulkan/vulkan.hpp>
+
+#include <vector>
+
+namespace Lynx
+{
+    enum class BlendMode
+    {
+        // The new colour replaces the old one.
+        Opaque,
+        // The new colour covers the old one by its alpha.
+        Alpha,
+        // The new colour is added to the old one.
+        Additive
+    };
+
+    struct VertexAttribute
+    {
+        vk::Format Format = vk::Format::eUndefined;
+        uint32_t Offset = 0;
+    };
+
+    // Everything that makes one graphics pipeline, with the values most passes want as defaults.
+    // Viewport and scissor are not part of it: they follow the size of the target and are set when drawing.
+    struct GraphicsPipelineDesc
+    {
+        const ShaderProgram* Program = nullptr;
+        vk::PipelineLayout Layout;
+
+        // The attributes of one vertex buffer, in the order of the shader's inputs. Empty for a pass
+        // whose vertex shader makes its vertices from the vertex index alone.
+        std::vector<VertexAttribute> VertexAttributes;
+        uint32_t VertexStride = 0;
+
+        vk::PrimitiveTopology Topology = vk::PrimitiveTopology::eTriangleList;
+        vk::CullModeFlags CullMode = vk::CullModeFlagBits::eNone;
+        BlendMode Blend = BlendMode::Opaque;
+
+        vk::Format ColorFormat = vk::Format::eUndefined;
+
+        // Undefined for a pass without a depth buffer.
+        vk::Format DepthFormat = vk::Format::eUndefined;
+        bool DepthTest = false;
+        bool DepthWrite = false;
+        vk::CompareOp DepthCompare = vk::CompareOp::eLess;
+    };
+
+    // Returns a null handle, after logging why, if the program lacks a vertex or a fragment stage.
+    vk::Pipeline CreateGraphicsPipeline(vk::Device device, const GraphicsPipelineDesc& desc);
+}

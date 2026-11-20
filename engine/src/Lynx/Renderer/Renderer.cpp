@@ -239,6 +239,7 @@ namespace Lynx
     {
         // TODO: Move these members to the struct, useless to have duplicates!
         m_RenderContext.Graphics = m_Context.get();
+        m_RenderContext.Uploads = m_Frame->Uploads.get();
         m_RenderContext.Device = m_NvrhiDevice;
         m_RenderContext.CommandList = m_CommandList;
         m_RenderContext.GlobalConstantBuffer = m_GlobalCB;

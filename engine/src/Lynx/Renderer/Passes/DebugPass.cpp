@@ -1,126 +1,153 @@
 #include "DebugPass.h"
 
-#include "Lynx/Renderer/DebugRenderer.h"
-#include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
+#include "Lynx/Log.h"
+#include "Lynx/Renderer/GraphicsContext.h"
+#include "Lynx/Renderer/Vulkan/GpuBuffer.h"
+#include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
+#include "Lynx/Renderer/Vulkan/ShaderLayout.h"
+#include "Lynx/Renderer/Vulkan/UploadQueue.h"
 
 namespace Lynx
 {
+    struct DebugPass::VulkanObjects
+    {
+        GraphicsContext* Context = nullptr;
+        UploadQueue* Uploads = nullptr;
+        vk::Device Device;
+
+        // The buffer with the frame's camera, which NVRHI still owns.
+        vk::Buffer SceneConstants;
+
+        vk::DescriptorSetLayout SetLayout;
+        vk::PipelineLayout PipelineLayout;
+        vk::Pipeline Pipeline;
+        vk::DescriptorPool DescriptorPool;
+        vk::DescriptorSet DescriptorSet;
+
+        GpuBuffer VertexBuffer;
+
+        // The renderer waits for the GPU before it destroys its passes, so nothing here is still in use.
+        ~VulkanObjects()
+        {
+            if (!Device)
+                return;
+
+            Device.destroyPipeline(Pipeline);
+            Device.destroyDescriptorPool(DescriptorPool);
+            Device.destroyPipelineLayout(PipelineLayout);
+            Device.destroyDescriptorSetLayout(SetLayout);
+        }
+    };
+
+    DebugPass::DebugPass() = default;
+    DebugPass::~DebugPass() = default;
+
     void DebugPass::Init(RenderContext& ctx)
     {
-        // 1. Create Layout
-        auto layoutDesc = nvrhi::BindingLayoutDesc()
-            .setVisibility(nvrhi::ShaderType::All)
-            .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
-            .setBindingOffsets({0, 0, 0, 0});
-        m_BindingLayout = ctx.Device->createBindingLayout(layoutDesc);
+        m_Vulkan = std::make_unique<VulkanObjects>();
+        m_Vulkan->Context = ctx.Graphics;
+        m_Vulkan->Uploads = ctx.Uploads;
+        m_Vulkan->Device = ctx.Graphics->Device();
+        m_Vulkan->SceneConstants = vk::Buffer(static_cast<VkBuffer>(ctx.GlobalConstantBuffer->getNativeObject(nvrhi::ObjectTypes::VK_Buffer).pointer));
 
-        // 2. Create Binding Set (Scene UBO)
-        auto bsDesc = nvrhi::BindingSetDesc()
-            .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer));
-        m_BindingSet = ctx.Device->createBindingSet(bsDesc, m_BindingLayout);
-
-        // 5. Create Dynamic Vertex Buffer (Start small, resize if needed)
-        nvrhi::BufferDesc vbDesc;
-        vbDesc.byteSize = 10000 * sizeof(LineVertex); // ~10k lines capacity
-        vbDesc.isVertexBuffer = true;
-        vbDesc.debugName = "DebugLineVB";
-        vbDesc.canHaveUAVs = false;
-        vbDesc.setInitialState(nvrhi::ResourceStates::VertexBuffer);
-        vbDesc.keepInitialState = true;
-        m_VertexBuffer = ctx.Device->createBuffer(vbDesc);
-
-        m_PipelineState.SetShader("Shaders/DebugLine.glsl");
-        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
-        {
-            this->CreatePipeline(ctx, shader);
-        });
+        m_PipelineState.SetShader("Shaders/DebugLine.slang");
+        m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
     }
-    
-    void DebugPass::CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader)
+
+    void DebugPass::CreatePipeline(const Shader& shader)
     {
-        // 4. Create Pipeline
-        nvrhi::GraphicsPipelineDesc pipeDesc;
-        pipeDesc.bindingLayouts = {m_BindingLayout};
-        pipeDesc.VS = shader->GetVertexShader();
-        pipeDesc.PS = shader->GetPixelShader();
+        const std::shared_ptr<const ShaderProgram> program = shader.GetProgram();
+        if (!program)
+            return;
 
-        // CRITICAL: Topology is LineList!
-        pipeDesc.primType = nvrhi::PrimitiveType::LineList;
+        const std::optional<uint32_t> sceneBinding = FindBinding(*program, "scene");
+        if (!sceneBinding)
+        {
+            LX_CORE_ERROR("DebugLine.slang no longer reads the scene constants the debug pass provides.");
+            return;
+        }
 
-        // Input Layout
-        nvrhi::VertexAttributeDesc attributes[] = {
-            nvrhi::VertexAttributeDesc().setName("POSITION").setFormat(nvrhi::Format::RGB32_FLOAT).setBufferIndex(0).setOffset(0).setElementStride(
-                sizeof(LineVertex)),
-            nvrhi::VertexAttributeDesc().setName("COLOR").setFormat(nvrhi::Format::RGBA32_FLOAT).setBufferIndex(0).setOffset(sizeof(glm::vec3)).
-                                         setElementStride(sizeof(LineVertex)),
+        // A reloaded shader replaces objects that frames still on the GPU may be using.
+        const vk::Device device = m_Vulkan->Device;
+        m_Vulkan->Context->Deletions().Retire([device, pipeline = m_Vulkan->Pipeline, pipelineLayout = m_Vulkan->PipelineLayout, setLayout = m_Vulkan->SetLayout, pool = m_Vulkan->DescriptorPool]()
+        {
+            device.destroyPipeline(pipeline);
+            device.destroyPipelineLayout(pipelineLayout);
+            device.destroyDescriptorPool(pool);
+            device.destroyDescriptorSetLayout(setLayout);
+        });
+
+        m_Vulkan->SetLayout = CreateSetLayout(device, *program, 0);
+        m_Vulkan->PipelineLayout = CreatePipelineLayout(device, *program, m_Vulkan->SetLayout);
+
+        // The camera buffer is the same object in every frame, so the set is written once.
+        const vk::DescriptorPoolSize poolSize(vk::DescriptorType::eUniformBuffer, 1);
+        m_Vulkan->DescriptorPool = device.createDescriptorPool(vk::DescriptorPoolCreateInfo({}, 1, poolSize));
+        m_Vulkan->DescriptorSet = device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo(m_Vulkan->DescriptorPool, m_Vulkan->SetLayout)).front();
+
+        const vk::DescriptorBufferInfo sceneInfo(m_Vulkan->SceneConstants, 0, VK_WHOLE_SIZE);
+        device.updateDescriptorSets(vk::WriteDescriptorSet(m_Vulkan->DescriptorSet, *sceneBinding, 0, vk::DescriptorType::eUniformBuffer, {}, sceneInfo), nullptr);
+
+        GraphicsPipelineDesc desc;
+        desc.Program = program.get();
+        desc.Layout = m_Vulkan->PipelineLayout;
+        desc.VertexAttributes = {
+            { vk::Format::eR32G32B32Sfloat, offsetof(LineVertex, Position) },
+            { vk::Format::eR32G32B32A32Sfloat, offsetof(LineVertex, Color) },
         };
-        pipeDesc.inputLayout = ctx.Device->createInputLayout(attributes, 2, shader->GetVertexShader());
-
-        pipeDesc.renderState.depthStencilState
-                .setDepthTestEnable(true)
-                .setDepthWriteEnable(false); // Usually off for debug lines so they don't occlude transparency
-        DisableEntityIdWrites(pipeDesc, ctx.PresentationFramebufferInfo);
-
-        m_Pipeline = ctx.Device->createGraphicsPipeline(pipeDesc, ctx.PresentationFramebufferInfo);
+        desc.VertexStride = sizeof(LineVertex);
+        desc.Topology = vk::PrimitiveTopology::eLineList;
+        desc.ColorFormat = vk::Format::eR16G16B16A16Sfloat;
+        desc.DepthFormat = vk::Format::eD32Sfloat;
+        // Tested against the scene, but not written: a line should not hide what is drawn after it.
+        desc.DepthTest = true;
+        desc.DepthWrite = false;
+        m_Vulkan->Pipeline = CreateGraphicsPipeline(device, desc);
     }
-    
-    void DebugPass::Execute(RenderContext& ctx, RenderData& renderData)
+
+    bool DebugPass::Declare(const RenderContext&, const RenderData& renderData, PassResources& resources)
     {
-        const std::span<const DebugLine> lines = renderData.DebugLines;
-        if (lines.empty()) return;
+        m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
 
-        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        if (renderData.DebugLines.empty() || !m_Vulkan->Pipeline)
+            return false;
+
+        m_Vertices.clear();
+        m_Vertices.reserve(renderData.DebugLines.size() * 2);
+        for (const DebugLine& line : renderData.DebugLines)
         {
-            this->CreatePipeline(ctx, shader);
-        });
-
-        ctx.CommandList->beginMarker("DebugPass");
-
-        // 1. Convert Lines to Vertices
-        std::vector<LineVertex> vertices;
-        vertices.reserve(lines.size() * 2);
-        for (const auto& line : lines)
-        {
-            vertices.push_back({line.Start, line.Color});
-            vertices.push_back({line.End, line.Color});
+            m_Vertices.push_back({ line.Start, line.Color });
+            m_Vertices.push_back({ line.End, line.Color });
         }
 
-        // 2. Upload to Buffer
-        size_t dataSize = vertices.size() * sizeof(LineVertex);
-        if (dataSize > m_VertexBuffer->getDesc().byteSize)
+        const std::span<const std::byte> bytes = std::as_bytes(std::span<const LineVertex>(m_Vertices));
+        if (m_Vulkan->VertexBuffer.Size() < bytes.size())
         {
-            // Grows to at least twice the old size, so drawing a few more lines every frame does not recreate it every frame.
-            nvrhi::BufferDesc desc = m_VertexBuffer->getDesc();
-            desc.byteSize = std::max<uint64_t>(dataSize, desc.byteSize * 2);
-            m_VertexBuffer = ctx.Device->createBuffer(desc);
+            // Twice what is needed, so a few more lines every frame do not mean a new buffer every frame.
+            GpuBufferDesc desc;
+            desc.Size = bytes.size() * 2;
+            desc.Usage = vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+            desc.Name = "DebugLines";
+            m_Vulkan->VertexBuffer = GpuBuffer(*m_Vulkan->Context, desc);
         }
+        m_Vulkan->Uploads->Upload(m_Vulkan->VertexBuffer.Handle(), 0, bytes);
 
-        // Write data
-        ctx.CommandList->writeBuffer(m_VertexBuffer, vertices.data(), dataSize);
+        // The lines go into the scene's picture. The entity ID picture next to it is left alone.
+        const nvrhi::FramebufferDesc& sceneTargets = renderData.TargetFramebuffer->getDesc();
+        resources.ColorTarget = sceneTargets.colorAttachments[0].texture;
+        resources.DepthTarget = sceneTargets.depthAttachment.texture;
+        return true;
+    }
 
-        // BARRIER! We just wrote to VB, now we read from it.
-        ctx.CommandList->setBufferState(m_VertexBuffer, nvrhi::ResourceStates::VertexBuffer);
-
-        // 3. Draw
-        auto state = nvrhi::GraphicsState()
-                     .setPipeline(m_Pipeline)
-                     .setFramebuffer(renderData.TargetFramebuffer)
-                     .addBindingSet(m_BindingSet)
-                     .addVertexBuffer(nvrhi::VertexBufferBinding(m_VertexBuffer, 0, 0));
-
-        // Viewport...
-        const auto& fbInfo = renderData.TargetFramebuffer->getFramebufferInfo();
-        state.viewport.addViewport(nvrhi::Viewport(fbInfo.width, fbInfo.height));
-        state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
-
-        ctx.CommandList->setGraphicsState(state);
-        ctx.CommandList->draw(nvrhi::DrawArguments().setVertexCount(vertices.size()));
-
-        ctx.CommandList->endMarker();
+    void DebugPass::Execute(vk::CommandBuffer commands, RenderData& renderData)
+    {
+        commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->Pipeline);
+        commands.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_Vulkan->PipelineLayout, 0, m_Vulkan->DescriptorSet, nullptr);
+        commands.bindVertexBuffers(0, m_Vulkan->VertexBuffer.Handle(), vk::DeviceSize(0));
+        commands.draw(static_cast<uint32_t>(m_Vertices.size()), 1, 0, 0);
 
         renderData.DrawCalls++;
-        renderData.IndexCount += vertices.size();
+        renderData.IndexCount += static_cast<uint32_t>(m_Vertices.size());
     }
-
 }

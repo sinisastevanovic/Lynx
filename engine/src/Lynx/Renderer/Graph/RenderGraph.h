@@ -28,6 +28,9 @@ namespace Lynx
         // The texture the pass draws into.
         nvrhi::ITexture* ColorTarget = nullptr;
 
+        // The depth buffer the pass tests against, and writes if its pipeline says so. Null for none.
+        nvrhi::ITexture* DepthTarget = nullptr;
+
         // The pass writes every pixel of the target, so what the target held before need not be kept.
         bool OverwritesTarget = false;
 
@@ -46,8 +49,9 @@ namespace Lynx
         // Called every frame before Execute. Returns false if the pass has nothing to draw in this frame.
         virtual bool Declare(const RenderContext& ctx, const RenderData& renderData, PassResources& resources) = 0;
 
-        // Called with rendering into the declared target already begun, and viewport and scissor set to cover it.
-        virtual void Execute(vk::CommandBuffer commands, const RenderData& renderData) = 0;
+        // Called with rendering into the declared targets already begun, and viewport and scissor set to cover them.
+        // What the pass queued for upload in Declare has arrived by then.
+        virtual void Execute(vk::CommandBuffer commands, RenderData& renderData) = 0;
     };
 
     // The passes of a frame, in the order they run.
@@ -80,7 +84,7 @@ namespace Lynx
             std::function<bool()> Condition;
         };
 
-        void ExecuteDirectPass(VulkanPass& pass, RenderContext& ctx, const RenderData& renderData);
+        void ExecuteDirectPass(VulkanPass& pass, RenderContext& ctx, RenderData& renderData);
 
     private:
         FrameProfiler& m_Profiler;

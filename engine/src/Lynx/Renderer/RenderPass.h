@@ -13,6 +13,7 @@ namespace Lynx
 {
     class GraphicsContext;
     class Shader;
+    class UploadQueue;
     class UICanvas;
 
     enum class RenderFlags : uint8_t
@@ -156,6 +157,7 @@ namespace Lynx
     {
         // For passes that draw with Vulkan directly.
         GraphicsContext* Graphics = nullptr;
+        UploadQueue* Uploads = nullptr;
 
         nvrhi::DeviceHandle Device;
         nvrhi::CommandListHandle CommandList;

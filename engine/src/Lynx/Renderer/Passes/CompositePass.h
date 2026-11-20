@@ -13,7 +13,7 @@ namespace Lynx
 
         void Init(RenderContext& ctx) override;
         bool Declare(const RenderContext& ctx, const RenderData& renderData, PassResources& resources) override;
-        void Execute(vk::CommandBuffer commands, const RenderData& renderData) override;
+        void Execute(vk::CommandBuffer commands, RenderData& renderData) override;
 
     private:
         void CreatePipeline(const Shader& shader);
