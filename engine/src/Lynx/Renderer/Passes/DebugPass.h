@@ -3,7 +3,9 @@
 
 namespace Lynx
 {
-    // Draws the frame's debug lines into the scene, hidden where the scene is in front of them.
+    // Draws the frame's debug lines on top of the finished picture, hidden where the scene is in front of them.
+    // It comes after post-processing so that anti-aliasing, bloom and tone mapping leave the lines alone:
+    // a line has exactly the colour it was given.
     class DebugPass : public VulkanPass
     {
     public:

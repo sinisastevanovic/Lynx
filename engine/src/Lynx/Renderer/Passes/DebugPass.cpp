@@ -3,6 +3,7 @@
 #include "Lynx/Asset/Shader.h"
 #include "Lynx/Log.h"
 #include "Lynx/Renderer/GraphicsContext.h"
+#include "Lynx/Renderer/RenderFormats.h"
 #include "Lynx/Renderer/Vulkan/GpuBuffer.h"
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
 #include "Lynx/Renderer/Vulkan/ShaderLayout.h"
@@ -98,8 +99,8 @@ namespace Lynx
         };
         desc.VertexStride = sizeof(LineVertex);
         desc.Topology = vk::PrimitiveTopology::eLineList;
-        desc.ColorFormat = vk::Format::eR16G16B16A16Sfloat;
-        desc.DepthFormat = vk::Format::eD32Sfloat;
+        desc.ColorFormat = RenderFormats::Output;
+        desc.DepthFormat = RenderFormats::SceneDepth;
         // Tested against the scene, but not written: a line should not hide what is drawn after it.
         desc.DepthTest = true;
         desc.DepthWrite = false;
@@ -133,10 +134,8 @@ namespace Lynx
         }
         m_Vulkan->Uploads->Upload(m_Vulkan->VertexBuffer.Handle(), 0, bytes);
 
-        // The lines go into the scene's picture. The entity ID picture next to it is left alone.
-        const nvrhi::FramebufferDesc& sceneTargets = renderData.TargetFramebuffer->getDesc();
-        resources.ColorTarget = sceneTargets.colorAttachments[0].texture;
-        resources.DepthTarget = sceneTargets.depthAttachment.texture;
+        resources.ColorTarget = renderData.OutputFramebuffer->getDesc().colorAttachments[0].texture;
+        resources.DepthTarget = renderData.TargetFramebuffer->getDesc().depthAttachment.texture;
         return true;
     }
 

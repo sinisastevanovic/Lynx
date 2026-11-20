@@ -1,24 +1,27 @@
 #pragma once
-#include "Lynx/Renderer/RenderPass.h"
+#include "Lynx/Renderer/Graph/RenderGraph.h"
 
 namespace Lynx
 {
-    class GridPass : public RenderPass
+    // Draws the editor's ground grid on top of the finished picture, hidden where the scene is in front of it.
+    // It comes after post-processing so that anti-aliasing, bloom and tone mapping leave it alone.
+    class GridPass : public VulkanPass
     {
     public:
-        GridPass() = default;
-        virtual ~GridPass() = default;
-        
+        GridPass();
+        ~GridPass() override;
+
         void Init(RenderContext& ctx) override;
-        void Execute(RenderContext& ctx, RenderData& renderData) override;
-    private:
-        void CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader);
+        bool Declare(const RenderContext& ctx, const RenderData& renderData, PassResources& resources) override;
+        void Execute(vk::CommandBuffer commands, RenderData& renderData) override;
 
     private:
-        nvrhi::GraphicsPipelineHandle m_Pipeline;
-        nvrhi::BindingLayoutHandle m_BindingLayout;
-        nvrhi::BindingSetHandle m_BindingSet;
+        void CreatePipeline(const Shader& shader);
+
+    private:
+        struct VulkanObjects;
+        std::unique_ptr<VulkanObjects> m_Vulkan;
+
         PipelineState m_PipelineState;
     };
 }
-

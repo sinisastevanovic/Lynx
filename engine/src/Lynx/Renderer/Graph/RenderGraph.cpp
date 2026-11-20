@@ -81,6 +81,16 @@ namespace Lynx
         if (!pass.Declare(ctx, renderData, resources) || !resources.ColorTarget)
             return;
 
+        // Targets that are drawn into together have to be the same size. They can differ for a frame
+        // while a window is being resized, and the pass is left out of that frame.
+        if (resources.DepthTarget)
+        {
+            const nvrhi::TextureDesc& color = resources.ColorTarget->getDesc();
+            const nvrhi::TextureDesc& depth = resources.DepthTarget->getDesc();
+            if (color.width != depth.width || color.height != depth.height)
+                return;
+        }
+
         // The hand-over from NVRHI to Vulkan, in three steps. It lives here so that no pass has to know it.
         // 1. NVRHI tracks which layout every texture is in. It is asked to put the textures into the layouts
         //    the pass needs, and they are left in those layouts, so its bookkeeping stays right.

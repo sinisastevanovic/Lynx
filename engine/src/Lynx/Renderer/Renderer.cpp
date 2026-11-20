@@ -23,6 +23,7 @@
 #include "Passes/DebugPass.h"
 #include "Passes/ForwardPass.h"
 #include "Passes/GridPass.h"
+#include "RenderFormats.h"
 #include "Passes/ShadowPass.h"
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
@@ -260,17 +261,18 @@ namespace Lynx
 
         SamplerCache::Init(m_NvrhiDevice, m_MaxAnisotropy);
 
-        // The frame, start to finish. The scene passes draw the HDR picture, bloom reads it,
-        // composite turns both into the output, and the UI is drawn on top of that.
+        // The frame, start to finish. The scene passes draw the HDR picture, bloom reads it and composite
+        // turns both into the output. What is not part of the scene is drawn on top of the output, so that
+        // post-processing does not touch it: the grid and debug lines, still hidden by the scene's depth, then the UI.
         m_Graph->Add("Shadow", std::make_unique<ShadowPass>(m_ShadowMapResolution));
         m_Graph->Add("Depth", std::make_unique<DepthPass>());
         m_Graph->Add("Forward", std::make_unique<ForwardPass>());
         m_Graph->Add("Particles", std::make_unique<ParticlePass>());
+        m_BloomPass = static_cast<BloomPass*>(&m_Graph->Add("Bloom", std::make_unique<BloomPass>()));
+        m_Graph->Add("Composite", std::make_unique<CompositePass>());
         if (m_ShouldCreateIDTarget)
             m_Graph->Add("Grid", std::make_unique<GridPass>());
         m_Graph->Add("Debug", std::make_unique<DebugPass>());
-        m_BloomPass = static_cast<BloomPass*>(&m_Graph->Add("Bloom", std::make_unique<BloomPass>()));
-        m_Graph->Add("Composite", std::make_unique<CompositePass>());
         m_Graph->Add("UI", std::make_unique<UIPass>(), [this]() { return m_ShowUI; });
         m_Graph->Init(m_RenderContext);
 
@@ -542,7 +544,7 @@ namespace Lynx
             .setDebugName("SceneHDR")
             .setInitialState(nvrhi::ResourceStates::ShaderResource)
             .setKeepInitialState(true);
-        target.Color = createTarget(m_Frame->SceneColor, vk::Format::eR16G16B16A16Sfloat, colorUsage, colorDesc);
+        target.Color = createTarget(m_Frame->SceneColor, RenderFormats::SceneColor, colorUsage, colorDesc);
 
         auto depthDesc = nvrhi::TextureDesc()
             .setWidth(width)
@@ -552,7 +554,7 @@ namespace Lynx
             .setDebugName("SceneDepth")
             .setInitialState(nvrhi::ResourceStates::DepthWrite)
             .setKeepInitialState(true);
-        target.Depth = createTarget(m_Frame->SceneDepth, vk::Format::eD32Sfloat, depthUsage, depthDesc);
+        target.Depth = createTarget(m_Frame->SceneDepth, RenderFormats::SceneDepth, depthUsage, depthDesc);
 
         auto outputDesc = nvrhi::TextureDesc()
             .setWidth(width)
@@ -562,7 +564,7 @@ namespace Lynx
             .setDebugName("SceneLDR")
             .setInitialState(nvrhi::ResourceStates::ShaderResource)
             .setKeepInitialState(true);
-        target.Output = createTarget(m_Frame->SceneOutput, vk::Format::eB8G8R8A8Unorm, colorUsage, outputDesc);
+        target.Output = createTarget(m_Frame->SceneOutput, RenderFormats::Output, colorUsage, outputDesc);
 
         if (m_ShouldCreateIDTarget)
         {

@@ -3,6 +3,7 @@
 #include "Lynx/Asset/Shader.h"
 #include "Lynx/Log.h"
 #include "Lynx/Renderer/GraphicsContext.h"
+#include "Lynx/Renderer/RenderFormats.h"
 #include "Lynx/Renderer/SamplerCache.h"
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
 #include "Lynx/Renderer/Vulkan/ShaderLayout.h"
@@ -19,9 +20,6 @@ namespace Lynx
             float BloomIntensity;
             int FXAAEnabled;
         };
-
-        // The format of every picture this pass writes: the window's images and the editor's viewport.
-        constexpr vk::Format TargetFormat = vk::Format::eB8G8R8A8Unorm;
 
         // NVRHI hands out the Vulkan object behind one of its own as an untyped pointer.
         template<typename Handle>
@@ -118,7 +116,7 @@ namespace Lynx
         GraphicsPipelineDesc desc;
         desc.Program = program.get();
         desc.Layout = m_Vulkan->PipelineLayout;
-        desc.ColorFormat = TargetFormat;
+        desc.ColorFormat = RenderFormats::Output;
         m_Vulkan->Pipeline = CreateGraphicsPipeline(device, desc);
     }
 
