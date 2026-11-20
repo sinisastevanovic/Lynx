@@ -1,4 +1,5 @@
 #include "UIImage.h"
+#include "Lynx/UI/Rendering/UIBatcher.h"
 
 #include <imgui.h>
 

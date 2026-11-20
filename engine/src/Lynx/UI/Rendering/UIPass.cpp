@@ -168,11 +168,11 @@ namespace Lynx
 
             auto state = nvrhi::GraphicsState()
                 .setPipeline(m_StandardPipeline)
-                .setFramebuffer(renderData.TargetFramebuffer)
+                .setFramebuffer(renderData.OutputFramebuffer)
                 .addVertexBuffer(nvrhi::VertexBufferBinding(m_Batcher->GetVertexBuffer(), 0, 0))
                 .setIndexBuffer(nvrhi::IndexBufferBinding(m_Batcher->GetIndexBuffer(), nvrhi::Format::R32_UINT, 0));
 
-            const auto& fbInfo = renderData.TargetFramebuffer->getFramebufferInfo();
+            const auto& fbInfo = renderData.OutputFramebuffer->getFramebufferInfo();
             state.viewport.addViewport(nvrhi::Viewport(fbInfo.width, fbInfo.height));
             state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
 

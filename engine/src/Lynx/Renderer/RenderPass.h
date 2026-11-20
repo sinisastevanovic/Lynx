@@ -135,7 +135,12 @@ namespace Lynx
         nvrhi::TextureHandle ShadowMap;
         nvrhi::SamplerHandle ShadowSampler;
 
+        // Where the scene passes draw: the HDR picture, with depth and, in the editor, entity IDs.
         nvrhi::FramebufferHandle TargetFramebuffer;
+
+        // Where the finished picture goes: the window, or the editor's viewport picture.
+        nvrhi::FramebufferHandle OutputFramebuffer;
+
         nvrhi::TextureHandle SceneColorInput;
         nvrhi::TextureHandle BloomTexture;
 

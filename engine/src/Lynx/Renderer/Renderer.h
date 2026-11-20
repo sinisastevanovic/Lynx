@@ -12,12 +12,10 @@
 #include "Lynx/Asset/StaticMesh.h"
 #include "Lynx/Asset/TextureSpecification.h"
 
-#include "RenderPipeline.h"
+
 #include "RenderPass.h"
 #include "Screenshot.h"
-#include "Lynx/UI/Rendering/UIPass.h"
 #include "Passes/BloomPass.h"
-#include "Passes/CompositePass.h"
 #include "Passes/MipMapBlitPass.h"
 
 struct GLFWwindow;
@@ -26,6 +24,7 @@ namespace Lynx
 {
     class FrameProfiler;
     class GraphicsContext;
+    class RenderGraph;
     struct ExtractedScene;
     class Swapchain;
     struct ImGui_NVRHI;
@@ -185,11 +184,13 @@ namespace Lynx
         std::unordered_map<Material*, std::vector<ParticleInstanceData>> m_ParticleBatches;
 
 
-        RenderPipeline m_Pipeline;
-        std::unique_ptr<CompositePass> m_CompositePass;
-        std::unique_ptr<BloomPass> m_BloomPass;
+        // Every pass of a frame, in the order they run.
+        std::unique_ptr<RenderGraph> m_Graph;
+
+        // Owned by the graph. Kept because its settings are edited from outside.
+        BloomPass* m_BloomPass = nullptr;
         std::unique_ptr<MipMapBlitPass> m_MipMapGenPass;
-        std::unique_ptr<UIPass> m_UIPass;
+
         RenderContext m_RenderContext;
         RenderData m_CurrentFrameData;
 

@@ -1,28 +1,25 @@
 #pragma once
-#include "Lynx/Renderer/RenderPass.h"
+#include "Lynx/Renderer/Graph/RenderGraph.h"
 
 namespace Lynx
 {
     // Turns the finished HDR picture into what the window shows: anti-aliasing, bloom and tone mapping.
-    //
-    // This is the first pass written directly on Vulkan. It records into the same command buffer as the
-    // NVRHI passes before and after it, and uses the textures, shaders and samplers NVRHI created.
-    // What that takes is described at the hand-over in Execute.
-    class CompositePass : public RenderPass
+    // Reads the scene and the bloom, and writes the frame's output.
+    class CompositePass : public VulkanPass
     {
     public:
         CompositePass();
         ~CompositePass() override;
 
         void Init(RenderContext& ctx) override;
-        void Execute(RenderContext& ctx, RenderData& renderData) override;
+        bool Declare(const RenderContext& ctx, const RenderData& renderData, PassResources& resources) override;
+        void Execute(vk::CommandBuffer commands, const RenderData& renderData) override;
 
     private:
         void CreatePipeline(const Shader& shader);
         void BindInputs(nvrhi::ITexture* sceneColor, nvrhi::ITexture* bloom);
 
     private:
-        // The Vulkan types stay out of this header, which game code includes through Renderer.h.
         struct VulkanObjects;
         std::unique_ptr<VulkanObjects> m_Vulkan;
 

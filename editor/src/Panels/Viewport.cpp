@@ -1,4 +1,5 @@
 #include "Viewport.h"
+#include <Lynx/UI/Core/UICanvas.h>
 
 #include <imgui.h>
 

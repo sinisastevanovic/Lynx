@@ -9,6 +9,9 @@
 
 #include "ExtractedScene.h"
 #include "Frustum.h"
+#include "Graph/RenderGraph.h"
+#include "Passes/CompositePass.h"
+#include "Lynx/UI/Rendering/UIPass.h"
 #include "GpuTimers.h"
 #include "GraphicsContext.h"
 #include "SamplerCache.h"
@@ -95,31 +98,6 @@ namespace Lynx
             return vk::CommandBuffer(static_cast<VkCommandBuffer>(commandList->getNativeObject(nvrhi::ObjectTypes::VK_CommandBuffer)));
         }
 
-        // Measures what is recorded during its lifetime: the CPU time to record it and the GPU time to run it.
-        class PassScope
-        {
-        public:
-            PassScope(FrameProfiler& profiler, GpuTimers& timers, nvrhi::ICommandList* commandList, std::string_view name)
-                : m_CpuScope(profiler, name), m_Timers(timers), m_CommandList(commandList), m_Name(name)
-            {
-                m_Timers.Begin(NativeCommandBuffer(m_CommandList), m_Name);
-            }
-
-            ~PassScope()
-            {
-                m_Timers.End(NativeCommandBuffer(m_CommandList), m_Name);
-            }
-
-            PassScope(const PassScope&) = delete;
-            PassScope& operator=(const PassScope&) = delete;
-
-        private:
-            ProfileScope m_CpuScope;
-            GpuTimers& m_Timers;
-            nvrhi::ICommandList* m_CommandList;
-            std::string_view m_Name;
-        };
-
         // A screenshot is read this many frames after it was copied, when the GPU has certainly finished the copy.
         constexpr uint64_t ScreenshotReadDelay = 3;
 
@@ -200,6 +178,7 @@ namespace Lynx
         }
         m_Frame->Timers = std::make_unique<GpuTimers>(m_Context->PhysicalDevice(), m_Context->Device(), m_Context->GraphicsQueueFamily());
         m_Frame->Uploads = std::make_unique<UploadQueue>(*m_Context);
+        m_Graph = std::make_unique<RenderGraph>(m_Profiler, *m_Frame->Timers);
 
         m_CommandList = m_NvrhiDevice->createCommandList();
         CreateDefaultTextures();
@@ -219,11 +198,9 @@ namespace Lynx
         m_Frame->ParticleInstances = {};
         m_Frame->Uploads.reset();
         m_PendingScreenshots.clear();
-        m_Pipeline.Clear();
-        m_BloomPass.reset();
-        m_CompositePass.reset();
+        m_Graph.reset();
+        m_BloomPass = nullptr;
         m_MipMapGenPass.reset();
-        m_UIPass.reset();
         m_RenderContext = RenderContext();
         m_CurrentFrameData = RenderData();
         m_OpaqueBatches.clear();
@@ -275,33 +252,26 @@ namespace Lynx
 
         SamplerCache::Init(m_NvrhiDevice, m_MaxAnisotropy);
 
-        m_Pipeline.AddPass("Shadow", std::make_unique<ShadowPass>(m_ShadowMapResolution));
-        m_Pipeline.AddPass("Depth", std::make_unique<DepthPass>());
-        m_Pipeline.AddPass("Forward", std::make_unique<ForwardPass>());
-        m_Pipeline.AddPass("Particles", std::make_unique<ParticlePass>());
+        // The frame, start to finish. The scene passes draw the HDR picture, bloom reads it,
+        // composite turns both into the output, and the UI is drawn on top of that.
+        m_Graph->Add("Shadow", std::make_unique<ShadowPass>(m_ShadowMapResolution));
+        m_Graph->Add("Depth", std::make_unique<DepthPass>());
+        m_Graph->Add("Forward", std::make_unique<ForwardPass>());
+        m_Graph->Add("Particles", std::make_unique<ParticlePass>());
         if (m_ShouldCreateIDTarget)
-        {
-            m_Pipeline.AddPass("Grid", std::make_unique<GridPass>());
-        }
-        m_Pipeline.AddPass("Debug", std::make_unique<DebugPass>());
+            m_Graph->Add("Grid", std::make_unique<GridPass>());
+        m_Graph->Add("Debug", std::make_unique<DebugPass>());
+        m_BloomPass = static_cast<BloomPass*>(&m_Graph->Add("Bloom", std::make_unique<BloomPass>()));
+        m_Graph->Add("Composite", std::make_unique<CompositePass>());
+        m_Graph->Add("UI", std::make_unique<UIPass>(), [this]() { return m_ShowUI; });
+        m_Graph->Init(m_RenderContext);
 
-        m_Pipeline.Init(m_RenderContext);
-
-        m_BloomPass = std::make_unique<BloomPass>();
-        m_BloomPass->Init(m_RenderContext);
-        
-        m_CompositePass = std::make_unique<CompositePass>();
-        m_CompositePass->Init(m_RenderContext);
-
-        m_ImGuiBackend = std::make_unique<ImGui_NVRHI>();
+        m_ImGuiBackend= std::make_unique<ImGui_NVRHI>();
         m_ImGuiBackend->init(m_NvrhiDevice);
 
         m_MipMapGenPass = std::make_unique<MipMapBlitPass>();
         m_MipMapGenPass->Init(m_NvrhiDevice);
 
-        m_UIPass = std::make_unique<UIPass>();
-        m_UIPass->Init(m_RenderContext);
-        
         LX_CORE_INFO("Renderer initialized successfully (Pipeline loaded).");
     }
 
@@ -457,8 +427,9 @@ namespace Lynx
 
     void Renderer::ReleaseSwapchainImages()
     {
-        // Both may refer to an image of the window. A swapchain cannot be replaced or destroyed while one is held.
+        // These may refer to an image of the window. A swapchain cannot be replaced or destroyed while one is held.
         m_CurrentFrameData.TargetFramebuffer = nullptr;
+        m_CurrentFrameData.OutputFramebuffer = nullptr;
         m_SceneOutput = nullptr;
     }
 
@@ -847,52 +818,24 @@ namespace Lynx
         // Everything between BeginScene and here is deciding what is visible and sorting it into batches.
         m_Profiler.AddCpuTime("Cull", MillisecondsSince(m_SubmitStart));
 
-        GpuTimers& timers = *m_Frame->Timers;
-        const auto measurePass = [this, &timers](std::string_view name)
-        {
-            return PassScope(m_Profiler, timers, m_CommandList, name);
-        };
-
         {
             ProfileScope prepareScope(m_Profiler, "PrepareDraws");
             PrepareDrawCalls();
         }
 
-        m_Pipeline.Execute(m_RenderContext, m_CurrentFrameData, measurePass);
+        // The editor shows the finished picture inside its viewport panel. A game shows it in the window.
+        m_CurrentFrameData.OutputFramebuffer = m_ShouldCreateIDTarget ? m_SceneTarget->LDRFramebuffer.Get() : m_Swapchain->Framebuffer();
+        m_CurrentFrameData.SceneColorInput = m_SceneTarget->Color;
+        m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled;
+
+        m_Graph->Execute(m_RenderContext, m_CurrentFrameData);
 
         m_Stats.DrawCalls = m_CurrentFrameData.DrawCalls;
         m_Stats.IndexCount = m_CurrentFrameData.IndexCount;
         m_Profiler.SetCounter("DrawCalls", m_Stats.DrawCalls);
         m_Profiler.SetCounter("Triangles", m_Stats.IndexCount / 3);
 
-        m_CurrentFrameData.SceneColorInput = m_SceneTarget->Color;
-        m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled;
-        {
-            auto scope = measurePass("Bloom");
-            m_BloomPass->Execute(m_RenderContext, m_CurrentFrameData);
-        }
-
-        if (m_ShouldCreateIDTarget)
-        {
-            m_CurrentFrameData.TargetFramebuffer = m_SceneTarget->LDRFramebuffer;
-        }
-        else
-        {
-            m_CurrentFrameData.TargetFramebuffer = m_Swapchain->Framebuffer();
-        }
-
-        {
-            auto scope = measurePass("Composite");
-            m_CompositePass->Execute(m_RenderContext, m_CurrentFrameData);
-        }
-
-        if (m_ShowUI)
-        {
-            auto scope = measurePass("UI");
-            m_UIPass->Execute(m_RenderContext, m_CurrentFrameData);
-        }
-
-        m_SceneOutput = m_CurrentFrameData.TargetFramebuffer->getDesc().colorAttachments[0].texture;
+        m_SceneOutput = m_CurrentFrameData.OutputFramebuffer->getDesc().colorAttachments[0].texture;
     }
 
     bool Renderer::BeginFrame()

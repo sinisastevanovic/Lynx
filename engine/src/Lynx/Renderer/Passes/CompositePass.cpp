@@ -197,52 +197,29 @@ namespace Lynx
         device.updateDescriptorSets(writes, nullptr);
     }
 
-    void CompositePass::Execute(RenderContext& ctx, RenderData& renderData)
+    bool CompositePass::Declare(const RenderContext& ctx, const RenderData& renderData, PassResources& resources)
     {
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
 
-        // The shader has never compiled. The error is in the log, and the window stays as the scene passes left it.
+        // The shader has never compiled. The error is in the log, and the output stays as it was.
         if (!m_Vulkan->Pipeline)
-            return;
+            return false;
 
         nvrhi::ITexture* sceneColor = renderData.SceneColorInput;
         nvrhi::ITexture* bloom = renderData.BloomTexture ? renderData.BloomTexture.Get() : ctx.BlackTexture.Get();
-        nvrhi::ITexture* target = renderData.TargetFramebuffer->getDesc().colorAttachments[0].texture;
         BindInputs(sceneColor, bloom);
 
-        // The hand-over from NVRHI to Vulkan, in three steps.
-        // 1. NVRHI tracks which layout every texture is in. It is asked to put the three textures into
-        //    the layouts this pass needs, and they are left in those layouts, so its bookkeeping stays right.
-        ctx.CommandList->setTextureState(sceneColor, nvrhi::AllSubresources, nvrhi::ResourceStates::ShaderResource);
-        ctx.CommandList->setTextureState(bloom, nvrhi::AllSubresources, nvrhi::ResourceStates::ShaderResource);
-        ctx.CommandList->setTextureState(target, nvrhi::AllSubresources, nvrhi::ResourceStates::RenderTarget);
-        ctx.CommandList->commitBarriers();
+        resources.Sample(sceneColor);
+        resources.Sample(bloom);
+        resources.ColorTarget = renderData.OutputFramebuffer->getDesc().colorAttachments[0].texture;
 
-        // 2. NVRHI keeps a render pass open between draws and remembers what is bound. Clearing its state
-        //    ends that render pass and makes the next NVRHI pass bind everything again.
-        ctx.CommandList->clearState();
+        // The triangle covers every pixel.
+        resources.OverwritesTarget = true;
+        return true;
+    }
 
-        // 3. From here on the commands go straight into the command buffer NVRHI is recording.
-        const vk::CommandBuffer commands = Native<vk::CommandBuffer>(ctx.CommandList->getNativeObject(nvrhi::ObjectTypes::VK_CommandBuffer));
-
-        const nvrhi::TextureDesc& targetDesc = target->getDesc();
-        const vk::Extent2D extent(targetDesc.width, targetDesc.height);
-        const auto width = static_cast<float>(extent.width);
-        const auto height = static_cast<float>(extent.height);
-
-        // The triangle covers every pixel, so what the target held before does not matter.
-        vk::RenderingAttachmentInfo colorAttachment;
-        colorAttachment.imageView = Native<vk::ImageView>(target->getNativeView(nvrhi::ObjectTypes::VK_ImageView));
-        colorAttachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-        colorAttachment.loadOp = vk::AttachmentLoadOp::eDontCare;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-
-        commands.beginRendering(vk::RenderingInfo({}, vk::Rect2D({ 0, 0 }, extent), 1, 0, colorAttachment));
-
-        // NVRHI draws with the viewport turned upside down, so that +Y is up as in Direct3D.
-        // The shaders are written for that, so this pass does the same.
-        commands.setViewport(0, vk::Viewport(0.0f, height, width, -height, 0.0f, 1.0f));
-        commands.setScissor(0, vk::Rect2D({ 0, 0 }, extent));
+    void CompositePass::Execute(vk::CommandBuffer commands, const RenderData& renderData)
+    {
         commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->Pipeline);
         commands.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_Vulkan->PipelineLayout, 0, m_Vulkan->DescriptorSet, nullptr);
 
@@ -252,6 +229,5 @@ namespace Lynx
         commands.pushConstants(m_Vulkan->PipelineLayout, m_Vulkan->PushConstantStages, 0, sizeof(push), &push);
 
         commands.draw(3, 1, 0, 0);
-        commands.endRendering();
     }
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "Lynx/UUID.h"
+#include "Lynx/UI/Core/UIGeometry.h"
 #include "Lynx/Asset/AssetTypes.h"
 #include "Lynx/Scene/Components/LuaScriptComponent.h"
 #include "Lynx/Asset/AssetRef.h"

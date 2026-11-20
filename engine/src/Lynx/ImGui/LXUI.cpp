@@ -1,4 +1,5 @@
 #include "LXUI.h"
+#include "Lynx/UI/Core/UIElement.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>

@@ -1,4 +1,5 @@
 #include "MathHelpers.h"
+#include "Lynx/UI/Core/UICanvas.h"
 
 #include "Lynx/Engine.h"
 
