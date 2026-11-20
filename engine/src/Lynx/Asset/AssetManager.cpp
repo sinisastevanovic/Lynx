@@ -10,106 +10,137 @@
 #include "Shader.h"
 #include "Sprite.h"
 #include "Lynx/Engine.h"
+#include "Lynx/Core/WorkerPool.h"
 #include "Lynx/Event/AssetEvents.h"
 #include "Lynx/Scene/Scene.h"
 
 namespace Lynx
 {
-    AssetManager::AssetManager(AssetRegistry* registry, const ContentPaths& contentPaths)
-        : m_AssetRegistry(registry), m_ContentPaths(contentPaths)
+    namespace
     {
-        GetDefaultTexture();
-        GetWhiteTexture();
-        GetErrorTexture();
+        unsigned int LoaderThreadCount()
+        {
+            // One core is left to the main thread. hardware_concurrency may report 0 when it does not know.
+            const unsigned int cores = std::thread::hardware_concurrency();
+            return std::clamp(cores > 1 ? cores - 1 : 1u, 1u, 4u);
+        }
     }
 
-    std::shared_ptr<Asset> AssetManager::GetAsset(AssetHandle handle, AssetLoadMode mode, std::function<void(AssetHandle)> onLoaded)
+    AssetManager::AssetManager(AssetRegistry* registry, const ContentPaths& contentPaths)
+        : m_AssetRegistry(registry),
+          m_ContentPaths(contentPaths),
+          m_MainThreadId(std::this_thread::get_id()),
+          m_Workers(std::make_unique<WorkerPool>(LoaderThreadCount()))
+    {
+    }
+
+    AssetManager::~AssetManager()
+    {
+        // Joins the loader threads first. Their jobs use the members of this object.
+        m_Workers.reset();
+    }
+
+    bool AssetManager::IsMainThread() const
+    {
+        return std::this_thread::get_id() == m_MainThreadId;
+    }
+
+    std::shared_ptr<Asset> AssetManager::GetAsset(AssetHandle handle, AssetLoadMode mode)
     {
         {
             std::lock_guard<std::mutex> lock(m_AssetsMutex);
-            if (m_LoadedAssets.contains(handle))
-            {
-                auto asset = m_LoadedAssets[handle];
-                if (asset->IsLoaded() && onLoaded)
-                    onLoaded(handle);
-                return asset;
-            }
+            const auto it = m_LoadedAssets.find(handle);
+            if (it != m_LoadedAssets.end())
+                return it->second;
         }
-        
+
         if (!m_AssetRegistry->Contains(handle))
         {
             LX_CORE_ERROR("AssetManager: Trying to get asset that does not exist ({0})!", handle);
-            return nullptr; // Asset does not exist!
+            return nullptr;
         }
 
-        const AssetMetadata& metadata = m_AssetRegistry->Get(handle);
-        return LoadAsset(metadata, mode, onLoaded);
+        // A copy: the registry may change its entry while the load is under way.
+        const AssetMetadata metadata = m_AssetRegistry->Get(handle);
+        return LoadAsset(metadata, mode);
     }
 
-    std::shared_ptr<Asset> AssetManager::LoadAsset(const AssetMetadata& metadata, AssetLoadMode mode, std::function<void(AssetHandle)> onLoaded)
+    std::shared_ptr<Asset> AssetManager::LoadAsset(const AssetMetadata& metadata, AssetLoadMode mode)
     {
-        std::shared_ptr<Asset> newAsset = CreateAssetInstance(metadata);
-        if (!newAsset)
+        std::shared_ptr<Asset> asset = CreateAssetInstance(metadata);
+        if (!asset)
             return nullptr;
 
-        newAsset->SetState(AssetState::Loading);
+        asset->SetState(AssetState::Loading);
 
         {
             std::lock_guard<std::mutex> lock(m_AssetsMutex);
-            m_LoadedAssets[metadata.Handle] = newAsset;
+            const auto [it, wasInserted] = m_LoadedAssets.try_emplace(metadata.Handle, asset);
+
+            // Another caller started loading this asset after GetAsset looked for it. Theirs is the one to use.
+            if (!wasInserted)
+                return it->second;
         }
-        
 
-        auto loadTask = [this, newAsset, metadata, onLoaded]()
+        if (mode == AssetLoadMode::Blocking && IsMainThread())
         {
-            if (newAsset->LoadSourceData())
-            {
-                std::lock_guard<std::mutex> lock(m_AssetsMutex);
-                m_MainThreadQueue.push_back([this, newAsset, metadata, onLoaded]()
-                {
-                    if (newAsset->CreateRenderResources())
-                    {
-                        if (newAsset->GetType() == AssetType::Texture)
-                        {
-                            std::lock_guard<std::mutex> lock(m_AssetsMutex);
-                            for (auto& [handle, asset] : m_LoadedAssets)
-                            {
-                                if (asset->GetType() == AssetType::Material && asset->DependsOn(newAsset->GetHandle()))
-                                {
-                                    asset->IncrementVersion();
-                                }
-                            }
-                        }
-                        newAsset->SetState(AssetState::Ready);
-                        if (onLoaded) onLoaded(newAsset->GetHandle());
-                    }
-                    else
-                    {
-                        newAsset->SetState(AssetState::Error);
-                        LX_CORE_ERROR("Failed to upload asset to GPU: {0}", metadata.FilePath.string());
-                    }
-                });
-            }
-            else
-            {
-                newAsset->SetState(AssetState::Error);
-                LX_CORE_ERROR("Failed to load asset source: {0}", metadata.FilePath.string());
-            }
-        };
-
-        if (mode == AssetLoadMode::Blocking)
+            if (LoadSourceData(asset))
+                FinishLoad(asset);
+        }
+        else if (mode == AssetLoadMode::Blocking)
         {
-            loadTask();
-            Update();
+            if (LoadSourceData(asset))
+                FinishLoadOnMainThread(asset);
         }
         else
         {
-            // TODO: Note: std::async w/ launch::async works too, but we don't need the future here
-            // Ideally use a thread pool later.
-            std::thread(loadTask).detach();
+            m_Workers->Submit([this, asset]()
+            {
+                if (LoadSourceData(asset))
+                    FinishLoadOnMainThread(asset);
+            });
         }
 
-        return newAsset;
+        return asset;
+    }
+
+    bool AssetManager::LoadSourceData(const std::shared_ptr<Asset>& asset)
+    {
+        if (asset->LoadSourceData())
+            return true;
+
+        asset->SetState(AssetState::Error);
+        LX_CORE_ERROR("Failed to load asset source: {0}", asset->GetFilePath());
+        return false;
+    }
+
+    void AssetManager::FinishLoad(const std::shared_ptr<Asset>& asset)
+    {
+        if (!asset->CreateRenderResources())
+        {
+            asset->SetState(AssetState::Error);
+            LX_CORE_ERROR("Failed to upload asset to GPU: {0}", asset->GetFilePath());
+            return;
+        }
+
+        // A material that was built while its texture was still loading has to pick the texture up now.
+        if (asset->GetType() == AssetType::Texture)
+        {
+            std::lock_guard<std::mutex> lock(m_AssetsMutex);
+            for (auto& [handle, other] : m_LoadedAssets)
+            {
+                if (other->GetType() == AssetType::Material && other->DependsOn(asset->GetHandle()))
+                    other->IncrementVersion();
+            }
+        }
+
+        asset->SetState(AssetState::Ready);
+    }
+
+    void AssetManager::FinishLoadOnMainThread(const std::shared_ptr<Asset>& asset)
+    {
+        std::lock_guard<std::mutex> lock(m_QueueMutex);
+        m_MainThreadQueue.push_back([this, asset]() { FinishLoad(asset); });
     }
 
     std::shared_ptr<Asset> AssetManager::CreateAssetInstance(const AssetMetadata& metadata)
@@ -165,8 +196,17 @@ namespace Lynx
 
     void AssetManager::ReloadAsset(AssetHandle handle)
     {
+        std::shared_ptr<Asset> asset;
+        {
+            std::lock_guard<std::mutex> lock(m_AssetsMutex);
+            const auto it = m_LoadedAssets.find(handle);
+            if (it == m_LoadedAssets.end())
+                return;
+
+            asset = it->second;
+        }
+
         LX_CORE_INFO("Reloading Asset: {0}", handle);
-        std::shared_ptr<Asset> asset = m_LoadedAssets[handle];
         if (asset->Reload())
         {
             LX_CORE_INFO("Asset reloaded successfully");
@@ -191,11 +231,9 @@ namespace Lynx
         // TODO: Are there possible bugs with this?
         // I mean if another object holds a shared_ptr to an Asset and we unload it here, it still has a reference.
         // But the AssetManager doesn't know about that. So if we request this asset again, the AssetManager creates a new one instead...
-        if (m_LoadedAssets.contains(handle))
-        {
+        std::lock_guard<std::mutex> lock(m_AssetsMutex);
+        if (m_LoadedAssets.erase(handle) > 0)
             LX_CORE_INFO("AssetManager: Unloading asset {0}", handle);
-            m_LoadedAssets.erase(handle);
-        }
     }
 
     void AssetManager::UnloadAllGameAssets()
@@ -211,7 +249,7 @@ namespace Lynx
         }
     }
 
-    std::shared_ptr<Asset> AssetManager::GetAsset(const std::filesystem::path& path, AssetLoadMode mode, std::function<void(AssetHandle)> onLoaded)
+    std::shared_ptr<Asset> AssetManager::GetAsset(const std::filesystem::path& path, AssetLoadMode mode)
     {
         if (!std::filesystem::exists(path))
         {
@@ -219,7 +257,7 @@ namespace Lynx
             return nullptr;
         }
         AssetHandle handle = m_AssetRegistry->ImportAsset(path);
-        return GetAsset(handle);
+        return GetAsset(handle, mode);
     }
 
     AssetHandle AssetManager::GetAssetHandle(const std::filesystem::path& path) const
@@ -233,6 +271,7 @@ namespace Lynx
 
     bool AssetManager::IsAssetLoaded(AssetHandle handle) const
     {
+        std::lock_guard<std::mutex> lock(m_AssetsMutex);
         return m_LoadedAssets.contains(handle);
     }
 
