@@ -258,8 +258,19 @@ namespace Lynx
         return true;
     }
 
-    void Window::SetSize(uint32_t width, uint32_t height)
+    void Window::CenterOnPrimaryMonitor(uint32_t width, uint32_t height)
     {
+        int areaX, areaY, areaWidth, areaHeight;
+        glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), &areaX, &areaY, &areaWidth, &areaHeight);
+
+        // The title bar sits above the content area and has to stay on the monitor to keep the window movable.
+        int frameTop = 0;
+        glfwGetWindowFrameSize(m_Window, nullptr, &frameTop, nullptr, nullptr);
+
+        const int x = areaX + (areaWidth - static_cast<int>(width)) / 2;
+        const int y = areaY + std::max(frameTop, (areaHeight - static_cast<int>(height)) / 2);
+
         glfwSetWindowSize(m_Window, static_cast<int>(width), static_cast<int>(height));
+        glfwSetWindowPos(m_Window, x, y);
     }
 }

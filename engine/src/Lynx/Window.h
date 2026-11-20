@@ -62,8 +62,10 @@ namespace Lynx
         // where it cannot be reached on the monitors that are connected now.
         bool SetBounds(const WindowBounds& bounds);
 
-        // Resizes the content area and leaves the window where it is. The desktop may limit the size.
-        void SetSize(uint32_t width, uint32_t height);
+        // Resizes the content area and centers it on the primary monitor. The desktop may limit the size.
+        // Windows places each new window a little further down and to the right than the last one,
+        // so anything that needs the window in the same place every time has to put it there.
+        void CenterOnPrimaryMonitor(uint32_t width, uint32_t height);
 
         GLFWwindow* GetNativeWindow() const { return m_Window; }
         void* GetNativeWindowHandle() const;

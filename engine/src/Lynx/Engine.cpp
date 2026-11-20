@@ -97,7 +97,7 @@ namespace Lynx
     {
         // A benchmark measures the renderer, not the display: its frames must not wait for the refresh.
         m_Renderer->SetVSync(false);
-        m_Window->SetSize(settings.Width, settings.Height);
+        m_Window->CenterOnPrimaryMonitor(settings.Width, settings.Height);
         m_Benchmark = std::make_unique<Benchmark>(std::move(settings));
     }
 
