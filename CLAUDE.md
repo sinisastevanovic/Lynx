@@ -7,6 +7,10 @@ Current state, open problems and the order of work: https://claude.ai/artifact/8
 Read its "Status" section before starting anything larger. Its "Target design" section describes where the
 structure is heading, and "Toward the target design" the order of the steps.
 
+Renderer work follows its own plan, Renderer V2: https://claude.ai/artifact/SShPW5mVGsxRJYgqVdASKj
+It is the main line of work. Read its "Decisions" and "Status" sections before touching the renderer, and tick off
+the steps under "Stage 1 in detail" as they land. The non-renderer steps of the review are paused meanwhile.
+
 ## Repositories
 
 - `D:\LynxEngine` (this one): engine and editor. Work happens on the `development` branch.
