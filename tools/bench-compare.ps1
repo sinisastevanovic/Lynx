@@ -6,6 +6,8 @@
 # by a few percent between runs of the same build. Rows that changed more are marked "faster" or "SLOWER".
 # Measured on an RTX 5080: the frame median and the GPU times repeat within 2.5 %, the CPU times of
 # single passes within 10 %, and the 99th percentile not at all (up to 30 %), so it gets no verdict.
+# That holds for results measured back to back. Between sessions the same build drifts by up to 5 %
+# in frame time and 12 % in GPU time, so the script warns when the two results are far apart in time.
 # Rows whose time is too small to measure reliably are left out unless -All is given.
 # For every picture that differs, a picture showing where is written next to the "after" result.
 param(
@@ -183,6 +185,15 @@ foreach ($benchName in $Bench) {
     "=== $benchName   $Before ($($beforeResult.Build), $($beforeResult.Width)x$($beforeResult.Height))  ->  $After ($($afterResult.Build), $($afterResult.Width)x$($afterResult.Height)) ==="
     if ($beforeResult.Build -ne $afterResult.Build -or $beforeResult.Width -ne $afterResult.Width -or $beforeResult.Height -ne $afterResult.Height -or $beforeResult.Adapter -ne $afterResult.Adapter) {
         "    The two results were measured under different conditions: their timings are not comparable."
+    }
+
+    # The machine itself drifts: the same build measured an hour later differed by up to 5 % in frame time
+    # and 12 % in GPU time. Pictures and counts are not affected.
+    if ($null -ne $beforeResult.MeasuredAt -and $null -ne $afterResult.MeasuredAt) {
+        $minutesApart = [math]::Abs(([datetime]$afterResult.MeasuredAt - [datetime]$beforeResult.MeasuredAt).TotalMinutes)
+        if ($minutesApart -gt 20) {
+            "    Measured {0:N0} minutes apart. Timings drift over that long: measure both back to back before trusting a verdict." -f $minutesApart
+        }
     }
 
     $rows = @()

@@ -7,6 +7,7 @@
 #include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
+#include "DeviceSelection.h"
 #include "GpuTimers.h"
 #include "SamplerCache.h"
 #include "Lynx/Profiling/FrameProfiler.h"
@@ -208,6 +209,13 @@ namespace Lynx
         nvrhi::vulkan::DeviceHandle NvrhiVulkanDevice;
 
         std::unique_ptr<GpuTimers> Timers;
+
+        // What the instance and the device were created with. NVRHI is told, so it knows what it may use.
+        std::vector<const char*> InstanceExtensions;
+        std::vector<const char*> DeviceExtensions;
+
+        // Set when presenting reported that the swapchain no longer matches the window.
+        bool SwapchainIsStale = false;
 
         // Whether the driver can report how much memory this process uses per heap.
         bool HasMemoryBudget = false;
@@ -489,6 +497,7 @@ namespace Lynx
         instInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         instInfo.ppEnabledExtensionNames = extensions.data();
         m_VulkanState->Instance = vk::createInstance(instInfo);
+        m_VulkanState->InstanceExtensions = extensions;
 
         VULKAN_HPP_DEFAULT_DISPATCHER.init(m_VulkanState->Instance);
 
@@ -514,60 +523,19 @@ namespace Lynx
         }
         m_VulkanState->Surface = rawSurface;
 
-        // 3. Physical Device
-        std::vector<vk::PhysicalDevice> physicalDevices = m_VulkanState->Instance.enumeratePhysicalDevices();
-        m_VulkanState->PhysicalDevice = physicalDevices[0];
-
-        // 4. Queue Family
-        //m_VulkanState->GraphicsQueueFamily = 0; // Simplified: assuming index 0 has graphics
-
-        // 5. Logical Device
-        vk::PhysicalDeviceVulkan13Features features13;
-        features13.dynamicRendering = VK_TRUE;
-        features13.synchronization2 = VK_TRUE;
-
-        vk::PhysicalDeviceVulkan12Features features12;
-        features12.timelineSemaphore = VK_TRUE;
-        features12.descriptorIndexing = VK_TRUE;
-        features12.bufferDeviceAddress = VK_TRUE;
-        features12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-        features12.runtimeDescriptorArray = VK_TRUE;
-        // The GPU timers reset their queries from the CPU.
-        features12.hostQueryReset = VK_TRUE;
-
-        vk::PhysicalDeviceFeatures features10;
-        features10.geometryShader = VK_TRUE;
-        features10.independentBlend = VK_TRUE;
-        features10.samplerAnisotropy = VK_TRUE;
-
-        features13.pNext = &features12;
-        
-        float priority = 1.0f;
-        vk::DeviceQueueCreateInfo queueInfo;
-        queueInfo.queueFamilyIndex = m_VulkanState->GraphicsQueueFamily;
-        queueInfo.queueCount = 1;
-        queueInfo.pQueuePriorities = &priority;
-
-        std::vector<const char*> deviceExtensions = {
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME
-        };
-
-        for (const vk::ExtensionProperties& extension : m_VulkanState->PhysicalDevice.enumerateDeviceExtensionProperties())
+        // 3. The GPU and the device on it
+        auto graphicsDevice = CreateGraphicsDevice(m_VulkanState->Instance, m_VulkanState->Surface);
+        if (!graphicsDevice)
         {
-            if (std::string_view(extension.extensionName) == VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)
-            {
-                deviceExtensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
-                m_VulkanState->HasMemoryBudget = true;
-            }
+            LX_CORE_CRITICAL("{0}", graphicsDevice.error());
+            throw std::runtime_error(graphicsDevice.error());
         }
-        vk::DeviceCreateInfo devInfo;
-        devInfo.queueCreateInfoCount = 1;
-        devInfo.pQueueCreateInfos = &queueInfo;
-        devInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
-        devInfo.ppEnabledExtensionNames = deviceExtensions.data();
-        devInfo.pNext = &features13;
-        devInfo.pEnabledFeatures = &features10;
-        m_VulkanState->Device = m_VulkanState->PhysicalDevice.createDevice(devInfo);
+
+        m_VulkanState->PhysicalDevice = graphicsDevice->PhysicalDevice;
+        m_VulkanState->Device = graphicsDevice->Device;
+        m_VulkanState->GraphicsQueueFamily = graphicsDevice->GraphicsQueueFamily;
+        m_VulkanState->DeviceExtensions = graphicsDevice->Extensions;
+        m_VulkanState->HasMemoryBudget = graphicsDevice->HasMemoryBudget;
 
         VULKAN_HPP_DEFAULT_DISPATCHER.init(m_VulkanState->Device);
 
@@ -575,7 +543,18 @@ namespace Lynx
         m_VulkanState->Timers = std::make_unique<GpuTimers>(m_VulkanState->PhysicalDevice, m_VulkanState->Device, m_VulkanState->GraphicsQueueFamily);
 
         // 6. Swapchain, its images and the per-image semaphores
-        m_VulkanState->SwapchainFormat = vk::Format::eB8G8R8A8Unorm; // Forced simplified format
+        m_VulkanState->SwapchainFormat = vk::Format::eB8G8R8A8Unorm;
+        const std::vector<vk::SurfaceFormatKHR> surfaceFormats = m_VulkanState->PhysicalDevice.getSurfaceFormatsKHR(m_VulkanState->Surface);
+        const bool hasSwapchainFormat = std::ranges::any_of(surfaceFormats, [this](const vk::SurfaceFormatKHR& format)
+        {
+            return format.format == m_VulkanState->SwapchainFormat && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
+        });
+        if (!hasSwapchainFormat)
+        {
+            // The composite pass and the ImGui layer write this format, so there is nothing to fall back to yet.
+            LX_CORE_CRITICAL("The window cannot show 8-bit BGRA pictures, which is the only format the renderer presents.");
+            throw std::runtime_error("Unsupported surface format");
+        }
 
         int framebufferWidth = 0;
         int framebufferHeight = 0;
@@ -611,7 +590,10 @@ namespace Lynx
 
         vk::SwapchainCreateInfoKHR swapInfo;
         swapInfo.surface = m_VulkanState->Surface;
-        swapInfo.minImageCount = 2;
+        // The fewest images the driver works with. One more is the usual advice, but measured on an RTX 5080
+        // it changed no frame time, cost 25 MB and let frames overlap on the GPU, which made the time of
+        // every pass read 12 to 19 % longer.
+        swapInfo.minImageCount = caps.minImageCount;
         swapInfo.imageFormat = m_VulkanState->SwapchainFormat;
         swapInfo.imageColorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
         swapInfo.imageExtent = m_VulkanState->SwapchainExtent;
@@ -655,6 +637,7 @@ namespace Lynx
     void Renderer::RecreateSwapchain(uint32_t width, uint32_t height)
     {
         m_VulkanState->Device.waitIdle();
+        m_VulkanState->SwapchainIsStale = false;
 
         for (auto& sem : m_VulkanState->RenderFinishedSemaphores)
             m_VulkanState->Device.destroySemaphore(sem);
@@ -690,8 +673,12 @@ namespace Lynx
         deviceDesc.graphicsQueue = m_VulkanState->GraphicsQueue;
         deviceDesc.graphicsQueueIndex = m_VulkanState->GraphicsQueueFamily;
         deviceDesc.errorCB = &s_NvrhiMessageLogger;
+        deviceDesc.instanceExtensions = m_VulkanState->InstanceExtensions.data();
+        deviceDesc.numInstanceExtensions = m_VulkanState->InstanceExtensions.size();
+        deviceDesc.deviceExtensions = m_VulkanState->DeviceExtensions.data();
+        deviceDesc.numDeviceExtensions = m_VulkanState->DeviceExtensions.size();
+        deviceDesc.bufferDeviceAddressSupported = true;
 
-        // TODO: Pass validation extensions
         m_VulkanState->NvrhiVulkanDevice = nvrhi::vulkan::createDevice(deviceDesc);
         m_NvrhiDevice = m_VulkanState->NvrhiVulkanDevice;
 
@@ -943,15 +930,30 @@ namespace Lynx
             m_VulkanState->Device.resetFences(1, &m_VulkanState->InFlightFences[m_CurrentFrame]);
 
             // 1. Acquire Image from Vulkan
-            // TODO: handle resizing (VK_ERROR_OUT_OF_DATE_KHR)
-            auto result = m_VulkanState->Device.acquireNextImageKHR(
-                m_VulkanState->Swapchain,
-                UINT64_MAX,
-                vk::Semaphore(m_VulkanState->ImageAvailableSemaphores[m_CurrentFrame]),
-                nullptr
-            );
+            // A swapchain stops matching its window when the window is resized or moved to another display.
+            // The driver then refuses to hand out images, and a new swapchain has to be made.
+            if (m_VulkanState->SwapchainIsStale)
+                RecreateSwapchain(m_VulkanState->SwapchainExtent.width, m_VulkanState->SwapchainExtent.height);
 
-            m_CurrentImageIndex = result.value;
+            // The overload that takes a pointer reports an out-of-date swapchain as a result. The other one throws.
+            const auto acquireImage = [this]()
+            {
+                return m_VulkanState->Device.acquireNextImageKHR(m_VulkanState->Swapchain, UINT64_MAX,
+                    m_VulkanState->ImageAvailableSemaphores[m_CurrentFrame], nullptr, &m_CurrentImageIndex);
+            };
+
+            vk::Result acquired = acquireImage();
+            if (acquired == vk::Result::eErrorOutOfDateKHR)
+            {
+                RecreateSwapchain(m_VulkanState->SwapchainExtent.width, m_VulkanState->SwapchainExtent.height);
+                acquired = acquireImage();
+            }
+
+            // Suboptimal still gives a usable image. The swapchain is replaced before the next frame.
+            if (acquired == vk::Result::eSuboptimalKHR)
+                m_VulkanState->SwapchainIsStale = true;
+            else if (acquired != vk::Result::eSuccess)
+                LX_CORE_ERROR("Could not acquire a swapchain image: {0}", vk::to_string(acquired));
         }
 
         // 2. Start recording
@@ -1191,7 +1193,11 @@ namespace Lynx
         presentInfo.waitSemaphoreCount = 1;
         presentInfo.pWaitSemaphores = &m_VulkanState->RenderFinishedSemaphores[m_CurrentImageIndex];
         
-        m_VulkanState->GraphicsQueue.presentKHR(&presentInfo);
+        const vk::Result presented = m_VulkanState->GraphicsQueue.presentKHR(&presentInfo);
+        if (presented == vk::Result::eErrorOutOfDateKHR || presented == vk::Result::eSuboptimalKHR)
+            m_VulkanState->SwapchainIsStale = true;
+        else if (presented != vk::Result::eSuccess)
+            LX_CORE_ERROR("Could not present the frame: {0}", vk::to_string(presented));
 
         m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 

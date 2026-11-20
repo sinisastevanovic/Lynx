@@ -122,6 +122,7 @@ foreach ($benchName in $Bench) {
     $result | Add-Member -NotePropertyName Label -NotePropertyValue $Label
     $result | Add-Member -NotePropertyName Commit -NotePropertyValue $commit
     $result | Add-Member -NotePropertyName UncommittedChanges -NotePropertyValue $isDirty
+    $result | Add-Member -NotePropertyName MeasuredAt -NotePropertyValue (Get-Date).ToString("o")
     $result | Add-Member -NotePropertyName RunFrameMsMedians -NotePropertyValue @($runResults | ForEach-Object { $_.Result.FrameMs.Median })
     $result | Add-Member -NotePropertyName PicturesMatchAcrossRuns -NotePropertyValue $picturesMatch
     $result | ConvertTo-Json -Depth 10 | Set-Content -Path (Join-Path $benchDirectory "result.json") -Encoding utf8
