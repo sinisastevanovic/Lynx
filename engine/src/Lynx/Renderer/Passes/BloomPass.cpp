@@ -274,10 +274,8 @@ namespace Lynx
             step(mip, vulkan.MipIndices[mip - 1], vulkan.MipExtent(mip - 1), BloomMode::Downsample, vulkan.ReplacePipeline, vk::AttachmentLoadOp::eDontCare);
 
         // Up: every size is added to the one above it, so the largest ends up with the glow of all of them.
-        // Known fault, kept so that this port does not change the picture: these steps should run in the
-        // upsample mode. With the downsample mode, the radius setting has no effect.
         for (uint32_t mip = vulkan.MipCount - 1; mip > 0; --mip)
-            step(mip - 1, vulkan.MipIndices[mip], vulkan.MipExtent(mip), BloomMode::Downsample, vulkan.AddPipeline, vk::AttachmentLoadOp::eLoad);
+            step(mip - 1, vulkan.MipIndices[mip], vulkan.MipExtent(mip), BloomMode::Upsample, vulkan.AddPipeline, vk::AttachmentLoadOp::eLoad);
 
         // The result is left ready for the composite pass to read.
         if (previousTarget)
