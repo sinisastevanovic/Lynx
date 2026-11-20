@@ -1,5 +1,6 @@
 #include <Lynx.h>
 #include <Lynx/GameModule.h>
+#include <Lynx/Renderer/DebugRenderer.h>
 
 #include <glm/gtc/quaternion.hpp>
 
@@ -64,7 +65,17 @@ public:
             CreateInstanceGrid(*engine.GetActiveScene(), engine.GetAssetManager(), static_cast<uint32_t>(instances));
     }
 
-    void OnUpdate(float) override {}
+    void OnUpdate(float) override
+    {
+        // Debug shapes last one frame, so they are drawn again in every frame. See bench/features.json.
+        const Benchmark* benchmark = Engine::Get().GetBenchmark();
+        if (!benchmark || benchmark->Settings().Parameter("DebugShapes", 0.0) <= 0.0)
+            return;
+
+        DebugRenderer::DrawBox(glm::vec3(-7.0f, 0.0f, 6.0f), glm::vec3(-5.0f, 2.0f, 8.0f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f));
+        DebugRenderer::DrawSphere(glm::vec3(4.0f, 1.5f, 6.0f), 1.5f, glm::vec4(0.2f, 1.0f, 0.2f, 1.0f));
+        DebugRenderer::DrawLine(glm::vec3(-9.0f, 0.1f, 9.0f), glm::vec3(9.0f, 4.0f, -4.0f), glm::vec4(0.3f, 0.5f, 1.0f, 1.0f));
+    }
     void OnShutdown() override {}
 };
 

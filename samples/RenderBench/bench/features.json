@@ -47,5 +47,8 @@
                 -1.0
             ]
         }
-    ]
+    ],
+    "Parameters": {
+        "DebugShapes": 1
+    }
 }
