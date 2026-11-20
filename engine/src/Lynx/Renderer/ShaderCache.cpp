@@ -14,7 +14,7 @@ namespace Lynx
         constexpr uint32_t s_SpirvMagicNumber = 0x07230203;
 
         // Bump this when the format of a stored program or the compile settings in ShaderCompiler change.
-        constexpr uint32_t s_ProgramVersion = 1;
+        constexpr uint32_t s_ProgramVersion = 2;
         constexpr uint32_t s_ProgramMagicNumber = 0x5053584c; // "LXSP"
 
         // FNV-1a. std::hash is not guaranteed to give the same value in another build, and the keys are file names.

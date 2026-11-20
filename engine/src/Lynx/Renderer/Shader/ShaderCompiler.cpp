@@ -106,6 +106,46 @@ namespace Lynx
         }
     }
 
+    namespace
+    {
+        // Marks the position a vertex shader writes as invariant: the GPU then computes it the same way
+        // in every shader that uses the same expression. A pass that draws only where the depth equals
+        // what an earlier pass wrote depends on that, and Slang has no way to ask for it.
+        void MakePositionInvariant(std::vector<uint32_t>& spirv)
+        {
+            constexpr uint32_t HeaderWords = 5;
+            constexpr uint32_t OpDecorate = 71;
+            constexpr uint32_t OpMemberDecorate = 72;
+            constexpr uint32_t DecorationBuiltIn = 11;
+            constexpr uint32_t DecorationInvariant = 18;
+            constexpr uint32_t BuiltInPosition = 0;
+
+            for (size_t index = HeaderWords; index < spirv.size();)
+            {
+                const uint32_t wordCount = spirv[index] >> 16;
+                const uint32_t opcode = spirv[index] & 0xFFFFu;
+                if (wordCount == 0)
+                    return;
+
+                // The position is either a variable of its own or a member of a block of built-in outputs.
+                if (opcode == OpDecorate && wordCount == 4 && spirv[index + 2] == DecorationBuiltIn && spirv[index + 3] == BuiltInPosition)
+                {
+                    const uint32_t decoration[] = { (3u << 16) | OpDecorate, spirv[index + 1], DecorationInvariant };
+                    spirv.insert(spirv.begin() + static_cast<ptrdiff_t>(index + wordCount), std::begin(decoration), std::end(decoration));
+                    return;
+                }
+                if (opcode == OpMemberDecorate && wordCount == 5 && spirv[index + 3] == DecorationBuiltIn && spirv[index + 4] == BuiltInPosition)
+                {
+                    const uint32_t decoration[] = { (4u << 16) | OpMemberDecorate, spirv[index + 1], spirv[index + 2], DecorationInvariant };
+                    spirv.insert(spirv.begin() + static_cast<ptrdiff_t>(index + wordCount), std::begin(decoration), std::end(decoration));
+                    return;
+                }
+
+                index += wordCount;
+            }
+        }
+    }
+
     struct ShaderCompiler::SlangSession
     {
         Slang::ComPtr<slang::IGlobalSession> Global;
@@ -243,6 +283,8 @@ namespace Lynx
 
             const auto* words = static_cast<const uint32_t*>(code->getBufferPointer());
             stage.Spirv.assign(words, words + code->getBufferSize() / sizeof(uint32_t));
+            if (stage.Stage == ShaderStage::Vertex)
+                MakePositionInvariant(stage.Spirv);
             program.Stages.push_back(std::move(stage));
         }
 
