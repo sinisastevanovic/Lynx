@@ -5,9 +5,15 @@
 #   tools/bench.ps1 [-Label <name>] [-Bench <name>,...] [-Runs <count>] [-Configuration Release|Debug]
 #       [-BuildDirectory <folder>] [-NoBuild] [-Set <name>=<number>,...]
 #
-# Each benchmark is run several times, because frame times vary from run to run. The run with the
-# median frame time is the result. The pictures of all runs are compared to check that the benchmark
-# renders the same frames every time.
+# Each benchmark is run several times, and the runs are combined frame by frame. A benchmark renders
+# the same frames in every run, so frame N costs the same each time, and whatever else the machine
+# does can only add to it: on a 240 Hz desktop the compositor takes about 0.4 ms of GPU time at every
+# refresh, which lands inside more than half of all frames. Taking the smallest time of frame N across
+# the runs removes that, and the median over all frames is the "clean" time of the benchmark. With five
+# runs about 93 % of the frames are undisturbed in at least one run. Fewer runs read measurably higher,
+# so only compare results made with the same number of runs.
+#
+# The pictures of all runs are compared to check that the benchmark renders the same frames every time.
 #
 # Results go to samples/RenderBench/temp/bench/<label>/<benchmark>/: result.json and the pictures.
 # The label defaults to the current commit, with "-dirty" appended when there are uncommitted changes.
@@ -15,7 +21,7 @@
 param(
     [string]$Label = "",
     [string[]]$Bench = @("features", "sponza", "grid"),
-    [int]$Runs = 3,
+    [int]$Runs = 5,
     [ValidateSet("Release", "Debug")][string]$Configuration = "Release",
     [string]$BuildDirectory = "",
     [switch]$NoBuild,
@@ -59,6 +65,21 @@ if (-not $NoBuild) {
 if (-not (Test-Path $executable)) {
     "Not found: $executable"
     exit 1
+}
+
+# The median of the smallest value each frame has in any run, for one column of the runs' frames.csv.
+function Get-CleanMedian($tables, $column, $frameCount) {
+    $values = New-Object double[] $frameCount
+    for ($frame = 0; $frame -lt $frameCount; $frame++) {
+        $smallest = [double]::MaxValue
+        foreach ($table in $tables) {
+            $value = [double]$table[$frame].$column
+            if ($value -lt $smallest) { $smallest = $value }
+        }
+        $values[$frame] = $smallest
+    }
+    [array]::Sort($values)
+    return $values[[int][math]::Floor(($frameCount - 1) / 2)]
 }
 
 $labelDirectory = Join-Path $projectRoot "temp\bench\$Label"
@@ -118,7 +139,24 @@ foreach ($benchName in $Bench) {
         Copy-Item (Join-Path $chosen.Directory $picture) (Join-Path $benchDirectory $picture)
     }
 
+    # Combine the runs frame by frame, see the top of this file.
+    $tables = @($runResults | ForEach-Object { , @(Import-Csv (Join-Path $_.Directory "frames.csv")) })
+    $frameCount = [int](($tables | ForEach-Object { $_.Count } | Measure-Object -Minimum).Minimum)
+    $clean = [ordered]@{ FrameMs = 0.0; GpuMs = [ordered]@{}; CpuMs = [ordered]@{} }
+    foreach ($column in $tables[0][0].PSObject.Properties.Name) {
+        if ($column -eq "Frame") { continue }
+        $inEveryRun = @($tables | Where-Object { $null -eq $_[0].$column }).Count -eq 0
+        if (-not $inEveryRun) { continue }
+
+        $median = Get-CleanMedian $tables $column $frameCount
+        if ($column -eq "FrameMs") { $clean.FrameMs = $median }
+        elseif ($column.StartsWith("Gpu.")) { $clean.GpuMs[$column.Substring(4)] = $median }
+        elseif ($column.StartsWith("Cpu.")) { $clean.CpuMs[$column.Substring(4)] = $median }
+    }
+
     $result = $chosen.Result
+    $result | Add-Member -NotePropertyName Clean -NotePropertyValue $clean
+    $result | Add-Member -NotePropertyName Runs -NotePropertyValue $runResults.Count
     $result | Add-Member -NotePropertyName Label -NotePropertyValue $Label
     $result | Add-Member -NotePropertyName Commit -NotePropertyValue $commit
     $result | Add-Member -NotePropertyName UncommittedChanges -NotePropertyValue $isDirty
@@ -135,11 +173,11 @@ foreach ($benchName in $Bench) {
 
     $summary += [pscustomobject]@{
         Benchmark = $benchName
-        "Frame ms" = "{0:N3}" -f $result.FrameMs.Median
-        "P99 ms" = "{0:N3}" -f $result.FrameMs.P99
-        "GPU ms" = "{0:N3}" -f $result.GpuMs.Frame.Median
-        FPS = "{0:N0}" -f $result.FramesPerSecond
-        "Run spread" = "{0:N1} %" -f $spread
+        "Clean frame ms" = "{0:N3}" -f $clean.FrameMs
+        "Clean GPU ms" = "{0:N3}" -f $clean.GpuMs["Frame"]
+        "Raw frame ms" = "{0:N3}" -f $result.FrameMs.Median
+        "Raw P99 ms" = "{0:N3}" -f $result.FrameMs.P99
+        "Raw run spread" = "{0:N1} %" -f $spread
         "Same pictures" = $picturesMatch
     }
 }

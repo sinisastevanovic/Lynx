@@ -2,19 +2,19 @@
 #
 #   tools/bench-compare.ps1 -Before <label> -After <label> [-Bench <name>,...] [-Threshold <percent>] [-All]
 #
-# A timing that changed by less than the threshold is treated as unchanged, because frame times vary
-# by a few percent between runs of the same build. Rows that changed more are marked "faster" or "SLOWER".
-# Measured on an RTX 5080: the frame median and the GPU times repeat within 2.5 %, the CPU times of
-# single passes within 10 %, and the 99th percentile not at all (up to 30 %), so it gets no verdict.
-# That holds for results measured back to back. Between sessions the same build drifts by up to 5 %
-# in frame time and 12 % in GPU time, so the script warns when the two results are far apart in time.
+# The timings compared are the "clean" ones, see tools/bench.ps1. A timing that changed by less than
+# the threshold is treated as unchanged. Rows that changed more are marked "faster" or "SLOWER".
+# Measured on an RTX 5080 with five runs: clean GPU times repeat within 1.3 % and the clean frame time
+# within 1.6 %. CPU times of single passes vary more and get four times the threshold.
+# The 99th percentile is raw and varies by up to 50 % on its own, so it gets no verdict.
+# Between sessions the same build drifts, so the script warns when the two results are far apart in time.
 # Rows whose time is too small to measure reliably are left out unless -All is given.
 # For every picture that differs, a picture showing where is written next to the "after" result.
 param(
     [Parameter(Mandatory)][string]$Before,
     [Parameter(Mandatory)][string]$After,
     [string[]]$Bench = @(),
-    [double]$Threshold = 3.0,
+    [double]$Threshold = 2.0,
     [switch]$All
 )
 
@@ -126,9 +126,14 @@ if ($Bench.Count -eq 0) {
     $Bench = @(Get-ChildItem -Directory $afterRoot | Where-Object { Test-Path (Join-Path $beforeRoot $_.Name) } | ForEach-Object { $_.Name })
 }
 
-# Times below this are dominated by measuring noise.
-$smallestMeasurableMs = 0.02
-
+>>>>
+<<<<
+function Compare-Group($title, $beforeGroup, $afterGroup, $rowThreshold) {
+    $isTime = $rowThreshold -ge 0
+====
+# Times below $smallestMeasurableMs are dominated by measuring noise and are left out.
+function Compare-Group($title, $beforeGroup, $afterGroup, $rowThreshold, $smallestMeasurableMs) {
+    $isTime = $rowThreshold -ge 0
 # $rowThreshold is the change in percent from which a time counts as changed. Zero gives no verdict,
 # and a negative one marks the row as a count, which is "changed" whenever it differs at all.
 function Compare-Row($name, $beforeValue, $afterValue, $rowThreshold) {
@@ -154,15 +159,21 @@ function Compare-Row($name, $beforeValue, $afterValue, $rowThreshold) {
     }
 }
 
+# A clean time is a plain number. A raw one is a set of statistics, of which the median is compared.
+function Get-Number($value) {
+    if ($value -is [System.Management.Automation.PSCustomObject]) { return $value.Median }
+    return $value
+}
+
 function Compare-Group($title, $beforeGroup, $afterGroup, $rowThreshold) {
     $isTime = $rowThreshold -ge 0
     $rows = @()
     if ($null -eq $afterGroup) { return $rows }
 
     foreach ($property in $afterGroup.PSObject.Properties) {
-        $afterValue = $property.Value.Median
+        $afterValue = Get-Number $property.Value
         $beforeValue = 0.0
-        if ($null -ne $beforeGroup -and $null -ne $beforeGroup.($property.Name)) { $beforeValue = $beforeGroup.($property.Name).Median }
+        if ($null -ne $beforeGroup -and $null -ne $beforeGroup.($property.Name)) { $beforeValue = Get-Number $beforeGroup.($property.Name) }
 
         if ($isTime -and -not $All -and $beforeValue -lt $smallestMeasurableMs -and $afterValue -lt $smallestMeasurableMs) { continue }
         $rows += Compare-Row "$title $($property.Name)" $beforeValue $afterValue $rowThreshold
@@ -199,13 +210,30 @@ foreach ($benchName in $Bench) {
     $rows = @()
     $cpuThreshold = $Threshold * 4
     $noVerdict = 0.0
+    $smallestGpuMs = 0.02
+    $smallestCpuMs = 0.05
     $isCount = -1.0
 
-    $rows += Compare-Row "Frame median" $beforeResult.FrameMs.Median $afterResult.FrameMs.Median $Threshold
-    $rows += Compare-Row "Frame P99" $beforeResult.FrameMs.P99 $afterResult.FrameMs.P99 $noVerdict
-    $rows += Compare-Group "GPU" $beforeResult.GpuMs $afterResult.GpuMs $Threshold
-    $rows += Compare-Group "CPU" $beforeResult.CpuMs $afterResult.CpuMs $cpuThreshold
-    $rows += Compare-Group "Count" $beforeResult.Counters $afterResult.Counters $isCount
+    # Older results have no clean times. Clean and raw times are not comparable with each other.
+    $useClean = $null -ne $beforeResult.Clean -and $null -ne $afterResult.Clean
+    if ($useClean -and $beforeResult.Runs -ne $afterResult.Runs) {
+        "    Made with $($beforeResult.Runs) and $($afterResult.Runs) runs: fewer runs read higher, so these timings are not comparable."
+    }
+
+    if ($useClean) {
+        $rows += Compare-Row "Frame" $beforeResult.Clean.FrameMs $afterResult.Clean.FrameMs $Threshold
+        $rows += Compare-Row "Frame P99 (raw)" $beforeResult.FrameMs.P99 $afterResult.FrameMs.P99 $noVerdict
+        $rows += Compare-Group "GPU" $beforeResult.Clean.GpuMs $afterResult.Clean.GpuMs $Threshold $smallestGpuMs
+        $rows += Compare-Group "CPU" $beforeResult.Clean.CpuMs $afterResult.Clean.CpuMs $cpuThreshold $smallestCpuMs
+    }
+    else {
+        "    One of the results has no clean times: comparing raw medians, which vary more."
+        $rows += Compare-Row "Frame median" $beforeResult.FrameMs.Median $afterResult.FrameMs.Median $Threshold
+        $rows += Compare-Row "Frame P99" $beforeResult.FrameMs.P99 $afterResult.FrameMs.P99 $noVerdict
+        $rows += Compare-Group "GPU" $beforeResult.GpuMs $afterResult.GpuMs $Threshold $smallestGpuMs
+        $rows += Compare-Group "CPU" $beforeResult.CpuMs $afterResult.CpuMs $cpuThreshold $smallestCpuMs
+    }
+    $rows += Compare-Group "Count" $beforeResult.Counters $afterResult.Counters $isCount 0.0
     $rows | Format-Table -AutoSize | Out-String -Width 200
 
     foreach ($picture in $afterResult.Screenshots) {

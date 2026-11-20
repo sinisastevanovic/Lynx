@@ -80,10 +80,10 @@ build\bin\Debug\LynxSandboxGame.exe
 - Build, then run the editor and the game and read `temp\engine.log` for `[error]`, `[critical]` and `NVRHI:` lines.
 - Rendering and speed: `tools/bench.ps1 -Label <name>` runs the RenderBench benchmarks in Release and stores timings
   and pictures under the label. Run it before and after a change, then `tools/bench-compare.ps1 -Before <a> -After <b>`.
-  Pictures are identical between runs of the same code, so any difference comes from the change. Frame times repeat
-  within about 2.5 % when both labels are measured back to back, and drift by up to 5 % over an hour, so measure the
-  "before" label right before the "after" one. In the grid benchmark the GPU times jump between two values about 8 %
-  apart from run to run: trust its frame time, and confirm a GPU verdict there with a second run.
+  Pictures are identical between runs of the same code, so any difference comes from the change. The timings compared
+  are "clean": each benchmark runs five times and every frame counts with its fastest run, which removes the GPU time
+  the Windows compositor takes at every display refresh. Clean GPU times repeat within about 1.3 % and the clean frame
+  time within 1.6 %. Measure the "before" label right before the "after" one, the machine drifts over an hour.
 - The editor window: `tools/capture-window.ps1` saves a picture of it. Compare one from before with one from after.
 - F3, or `--profiler` on the command line, shows frame, CPU and GPU times on screen in the editor and in a game.
 - Serialization: re-save every scene and prefab with the old and the new code and compare the JSON.

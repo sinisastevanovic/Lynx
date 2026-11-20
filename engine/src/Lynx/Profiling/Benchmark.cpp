@@ -427,11 +427,29 @@ namespace Lynx
             succeeded = false;
         }
 
-        // One line per measured frame, for finding the frames behind a bad percentile.
+        // One line per measured frame, for finding the frames behind a bad percentile and for seeing
+        // how a time behaves over a run. A time that was not reported in every frame has no column.
+        std::vector<std::pair<std::string, const std::vector<double>*>> columns;
+        columns.emplace_back("FrameMs", &recording.FrameMs);
+        for (const FrameProfiler::Series& series : recording.GpuMs)
+            columns.emplace_back("Gpu." + series.Name, &series.Samples);
+        for (const FrameProfiler::Series& series : recording.CpuMs)
+            columns.emplace_back("Cpu." + series.Name, &series.Samples);
+        std::erase_if(columns, [&recording](const auto& column) { return column.second->size() != recording.FrameMs.size(); });
+
         std::ofstream frameStream(m_Settings.OutputDirectory / "frames.csv");
-        frameStream << "Frame,FrameMs\n";
+        frameStream << "Frame";
+        for (const auto& [name, samples] : columns)
+            frameStream << ',' << name;
+        frameStream << '\n';
+
         for (size_t frame = 0; frame < recording.FrameMs.size(); ++frame)
-            frameStream << frame << ',' << recording.FrameMs[frame] << '\n';
+        {
+            frameStream << frame;
+            for (const auto& [name, samples] : columns)
+                frameStream << ',' << (*samples)[frame];
+            frameStream << '\n';
+        }
 
         LX_CORE_INFO("Benchmark '{0}': median frame {1:.3f} ms over {2} frames. Results in {3}", m_Settings.Name, frameTime.Median, recording.FrameMs.size(), m_Settings.OutputDirectory.string());
         return succeeded;
