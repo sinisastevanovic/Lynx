@@ -1,222 +1,183 @@
 #include "UIPass.h"
 
-#include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
-#include "Lynx/Renderer/SamplerCache.h"
-#include "Lynx/Scene/Components/UIComponents.h"
+#include "Lynx/Asset/Texture.h"
+#include "Lynx/Renderer/GraphicsContext.h"
+#include "Lynx/Renderer/RenderFormats.h"
+#include "Lynx/Renderer/Vulkan/GpuBuffer.h"
+#include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
+#include "Lynx/Renderer/Vulkan/SharedBindings.h"
+#include "Lynx/Renderer/Vulkan/UploadQueue.h"
 
 namespace Lynx
 {
-    struct UIPushData
+    namespace
     {
-        glm::vec2 ScreenSize;
-        float PixelRange;
+        // Has to match UIConstants in UI.slang and UIText.slang.
+        struct UIPushData
+        {
+            glm::vec2 ScreenSize;
+            float PixelRange;
+            uint32_t Texture;
+            uint32_t Sampler;
+            uint32_t Padding;
+        };
+
+        // Makes sure the buffer can hold the data, then queues the data for upload.
+        void Upload(GraphicsContext& context, UploadQueue& uploads, GpuBuffer& buffer, std::span<const std::byte> bytes, vk::BufferUsageFlagBits usage, const char* name)
+        {
+            if (buffer.Size() < bytes.size())
+            {
+                // Twice what is needed, so a UI that grows a little every frame does not mean a new buffer every frame.
+                GpuBufferDesc desc;
+                desc.Size = bytes.size() * 2;
+                desc.Usage = usage | vk::BufferUsageFlagBits::eTransferDst;
+                desc.Name = name;
+                buffer = GpuBuffer(context, desc);
+            }
+            uploads.Upload(buffer.Handle(), 0, bytes);
+        }
+    }
+
+    struct UIPass::VulkanObjects
+    {
+        GraphicsContext* Context = nullptr;
+        UploadQueue* Uploads = nullptr;
+        SharedBindings* Shared = nullptr;
+        vk::Device Device;
+
+        vk::Pipeline StandardPipeline;
+        vk::Pipeline TextPipeline;
+
+        GpuBuffer VertexBuffer;
+        GpuBuffer IndexBuffer;
+
+        // The renderer waits for the GPU before it destroys its passes, so nothing here is still in use.
+        ~VulkanObjects()
+        {
+            if (!Device)
+                return;
+
+            Device.destroyPipeline(StandardPipeline);
+            Device.destroyPipeline(TextPipeline);
+        }
     };
 
-    UIPass::UIPass()
-    {
-    }
+    UIPass::UIPass() = default;
+    UIPass::~UIPass() = default;
 
     void UIPass::Init(RenderContext& ctx)
     {
-        m_Batcher = std::make_unique<UIBatcher>(ctx.Device);
+        m_Vulkan = std::make_unique<VulkanObjects>();
+        m_Vulkan->Context = ctx.Graphics;
+        m_Vulkan->Uploads = ctx.Uploads;
+        m_Vulkan->Shared = ctx.Shared;
+        m_Vulkan->Device = ctx.Graphics->Device();
 
-        // Layout (Set 0)
-        auto layoutDesc = nvrhi::BindingLayoutDesc()
-            .setVisibility(nvrhi::ShaderType::All)
-            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))
-            .addItem(nvrhi::BindingLayoutItem::Sampler(1))
-            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(UIPushData)))
-            .setBindingOffsets({ 0, 0, 0, 0 });
-          
-        m_BindingLayout = ctx.Device->createBindingLayout(layoutDesc);
+        m_StandardPipelineState.SetShader("Shaders/UI.slang");
+        m_StandardPipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader, UIBatchType::Standard); });
 
-        m_StandardPipelineState.SetShader("Shaders/UI_Standard.glsl");
-        m_StandardPipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
-        {
-            m_StandardPipeline = this->CreatePipeline(ctx, shader, false);
-        });
-
-        m_TextPipelineState.SetShader("Shaders/UI_Text.glsl");
-        m_TextPipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
-        {
-            m_TextPipeline = this->CreatePipeline(ctx, shader, true);
-        });
+        m_TextPipelineState.SetShader("Shaders/UIText.slang");
+        m_TextPipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader, UIBatchType::Text); });
     }
 
-    nvrhi::GraphicsPipelineHandle UIPass::CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader, bool isText)
+    void UIPass::CreatePipeline(const Shader& shader, UIBatchType type)
     {
-        auto pipeDesc = nvrhi::GraphicsPipelineDesc()
-            .addBindingLayout(m_BindingLayout)
-            .setVertexShader(shader->GetVertexShader())
-            .setFragmentShader(shader->GetPixelShader())
-            .setPrimType(nvrhi::PrimitiveType::TriangleList);
+        const std::shared_ptr<const ShaderProgram> program = shader.GetProgram();
+        if (!program)
+            return;
 
-        pipeDesc.renderState.rasterState.frontCounterClockwise = true; // Quad generation 0->1->2 might be CW
-        pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::None; // Safe for 2D
+        // The pass and its shaders are written together. If they stop agreeing, the pipeline that works is kept.
+        const char* shaderName = type == UIBatchType::Text ? "UIText.slang" : "UI.slang";
+        if (!m_Vulkan->Shared->Supports(*program, shaderName, sizeof(UIPushData)))
+            return;
 
-        if (!isText)
+        GraphicsPipelineDesc desc;
+        desc.Program = program.get();
+        desc.Layout = m_Vulkan->Shared->PipelineLayout();
+        desc.VertexStride = sizeof(UIVertex);
+        desc.Blend = BlendMode::Alpha;
+        desc.ColorFormat = RenderFormats::Output;
+
+        // Both shaders read the same vertices. Text also reads the outline.
+        desc.VertexAttributes = {
+            { vk::Format::eR32G32B32Sfloat, offsetof(UIVertex, Position) },
+            { vk::Format::eR32G32Sfloat, offsetof(UIVertex, UV) },
+            { vk::Format::eR8G8B8A8Unorm, offsetof(UIVertex, Color) },
+        };
+        if (type == UIBatchType::Text)
         {
-            nvrhi::VertexAttributeDesc attributes[] = {
-                nvrhi::VertexAttributeDesc()
-                    .setName("POSITION")
-                    .setFormat(nvrhi::Format::RGB32_FLOAT)
-                    .setBufferIndex(0)
-                    .setOffset(offsetof(UIVertex, Position))
-                    .setElementStride(sizeof(UIVertex)),
-                nvrhi::VertexAttributeDesc()
-                    .setName("TEXCOORD")
-                    .setFormat(nvrhi::Format::RG32_FLOAT)
-                    .setBufferIndex(0)
-                    .setOffset(offsetof(UIVertex, UV))
-                    .setElementStride(sizeof(UIVertex)),
-                nvrhi::VertexAttributeDesc()
-                    .setName("COLOR")
-                    .setFormat(nvrhi::Format::RGBA8_UNORM)
-                    .setBufferIndex(0)
-                    .setOffset(offsetof(UIVertex, Color))
-                    .setElementStride(sizeof(UIVertex)),
-                nvrhi::VertexAttributeDesc()
-                    .setName("CLIPRECT")
-                    .setFormat(nvrhi::Format::RGBA32_FLOAT)
-                    .setBufferIndex(0)
-                    .setOffset(offsetof(UIVertex, ClipRect))
-                    .setElementStride(sizeof(UIVertex))
-            };
-            pipeDesc.inputLayout = ctx.Device->createInputLayout(attributes, 4, shader->GetVertexShader());
+            desc.VertexAttributes.push_back({ vk::Format::eR8G8B8A8Unorm, offsetof(UIVertex, OutlineColor) });
+            desc.VertexAttributes.push_back({ vk::Format::eR32Sfloat, offsetof(UIVertex, OutlineWidth) });
         }
-        else
-        {
-            nvrhi::VertexAttributeDesc attributes[] = {
-                nvrhi::VertexAttributeDesc()
-                    .setName("POSITION")
-                    .setFormat(nvrhi::Format::RGB32_FLOAT)
-                    .setBufferIndex(0)
-                    .setOffset(offsetof(UIVertex, Position))
-                    .setElementStride(sizeof(UIVertex)),
-                nvrhi::VertexAttributeDesc()
-                    .setName("TEXCOORD")
-                    .setFormat(nvrhi::Format::RG32_FLOAT)
-                    .setBufferIndex(0)
-                    .setOffset(offsetof(UIVertex, UV))
-                    .setElementStride(sizeof(UIVertex)),
-                nvrhi::VertexAttributeDesc()
-                    .setName("COLOR")
-                    .setFormat(nvrhi::Format::RGBA8_UNORM)
-                    .setBufferIndex(0)
-                    .setOffset(offsetof(UIVertex, Color))
-                    .setElementStride(sizeof(UIVertex)),
-                nvrhi::VertexAttributeDesc()
-                    .setName("OUTLINECOLOR")
-                    .setFormat(nvrhi::Format::RGBA8_UNORM)
-                    .setBufferIndex(0)
-                    .setOffset(offsetof(UIVertex, OutlineColor))
-                    .setElementStride(sizeof(UIVertex)),
-                nvrhi::VertexAttributeDesc()
-                    .setName("OUTLINEWIDTH")
-                    .setFormat(nvrhi::Format::R32_FLOAT)
-                    .setBufferIndex(0)
-                    .setOffset(offsetof(UIVertex, OutlineWidth))
-                    .setElementStride(sizeof(UIVertex)),
-                nvrhi::VertexAttributeDesc()
-                    .setName("CLIPRECT")
-                    .setFormat(nvrhi::Format::RGBA32_FLOAT)
-                    .setBufferIndex(0)
-                    .setOffset(offsetof(UIVertex, ClipRect))
-                    .setElementStride(sizeof(UIVertex))
-            };
-            pipeDesc.inputLayout = ctx.Device->createInputLayout(attributes, 6, shader->GetVertexShader());
-        }
+        desc.VertexAttributes.push_back({ vk::Format::eR32G32B32A32Sfloat, offsetof(UIVertex, ClipRect) });
 
-        // Alpha Blending
-        pipeDesc.renderState.blendState.targets[0]
-            .setBlendEnable(true)
-            .setSrcBlend(nvrhi::BlendFactor::SrcAlpha)
-            .setDestBlend(nvrhi::BlendFactor::InvSrcAlpha)
-            .setSrcBlendAlpha(nvrhi::BlendFactor::One)
-            .setDestBlendAlpha(nvrhi::BlendFactor::InvSrcAlpha);
+        const vk::Pipeline pipeline = CreateGraphicsPipeline(m_Vulkan->Device, desc);
+        if (!pipeline)
+            return;
 
-        // No Depth Test
-        pipeDesc.renderState.depthStencilState.depthTestEnable = false;
-        pipeDesc.renderState.depthStencilState.depthWriteEnable = false;
-
-        return ctx.Device->createGraphicsPipeline(pipeDesc, ctx.FinalFramebufferInfo);
+        // A reloaded shader replaces a pipeline that frames still on the GPU may be using.
+        vk::Pipeline& current = type == UIBatchType::Text ? m_Vulkan->TextPipeline : m_Vulkan->StandardPipeline;
+        m_Vulkan->Context->Deletions().Retire([device = m_Vulkan->Device, old = current]() { device.destroyPipeline(old); });
+        current = pipeline;
     }
-    
-    void UIPass::Execute(RenderContext& ctx, RenderData& renderData)
+
+    bool UIPass::Declare(const RenderContext&, const RenderData& renderData, PassResources& resources)
     {
-        // 1. Update Shader if hot-reloaded
-        m_StandardPipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
-        {
-            m_StandardPipeline = this->CreatePipeline(ctx, shader, false);
-        });
-        m_TextPipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
-        {
-            m_TextPipeline = this->CreatePipeline(ctx, shader, true);
-        });
+        m_StandardPipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader, UIBatchType::Standard); });
+        m_TextPipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader, UIBatchType::Text); });
 
-        // 2. Collect UI Data
-        m_Batcher->Begin();
+        if (!m_Vulkan->StandardPipeline || !m_Vulkan->TextPipeline)
+            return false;
 
+        m_Batcher.Begin();
         for (const std::shared_ptr<UICanvas>& canvas : renderData.Canvases)
-            m_Batcher->Submit(canvas);
+            m_Batcher.Submit(canvas);
 
-        // 3. Render
-        if (m_Batcher->HasData())
-        {
-            m_Batcher->Upload(ctx.CommandList);
+        if (!m_Batcher.HasData())
+            return false;
 
-            auto state = nvrhi::GraphicsState()
-                .setPipeline(m_StandardPipeline)
-                .setFramebuffer(renderData.OutputFramebuffer)
-                .addVertexBuffer(nvrhi::VertexBufferBinding(m_Batcher->GetVertexBuffer(), 0, 0))
-                .setIndexBuffer(nvrhi::IndexBufferBinding(m_Batcher->GetIndexBuffer(), nvrhi::Format::R32_UINT, 0));
+        Upload(*m_Vulkan->Context, *m_Vulkan->Uploads, m_Vulkan->VertexBuffer, std::as_bytes(m_Batcher.GetVertices()), vk::BufferUsageFlagBits::eVertexBuffer, "UIVertices");
+        Upload(*m_Vulkan->Context, *m_Vulkan->Uploads, m_Vulkan->IndexBuffer, std::as_bytes(m_Batcher.GetIndices()), vk::BufferUsageFlagBits::eIndexBuffer, "UIIndices");
 
-            const auto& fbInfo = renderData.OutputFramebuffer->getFramebufferInfo();
-            state.viewport.addViewport(nvrhi::Viewport(fbInfo.width, fbInfo.height));
-            state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
-
-            UIPushData push;
-            push.ScreenSize = { (float)fbInfo.width, (float)fbInfo.height };
-
-            for (const auto& batch : m_Batcher->GetBatches())
-            {
-                auto pipeline = (batch.Type == UIBatchType::Text) ? m_TextPipeline : m_StandardPipeline;
-                state.setPipeline(pipeline);
-                auto tex = batch.Texture;
-                if (!tex || !tex->GetTextureHandle())
-                    continue;
-
-                state.bindings = { GetBindingSet(ctx, tex.get()) };
-                ctx.CommandList->setGraphicsState(state);
-
-                push.PixelRange = batch.PixelRange;
-                ctx.CommandList->setPushConstants(&push, sizeof(push));
-                
-
-                nvrhi::DrawArguments args;
-                args.vertexCount = batch.IndexCount;
-                args.startIndexLocation = batch.IndexStart;
-                ctx.CommandList->drawIndexed(args);
-
-                renderData.DrawCalls++;
-                renderData.IndexCount += batch.IndexCount;
-            }
-        }
+        resources.ColorTarget = renderData.OutputFramebuffer->getDesc().colorAttachments[0].texture;
+        return true;
     }
 
-    nvrhi::BindingSetHandle UIPass::GetBindingSet(RenderContext& ctx, Texture* texture)
+    void UIPass::Execute(vk::CommandBuffer commands, RenderData& renderData)
     {
-        uint32_t version = texture ? texture->GetVersion() : 0;
-        return m_BindingSetCache.Get(texture, version, [&]() -> nvrhi::BindingSetHandle
-        {
-            // TODO: What sampler do we need? 
-            auto desc = nvrhi::BindingSetDesc()
-                .addItem(nvrhi::BindingSetItem::Texture_SRV(0, texture->GetTextureHandle()))
-                .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(texture->GetSamplerSettings())))
-                .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(UIPushData)));
+        commands.bindVertexBuffers(0, m_Vulkan->VertexBuffer.Handle(), vk::DeviceSize(0));
+        commands.bindIndexBuffer(m_Vulkan->IndexBuffer.Handle(), 0, vk::IndexType::eUint32);
 
-            return ctx.Device->createBindingSet(desc, m_BindingLayout);
-        });
+        const nvrhi::FramebufferInfoEx& output = renderData.OutputFramebuffer->getFramebufferInfo();
+
+        UIPushData push{};
+        push.ScreenSize = { static_cast<float>(output.width), static_cast<float>(output.height) };
+
+        vk::Pipeline boundPipeline;
+
+        for (const UIBatch& batch : m_Batcher.GetBatches())
+        {
+            // A texture that is still loading has no picture yet. Its elements appear once it has one.
+            if (!batch.Texture || !batch.Texture->GetTextureHandle())
+                continue;
+
+            const vk::Pipeline pipeline = batch.Type == UIBatchType::Text ? m_Vulkan->TextPipeline : m_Vulkan->StandardPipeline;
+            if (pipeline != boundPipeline)
+            {
+                commands.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+                boundPipeline = pipeline;
+            }
+
+            push.PixelRange = batch.PixelRange;
+            push.Texture = batch.Texture->GetTableIndex();
+            push.Sampler = batch.Texture->GetSamplerIndex();
+            m_Vulkan->Shared->Push(commands, push);
+
+            commands.drawIndexed(batch.IndexCount, 1, batch.IndexStart, 0, 0);
+
+            renderData.DrawCalls++;
+            renderData.IndexCount += batch.IndexCount;
+        }
     }
 }

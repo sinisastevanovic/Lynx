@@ -16,40 +16,9 @@ namespace Lynx
         return (a << 24) | (b << 16) | (g << 8) | r; // Little Endian (R G B A in memory)
     }
     
-    UIBatcher::UIBatcher(nvrhi::DeviceHandle device)
-        : m_Device(device)
+    UIBatcher::UIBatcher()
     {
-        ResizeBuffers(4096, 6144); // enough for ~1000 quads
         m_CurrentClipRect = { -FLT_MAX, -FLT_MAX, FLT_MAX, FLT_MAX };
-    }
-    
-    void UIBatcher::ResizeBuffers(size_t numVerts, size_t numIndices)
-    {
-        if (numVerts > m_VertexBufferSize || !m_VertexBuffer)
-        {
-            m_VertexBufferSize = std::max(numVerts, (size_t)4096);
-
-            auto desc = nvrhi::BufferDesc()
-                .setByteSize(m_VertexBufferSize * sizeof(UIVertex))
-                .setIsVertexBuffer(true)
-                .setDebugName("UI_VertexBuffer")
-                .setInitialState(nvrhi::ResourceStates::VertexBuffer)
-                .setKeepInitialState(true);
-            m_VertexBuffer = m_Device->createBuffer(desc);
-        }
-
-        if (numIndices > m_IndexBufferSize || !m_IndexBuffer)
-        {
-            m_IndexBufferSize = std::max(numIndices, (size_t)6144);
-
-            auto desc = nvrhi::BufferDesc()
-                .setByteSize(m_IndexBufferSize * sizeof(uint32_t))
-                .setIsIndexBuffer(true)
-                .setDebugName("UI_IndexBuffer")
-                .setInitialState(nvrhi::ResourceStates::IndexBuffer)
-                .setKeepInitialState(true);
-            m_IndexBuffer = m_Device->createBuffer(desc);
-        }
     }
 
     void UIBatcher::Begin()
@@ -369,16 +338,5 @@ namespace Lynx
         m_Indices.push_back(startIndex + 1);
         m_Indices.push_back(startIndex + 2);
         m_Indices.push_back(startIndex + 3);
-    }
-    
-    void UIBatcher::Upload(nvrhi::CommandListHandle commandList)
-    {
-        if (m_Vertices.empty())
-            return;
-
-        ResizeBuffers(m_Vertices.size(), m_Indices.size());
-
-        commandList->writeBuffer(m_VertexBuffer, m_Vertices.data(), m_Vertices.size() * sizeof(UIVertex));
-        commandList->writeBuffer(m_IndexBuffer, m_Indices.data(), m_Indices.size() * sizeof(uint32_t));
     }
 }

@@ -1,34 +1,31 @@
 #pragma once
 #include "UIBatcher.h"
-#include "Lynx/Renderer/BindingSetCache.h"
-#include "Lynx/Renderer/RenderPass.h"
+#include "Lynx/Renderer/Graph/RenderGraph.h"
 
 namespace Lynx
 {
-    class UIPass : public RenderPass
+    // Draws the in-game UI on top of the finished picture: the frame's canvases are turned into
+    // one list of triangles, which is drawn in as few calls as the textures allow.
+    class UIPass : public VulkanPass
     {
     public:
         UIPass();
-        virtual ~UIPass() = default;
+        ~UIPass() override;
 
         void Init(RenderContext& ctx) override;
-        void Execute(RenderContext& ctx, RenderData& renderData) override;
+        bool Declare(const RenderContext& ctx, const RenderData& renderData, PassResources& resources) override;
+        void Execute(vk::CommandBuffer commands, RenderData& renderData) override;
 
     private:
-        nvrhi::GraphicsPipelineHandle CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader, bool isText);
-        nvrhi::BindingSetHandle GetBindingSet(RenderContext& ctx, Texture* texture);
+        void CreatePipeline(const Shader& shader, UIBatchType type);
 
     private:
-        std::unique_ptr<UIBatcher> m_Batcher;
+        struct VulkanObjects;
+        std::unique_ptr<VulkanObjects> m_Vulkan;
 
-        nvrhi::BindingLayoutHandle m_BindingLayout;
-        nvrhi::GraphicsPipelineHandle m_StandardPipeline;
-        nvrhi::GraphicsPipelineHandle m_TextPipeline;
-
-        BindingSetCache<Texture*> m_BindingSetCache;
+        UIBatcher m_Batcher;
 
         PipelineState m_StandardPipelineState;
         PipelineState m_TextPipelineState;
     };
 }
-
