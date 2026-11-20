@@ -309,7 +309,7 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity, nlohmann::json& json)
             {
                 auto& comp = reg.get<ParticleEmitterComponent>(entity);
-                json["Material"] = (uint64_t)comp.Material;
+                json["Material"] = static_cast<uint64_t>(comp.Material.Handle);
                 json["MaxParticles"] = comp.MaxParticles;
                 json["EmissionRate"] = comp.EmissionRate;
                 json["IsLooping"] = comp.IsLooping;
@@ -331,7 +331,7 @@ namespace Lynx
             [](entt::registry& reg, entt::entity entity, const nlohmann::json& json)
             {
                 auto& comp = reg.get_or_emplace<ParticleEmitterComponent>(entity);
-                if (json.contains("Material")) comp.Material = AssetHandle(json["Material"]);
+                if (json.contains("Material")) comp.Material = AssetHandle(json["Material"].get<uint64_t>());
                 if (json.contains("MaxParticles"))
                 {
                     comp.SetMaxParticles(json["MaxParticles"]);
