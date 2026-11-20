@@ -51,6 +51,7 @@ namespace Lynx
             .setDepthTestEnable(true)
             .setDepthWriteEnable(false)
             .setDepthFunc(nvrhi::ComparisonFunc::Less);
+        DisableEntityIdWrites(pipeDesc, ctx.PresentationFramebufferInfo);
         m_Pipeline = ctx.Device->createGraphicsPipeline(pipeDesc, ctx.PresentationFramebufferInfo);
     }
 

@@ -976,6 +976,8 @@ namespace Lynx
         for (int i = 0; i < mesh->GetSubmeshes().size(); ++i)
         {
             const auto& submesh = mesh->GetSubmeshes()[i];
+            if (!submesh.Material)
+                continue;
 
             GPUInstanceData instance = { transform, entityID };
             BatchKey key = { mesh.get(), (uint32_t)i, submesh.Material.get(), Flags };
@@ -1116,7 +1118,6 @@ namespace Lynx
 
         RecreateSwapchain(width, height);
 
-        //EnsureEditorViewport(width, height);
     }
 
     void Renderer::EnsureEditorViewport(uint32_t width, uint32_t height)

@@ -25,10 +25,16 @@ layout(std430, set = 0, binding = 10) readonly buffer InstanceBuffer {
     InstanceData instances[];
 } u_Instances;
 
+// The forward pass tests depth for equality with what this shader wrote, so both have to compute
+// the position with the same expression, and invariant tells the compiler to keep them identical.
+invariant gl_Position;
+
 void main() {
     InstanceData data = u_Instances.instances[gl_InstanceIndex];
     v_TexCoord = a_TexCoord;
-    gl_Position = ubo.u_ViewProjection * data.Model * vec4(a_Position, 1.0);
+
+    vec4 worldPos = data.Model * vec4(a_Position, 1.0);
+    gl_Position = ubo.u_ViewProjection * worldPos;
 }
 
 #type pixel

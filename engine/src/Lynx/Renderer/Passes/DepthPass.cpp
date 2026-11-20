@@ -62,7 +62,8 @@ namespace Lynx
 
         // Color State: Disable Writes
         pipeDesc.renderState.blendState.targets[0].setBlendEnable(false)
-                                                  .setColorWriteMask(static_cast<nvrhi::ColorMask>(0)); // TODO: is this correct?
+                                                  .setColorWriteMask(static_cast<nvrhi::ColorMask>(0));
+        DisableEntityIdWrites(pipeDesc, ctx.PresentationFramebufferInfo);
 
         nvrhi::VertexAttributeDesc attributes[] = {
             nvrhi::VertexAttributeDesc()

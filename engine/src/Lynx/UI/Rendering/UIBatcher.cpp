@@ -40,7 +40,7 @@ namespace Lynx
 
         if (numIndices > m_IndexBufferSize || !m_IndexBuffer)
         {
-            m_IndexBufferSize = std::max(numVerts, (size_t)6144);
+            m_IndexBufferSize = std::max(numIndices, (size_t)6144);
 
             auto desc = nvrhi::BufferDesc()
                 .setByteSize(m_IndexBufferSize * sizeof(uint32_t))

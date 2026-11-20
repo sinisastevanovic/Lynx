@@ -41,6 +41,9 @@ layout(push_constant) uniform PushConsts {
     float u_AlphaCutoff;
 } push;
 
+// Has to match DepthOnly.glsl exactly, see the comment there.
+invariant gl_Position;
+
 void main() {
     InstanceData data = u_Instances.instances[gl_InstanceIndex];
 

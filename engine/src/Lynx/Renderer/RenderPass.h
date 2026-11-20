@@ -169,6 +169,15 @@ namespace Lynx
         virtual void Execute(RenderContext& ctx, RenderData& renderData) = 0;
     };
 
+    // The editor's scene target has a second color attachment that holds entity IDs for picking.
+    // A pass whose shader does not output an ID has to leave it alone: without this,
+    // every pixel the pass draws gets an undefined ID.
+    inline void DisableEntityIdWrites(nvrhi::GraphicsPipelineDesc& pipelineDesc, const nvrhi::FramebufferInfo& framebufferInfo)
+    {
+        for (size_t target = 1; target < framebufferInfo.colorFormats.size(); ++target)
+            pipelineDesc.renderState.blendState.targets[target].setColorWriteMask(static_cast<nvrhi::ColorMask>(0));
+    }
+
     // Rebuilds a pass's pipelines whenever its shader is loaded or hot-reloaded.
     class PipelineState
     {

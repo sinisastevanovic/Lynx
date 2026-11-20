@@ -106,6 +106,7 @@ namespace Lynx
         pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::None; // Particles represent 2D sprites, usually seen from any side, but mostly front.
         pipeDesc.renderState.depthStencilState.depthWriteEnable = false; // Soft particles
         pipeDesc.renderState.depthStencilState.depthTestEnable = true;
+        DisableEntityIdWrites(pipeDesc, ctx.PresentationFramebufferInfo);
 
         // Alpha Blend Pipeline
         pipeDesc.renderState.blendState.targets[0]

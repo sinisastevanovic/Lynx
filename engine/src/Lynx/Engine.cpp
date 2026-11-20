@@ -396,7 +396,7 @@ namespace Lynx
         
         dispatcher.Dispatch<ViewportResizeEvent>([this](ViewportResizeEvent& event)
         {
-            //m_Renderer->EnsureEditorViewport(event.GetWidth(), event.GetHeight());
+            m_Renderer->EnsureEditorViewport(event.GetWidth(), event.GetHeight());
             m_SceneRenderer->SetViewportSize(event.GetWidth(), event.GetHeight());
             return false;
         });

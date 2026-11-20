@@ -60,6 +60,7 @@ namespace Lynx
         pipeDesc.renderState.depthStencilState
                 .setDepthTestEnable(true)
                 .setDepthWriteEnable(false); // Usually off for debug lines so they don't occlude transparency
+        DisableEntityIdWrites(pipeDesc, ctx.PresentationFramebufferInfo);
 
         m_Pipeline = ctx.Device->createGraphicsPipeline(pipeDesc, ctx.PresentationFramebufferInfo);
     }
@@ -86,11 +87,13 @@ namespace Lynx
         }
 
         // 2. Upload to Buffer
-        // Check if we need to resize
         size_t dataSize = vertices.size() * sizeof(LineVertex);
         if (dataSize > m_VertexBuffer->getDesc().byteSize)
         {
-            // TODO: add resizing if we need it!
+            // Grows to at least twice the old size, so drawing a few more lines every frame does not recreate it every frame.
+            nvrhi::BufferDesc desc = m_VertexBuffer->getDesc();
+            desc.byteSize = std::max<uint64_t>(dataSize, desc.byteSize * 2);
+            m_VertexBuffer = ctx.Device->createBuffer(desc);
         }
 
         // Write data
