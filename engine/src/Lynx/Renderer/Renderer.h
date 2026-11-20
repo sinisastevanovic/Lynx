@@ -163,7 +163,7 @@ namespace Lynx
         nvrhi::StagingTextureHandle m_StageBuffer;
 
         nvrhi::BufferHandle m_GlobalCB;
-        nvrhi::BufferHandle m_InstanceBuffer;
+
         nvrhi::TextureHandle m_WhiteTex;
         nvrhi::TextureHandle m_NormalTex;
         nvrhi::TextureHandle m_BlackTex;
@@ -183,7 +183,7 @@ namespace Lynx
 
         std::unordered_map<BatchKey, std::vector<GPUInstanceData>, BatchKeyHasher> m_OpaqueBatches;
         std::unordered_map<Material*, std::vector<ParticleInstanceData>> m_ParticleBatches;
-        nvrhi::BufferHandle m_ParticleInstanceBuffer;
+
 
         RenderPipeline m_Pipeline;
         std::unique_ptr<CompositePass> m_CompositePass;

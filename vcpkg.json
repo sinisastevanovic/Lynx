@@ -15,6 +15,7 @@
         "stb",
         "nlohmann-json",
         "freetype",
-        "libpng"
+        "libpng",
+        "vulkan-memory-allocator"
     ]
 }

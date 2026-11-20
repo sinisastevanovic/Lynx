@@ -11,6 +11,7 @@
 
 namespace Lynx
 {
+    class GraphicsContext;
     class Shader;
     class UICanvas;
 
@@ -148,6 +149,9 @@ namespace Lynx
 
     struct RenderContext
     {
+        // For passes that draw with Vulkan directly.
+        GraphicsContext* Graphics = nullptr;
+
         nvrhi::DeviceHandle Device;
         nvrhi::CommandListHandle CommandList;
 

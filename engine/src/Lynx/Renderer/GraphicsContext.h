@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Vulkan/DeletionQueue.h"
+
 #include <nvrhi/nvrhi.h>
 #include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
@@ -9,6 +11,7 @@
 #include <vector>
 
 struct GLFWwindow;
+struct VmaAllocator_T;
 
 namespace Lynx
 {
@@ -40,6 +43,12 @@ namespace Lynx
         // The same device as its Vulkan type, for the calls only that type has.
         nvrhi::vulkan::IDevice* NvrhiVulkan() const { return m_NvrhiVulkanDevice; }
 
+        // Hands out the memory of every buffer the renderer creates itself, see GpuBuffer.
+        VmaAllocator_T* Allocator() const { return m_Allocator; }
+
+        // Where GPU objects go when they are no longer wanted but may still be in use by a frame on the GPU.
+        DeletionQueue& Deletions() { return m_Deletions; }
+
         std::string AdapterName() const;
 
         // How much memory on the graphics card this process uses. Empty if the driver cannot tell.
@@ -57,6 +66,9 @@ namespace Lynx
         vk::Queue m_GraphicsQueue;
         uint32_t m_GraphicsQueueFamily = 0;
         bool m_HasMemoryBudget = false;
+
+        VmaAllocator_T* m_Allocator = nullptr;
+        DeletionQueue m_Deletions;
 
         nvrhi::vulkan::DeviceHandle m_NvrhiVulkanDevice;
         nvrhi::DeviceHandle m_NvrhiDevice;

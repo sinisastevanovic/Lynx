@@ -1,6 +1,7 @@
 #include "CompositePass.h"
 
 #include "Lynx/Asset/Shader.h"
+#include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/SamplerCache.h"
 
 #include <vulkan/vulkan.hpp>
@@ -29,6 +30,7 @@ namespace Lynx
 
     struct CompositePass::VulkanObjects
     {
+        GraphicsContext* Context = nullptr;
         vk::Device Device;
         vk::DescriptorSetLayout SetLayout;
         vk::PipelineLayout PipelineLayout;
@@ -55,7 +57,8 @@ namespace Lynx
     void CompositePass::Init(RenderContext& ctx)
     {
         m_Vulkan = std::make_unique<VulkanObjects>();
-        m_Vulkan->Device = Native<vk::Device>(ctx.Device->getNativeObject(nvrhi::ObjectTypes::VK_Device));
+        m_Vulkan->Context = ctx.Graphics;
+        m_Vulkan->Device = ctx.Graphics->Device();
         const vk::Device device = m_Vulkan->Device;
 
         // Matches set 0 of Composite.glsl: the scene, a sampler, the bloom.
@@ -69,13 +72,6 @@ namespace Lynx
         const vk::PushConstantRange pushRange(vk::ShaderStageFlagBits::eFragment, 0, sizeof(CompositePushData));
         m_Vulkan->PipelineLayout = device.createPipelineLayout(vk::PipelineLayoutCreateInfo({}, m_Vulkan->SetLayout, pushRange));
 
-        const vk::DescriptorPoolSize poolSizes[] = {
-            { vk::DescriptorType::eSampledImage, 2 },
-            { vk::DescriptorType::eSampler, 1 },
-        };
-        m_Vulkan->DescriptorPool = device.createDescriptorPool(vk::DescriptorPoolCreateInfo({}, 1, poolSizes));
-        m_Vulkan->DescriptorSet = device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo(m_Vulkan->DescriptorPool, m_Vulkan->SetLayout)).front();
-
         m_PipelineState.SetShader("Shaders/Composite.glsl");
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
     }
@@ -86,11 +82,7 @@ namespace Lynx
 
         // A hot-reloaded shader replaces a pipeline that frames still on the GPU may be using.
         if (m_Vulkan->Pipeline)
-        {
-            device.waitIdle();
-            device.destroyPipeline(m_Vulkan->Pipeline);
-            m_Vulkan->Pipeline = nullptr;
-        }
+            m_Vulkan->Context->Deletions().Retire([device, pipeline = m_Vulkan->Pipeline]() { device.destroyPipeline(pipeline); });
 
         // A pipeline keeps nothing of the shader modules it was made from, so NVRHI stays their only owner.
         const vk::PipelineShaderStageCreateInfo stages[] = {
@@ -143,10 +135,18 @@ namespace Lynx
         if (m_BoundSceneColor == sceneColor && m_BoundBloom == bloom)
             return;
 
-        // The inputs change when the picture is resized. A descriptor set may not be rewritten
-        // while a frame that uses it is still on the GPU.
-        if (m_BoundSceneColor)
-            m_Vulkan->Device.waitIdle();
+        // The inputs change when the picture is resized. A descriptor set may not be rewritten while a frame
+        // that uses it is still on the GPU, so a new one is made and the old one is given up.
+        const vk::Device device = m_Vulkan->Device;
+        if (m_Vulkan->DescriptorPool)
+            m_Vulkan->Context->Deletions().Retire([device, pool = m_Vulkan->DescriptorPool]() { device.destroyDescriptorPool(pool); });
+
+        const vk::DescriptorPoolSize poolSizes[] = {
+            { vk::DescriptorType::eSampledImage, 2 },
+            { vk::DescriptorType::eSampler, 1 },
+        };
+        m_Vulkan->DescriptorPool = device.createDescriptorPool(vk::DescriptorPoolCreateInfo({}, 1, poolSizes));
+        m_Vulkan->DescriptorSet = device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo(m_Vulkan->DescriptorPool, m_Vulkan->SetLayout)).front();
 
         m_BoundSceneColor = sceneColor;
         m_BoundBloom = bloom;
@@ -160,7 +160,7 @@ namespace Lynx
             { m_Vulkan->DescriptorSet, 1, 0, vk::DescriptorType::eSampler, samplerInfo },
             { m_Vulkan->DescriptorSet, 2, 0, vk::DescriptorType::eSampledImage, bloomInfo },
         };
-        m_Vulkan->Device.updateDescriptorSets(writes, nullptr);
+        device.updateDescriptorSets(writes, nullptr);
     }
 
     void CompositePass::Execute(RenderContext& ctx, RenderData& renderData)

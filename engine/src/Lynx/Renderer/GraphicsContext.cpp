@@ -4,6 +4,7 @@
 #include "Lynx/Log.h"
 
 #include <nvrhi/validation.h>
+#include <vk_mem_alloc.h>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -111,6 +112,24 @@ namespace Lynx
         VULKAN_HPP_DEFAULT_DISPATCHER.init(m_Device);
         m_GraphicsQueue = m_Device.getQueue(m_GraphicsQueueFamily, 0);
 
+        // The allocator calls Vulkan through the same run-time loaded functions as the rest of the engine.
+        VmaVulkanFunctions vulkanFunctions{};
+        vulkanFunctions.vkGetInstanceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr;
+        vulkanFunctions.vkGetDeviceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr;
+
+        VmaAllocatorCreateInfo allocatorInfo{};
+        allocatorInfo.instance = m_Instance;
+        allocatorInfo.physicalDevice = m_PhysicalDevice;
+        allocatorInfo.device = m_Device;
+        allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+        allocatorInfo.pVulkanFunctions = &vulkanFunctions;
+        allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+        if (m_HasMemoryBudget)
+            allocatorInfo.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+
+        if (vmaCreateAllocator(&allocatorInfo, &m_Allocator) != VK_SUCCESS)
+            throw std::runtime_error("Could not create the GPU memory allocator");
+
         // NVRHI is told what the instance and the device were created with, so it knows what it may use.
         nvrhi::vulkan::DeviceDesc nvrhiDesc;
         nvrhiDesc.errorCB = &s_NvrhiMessageLogger;
@@ -140,6 +159,10 @@ namespace Lynx
         m_NvrhiDevice->runGarbageCollection();
         m_NvrhiDevice = nullptr;
         m_NvrhiVulkanDevice = nullptr;
+
+        // The GPU is idle, so nothing that was retired is still in use.
+        m_Deletions.Flush();
+        vmaDestroyAllocator(m_Allocator);
 
         m_Device.destroy();
         m_Instance.destroySurfaceKHR(m_Surface);

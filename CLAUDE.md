@@ -25,7 +25,7 @@ the steps under "Stage 1 in detail" as they land. The non-renderer steps of the 
   - `Reflection/` field lists for components
   - `Scene/` scene, entities, components, serializer. Engine components are registered in `Scene/Components/CoreComponentRegistration.cpp`
   - `Asset/` asset registry and manager
-  - `Renderer/` renderer and `Passes/`
+  - `Renderer/` renderer and `Passes/`. `Renderer/Vulkan/` is the engine's own thin layer over Vulkan, which replaces NVRHI step by step
   - `Physics/`, `Scripting/`, `UI/` (the in-game UI), `ImGui/` (editor widgets, `LXUI`)
 - `engine/resources/` shaders, default textures, the default editor layout
 - `engine/launch/` sources compiled into every game: module exports and the standalone `main`

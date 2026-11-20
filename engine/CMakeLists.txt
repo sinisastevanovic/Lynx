@@ -74,6 +74,7 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(unofficial-shaderc CONFIG REQUIRED)
 find_package(Jolt CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 
 target_link_libraries(engine PUBLIC
 
@@ -94,6 +95,8 @@ target_link_libraries(engine PUBLIC
     Jolt::Jolt
 
     nlohmann_json::nlohmann_json
+
+    GPUOpen::VulkanMemoryAllocator
 
     ${LUA_LIBRARIES}
 )

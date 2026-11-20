@@ -13,6 +13,8 @@
 #include "GraphicsContext.h"
 #include "SamplerCache.h"
 #include "Swapchain.h"
+#include "Vulkan/GpuBuffer.h"
+#include "Vulkan/UploadQueue.h"
 #include "Lynx/Profiling/FrameProfiler.h"
 #include "Passes/DebugPass.h"
 #include "Passes/ForwardPass.h"
@@ -134,6 +136,48 @@ namespace Lynx
         std::array<vk::Semaphore, MAX_FRAMES_IN_FLIGHT> ImageAvailable;
         std::array<vk::Fence, MAX_FRAMES_IN_FLIGHT> InFlight;
         std::unique_ptr<GpuTimers> Timers;
+        std::unique_ptr<UploadQueue> Uploads;
+
+        // Rewritten every frame with one entry per drawn instance. The NVRHI passes read it through
+        // the wrapper, which is a second handle to the same Vulkan buffer.
+        struct InstanceStorage
+        {
+            GpuBuffer Buffer;
+            nvrhi::BufferHandle Wrapper;
+
+            // Makes sure the buffer can hold the instances, then queues them for upload.
+            template<typename Instance>
+            void Upload(GraphicsContext& context, UploadQueue& uploads, std::span<const Instance> instances, const char* name)
+            {
+                const uint64_t requiredSize = instances.size_bytes();
+                if (requiredSize == 0)
+                    return;
+
+                if (Buffer.Size() < requiredSize)
+                {
+                    // Half as much again as needed, so a scene that grows a little each frame does not reallocate each frame.
+                    GpuBufferDesc desc;
+                    desc.Size = requiredSize + requiredSize / 2;
+                    desc.Usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+                    desc.Name = name;
+                    Buffer = GpuBuffer(context, desc);
+
+                    // The upload queue makes the buffer readable after every write, so NVRHI may treat it
+                    // as a shader resource at all times and never has to change its state.
+                    nvrhi::BufferDesc wrapperDesc;
+                    wrapperDesc.byteSize = desc.Size;
+                    wrapperDesc.structStride = sizeof(Instance);
+                    wrapperDesc.debugName = name;
+                    wrapperDesc.initialState = nvrhi::ResourceStates::ShaderResource;
+                    wrapperDesc.keepInitialState = true;
+                    Wrapper = context.Nvrhi()->createHandleForNativeBuffer(nvrhi::ObjectTypes::VK_Buffer, nvrhi::Object(static_cast<VkBuffer>(Buffer.Handle())), wrapperDesc);
+                }
+
+                uploads.Upload(Buffer.Handle(), 0, std::as_bytes(instances));
+            }
+        };
+        InstanceStorage MeshInstances;
+        InstanceStorage ParticleInstances;
     };
 
     Renderer::Renderer(GLFWwindow* window, FrameProfiler& profiler, bool initIdTarget)
@@ -155,6 +199,7 @@ namespace Lynx
             m_Frame->InFlight[frame] = m_Context->Device().createFence(vk::FenceCreateInfo(vk::FenceCreateFlagBits::eSignaled));
         }
         m_Frame->Timers = std::make_unique<GpuTimers>(m_Context->PhysicalDevice(), m_Context->Device(), m_Context->GraphicsQueueFamily());
+        m_Frame->Uploads = std::make_unique<UploadQueue>(*m_Context);
 
         m_CommandList = m_NvrhiDevice->createCommandList();
         CreateDefaultTextures();
@@ -170,6 +215,9 @@ namespace Lynx
 
         // Everything made from the device goes before the device does.
         ReleaseSwapchainImages();
+        m_Frame->MeshInstances = {};
+        m_Frame->ParticleInstances = {};
+        m_Frame->Uploads.reset();
         m_PendingScreenshots.clear();
         m_Pipeline.Clear();
         m_BloomPass.reset();
@@ -180,7 +228,6 @@ namespace Lynx
         m_CurrentFrameData = RenderData();
         m_OpaqueBatches.clear();
         m_StageBuffer = nullptr;
-        m_ParticleInstanceBuffer = nullptr;
 
         SamplerCache::Shutdown();
         m_WhiteTex = nullptr;
@@ -188,7 +235,6 @@ namespace Lynx
         m_BlackTex = nullptr;
         m_MetallicRoughnessTex = nullptr;
         m_GlobalCB = nullptr;
-        m_InstanceBuffer = nullptr;
         m_CommandList = nullptr;
         m_SceneTarget.reset();
         m_ImGuiBackend.reset();
@@ -208,6 +254,7 @@ namespace Lynx
     void Renderer::Init()
     {
         // TODO: Move these members to the struct, useless to have duplicates!
+        m_RenderContext.Graphics = m_Context.get();
         m_RenderContext.Device = m_NvrhiDevice;
         m_RenderContext.CommandList = m_CommandList;
         m_RenderContext.GlobalConstantBuffer = m_GlobalCB;
@@ -580,25 +627,8 @@ namespace Lynx
             allInstanceData.push_back({ cmd.InstanceData.Model, cmd.InstanceData.EntityID });
         }
 
-        // Create or resize GPU Buffer
-        size_t requiredSize = allInstanceData.size() * sizeof(GPUInstanceData);
-        if (requiredSize > 0)
-        {
-            if (!m_InstanceBuffer || m_InstanceBuffer->getDesc().byteSize < requiredSize)
-            {
-                nvrhi::BufferDesc desc;
-                desc.byteSize = (uint64_t)(requiredSize * 1.5);
-                desc.structStride = sizeof(GPUInstanceData);
-                desc.debugName = "InstanceBuffer";
-                desc.initialState = nvrhi::ResourceStates::ShaderResource;
-                desc.keepInitialState = true;
-                m_InstanceBuffer = m_NvrhiDevice->createBuffer(desc);
-            }
-
-            m_CommandList->writeBuffer(m_InstanceBuffer, allInstanceData.data(), requiredSize);
-        }
-
-        m_CurrentFrameData.InstanceBuffer = m_InstanceBuffer;
+        m_Frame->MeshInstances.Upload<GPUInstanceData>(*m_Context, *m_Frame->Uploads, allInstanceData, "InstanceBuffer");
+        m_CurrentFrameData.InstanceBuffer = m_Frame->MeshInstances.Wrapper;
         m_Profiler.SetCounter("Instances", static_cast<double>(allInstanceData.size()));
 
         std::vector<ParticleInstanceData> allParticleData;
@@ -618,23 +648,12 @@ namespace Lynx
             allParticleData.insert(allParticleData.end(), particles.begin(), particles.end());
         }
 
-        size_t requiredParticleSize = allParticleData.size() * sizeof(ParticleInstanceData);
-        if (requiredParticleSize > 0)
-        {
-            if (!m_ParticleInstanceBuffer || m_ParticleInstanceBuffer->getDesc().byteSize < requiredParticleSize)
-            {
-                nvrhi::BufferDesc desc;
-                desc.byteSize = (uint64_t)(requiredParticleSize * 1.5);
-                desc.structStride = sizeof(ParticleInstanceData);
-                desc.debugName = "ParticleInstanceBuffer";
-                desc.initialState = nvrhi::ResourceStates::ShaderResource;
-                desc.keepInitialState = true;
-                m_ParticleInstanceBuffer = m_NvrhiDevice->createBuffer(desc);
-            }
+        m_Frame->ParticleInstances.Upload<ParticleInstanceData>(*m_Context, *m_Frame->Uploads, allParticleData, "ParticleInstanceBuffer");
+        m_CurrentFrameData.ParticleInstanceBuffer = m_Frame->ParticleInstances.Wrapper;
 
-            m_CommandList->writeBuffer(m_ParticleInstanceBuffer, allParticleData.data(), requiredParticleSize);
-        }
-        m_CurrentFrameData.ParticleInstanceBuffer = m_ParticleInstanceBuffer;
+        // The copies go straight into the command buffer, so NVRHI must not have a render pass open.
+        m_CommandList->clearState();
+        m_Frame->Uploads->Flush(NativeCommandBuffer(m_CommandList));
     }
 
     void Renderer::BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, float deltaTime, bool editMode)
@@ -895,6 +914,9 @@ namespace Lynx
             // Reset only now: a frame that is skipped submits nothing that would signal the fence again.
             device.resetFences(1, &m_Frame->InFlight[m_CurrentFrame]);
         }
+
+        m_Context->Deletions().BeginFrame();
+        m_Frame->Uploads->BeginFrame();
 
         m_CommandList->open();
         m_Frame->Timers->BeginFrame(m_Profiler);
