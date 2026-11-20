@@ -285,6 +285,303 @@
                     "ProjectionType": 0
                 }
             }
+        },
+        {
+            "ID": 7000000000000000101,
+            "Tag": {
+                "Tag": "Particles"
+            },
+            "Transform": {
+                "Translation": [
+                    7.5,
+                    0.3,
+                    4.0
+                ],
+                "Rotation": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "ParticleEmitter": {
+                "DepthSorting": false,
+                "EmissionRate": 60.0,
+                "IsLooping": true,
+                "Material": 7300000000000000001,
+                "MaxParticles": 1000,
+                "Properties": {
+                    "ColorBegin": [
+                        1.0,
+                        0.83,
+                        0.48,
+                        1.0
+                    ],
+                    "ColorEnd": [
+                        1.0,
+                        0.43,
+                        0.16,
+                        0.0
+                    ],
+                    "LifeTime": 1.5,
+                    "Position": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "SizeBegin": 0.5,
+                    "SizeEnd": 0.1,
+                    "SizeVariation": 0.2,
+                    "Velocity": [
+                        0.0,
+                        2.0,
+                        0.0
+                    ],
+                    "VelocityVariation": [
+                        0.8,
+                        1.0,
+                        0.8
+                    ]
+                }
+            }
+        },
+        {
+            "ID": 7000000000000000102,
+            "Tag": {
+                "Tag": "UI"
+            },
+            "Transform": {
+                "Translation": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Rotation": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "UICanvas": {
+                "Canvas": {
+                    "Anchor": [
+                        0.0,
+                        0.0,
+                        1.0,
+                        1.0
+                    ],
+                    "Children": [
+                        {
+                            "Anchor": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "Children": [],
+                            "ClipChildren": false,
+                            "Enabled": true,
+                            "HitTestVisible": false,
+                            "HorizontalAlignment": 0,
+                            "Name": "Panel",
+                            "Offset": [
+                                40.0,
+                                40.0
+                            ],
+                            "Opacity": 1.0,
+                            "Padding": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "Pivot": [
+                                0.0,
+                                0.0
+                            ],
+                            "Size": [
+                                420.0,
+                                90.0
+                            ],
+                            "Type": "UIImage",
+                            "VerticalAlignment": 0,
+                            "Visibility": 0,
+                            "Tint": [
+                                0.1,
+                                0.1,
+                                0.15,
+                                0.85
+                            ],
+                            "UUID": 7400000000000000002,
+                            "Border": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "FillAmount": 1.0,
+                            "FillMethod": 0,
+                            "ImageType": 0,
+                            "Material": 0,
+                            "Texture": 0
+                        },
+                        {
+                            "Anchor": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "Children": [],
+                            "ClipChildren": false,
+                            "Enabled": true,
+                            "HitTestVisible": false,
+                            "HorizontalAlignment": 0,
+                            "Name": "Bar",
+                            "Offset": [
+                                60.0,
+                                95.0
+                            ],
+                            "Opacity": 1.0,
+                            "Padding": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "Pivot": [
+                                0.0,
+                                0.0
+                            ],
+                            "Size": [
+                                380.0,
+                                18.0
+                            ],
+                            "Type": "UIImage",
+                            "VerticalAlignment": 0,
+                            "Visibility": 0,
+                            "Tint": [
+                                0.9,
+                                0.2,
+                                0.2,
+                                1.0
+                            ],
+                            "UUID": 7400000000000000003,
+                            "Border": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "FillAmount": 1.0,
+                            "FillMethod": 0,
+                            "ImageType": 0,
+                            "Material": 0,
+                            "Texture": 0
+                        },
+                        {
+                            "Anchor": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "Children": [],
+                            "ClipChildren": false,
+                            "Enabled": true,
+                            "HitTestVisible": false,
+                            "HorizontalAlignment": 0,
+                            "Name": "Label",
+                            "Offset": [
+                                60.0,
+                                50.0
+                            ],
+                            "Opacity": 1.0,
+                            "Padding": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0
+                            ],
+                            "Pivot": [
+                                0.0,
+                                0.0
+                            ],
+                            "Size": [
+                                380.0,
+                                36.0
+                            ],
+                            "Type": "UIText",
+                            "VerticalAlignment": 0,
+                            "Visibility": 0,
+                            "Alignment": 0,
+                            "VAlignment": 0,
+                            "AutoWrap": false,
+                            "Color": [
+                                1.0,
+                                1.0,
+                                1.0,
+                                1.0
+                            ],
+                            "Font": 1403325133360733589,
+                            "FontSize": 28.0,
+                            "OutlineColor": [
+                                0.0,
+                                0.0,
+                                0.0,
+                                1.0
+                            ],
+                            "OutlineWidth": 0.0,
+                            "Text": "RenderBench features",
+                            "UUID": 7400000000000000004
+                        }
+                    ],
+                    "ClipChildren": false,
+                    "Enabled": true,
+                    "HitTestVisible": false,
+                    "HorizontalAlignment": 3,
+                    "Name": "Canvas",
+                    "Offset": [
+                        0.0,
+                        0.0
+                    ],
+                    "Opacity": 1.0,
+                    "Padding": [
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    "Pivot": [
+                        0.5,
+                        0.5
+                    ],
+                    "Size": [
+                        0.0,
+                        0.0
+                    ],
+                    "Type": "UICanvas",
+                    "VerticalAlignment": 3,
+                    "Visibility": 0,
+                    "RefRes": [
+                        1920.0,
+                        1080.0
+                    ],
+                    "ScaleMode": 1,
+                    "UUID": 7400000000000000001
+                }
+            }
         }
     ],
     "Scene": "Features"

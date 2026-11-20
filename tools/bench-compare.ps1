@@ -18,6 +18,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Started with "powershell -File", a comma-separated list arrives as one string.
+$Bench = @($Bench | ForEach-Object { $_ -split "," } | Where-Object { $_ -ne "" })
+
 Add-Type -AssemblyName System.Drawing
 Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
 using System;

@@ -24,8 +24,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Started with "powershell -File", a comma-separated list arrives as one string.
+$Bench = @($Bench | ForEach-Object { $_ -split "," } | Where-Object { $_ -ne "" })
+$Set = @($Set | ForEach-Object { $_ -split "," } | Where-Object { $_ -ne "" })
+
 $engineRoot = Split-Path -Parent $PSScriptRoot
-$projectRoot = Join-Path $engineRoot "samples\RenderBench"
+$projectRoot= Join-Path $engineRoot "samples\RenderBench"
 $projectFile = Join-Path $projectRoot "RenderBench.lxproj"
 $engineLog = Join-Path $projectRoot "temp\engine.log"
 
