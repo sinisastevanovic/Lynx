@@ -590,9 +590,9 @@ namespace Lynx
 
         vk::SwapchainCreateInfoKHR swapInfo;
         swapInfo.surface = m_VulkanState->Surface;
-        // The fewest images the driver works with. One more is the usual advice, but measured on an RTX 5080
-        // it changed no frame time, cost 25 MB and let frames overlap on the GPU, which made the time of
-        // every pass read 12 to 19 % longer.
+        // The fewest images the driver works with. One more is the usual advice, so that the CPU does not
+        // have to wait for the display to release an image. Measured without VSync on an RTX 5080 it changed
+        // no frame time and cost 25 MB. It has not been measured with VSync on, where it matters most.
         swapInfo.minImageCount = caps.minImageCount;
         swapInfo.imageFormat = m_VulkanState->SwapchainFormat;
         swapInfo.imageColorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
