@@ -38,9 +38,23 @@ namespace Lynx
 
         vk::PrimitiveTopology Topology = vk::PrimitiveTopology::eTriangleList;
         vk::CullModeFlags CullMode = vk::CullModeFlagBits::eNone;
+
+        // Which winding is the front, as seen through the upside-down viewport all passes draw with.
+        // Meshes are counter-clockwise.
+        vk::FrontFace FrontFace = vk::FrontFace::eClockwise;
+
+        // Pushes what is drawn away from the camera: by a fixed amount, and by more the steeper the surface is.
+        // Used for shadow maps, where a surface would otherwise shadow itself.
+        float DepthBias = 0.0f;
+        float DepthBiasSlope = 0.0f;
         BlendMode Blend = BlendMode::Opaque;
 
+        // Undefined for a pass that draws depth only.
         vk::Format ColorFormat = vk::Format::eUndefined;
+
+        // A second target that receives whole numbers and is never blended: the entity IDs the editor picks by.
+        // Undefined for none.
+        vk::Format IdFormat = vk::Format::eUndefined;
 
         // Undefined for a pass without a depth buffer.
         vk::Format DepthFormat = vk::Format::eUndefined;

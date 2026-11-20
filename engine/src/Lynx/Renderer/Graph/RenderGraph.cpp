@@ -80,7 +80,12 @@ namespace Lynx
     void RenderGraph::ExecuteDirectPass(VulkanPass& pass, RenderContext& ctx, RenderData& renderData)
     {
         PassResources resources;
-        if (!pass.Declare(ctx, renderData, resources) || (!resources.ColorTarget && !resources.OwnTargets))
+        if (!pass.Declare(ctx, renderData, resources))
+            return;
+
+        // The picture whose size the pass draws at.
+        nvrhi::ITexture* mainTarget = resources.ColorTarget ? resources.ColorTarget : resources.DepthTarget;
+        if (!mainTarget && !resources.OwnTargets)
             return;
 
         // Targets that are drawn into together have to be the same size. They can differ for a frame
@@ -100,6 +105,8 @@ namespace Lynx
             ctx.CommandList->setTextureState(resources.Sampled[index], nvrhi::AllSubresources, nvrhi::ResourceStates::ShaderResource);
         if (resources.ColorTarget)
             ctx.CommandList->setTextureState(resources.ColorTarget, nvrhi::AllSubresources, nvrhi::ResourceStates::RenderTarget);
+        if (resources.IdTarget)
+            ctx.CommandList->setTextureState(resources.IdTarget, nvrhi::AllSubresources, nvrhi::ResourceStates::RenderTarget);
         if (resources.DepthTarget)
             ctx.CommandList->setTextureState(resources.DepthTarget, nvrhi::AllSubresources, nvrhi::ResourceStates::DepthWrite);
         ctx.CommandList->commitBarriers();
@@ -124,10 +131,13 @@ namespace Lynx
             return;
         }
 
-        const nvrhi::TextureDesc& targetDesc = resources.ColorTarget->getDesc();
+        const nvrhi::TextureDesc& targetDesc = mainTarget->getDesc();
 
         RenderingTargets targets;
-        targets.Color = NativeView(resources.ColorTarget);
+        if (resources.ColorTarget)
+            targets.Color = NativeView(resources.ColorTarget);
+        if (resources.IdTarget)
+            targets.Ids = NativeView(resources.IdTarget);
         if (resources.DepthTarget)
             targets.Depth = NativeView(resources.DepthTarget);
         targets.Extent = vk::Extent2D(targetDesc.width, targetDesc.height);

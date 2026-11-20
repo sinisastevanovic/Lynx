@@ -58,11 +58,22 @@ namespace Lynx
         }
     };
 
+    // Where the texture and sampler tables have the textures of a material.
+    struct MaterialTextureIndices
+    {
+        uint32_t Albedo = 0;
+        uint32_t Normal = 0;
+        uint32_t MetallicRoughness = 0;
+        uint32_t Emissive = 0;
+        uint32_t Sampler = 0;
+    };
+
     struct BatchDrawCall
     {
         BatchKey Key;
         uint32_t FirstInstance;
         uint32_t InstanceCount;
+        MaterialTextureIndices Textures;
     };
     
     struct PushData
@@ -92,6 +103,7 @@ namespace Lynx
         float DistanceToCamera;
         int InstanceOffset = -1;
         RenderFlags Flags = RenderFlags::All;
+        MaterialTextureIndices Textures;
     };
 
     struct ParticleInstanceData
@@ -134,6 +146,9 @@ namespace Lynx
         nvrhi::BufferHandle InstanceBuffer;
 
         std::vector<ParticleBatch> ParticleQueue;
+
+        // The address shaders read the frame's mesh instances from, one GPUInstanceData each.
+        uint64_t MeshInstanceAddress = 0;
 
         // The address shaders read the frame's particles from, one ParticleInstanceData each.
         uint64_t ParticleInstanceAddress = 0;

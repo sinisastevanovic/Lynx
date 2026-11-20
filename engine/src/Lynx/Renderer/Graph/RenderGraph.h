@@ -25,8 +25,11 @@ namespace Lynx
         std::array<nvrhi::ITexture*, MaxSampled> Sampled{};
         uint32_t SampledCount = 0;
 
-        // The texture the pass draws into.
+        // The texture the pass draws into. Null for a pass that draws depth only.
         nvrhi::ITexture* ColorTarget = nullptr;
+
+        // The picture of entity IDs the pass writes next to the colour. Null for none.
+        nvrhi::ITexture* IdTarget = nullptr;
 
         // Set instead of a colour target by a pass that draws into pictures of its own, in several steps.
         // Such a pass begins and ends rendering itself (see Vulkan/Rendering.h) and looks after the layouts

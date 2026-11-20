@@ -22,6 +22,7 @@ struct GLFWwindow;
 namespace Lynx
 {
     class AssetManager;
+    class MaterialTextures;
     class FrameProfiler;
     class GraphicsContext;
     class RenderGraph;
@@ -213,6 +214,7 @@ namespace Lynx
 
         // For the textures of the materials that are drawn.
         AssetManager& m_Assets;
+        std::unique_ptr<MaterialTextures> m_MaterialTextures;
         std::chrono::steady_clock::time_point m_SubmitStart;
 
         struct PendingScreenshot

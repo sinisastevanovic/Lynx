@@ -1,36 +1,27 @@
 #pragma once
-#include "Lynx/Renderer/BindingSetCache.h"
-#include "Lynx/Renderer/RenderPass.h"
+#include "Lynx/Renderer/Graph/RenderGraph.h"
 
 namespace Lynx
 {
-    class DepthPass : public RenderPass
+    // Draws the depth of the scene's opaque meshes ahead of the forward pass, which then shades
+    // only the surfaces that end up visible.
+    class DepthPass : public VulkanPass
     {
     public:
-        virtual ~DepthPass() = default;
+        DepthPass();
+        ~DepthPass() override;
 
         void Init(RenderContext& ctx) override;
-        void Execute(RenderContext& ctx, RenderData& renderData) override;
+        bool Declare(const RenderContext& ctx, const RenderData& renderData, PassResources& resources) override;
+        void Execute(vk::CommandBuffer commands, RenderData& renderData) override;
 
     private:
-        void CreatePipelines(RenderContext& ctx, std::shared_ptr<Shader> shader);
-        void CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData);
-        nvrhi::BindingSetHandle GetMaterialBindingSet(RenderContext& ctx, Material* material);
+        void CreatePipeline(const Shader& shader);
 
     private:
-        nvrhi::BindingLayoutHandle m_GlobalBindingLayout;
-        nvrhi::BindingLayoutHandle m_MaterialBindingLayout;
-        nvrhi::GraphicsPipelineHandle m_Pipeline;
-
-        // Caching
-        nvrhi::BindingSetHandle m_GlobalBindingSet;
-        nvrhi::BindingSetHandle m_OpaqueBindingSet;
-        nvrhi::BufferHandle m_CachedInstanceBuffer;
-        BindingSetCache<Material*> m_MaterialBindingSetCache;
+        struct VulkanObjects;
+        std::unique_ptr<VulkanObjects> m_Vulkan;
 
         PipelineState m_PipelineState;
-
-        
     };
 }
-

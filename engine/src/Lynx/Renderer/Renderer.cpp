@@ -24,6 +24,7 @@
 #include "Passes/DebugPass.h"
 #include "Passes/ForwardPass.h"
 #include "Lynx/Asset/AssetManager.h"
+#include "MaterialTextures.h"
 #include "Passes/BloomPass.h"
 #include "Passes/GridPass.h"
 #include "RenderFormats.h"
@@ -225,6 +226,7 @@ namespace Lynx
         m_Frame->Uploads.reset();
         m_PendingScreenshots.clear();
         m_Graph.reset();
+        m_MaterialTextures.reset();
         m_Frame->Shared.reset();
         m_MipMapGenPass.reset();
         m_RenderContext = RenderContext();
@@ -279,6 +281,19 @@ namespace Lynx
         m_RenderContext.FinalFramebufferInfo = finalfbInfo;
 
         SamplerCache::Init(m_NvrhiDevice, m_MaxAnisotropy);
+
+        // What a material draws with where it has no texture of its own.
+        const auto addDefault = [this](const nvrhi::TextureHandle& texture)
+        {
+            return m_Frame->Shared->AddTexture(vk::ImageView(static_cast<VkImageView>(texture->getNativeView(nvrhi::ObjectTypes::VK_ImageView).pointer)));
+        };
+        MaterialTextureIndices defaults;
+        defaults.Albedo = m_Frame->WhiteTextureIndex;
+        defaults.Normal = addDefault(m_NormalTex);
+        defaults.MetallicRoughness = addDefault(m_MetallicRoughnessTex);
+        defaults.Emissive = m_Frame->WhiteTextureIndex;
+        defaults.Sampler = SamplerIndex(SamplerSettings());
+        m_MaterialTextures = std::make_unique<MaterialTextures>(m_Assets, defaults);
 
         // The frame, start to finish. The scene passes draw the HDR picture, bloom reads it and composite
         // turns both into the output. What is not part of the scene is drawn on top of the output, so that
@@ -643,6 +658,9 @@ namespace Lynx
             return std::tie(meshA, a.Key.SubmeshIndex, a.Key.RenderFlags) < std::tie(meshB, b.Key.SubmeshIndex, b.Key.RenderFlags);
         });
 
+        for (BatchDrawCall& call : m_CurrentFrameData.OpaqueDrawCalls)
+            call.Textures = m_MaterialTextures->Get(call.Key.Mesh->GetSubmeshes()[call.Key.SubmeshIndex].Material);
+
         std::ranges::sort(m_CurrentFrameData.TransparentQueue,
           [](const RenderCommand& a, const RenderCommand& b) {
               return a.DistanceToCamera > b.DistanceToCamera; 
@@ -650,12 +668,14 @@ namespace Lynx
 
         for (auto& cmd : m_CurrentFrameData.TransparentQueue)
         {
+            cmd.Textures = m_MaterialTextures->Get(cmd.Mesh->GetSubmeshes()[cmd.SubmeshIndex].Material);
             cmd.InstanceOffset = (int)allInstanceData.size();
             allInstanceData.push_back({ cmd.InstanceData.Model, cmd.InstanceData.EntityID });
         }
 
         m_Frame->MeshInstances.Upload<GPUInstanceData>(*m_Context, *m_Frame->Uploads, allInstanceData, "InstanceBuffer");
         m_CurrentFrameData.InstanceBuffer = m_Frame->MeshInstances.Wrapper;
+        m_CurrentFrameData.MeshInstanceAddress = m_Frame->MeshInstances.Buffer.Address();
         m_Profiler.SetCounter("Instances", static_cast<double>(allInstanceData.size()));
 
         std::vector<ParticleInstanceData> allParticleData;

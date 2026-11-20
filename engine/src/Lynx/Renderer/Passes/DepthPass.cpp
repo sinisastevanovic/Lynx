@@ -1,179 +1,121 @@
 #include "DepthPass.h"
 
-#include "Lynx/Engine.h"
+#include "MeshDraw.h"
+#include "Lynx/Asset/Material.h"
 #include "Lynx/Asset/Shader.h"
-#include "Lynx/Renderer/SamplerCache.h"
+#include "Lynx/Renderer/GraphicsContext.h"
+#include "Lynx/Renderer/RenderFormats.h"
+#include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
+#include "Lynx/Renderer/Vulkan/SharedBindings.h"
 
 namespace Lynx
 {
-    struct DepthPushData
+    namespace
     {
-        float AlphaCutoff;
-        float Padding[3];
+        // Has to match DepthConstants in DepthOnly.slang.
+        struct DepthPushData
+        {
+            float AlphaCutoff;
+            uint32_t AlbedoTexture;
+            uint32_t AlbedoSampler;
+            uint32_t Padding;
+            uint64_t Instances;
+        };
+    }
+
+    struct DepthPass::VulkanObjects
+    {
+        GraphicsContext* Context = nullptr;
+        SharedBindings* Shared = nullptr;
+        vk::Device Device;
+        vk::Pipeline Pipeline;
+
+        // The renderer waits for the GPU before it destroys its passes, so nothing here is still in use.
+        ~VulkanObjects()
+        {
+            if (Device)
+                Device.destroyPipeline(Pipeline);
+        }
     };
-    
+
+    DepthPass::DepthPass() = default;
+    DepthPass::~DepthPass() = default;
+
     void DepthPass::Init(RenderContext& ctx)
     {
-        auto globalLayoutDesc = nvrhi::BindingLayoutDesc()
-            .setVisibility(nvrhi::ShaderType::All)
-            .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
-            .addItem(nvrhi::BindingLayoutItem::PushConstants(1, sizeof(DepthPushData)))
-            .addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(10))
-            .setBindingOffsets({0, 0, 0, 0})
-            .setRegisterSpaceAndDescriptorSet(0);
-        m_GlobalBindingLayout = ctx.Device->createBindingLayout(globalLayoutDesc);
+        m_Vulkan = std::make_unique<VulkanObjects>();
+        m_Vulkan->Context = ctx.Graphics;
+        m_Vulkan->Shared = ctx.Shared;
+        m_Vulkan->Device = ctx.Graphics->Device();
 
-        auto matDesc = nvrhi::BindingLayoutDesc()
-            .setVisibility(nvrhi::ShaderType::All)
-            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))    // Albedo (for alpha mask)
-            .addItem(nvrhi::BindingLayoutItem::Sampler(1))        // Sampler
-            .setBindingOffsets({0, 0, 0, 0})
-            .setRegisterSpaceAndDescriptorSet(1);
-        m_MaterialBindingLayout = ctx.Device->createBindingLayout(matDesc);
-
-        auto bsDesc = nvrhi::BindingSetDesc()
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(0, ctx.WhiteTexture))
-            .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(SamplerSettings())));
-        m_OpaqueBindingSet = ctx.Device->createBindingSet(bsDesc, m_MaterialBindingLayout);
-
-        m_PipelineState.SetShader("Shaders/DepthOnly.glsl");
-        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
-        {
-            this->CreatePipelines(ctx, shader);
-        });
+        m_PipelineState.SetShader("Shaders/DepthOnly.slang");
+        m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
     }
-    
-    void DepthPass::CreatePipelines(RenderContext& ctx, std::shared_ptr<Shader> shader)
+
+    void DepthPass::CreatePipeline(const Shader& shader)
     {
-        auto pipeDesc = nvrhi::GraphicsPipelineDesc()
-            .addBindingLayout(m_GlobalBindingLayout)
-            .addBindingLayout(m_MaterialBindingLayout)
-            .setVertexShader(shader->GetVertexShader())
-            .setFragmentShader(shader->GetPixelShader()) // Needed for Alpha Test
-            .setPrimType(nvrhi::PrimitiveType::TriangleList);
+        const std::shared_ptr<const ShaderProgram> program = shader.GetProgram();
+        if (!program)
+            return;
 
-        pipeDesc.renderState.rasterState.frontCounterClockwise = true;
-        pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::Back;
+        // The pass and its shader are written together. If they stop agreeing, the pipeline that works is kept.
+        if (!m_Vulkan->Shared->Supports(*program, "DepthOnly.slang", sizeof(DepthPushData)))
+            return;
 
-        // Depth State: Write ON, Test Less
-        pipeDesc.renderState.depthStencilState.depthTestEnable = true;
-        pipeDesc.renderState.depthStencilState.depthWriteEnable = true;
-        pipeDesc.renderState.depthStencilState.depthFunc = nvrhi::ComparisonFunc::Less;
-
-        // Color State: Disable Writes
-        pipeDesc.renderState.blendState.targets[0].setBlendEnable(false)
-                                                  .setColorWriteMask(static_cast<nvrhi::ColorMask>(0));
-        DisableEntityIdWrites(pipeDesc, ctx.PresentationFramebufferInfo);
-
-        nvrhi::VertexAttributeDesc attributes[] = {
-            nvrhi::VertexAttributeDesc()
-                .setName("POSITION")
-                .setFormat(nvrhi::Format::RGB32_FLOAT)
-                .setBufferIndex(0)
-                .setOffset(offsetof(Vertex, Position))
-                .setElementStride(sizeof(Vertex)),
-            nvrhi::VertexAttributeDesc()
-                .setName("TEXCOORD")
-                .setFormat(nvrhi::Format::RG32_FLOAT)
-                .setBufferIndex(0)
-                .setOffset(offsetof(Vertex, TexCoord))
-                .setElementStride(sizeof(Vertex))
+        // No colour target: only depth is drawn. The texture coordinate is needed for materials with cut-outs.
+        GraphicsPipelineDesc desc;
+        desc.Program = program.get();
+        desc.Layout = m_Vulkan->Shared->PipelineLayout();
+        desc.VertexAttributes = {
+            { MeshVertexLayout::PositionFormat, offsetof(Vertex, Position) },
+            { MeshVertexLayout::TexCoordFormat, offsetof(Vertex, TexCoord) },
         };
-        pipeDesc.inputLayout = ctx.Device->createInputLayout(attributes, 2, shader->GetVertexShader());
-        m_Pipeline = ctx.Device->createGraphicsPipeline(pipeDesc, ctx.PresentationFramebufferInfo);
+        desc.VertexStride = sizeof(Vertex);
+        desc.CullMode = vk::CullModeFlagBits::eBack;
+        desc.FrontFace = vk::FrontFace::eCounterClockwise;
+        desc.DepthFormat = RenderFormats::SceneDepth;
+        desc.DepthTest = true;
+        desc.DepthWrite = true;
+        const vk::Pipeline pipeline = CreateGraphicsPipeline(m_Vulkan->Device, desc);
+        if (!pipeline)
+            return;
+
+        // A reloaded shader replaces a pipeline that frames still on the GPU may be using.
+        m_Vulkan->Context->Deletions().Retire([device = m_Vulkan->Device, old = m_Vulkan->Pipeline]() { device.destroyPipeline(old); });
+        m_Vulkan->Pipeline = pipeline;
     }
 
-    void DepthPass::Execute(RenderContext& ctx, RenderData& renderData)
+    bool DepthPass::Declare(const RenderContext&, const RenderData& renderData, PassResources& resources)
     {
-        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
-        {
-            this->CreatePipelines(ctx, shader);
-        });
-        
-        CreateGlobalBindingSet(ctx, renderData);
+        m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
 
-        ctx.CommandList->beginMarker("DepthPrePass");
+        if (renderData.OpaqueDrawCalls.empty() || !m_Vulkan->Pipeline)
+            return false;
 
-        auto state = nvrhi::GraphicsState()
-            .setPipeline(m_Pipeline)
-            .setFramebuffer(renderData.TargetFramebuffer); // Main FB
+        resources.DepthTarget = renderData.TargetFramebuffer->getDesc().depthAttachment.texture;
+        return true;
+    }
 
-        // Viewport
-        const auto& fbInfo = renderData.TargetFramebuffer->getFramebufferInfo();
-        state.viewport.addViewport(nvrhi::Viewport(fbInfo.width, fbInfo.height));
-        state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
+    void DepthPass::Execute(vk::CommandBuffer commands, RenderData& renderData)
+    {
+        commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->Pipeline);
 
-        for (const auto& batch : renderData.OpaqueDrawCalls)
+        for (const BatchDrawCall& batch : renderData.OpaqueDrawCalls)
         {
             if (!(batch.Key.RenderFlags & RenderFlags::MainPass))
                 continue;
 
-            const auto& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
-            auto material = submesh.Material.get();
-            bool isMasked = (material->Mode == AlphaMode::Mask);
+            const Submesh& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
+            BindSubmesh(commands, submesh);
 
-            state.bindings = { m_GlobalBindingSet, isMasked ? GetMaterialBindingSet(ctx, material) : m_OpaqueBindingSet };
+            DepthPushData push{};
+            push.AlphaCutoff = submesh.Material->Mode == AlphaMode::Mask ? submesh.Material->AlphaCutoff : -1.0f;
+            push.AlbedoTexture = batch.Textures.Albedo;
+            push.AlbedoSampler = batch.Textures.Sampler;
+            push.Instances = MeshInstanceAddress(renderData, batch.FirstInstance);
+            m_Vulkan->Shared->Push(commands, push);
 
-            state.vertexBuffers = { nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0) };
-            state.indexBuffer = nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT);
-            ctx.CommandList->setGraphicsState(state);
-
-            DepthPushData push;
-            push.AlphaCutoff = isMasked ? material->AlphaCutoff : -1.0f;
-            ctx.CommandList->setPushConstants(&push, sizeof(DepthPushData));
-
-            ctx.CommandList->drawIndexed(nvrhi::DrawArguments()
-                .setVertexCount(submesh.IndexCount)
-                .setInstanceCount(batch.InstanceCount)
-                .setStartInstanceLocation(batch.FirstInstance));
-
-            // Note: Don't double count stats here!
-            // Or count them as "DepthDrawCalls" if you want separate metrics.
+            commands.drawIndexed(submesh.IndexCount, batch.InstanceCount, 0, 0, 0);
         }
-
-        ctx.CommandList->endMarker();
-    }
-
-
-    void DepthPass::CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData)
-    {
-        if (m_GlobalBindingSet && m_CachedInstanceBuffer == renderData.InstanceBuffer)
-            return;
-
-        m_CachedInstanceBuffer = renderData.InstanceBuffer;
-        auto desc = nvrhi::BindingSetDesc()
-            .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer))
-            .addItem(nvrhi::BindingSetItem::PushConstants(1, sizeof(DepthPushData)))
-            .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(10, renderData.InstanceBuffer));
-
-        m_GlobalBindingSet = ctx.Device->createBindingSet(desc, m_GlobalBindingLayout);
-    }
-
-    nvrhi::BindingSetHandle DepthPass::GetMaterialBindingSet(RenderContext& ctx, Material* material)
-    {
-        uint32_t version = material ? material->GetVersion() : 0;
-
-        return m_MaterialBindingSetCache.Get(material, version, [&]() -> nvrhi::BindingSetHandle
-        {
-            nvrhi::TextureHandle albedo = ctx.WhiteTexture;
-            SamplerSettings samplerSettings;
-
-            if (material->AlbedoTexture)
-            {
-                if (auto tex = Engine::Get().GetAssetManager().GetAsset<Texture>(material->AlbedoTexture))
-                {
-                    if (auto handle = tex->GetTextureHandle())
-                    {
-                        albedo = handle;
-                        samplerSettings = tex->GetSamplerSettings();
-                    }
-                }
-            }
-
-            auto desc = nvrhi::BindingSetDesc()
-                .addItem(nvrhi::BindingSetItem::Texture_SRV(0, albedo))
-                .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(samplerSettings)));
-            return ctx.Device->createBindingSet(desc, m_MaterialBindingLayout);
-        });
     }
 }

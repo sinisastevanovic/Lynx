@@ -65,9 +65,11 @@ namespace Lynx
         vk::PipelineRasterizationStateCreateInfo rasterization;
         rasterization.polygonMode = vk::PolygonMode::eFill;
         rasterization.cullMode = desc.CullMode;
-        // Clockwise is the front, as in the NVRHI passes.
-        rasterization.frontFace= vk::FrontFace::eClockwise;
+        rasterization.frontFace = desc.FrontFace;
         rasterization.lineWidth = 1.0f;
+        rasterization.depthBiasEnable = desc.DepthBias != 0.0f || desc.DepthBiasSlope != 0.0f;
+        rasterization.depthBiasConstantFactor = desc.DepthBias;
+        rasterization.depthBiasSlopeFactor = desc.DepthBiasSlope;
 
         const vk::PipelineMultisampleStateCreateInfo multisample({}, vk::SampleCountFlagBits::e1);
 
@@ -76,12 +78,25 @@ namespace Lynx
         depthStencil.depthWriteEnable = desc.DepthWrite;
         depthStencil.depthCompareOp = desc.DepthCompare;
 
-        const vk::PipelineColorBlendAttachmentState blendAttachment = BlendState(desc.Blend);
-        const vk::PipelineColorBlendStateCreateInfo blend({}, VK_FALSE, vk::LogicOp::eCopy, blendAttachment);
+        // The colour target first, then the ID target, each only if the pass has it.
+        std::vector<vk::Format> colorFormats;
+        std::vector<vk::PipelineColorBlendAttachmentState> blendAttachments;
+        if (desc.ColorFormat != vk::Format::eUndefined)
+        {
+            colorFormats.push_back(desc.ColorFormat);
+            blendAttachments.push_back(BlendState(desc.Blend));
+        }
+        if (desc.IdFormat != vk::Format::eUndefined)
+        {
+            colorFormats.push_back(desc.IdFormat);
+            blendAttachments.push_back(BlendState(BlendMode::Opaque));
+        }
+        vk::PipelineColorBlendStateCreateInfo blend;
+        blend.setAttachments(blendAttachments);
 
         // No render pass object: the formats are all the pipeline needs to know about its targets.
         vk::PipelineRenderingCreateInfo rendering;
-        rendering.setColorAttachmentFormats(desc.ColorFormat);
+        rendering.setColorAttachmentFormats(colorFormats);
         rendering.depthAttachmentFormat = desc.DepthFormat;
 
         vk::GraphicsPipelineCreateInfo pipelineInfo;
