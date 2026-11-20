@@ -16,12 +16,13 @@ namespace Lynx
         auto layoutDesc = nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::All)
             .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
-            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(GridPushConstants)))
+            .addItem(nvrhi::BindingLayoutItem::PushConstants(1, sizeof(GridPushConstants)))
             .setBindingOffsets({0, 0, 0, 0});
         m_BindingLayout = ctx.Device->createBindingLayout(layoutDesc);
 
         auto bsDesc = nvrhi::BindingSetDesc()
-            .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer));
+            .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer))
+            .addItem(nvrhi::BindingSetItem::PushConstants(1, sizeof(GridPushConstants)));
         m_BindingSet = ctx.Device->createBindingSet(bsDesc, m_BindingLayout);
 
         m_PipelineState.SetShader("Shaders/Grid.glsl");

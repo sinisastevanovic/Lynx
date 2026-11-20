@@ -221,7 +221,8 @@ namespace Lynx
             // TODO: What sampler do we need? 
             auto desc = nvrhi::BindingSetDesc()
                 .addItem(nvrhi::BindingSetItem::Texture_SRV(0, texture->GetTextureHandle()))
-                .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(texture->GetSamplerSettings())));
+                .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(texture->GetSamplerSettings())))
+                .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(UIPushData)));
 
             return ctx.Device->createBindingSet(desc, m_BindingLayout);
         });

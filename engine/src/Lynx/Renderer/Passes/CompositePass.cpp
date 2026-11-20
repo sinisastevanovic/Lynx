@@ -39,6 +39,8 @@ namespace Lynx
             .setPixelShader(shader->GetPixelShader())
             .setPrimType(nvrhi::PrimitiveType::TriangleList);
         pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::None;
+        pipeDesc.renderState.depthStencilState.depthTestEnable = false;
+        pipeDesc.renderState.depthStencilState.depthWriteEnable = false;
         nvrhi::FramebufferInfo fbInfo;
         fbInfo.addColorFormat(nvrhi::Format::BGRA8_UNORM);
 
@@ -70,7 +72,6 @@ namespace Lynx
         CompositePushData push;
         push.BloomIntensity = renderData.BloomIntensity;
         push.FXAAEnabled = renderData.FXAAEnabled ? 1 : 0;
-        ctx.CommandList->setPushConstants(&push, sizeof(CompositePushData));
 
         auto state = nvrhi::GraphicsState()
             .setPipeline(m_Pipeline)
@@ -82,6 +83,7 @@ namespace Lynx
         state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
 
         ctx.CommandList->setGraphicsState(state);
+        ctx.CommandList->setPushConstants(&push, sizeof(CompositePushData));
         ctx.CommandList->draw(nvrhi::DrawArguments().setVertexCount(3));
     }
 

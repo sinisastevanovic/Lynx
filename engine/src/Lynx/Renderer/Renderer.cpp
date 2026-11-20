@@ -101,6 +101,31 @@ namespace Lynx
     
     namespace
     {
+        // NVRHI reports its own errors, and those of its validation layer, through this.
+        class NvrhiMessageLogger : public nvrhi::IMessageCallback
+        {
+        public:
+            void message(nvrhi::MessageSeverity severity, const char* messageText) override
+            {
+                switch (severity)
+                {
+                    case nvrhi::MessageSeverity::Info:    LX_CORE_INFO("NVRHI: {0}", messageText); break;
+                    case nvrhi::MessageSeverity::Warning: LX_CORE_WARN("NVRHI: {0}", messageText); break;
+                    case nvrhi::MessageSeverity::Error:   LX_CORE_ERROR("NVRHI: {0}", messageText); break;
+                    case nvrhi::MessageSeverity::Fatal:   LX_CORE_CRITICAL("NVRHI: {0}", messageText); break;
+                }
+            }
+        };
+
+        NvrhiMessageLogger s_NvrhiMessageLogger;
+
+        // An asset can be loaded in the middle of a frame, while the frame's command list is open.
+        // NVRHI allows only one immediate command list to be open at a time, so uploads use one that is not immediate.
+        nvrhi::CommandListHandle CreateUploadCommandList(nvrhi::IDevice* device)
+        {
+            return device->createCommandList(nvrhi::CommandListParameters().setEnableImmediateExecution(false));
+        }
+
         vk::PresentModeKHR ChoosePresentMode(vk::PhysicalDevice physicalDevice, vk::SurfaceKHR surface, bool vsync)
         {
             // FIFO waits for the display refresh, and every Vulkan implementation supports it.
@@ -137,6 +162,10 @@ namespace Lynx
         std::vector<vk::Fence> InFlightFences;
         
         vk::DebugUtilsMessengerEXT DebugMessenger;
+
+        // The NVRHI device as its Vulkan type, for the Vulkan-only calls. m_NvrhiDevice is the same device
+        // in release builds, but in debug builds it is the validation layer wrapped around this one.
+        nvrhi::vulkan::DeviceHandle NvrhiVulkanDevice;
     };
     
     Renderer::Renderer(GLFWwindow* window, bool initIdTarget)
@@ -186,6 +215,7 @@ namespace Lynx
         m_SceneTarget.reset();
         m_NvrhiDevice = nullptr;
         m_ImGuiBackend.reset();
+        m_VulkanState->NvrhiVulkanDevice = nullptr;
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
@@ -294,7 +324,7 @@ namespace Lynx
             size_t depthPitch = 0;
 
             // TODO: Batch this!
-            auto cmdList = m_NvrhiDevice->createCommandList();
+            auto cmdList = CreateUploadCommandList(m_NvrhiDevice);
             cmdList->open();
             cmdList->writeTexture(result, 0, 0, data, rowPitch, depthPitch);
 
@@ -326,8 +356,6 @@ namespace Lynx
             .setDebugName("ID_Stage");
             m_StageBuffer = m_NvrhiDevice->createStagingTexture(desc, nvrhi::CpuAccessMode::Read);
         }
-
-        m_CommandList->open();
 
         m_CommandList->open();
 
@@ -600,15 +628,16 @@ namespace Lynx
         deviceDesc.device = m_VulkanState->Device;
         deviceDesc.graphicsQueue = m_VulkanState->GraphicsQueue;
         deviceDesc.graphicsQueueIndex = m_VulkanState->GraphicsQueueFamily;
+        deviceDesc.errorCB = &s_NvrhiMessageLogger;
 
         // TODO: Pass validation extensions
-        m_NvrhiDevice = nvrhi::vulkan::createDevice(deviceDesc);
+        m_VulkanState->NvrhiVulkanDevice = nvrhi::vulkan::createDevice(deviceDesc);
+        m_NvrhiDevice = m_VulkanState->NvrhiVulkanDevice;
 
-        /*if (enableValidationLayers)
-        {
-            nvrhi::DeviceHandle nvrhiValidationLayer = nvrhi::validation::createValidationLayer(m_NvrhiDevice);
-            m_NvrhiDevice = nvrhiValidationLayer;
-        }*/
+        // Checks every NVRHI call against the state NVRHI expects, which catches mistakes
+        // that the Vulkan validation layer cannot see, such as a binding set that does not match its layout.
+        if (enableValidationLayers)
+            m_NvrhiDevice = nvrhi::validation::createValidationLayer(m_NvrhiDevice);
 
         CreateSwapchainFramebuffers();
 
@@ -1021,8 +1050,8 @@ namespace Lynx
         m_CommandList->close();
 
         // 2. Execute
-        nvrhi::vulkan::IDevice* vkDevice = static_cast<nvrhi::vulkan::IDevice*>(m_NvrhiDevice.Get());
-        
+        nvrhi::vulkan::IDevice* vkDevice = m_VulkanState->NvrhiVulkanDevice;
+
         // SYNC: Wait for the image to be available before executing
         vkDevice->queueWaitForSemaphore(nvrhi::CommandQueue::Graphics, (VkSemaphore)m_VulkanState->ImageAvailableSemaphores[m_CurrentFrame], 0);
 
@@ -1071,7 +1100,7 @@ namespace Lynx
 
         // TODO: We use a temporary command list here to immediately upload the buffers,
         // in the future, we should maybe batch these things? 
-        nvrhi::CommandListHandle commandList = m_NvrhiDevice->createCommandList();
+        nvrhi::CommandListHandle commandList = CreateUploadCommandList(m_NvrhiDevice);
         commandList->open();
         commandList->writeBuffer(vb, vertices.data(), vbDesc.byteSize);
         commandList->writeBuffer(ib, indices.data(), ibDesc.byteSize);

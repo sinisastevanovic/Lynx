@@ -54,16 +54,18 @@ namespace Lynx
         auto globalDesc = nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::All)
             .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0)) // UBO
-            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(ShadowPushData)))
+            .addItem(nvrhi::BindingLayoutItem::PushConstants(1, sizeof(ShadowPushData)))
             .addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(10))
-            .setBindingOffsets({0, 0, 0, 0});
+            .setBindingOffsets({0, 0, 0, 0})
+            .setRegisterSpaceAndDescriptorSet(0);
         m_GlobalBindingLayout = ctx.Device->createBindingLayout(globalDesc);
 
         auto matDesc = nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::All)
             .addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))    // Albedo (for alpha mask)
             .addItem(nvrhi::BindingLayoutItem::Sampler(1))        // Sampler
-            .setBindingOffsets({0, 0, 0, 0});
+            .setBindingOffsets({0, 0, 0, 0})
+            .setRegisterSpaceAndDescriptorSet(1);
         m_MaterialBindingLayout = ctx.Device->createBindingLayout(matDesc);
 
         auto bsDesc = nvrhi::BindingSetDesc()
@@ -155,9 +157,6 @@ namespace Lynx
         state.viewport.addViewport(nvrhi::Viewport(m_Resolution, m_Resolution));
         state.viewport.addScissorRect(nvrhi::Rect(0, m_Resolution, 0, m_Resolution));
 
-        state.bindings = { m_GlobalBindingSet };
-        ctx.CommandList->setGraphicsState(state);
-
         for (const auto& batch : renderData.OpaqueDrawCalls)
         {
             if (batch.InstanceCount <= 0)
@@ -244,7 +243,7 @@ namespace Lynx
         m_CachedInstanceBuffer = renderData.InstanceBuffer;
         auto desc = nvrhi::BindingSetDesc()
             .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, m_ShadowConstantBuffer))
-            .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(ShadowPushData)))
+            .addItem(nvrhi::BindingSetItem::PushConstants(1, sizeof(ShadowPushData)))
             .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(10, renderData.InstanceBuffer));
 
         m_GlobalBindingSet = ctx.Device->createBindingSet(desc, m_GlobalBindingLayout);

@@ -57,15 +57,17 @@ namespace Lynx
             .setVisibility(nvrhi::ShaderType::All)
             .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
             .addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(1))
-            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(ParticlePushData)))
-            .setBindingOffsets({ 0, 0, 0, 0 });
+            .addItem(nvrhi::BindingLayoutItem::PushConstants(1, sizeof(ParticlePushData)))
+            .setBindingOffsets({ 0, 0, 0, 0 })
+            .setRegisterSpaceAndDescriptorSet(0);
         m_GlobalBindingLayout = ctx.Device->createBindingLayout(globalLayoutDesc);
 
         auto materialLayoutDesc = nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::Pixel)
             .addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))
             .addItem(nvrhi::BindingLayoutItem::Sampler(1))
-            .setBindingOffsets({ 0, 0, 0, 0 });
+            .setBindingOffsets({ 0, 0, 0, 0 })
+            .setRegisterSpaceAndDescriptorSet(1);
         m_MaterialBindingLayout = ctx.Device->createBindingLayout(materialLayoutDesc);
 
         m_PipelineState.SetShader("Shaders/Particle.glsl");
@@ -128,7 +130,7 @@ namespace Lynx
         m_CachedInstanceBuffer = renderData.ParticleInstanceBuffer;
         auto desc = nvrhi::BindingSetDesc()
             .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer))
-            .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(ParticlePushData)))
+            .addItem(nvrhi::BindingSetItem::PushConstants(1, sizeof(ParticlePushData)))
             .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, renderData.ParticleInstanceBuffer));
 
         m_GlobalBindingSet = ctx.Device->createBindingSet(desc, m_GlobalBindingLayout);

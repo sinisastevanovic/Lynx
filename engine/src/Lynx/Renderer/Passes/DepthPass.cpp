@@ -17,16 +17,18 @@ namespace Lynx
         auto globalLayoutDesc = nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::All)
             .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
-            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(DepthPushData)))
+            .addItem(nvrhi::BindingLayoutItem::PushConstants(1, sizeof(DepthPushData)))
             .addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(10))
-            .setBindingOffsets({0, 0, 0, 0});
+            .setBindingOffsets({0, 0, 0, 0})
+            .setRegisterSpaceAndDescriptorSet(0);
         m_GlobalBindingLayout = ctx.Device->createBindingLayout(globalLayoutDesc);
 
         auto matDesc = nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::All)
             .addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))    // Albedo (for alpha mask)
             .addItem(nvrhi::BindingLayoutItem::Sampler(1))        // Sampler
-            .setBindingOffsets({0, 0, 0, 0});
+            .setBindingOffsets({0, 0, 0, 0})
+            .setRegisterSpaceAndDescriptorSet(1);
         m_MaterialBindingLayout = ctx.Device->createBindingLayout(matDesc);
 
         auto bsDesc = nvrhi::BindingSetDesc()
@@ -100,9 +102,6 @@ namespace Lynx
         state.viewport.addViewport(nvrhi::Viewport(fbInfo.width, fbInfo.height));
         state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
 
-        state.bindings = { m_GlobalBindingSet };
-        ctx.CommandList->setGraphicsState(state);
-
         for (const auto& batch : renderData.OpaqueDrawCalls)
         {
             if (!(batch.Key.RenderFlags & RenderFlags::MainPass))
@@ -143,6 +142,7 @@ namespace Lynx
         m_CachedInstanceBuffer = renderData.InstanceBuffer;
         auto desc = nvrhi::BindingSetDesc()
             .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer))
+            .addItem(nvrhi::BindingSetItem::PushConstants(1, sizeof(DepthPushData)))
             .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(10, renderData.InstanceBuffer));
 
         m_GlobalBindingSet = ctx.Device->createBindingSet(desc, m_GlobalBindingLayout);

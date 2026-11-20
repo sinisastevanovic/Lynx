@@ -19,7 +19,7 @@ namespace Lynx
             .setVisibility(nvrhi::ShaderType::Pixel)
             .addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))
             .addItem(nvrhi::BindingLayoutItem::Sampler(1))
-            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(PushData)))
+            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(BloomPushData)))
             .setBindingOffsets({0, 0, 0, 0})
         );
 
@@ -40,6 +40,8 @@ namespace Lynx
             .setPixelShader(shader->GetPixelShader())
             .setPrimType(nvrhi::PrimitiveType::TriangleList);
         pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::None;
+        pipeDesc.renderState.depthStencilState.depthTestEnable = false;
+        pipeDesc.renderState.depthStencilState.depthWriteEnable = false;
         pipeDesc.renderState.blendState.targets[0]
             .setBlendEnable(true)
             .setSrcBlend(nvrhi::BlendFactor::One)
@@ -89,7 +91,7 @@ namespace Lynx
             auto bsDesc = nvrhi::BindingSetDesc()
             .addItem(nvrhi::BindingSetItem::Texture_SRV(0, m_BloomTexture).setSubresources(nvrhi::TextureSubresourceSet(i, 1, 0, 1)))
             .addItem(nvrhi::BindingSetItem::Sampler(1, m_Sampler))
-            .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(PushData)));
+            .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(BloomPushData)));
 
             m_BindingSets.push_back(ctx.Device->createBindingSet(bsDesc, m_BindingLayout));
         }
@@ -120,7 +122,7 @@ namespace Lynx
             m_InputBindingSet = ctx.Device->createBindingSet(nvrhi::BindingSetDesc()
                 .addItem(nvrhi::BindingSetItem::Texture_SRV(0, renderData.SceneColorInput))
                 .addItem(nvrhi::BindingSetItem::Sampler(1, m_Sampler))
-                .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(PushData))), m_BindingLayout);
+                .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(BloomPushData))), m_BindingLayout);
         }
 
         BloomPushData push;

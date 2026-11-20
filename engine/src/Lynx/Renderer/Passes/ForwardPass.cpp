@@ -12,11 +12,12 @@ namespace Lynx
         auto globalLayoutDesc = nvrhi::BindingLayoutDesc()
             .setVisibility(nvrhi::ShaderType::All)
             .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
-            .addItem(nvrhi::BindingLayoutItem::PushConstants(0, sizeof(PushData)))
+            .addItem(nvrhi::BindingLayoutItem::PushConstants(1, sizeof(PushData)))
             .addItem(nvrhi::BindingLayoutItem::Texture_SRV(1)) // Shadow Map
             .addItem(nvrhi::BindingLayoutItem::Sampler(2))
             .addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(10))
-            .setBindingOffsets({0, 0, 0, 0});
+            .setBindingOffsets({0, 0, 0, 0})
+            .setRegisterSpaceAndDescriptorSet(0);
         m_GlobalBindingLayout = ctx.Device->createBindingLayout(globalLayoutDesc);
 
         // Material Layout (Set 1)
@@ -27,7 +28,8 @@ namespace Lynx
             .addItem(nvrhi::BindingLayoutItem::Texture_SRV(2)) // MR
             .addItem(nvrhi::BindingLayoutItem::Texture_SRV(3)) // Emissive
             .addItem(nvrhi::BindingLayoutItem::Sampler(4))
-            .setBindingOffsets({0, 0, 0, 0});
+            .setBindingOffsets({0, 0, 0, 0})
+            .setRegisterSpaceAndDescriptorSet(1);
         m_MaterialBindingLayout = ctx.Device->createBindingLayout(matLayoutDesc);
 
         const bool hasEntityIdTarget = ctx.PresentationFramebufferInfo.colorFormats.size() > 1;
@@ -191,7 +193,7 @@ namespace Lynx
         m_CachedInstanceBuffer = renderData.InstanceBuffer;
         auto desc = nvrhi::BindingSetDesc()
             .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer))
-            .addItem(nvrhi::BindingSetItem::PushConstants(0, sizeof(PushData)))
+            .addItem(nvrhi::BindingSetItem::PushConstants(1, sizeof(PushData)))
             .addItem(nvrhi::BindingSetItem::Texture_SRV(1, renderData.ShadowMap)) // Shadow Map
             .addItem(nvrhi::BindingSetItem::Sampler(2, renderData.ShadowSampler))
             .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(10, renderData.InstanceBuffer));
