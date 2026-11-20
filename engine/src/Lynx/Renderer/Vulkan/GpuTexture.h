@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include <cstdint>
+#include <vector>
 
 struct VmaAllocation_T;
 
@@ -17,6 +18,9 @@ namespace Lynx
         vk::Format Format = vk::Format::eUndefined;
         vk::ImageUsageFlags Usage;
         uint32_t MipLevels = 1;
+
+        // Also make a view of every mip level on its own, for a texture whose levels are drawn into one by one.
+        bool ViewPerMip = false;
 
         // Shown in RenderDoc and in validation messages.
         const char* Name = "";
@@ -40,6 +44,9 @@ namespace Lynx
 
         vk::Image Image() const { return m_Image; }
         vk::ImageView View() const { return m_View; }
+
+        // Only for a texture made with ViewPerMip.
+        vk::ImageView MipView(uint32_t mip) const { return m_MipViews[mip]; }
         const GpuTextureDesc& Desc() const { return m_Desc; }
 
     private:
@@ -49,6 +56,7 @@ namespace Lynx
         GraphicsContext* m_Context = nullptr;
         vk::Image m_Image;
         vk::ImageView m_View;
+        std::vector<vk::ImageView> m_MipViews;
         VmaAllocation_T* m_Allocation = nullptr;
         GpuTextureDesc m_Desc;
     };

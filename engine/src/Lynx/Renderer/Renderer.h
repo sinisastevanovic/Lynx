@@ -15,7 +15,6 @@
 
 #include "RenderPass.h"
 #include "Screenshot.h"
-#include "Passes/BloomPass.h"
 #include "Passes/MipMapBlitPass.h"
 
 struct GLFWwindow;
@@ -124,8 +123,8 @@ namespace Lynx
         glm::mat4 GetLightViewProjMatrix() const { return m_CurrentFrameData.LightViewProj; }
         glm::mat4 GetCameraViewProjMatrix() const { return m_CurrentFrameData.ViewProjection; }
 
-        BloomSettings& GetBloomSettings() { return m_BloomPass->GetSettings(); }
-        const BloomSettings& GetBloomSettings() const { return m_BloomPass->GetSettings(); }
+        BloomSettings& GetBloomSettings() { return m_BloomSettings; }
+        const BloomSettings& GetBloomSettings() const { return m_BloomSettings; }
 
         void SetFXAAEnabled(bool enabled) { m_FXAAEnabled = enabled; }
         bool GetFXAAEnabled() const { return m_FXAAEnabled; }
@@ -187,8 +186,7 @@ namespace Lynx
         // Every pass of a frame, in the order they run.
         std::unique_ptr<RenderGraph> m_Graph;
 
-        // Owned by the graph. Kept because its settings are edited from outside.
-        BloomPass* m_BloomPass = nullptr;
+        BloomSettings m_BloomSettings;
         std::unique_ptr<MipMapBlitPass> m_MipMapGenPass;
 
         RenderContext m_RenderContext;

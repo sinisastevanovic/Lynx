@@ -23,6 +23,7 @@
 #include "Lynx/Profiling/FrameProfiler.h"
 #include "Passes/DebugPass.h"
 #include "Passes/ForwardPass.h"
+#include "Passes/BloomPass.h"
 #include "Passes/GridPass.h"
 #include "RenderFormats.h"
 #include "Passes/ShadowPass.h"
@@ -120,6 +121,10 @@ namespace Lynx
         std::unique_ptr<UploadQueue> Uploads;
         std::unique_ptr<SharedBindings> Shared;
 
+        // Where the texture table has the scene's HDR picture and the black default texture.
+        std::optional<uint32_t> SceneColorIndex;
+        uint32_t BlackTextureIndex = 0;
+
         // Rewritten every frame with one entry per drawn instance. The NVRHI passes read it through
         // the wrapper, which is a second handle to the same Vulkan buffer.
         struct InstanceStorage
@@ -197,6 +202,7 @@ namespace Lynx
         // The scene constants are still a buffer of NVRHI's. The shared bindings point at the Vulkan buffer behind it.
         const vk::Buffer sceneConstants(static_cast<VkBuffer>(m_GlobalCB->getNativeObject(nvrhi::ObjectTypes::VK_Buffer).pointer));
         m_Frame->Shared = std::make_unique<SharedBindings>(*m_Context, sceneConstants);
+        m_Frame->BlackTextureIndex = m_Frame->Shared->AddTexture(vk::ImageView(static_cast<VkImageView>(m_BlackTex->getNativeView(nvrhi::ObjectTypes::VK_ImageView).pointer)));
     }
 
     Renderer::~Renderer()
@@ -214,7 +220,6 @@ namespace Lynx
         m_PendingScreenshots.clear();
         m_Graph.reset();
         m_Frame->Shared.reset();
-        m_BloomPass = nullptr;
         m_MipMapGenPass.reset();
         m_RenderContext = RenderContext();
         m_CurrentFrameData = RenderData();
@@ -276,7 +281,7 @@ namespace Lynx
         m_Graph->Add("Depth", std::make_unique<DepthPass>());
         m_Graph->Add("Forward", std::make_unique<ForwardPass>());
         m_Graph->Add("Particles", std::make_unique<ParticlePass>());
-        m_BloomPass = static_cast<BloomPass*>(&m_Graph->Add("Bloom", std::make_unique<BloomPass>()));
+        m_Graph->Add("Bloom", std::make_unique<BloomPass>());
         m_Graph->Add("Composite", std::make_unique<CompositePass>());
         if (m_ShouldCreateIDTarget)
             m_Graph->Add("Grid", std::make_unique<GridPass>());
@@ -553,6 +558,11 @@ namespace Lynx
             .setInitialState(nvrhi::ResourceStates::ShaderResource)
             .setKeepInitialState(true);
         target.Color = createTarget(m_Frame->SceneColor, RenderFormats::SceneColor, colorUsage, colorDesc);
+
+        // Post-processing reads the scene through the texture table. The picture before this one leaves it.
+        if (m_Frame->SceneColorIndex)
+            m_Frame->Shared->ReleaseTexture(*m_Frame->SceneColorIndex);
+        m_Frame->SceneColorIndex = m_Frame->Shared->AddTexture(m_Frame->SceneColor.View());
 
         auto depthDesc = nvrhi::TextureDesc()
             .setWidth(width)
@@ -866,6 +876,9 @@ namespace Lynx
         // The editor shows the finished picture inside its viewport panel. A game shows it in the window.
         m_CurrentFrameData.OutputFramebuffer = m_ShouldCreateIDTarget ? m_SceneTarget->LDRFramebuffer.Get() : m_Swapchain->Framebuffer();
         m_CurrentFrameData.SceneColorInput = m_SceneTarget->Color;
+        m_CurrentFrameData.SceneColorIndex = *m_Frame->SceneColorIndex;
+        m_CurrentFrameData.BloomTextureIndex = m_Frame->BlackTextureIndex;
+        m_CurrentFrameData.Bloom = m_BloomSettings;
         m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled;
 
         m_Graph->Execute(m_RenderContext, m_CurrentFrameData);

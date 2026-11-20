@@ -2,6 +2,7 @@
 
 #include "Lynx/Profiling/FrameProfiler.h"
 #include "Lynx/Renderer/GpuTimers.h"
+#include "Lynx/Renderer/Vulkan/Rendering.h"
 #include "Lynx/Renderer/Vulkan/SharedBindings.h"
 #include "Lynx/Renderer/Vulkan/UploadQueue.h"
 
@@ -79,12 +80,12 @@ namespace Lynx
     void RenderGraph::ExecuteDirectPass(VulkanPass& pass, RenderContext& ctx, RenderData& renderData)
     {
         PassResources resources;
-        if (!pass.Declare(ctx, renderData, resources) || !resources.ColorTarget)
+        if (!pass.Declare(ctx, renderData, resources) || (!resources.ColorTarget && !resources.OwnTargets))
             return;
 
         // Targets that are drawn into together have to be the same size. They can differ for a frame
         // while a window is being resized, and the pass is left out of that frame.
-        if (resources.DepthTarget)
+        if (resources.ColorTarget && resources.DepthTarget)
         {
             const nvrhi::TextureDesc& color = resources.ColorTarget->getDesc();
             const nvrhi::TextureDesc& depth = resources.DepthTarget->getDesc();
@@ -97,7 +98,8 @@ namespace Lynx
         //    the pass needs, and they are left in those layouts, so its bookkeeping stays right.
         for (uint32_t index = 0; index < resources.SampledCount; ++index)
             ctx.CommandList->setTextureState(resources.Sampled[index], nvrhi::AllSubresources, nvrhi::ResourceStates::ShaderResource);
-        ctx.CommandList->setTextureState(resources.ColorTarget, nvrhi::AllSubresources, nvrhi::ResourceStates::RenderTarget);
+        if (resources.ColorTarget)
+            ctx.CommandList->setTextureState(resources.ColorTarget, nvrhi::AllSubresources, nvrhi::ResourceStates::RenderTarget);
         if (resources.DepthTarget)
             ctx.CommandList->setTextureState(resources.DepthTarget, nvrhi::AllSubresources, nvrhi::ResourceStates::DepthWrite);
         ctx.CommandList->commitBarriers();
@@ -113,39 +115,24 @@ namespace Lynx
         // once rendering has begun, so this is the last moment for them.
         ctx.Uploads->Flush(commands);
 
-        const nvrhi::TextureDesc& targetDesc= resources.ColorTarget->getDesc();
-        const vk::Extent2D extent(targetDesc.width, targetDesc.height);
-        const auto width = static_cast<float>(extent.width);
-        const auto height = static_cast<float>(extent.height);
-
-        vk::RenderingAttachmentInfo colorAttachment;
-        colorAttachment.imageView = NativeView(resources.ColorTarget);
-        colorAttachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-        colorAttachment.loadOp = resources.OverwritesTarget ? vk::AttachmentLoadOp::eDontCare : vk::AttachmentLoadOp::eLoad;
-        colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-
-        // A depth buffer is always kept: a pass that declares one draws on top of what others drew.
-        vk::RenderingAttachmentInfo depthAttachment;
-        if (resources.DepthTarget)
-        {
-            depthAttachment.imageView = NativeView(resources.DepthTarget);
-            depthAttachment.imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-            depthAttachment.loadOp = vk::AttachmentLoadOp::eLoad;
-            depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-        }
-
-        vk::RenderingInfo renderingInfo({}, vk::Rect2D({ 0, 0 }, extent), 1, 0, colorAttachment);
-        if (resources.DepthTarget)
-            renderingInfo.pDepthAttachment = &depthAttachment;
-        commands.beginRendering(renderingInfo);
-
-        // NVRHI draws with the viewport turned upside down, so that +Y is up as in Direct3D. The shaders are written
-        // for that, so passes on Vulkan get the same viewport until the last NVRHI pass is gone.
-        commands.setViewport(0, vk::Viewport(0.0f, height, width, -height, 0.0f, 1.0f));
-        commands.setScissor(0, vk::Rect2D({ 0, 0 }, extent));
-
         // The NVRHI pass before this one may have bound something else in its place.
         ctx.Shared->Bind(commands);
+
+        if (resources.OwnTargets)
+        {
+            pass.Execute(commands, renderData);
+            return;
+        }
+
+        const nvrhi::TextureDesc& targetDesc = resources.ColorTarget->getDesc();
+
+        RenderingTargets targets;
+        targets.Color = NativeView(resources.ColorTarget);
+        if (resources.DepthTarget)
+            targets.Depth = NativeView(resources.DepthTarget);
+        targets.Extent = vk::Extent2D(targetDesc.width, targetDesc.height);
+        targets.ColorLoad = resources.OverwritesTarget ? vk::AttachmentLoadOp::eDontCare : vk::AttachmentLoadOp::eLoad;
+        BeginRendering(commands, targets);
 
         pass.Execute(commands, renderData);
 

@@ -28,6 +28,11 @@ namespace Lynx
         // The texture the pass draws into.
         nvrhi::ITexture* ColorTarget = nullptr;
 
+        // Set instead of a colour target by a pass that draws into pictures of its own, in several steps.
+        // Such a pass begins and ends rendering itself (see Vulkan/Rendering.h) and looks after the layouts
+        // of its own pictures. Everything else is still done for it.
+        bool OwnTargets = false;
+
         // The depth buffer the pass tests against, and writes if its pipeline says so. Null for none.
         nvrhi::ITexture* DepthTarget = nullptr;
 
@@ -51,7 +56,7 @@ namespace Lynx
         virtual bool Declare(const RenderContext& ctx, const RenderData& renderData, PassResources& resources) = 0;
 
         // Called with rendering into the declared targets already begun, viewport and scissor set to cover them,
-        // and the shared bindings bound.
+        // and the shared bindings bound. A pass with targets of its own is called before rendering has begun.
         // What the pass queued for upload in Declare has arrived by then.
         virtual void Execute(vk::CommandBuffer commands, RenderData& renderData) = 0;
     };

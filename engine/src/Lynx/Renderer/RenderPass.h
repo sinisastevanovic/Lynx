@@ -111,6 +111,18 @@ namespace Lynx
         uint32_t Count;
     };
 
+    struct BloomSettings
+    {
+        // Parts of the picture brighter than this glow. The knee makes the cut soft.
+        float Threshold = 1.0f;
+        float Knee = 0.1f;
+        float Radius = 1.0f;
+
+        // How much of the glow is added to the picture.
+        float Intensity = 0.04f;
+        bool Enabled = true;
+    };
+
     struct RenderData
     {
         std::vector<RenderCommand> TransparentQueue;
@@ -144,10 +156,14 @@ namespace Lynx
         nvrhi::FramebufferHandle OutputFramebuffer;
 
         nvrhi::TextureHandle SceneColorInput;
-        nvrhi::TextureHandle BloomTexture;
 
+        // Where the texture table has the scene's HDR picture, and the bloom to add to it.
+        // The bloom is a black picture unless the bloom pass has run in this frame.
+        uint32_t SceneColorIndex = 0;
+        uint32_t BloomTextureIndex = 0;
+
+        BloomSettings Bloom;
         bool ShowGrid = true;
-        float BloomIntensity;
         bool FXAAEnabled; 
 
         uint32_t DrawCalls = 0;

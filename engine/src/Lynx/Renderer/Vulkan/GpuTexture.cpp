@@ -58,6 +58,17 @@ namespace Lynx
         viewInfo.format = desc.Format;
         viewInfo.subresourceRange = vk::ImageSubresourceRange(AspectOf(desc.Format), 0, desc.MipLevels, 0, 1);
         m_View = context.Device().createImageView(viewInfo);
+
+        if (desc.ViewPerMip)
+        {
+            m_MipViews.reserve(desc.MipLevels);
+            for (uint32_t mip = 0; mip < desc.MipLevels; ++mip)
+            {
+                viewInfo.subresourceRange.baseMipLevel = mip;
+                viewInfo.subresourceRange.levelCount = 1;
+                m_MipViews.push_back(context.Device().createImageView(viewInfo));
+            }
+        }
     }
 
     GpuTexture::~GpuTexture()
@@ -69,6 +80,7 @@ namespace Lynx
         : m_Context(std::exchange(other.m_Context, nullptr)),
           m_Image(std::exchange(other.m_Image, nullptr)),
           m_View(std::exchange(other.m_View, nullptr)),
+          m_MipViews(std::move(other.m_MipViews)),
           m_Allocation(std::exchange(other.m_Allocation, nullptr)),
           m_Desc(std::exchange(other.m_Desc, {}))
     {
@@ -82,6 +94,7 @@ namespace Lynx
             m_Context = std::exchange(other.m_Context, nullptr);
             m_Image = std::exchange(other.m_Image, nullptr);
             m_View = std::exchange(other.m_View, nullptr);
+            m_MipViews = std::move(other.m_MipViews);
             m_Allocation = std::exchange(other.m_Allocation, nullptr);
             m_Desc = std::exchange(other.m_Desc, {});
         }
@@ -94,14 +107,17 @@ namespace Lynx
             return;
 
         // A frame that is still on the GPU may be drawing into the texture or reading it.
-        m_Context->Deletions().Retire([device = m_Context->Device(), allocator = m_Context->Allocator(), image = static_cast<VkImage>(m_Image), view = m_View, allocation = m_Allocation]()
+        m_Context->Deletions().Retire([device = m_Context->Device(), allocator = m_Context->Allocator(), image = static_cast<VkImage>(m_Image), view = m_View, mipViews = std::move(m_MipViews), allocation = m_Allocation]()
         {
             device.destroyImageView(view);
+            for (const vk::ImageView mipView : mipViews)
+                device.destroyImageView(mipView);
             vmaDestroyImage(allocator, image, allocation);
         });
 
         m_Image = nullptr;
         m_View = nullptr;
+        m_MipViews.clear();
         m_Allocation = nullptr;
         m_Desc = {};
     }

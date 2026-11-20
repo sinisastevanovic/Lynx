@@ -1,63 +1,30 @@
 #pragma once
-#include "Lynx/Renderer/RenderPass.h"
+#include "Lynx/Renderer/Graph/RenderGraph.h"
 
 namespace Lynx
 {
-    struct BloomPushData
-    {
-        glm::vec4 Params; // x: Threshold, y: Knee, z: Radius, w: Lod
-        int Mode;
-        float Padding[3];
-    };
-
-    struct BloomSettings
-    {
-        float Threshold = 1.0f;
-        float Knee = 0.1f;
-        float Radius = 1.0f;
-        float Intensity = 0.04f;
-        bool Enabled = true;
-    };
-    
-    class BloomPass : public RenderPass
+    // Makes the glow around bright parts of the scene. The bright parts are copied into a picture of half
+    // the size, which is shrunk step by step and then enlarged again, each size added to the one above.
+    // The composite pass adds the result to the scene.
+    class BloomPass : public VulkanPass
     {
     public:
         BloomPass();
-        virtual ~BloomPass() = default;
+        ~BloomPass() override;
 
-        virtual void Init(RenderContext& ctx) override;
-        virtual void Execute(RenderContext& ctx, RenderData& renderData) override;
-
-        void EnsureResources(RenderContext& ctx, uint32_t width, uint32_t height);
-
-        nvrhi::TextureHandle GetResult() const { return m_BloomTexture; }
-
-        BloomSettings& GetSettings() { return m_Settings; }
-        const BloomSettings& GetSettings() const { return m_Settings; }
+        void Init(RenderContext& ctx) override;
+        bool Declare(const RenderContext& ctx, const RenderData& renderData, PassResources& resources) override;
+        void Execute(vk::CommandBuffer commands, RenderData& renderData) override;
 
     private:
-        void CreatePipeline(RenderContext& ctx, std::shared_ptr<Shader> shader);
+        void CreatePipelines(const Shader& shader);
+        void EnsureChain(uint32_t width, uint32_t height);
 
     private:
-        nvrhi::GraphicsPipelineHandle m_Pipeline;
-        nvrhi::BindingLayoutHandle m_BindingLayout;
-        nvrhi::SamplerHandle m_Sampler;
-
-        nvrhi::TextureHandle m_CachedInput;
-        nvrhi::TextureHandle m_BloomTexture;
-
-        nvrhi::BindingSetHandle m_InputBindingSet;
-        std::vector<nvrhi::BindingSetHandle> m_BindingSets;
-        std::vector<nvrhi::FramebufferHandle> m_Framebuffers;
-
-        BloomSettings m_Settings;
-
-        uint32_t m_Width = 0;
-        uint32_t m_Height = 0;
-        const uint32_t MAX_MIPS = 6;
-        uint32_t m_MipCount = 0;
+        struct VulkanObjects;
+        std::unique_ptr<VulkanObjects> m_Vulkan;
 
         PipelineState m_PipelineState;
+        uint32_t m_LinearSampler = 0;
     };
-
 }

@@ -91,21 +91,7 @@ namespace Lynx
         m_Vulkan->Pipeline = pipeline;
     }
 
-    void CompositePass::UseInput(Input& input, nvrhi::ITexture* texture)
-    {
-        if (input.Texture == texture)
-            return;
-
-        // The inputs change when the picture is resized. The old one keeps its place in the table
-        // until the frames that read it are done, and is kept alive by NVRHI for as long.
-        if (input.Texture)
-            m_Vulkan->Shared->ReleaseTexture(input.Index);
-
-        input.Texture = texture;
-        input.Index = m_Vulkan->Shared->AddTexture(Native<vk::ImageView>(texture->getNativeView(nvrhi::ObjectTypes::VK_ImageView)));
-    }
-
-    bool CompositePass::Declare(const RenderContext& ctx, const RenderData& renderData, PassResources& resources)
+    bool CompositePass::Declare(const RenderContext&, const RenderData& renderData, PassResources& resources)
     {
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
 
@@ -113,13 +99,8 @@ namespace Lynx
         if (!m_Vulkan->Pipeline)
             return false;
 
-        nvrhi::ITexture* sceneColor = renderData.SceneColorInput;
-        nvrhi::ITexture* bloom = renderData.BloomTexture ? renderData.BloomTexture.Get() : ctx.BlackTexture.Get();
-        UseInput(m_SceneColor, sceneColor);
-        UseInput(m_Bloom, bloom);
-
-        resources.Sample(sceneColor);
-        resources.Sample(bloom);
+        // The bloom needs no mention: the pass that made it left it ready for reading.
+        resources.Sample(renderData.SceneColorInput);
         resources.ColorTarget = renderData.OutputFramebuffer->getDesc().colorAttachments[0].texture;
 
         // The triangle covers every pixel.
@@ -132,10 +113,10 @@ namespace Lynx
         commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->Pipeline);
 
         CompositePushData push{};
-        push.BloomIntensity = renderData.BloomIntensity;
+        push.BloomIntensity = renderData.Bloom.Enabled ? renderData.Bloom.Intensity : 0.0f;
         push.FXAAEnabled = renderData.FXAAEnabled ? 1 : 0;
-        push.SceneTexture = m_SceneColor.Index;
-        push.BloomTexture = m_Bloom.Index;
+        push.SceneTexture = renderData.SceneColorIndex;
+        push.BloomTexture = renderData.BloomTextureIndex;
         push.LinearSampler = m_LinearSampler;
         m_Vulkan->Shared->Push(commands, push);
 
