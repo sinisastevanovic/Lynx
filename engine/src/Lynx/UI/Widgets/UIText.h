@@ -33,6 +33,7 @@ namespace Lynx
         void SetText(const std::string& text);
         const std::string& GetText() const { return m_Text; }
 
+        // A null font selects the default font.
         void SetFont(std::shared_ptr<Font> font);
         std::shared_ptr<Font> GetFont() const { return m_Font; }
 
@@ -71,6 +72,7 @@ namespace Lynx
         
     private:
         std::string m_Text = "New Text";
+        // Never null once the element is constructed: clearing the font falls back to the default font.
         std::shared_ptr<Font> m_Font;
         float m_FontSize = 24.0f;
         glm::vec4 m_Color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);

@@ -26,6 +26,9 @@ namespace Lynx
 
     void UIText::SetFont(std::shared_ptr<Font> font)
     {
+        if (!font)
+            font = Engine::Get().GetAssetManager().GetDefaultFont();
+
         if (m_Font != font)
         {
             m_Font = font;
@@ -179,6 +182,12 @@ namespace Lynx
         UpdateLines(targetWidth);
 
         // Calculate Desired Size (Bounding Box of wrapped text)
+        if (!m_Font)
+        {
+            m_DesiredSize = {0.0f, 0.0f};
+            return;
+        }
+
         float maxW = 0.0f;
         for (const auto& line : m_Lines) maxW = std::max(maxW, line.Width);
         float h = m_Lines.size() * m_Font->GetMetrics().LineHeight * m_FontSize;
@@ -277,16 +286,7 @@ namespace Lynx
 
             AssetHandle fontHandle = m_Font ? m_Font->GetHandle() : AssetHandle::Null();
             if (LXUI::DrawAssetReference("Font", fontHandle, {AssetType::Font}))
-            {
-                if (fontHandle)
-                {
-                    m_Font = Engine::Get().GetAssetManager().GetAsset<Font>(fontHandle);
-                }
-                else
-                {
-                    m_Font = nullptr;
-                }
-            }
+                SetFont(fontHandle ? Engine::Get().GetAssetManager().GetAsset<Font>(fontHandle) : nullptr);
 
             bool autoWrap = m_AutoWrap;
             if (LXUI::DrawCheckBox("Auto Wrap", autoWrap))
@@ -324,10 +324,7 @@ namespace Lynx
         if (json.contains("Font"))
         {
             AssetHandle fontHandle = json["Font"].get<AssetHandle>();
-            if (fontHandle)
-                m_Font = Engine::Get().GetAssetManager().GetAsset<Font>(fontHandle);
-            else
-                m_Font = nullptr;
+            SetFont(fontHandle ? Engine::Get().GetAssetManager().GetAsset<Font>(fontHandle) : nullptr);
         }
         if (json.contains("AutoWrap")) m_AutoWrap = json["AutoWrap"];
 

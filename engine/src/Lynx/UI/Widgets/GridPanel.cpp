@@ -128,8 +128,8 @@ namespace Lynx
     void GridPanel::Deserialize(const nlohmann::json& json)
     {
         UIElement::Deserialize(json);
-        m_CellSize = json["CellSize"].get<glm::vec2>();
-        m_Spacing = json["Spacing"].get<glm::vec2>();
-        m_ConstraintCount = json["Constraint"];
+        m_CellSize = json.value("CellSize", m_CellSize);
+        m_Spacing = json.value("Spacing", m_Spacing);
+        m_ConstraintCount = json.value("Constraint", m_ConstraintCount);
     }
 }

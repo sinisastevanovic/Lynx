@@ -94,10 +94,10 @@ namespace Lynx
     void UIButton::Deserialize(const nlohmann::json& inJson)
     {
         UIImage::Deserialize(inJson);
-        m_NormalColor = inJson["BtnNormal"].get<glm::vec4>();
-        m_HoveredColor = inJson["BtnHovered"].get<glm::vec4>();
-        m_PressedColor = inJson["BtnPressed"].get<glm::vec4>();
-        m_DisabledColor = inJson["BtnDisabled"].get<glm::vec4>();
+        m_NormalColor = inJson.value("BtnNormal", m_NormalColor);
+        m_HoveredColor = inJson.value("BtnHovered", m_HoveredColor);
+        m_PressedColor = inJson.value("BtnPressed", m_PressedColor);
+        m_DisabledColor = inJson.value("BtnDisabled", m_DisabledColor);
     }
 
     

@@ -69,8 +69,8 @@ namespace Lynx
             UISize explicitSize = child->GetSize();
             UISize desiredSize = child->GetDesiredSize();
             UISize effectiveSize = {
-                glm::abs(explicitSize.Width > 0.001f) ? explicitSize.Width : desiredSize.Width,
-                glm::abs(explicitSize.Height > 0.001f) ? explicitSize.Height : desiredSize.Height,
+                glm::abs(explicitSize.Width) > 0.001f ? explicitSize.Width : desiredSize.Width,
+                glm::abs(explicitSize.Height) > 0.001f ? explicitSize.Height : desiredSize.Height,
             };
             
             m_ContentSize.Width = std::max(m_ContentSize.Width, effectiveSize.Width);
@@ -179,8 +179,8 @@ namespace Lynx
     void UIScrollView::Deserialize(const nlohmann::json& json)
     {
         UIElement::Deserialize(json);
-        m_ScrollPosition = json["ScrollPosition"];
-        m_VScrollbarID = json["VerticalScrollbar"].get<UUID>();
+        m_ScrollPosition = json.value("ScrollPosition", m_ScrollPosition);
+        m_VScrollbarID = json.value("VerticalScrollbar", m_VScrollbarID);
     }
 
     void UIScrollView::UpdateScrollBarState()

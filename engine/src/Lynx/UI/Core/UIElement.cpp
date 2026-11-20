@@ -40,6 +40,7 @@ namespace Lynx
             m_Children.push_back(child);
         else
             m_Children.insert(m_Children.begin() + index, child);
+        MarkDirty();
     }
 
     void UIElement::RemoveChild(std::shared_ptr<UIElement> child)
@@ -224,8 +225,8 @@ namespace Lynx
             UISize explicitSize = child->GetSize();
             UISize desiredSize = child->GetDesiredSize();
             UISize effectiveSize = {
-                glm::abs(explicitSize.Width > 0.001f) ? explicitSize.Width : desiredSize.Width,
-                glm::abs(explicitSize.Height > 0.001f) ? explicitSize.Height : desiredSize.Height,
+                glm::abs(explicitSize.Width) > 0.001f ? explicitSize.Width : desiredSize.Width,
+                glm::abs(explicitSize.Height) > 0.001f ? explicitSize.Height : desiredSize.Height,
             };
 
             float right = child->GetOffset().X + effectiveSize.Width;
