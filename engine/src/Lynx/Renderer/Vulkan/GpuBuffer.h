@@ -43,6 +43,9 @@ namespace Lynx
         vk::Buffer Handle() const { return m_Buffer; }
         uint64_t Size() const { return m_Size; }
 
+        // The address shaders reach the buffer by, without it being bound. Zero for a CpuWritable buffer.
+        vk::DeviceAddress Address() const { return m_Address; }
+
         // Where the CPU can write. Null unless the buffer was created CpuWritable.
         void* Data() const { return m_Data; }
 
@@ -54,6 +57,7 @@ namespace Lynx
         vk::Buffer m_Buffer;
         VmaAllocation_T* m_Allocation = nullptr;
         uint64_t m_Size = 0;
+        vk::DeviceAddress m_Address = 0;
         void* m_Data = nullptr;
     };
 }

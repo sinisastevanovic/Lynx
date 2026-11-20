@@ -1,37 +1,27 @@
 #pragma once
-#include "Lynx/Renderer/BindingSetCache.h"
-#include "Lynx/Renderer/RenderPass.h"
+#include "Lynx/Renderer/Graph/RenderGraph.h"
 
 namespace Lynx
 {
-    class ParticlePass : public RenderPass
+    // Draws the frame's particles into the scene, one draw per material. The particles are hidden
+    // where the scene is in front of them, but do not hide each other.
+    class ParticlePass : public VulkanPass
     {
     public:
-        virtual ~ParticlePass() = default;
+        ParticlePass();
+        ~ParticlePass() override;
 
         void Init(RenderContext& ctx) override;
-        void Execute(RenderContext& ctx, RenderData& renderData) override;
+        bool Declare(const RenderContext& ctx, const RenderData& renderData, PassResources& resources) override;
+        void Execute(vk::CommandBuffer commands, RenderData& renderData) override;
 
     private:
-        void CreatePipelines(RenderContext& ctx, std::shared_ptr<Shader> shader);
-        void CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData);
-        nvrhi::BindingSetHandle GetMaterialBindingSet(RenderContext& ctx, Material* material);
+        void CreatePipelines(const Shader& shader);
 
     private:
-        nvrhi::BindingLayoutHandle m_GlobalBindingLayout;
-        nvrhi::BindingLayoutHandle m_MaterialBindingLayout;
-
-        nvrhi::BindingSetHandle m_GlobalBindingSet;
-        BindingSetCache<Material*> m_MaterialBindingSetCache;
-
-        nvrhi::GraphicsPipelineHandle m_PipelineAlpha;
-        nvrhi::GraphicsPipelineHandle m_PipelineAdditive;
-
-        nvrhi::BufferHandle m_QuadVertexBuffer;
-        nvrhi::BufferHandle m_QuadIndexBuffer;
-        nvrhi::BufferHandle m_CachedInstanceBuffer;
+        struct VulkanObjects;
+        std::unique_ptr<VulkanObjects> m_Vulkan;
 
         PipelineState m_PipelineState;
     };
 }
-

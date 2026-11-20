@@ -87,6 +87,9 @@ namespace Lynx
         
         if (m_TextureHandle)
         {
+            Renderer& renderer = Engine::Get().GetRenderer();
+            m_TableSlot = renderer.AddToTextureTable(m_TextureHandle);
+            m_SamplerIndex = renderer.SamplerIndex(m_Specification.SamplerSettings);
             LX_CORE_TRACE("Texture loaded successfully: {0} ({1}x{2})", m_FilePath, GetWidth(), GetHeight());
             IncrementVersion();
             return true;

@@ -4,6 +4,7 @@
 #include <nvrhi/nvrhi.h>
 
 #include "TextureSpecification.h"
+#include "Lynx/Renderer/TextureSlot.h"
 
 namespace Lynx
 {
@@ -20,6 +21,11 @@ namespace Lynx
 
         nvrhi::TextureHandle GetTextureHandle() const { return m_TextureHandle; }
 
+        // Where the renderer's texture and sampler tables have this texture and its sampler.
+        // Valid once the texture handle is.
+        uint32_t GetTableIndex() const { return m_TableSlot.Index(); }
+        uint32_t GetSamplerIndex() const { return m_SamplerIndex; }
+
         uint32_t GetWidth() const { return m_Specification.Width; }
         uint32_t GetHeight() const { return m_Specification.Height; }
 
@@ -34,6 +40,8 @@ namespace Lynx
     private:
         TextureSpecification m_Specification;
         nvrhi::TextureHandle m_TextureHandle;
+        TextureSlot m_TableSlot;
+        uint32_t m_SamplerIndex = 0;
 
         unsigned char* m_PixelData = nullptr;
     };

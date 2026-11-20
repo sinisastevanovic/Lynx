@@ -1,216 +1,145 @@
 #include "ParticlePass.h"
 
-#include "Lynx/Engine.h"
+#include "Lynx/Asset/Material.h"
 #include "Lynx/Asset/Shader.h"
-#include "Lynx/Renderer/SamplerCache.h"
+#include "Lynx/Log.h"
+#include "Lynx/Renderer/GraphicsContext.h"
+#include "Lynx/Renderer/RenderFormats.h"
+#include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
+#include "Lynx/Renderer/Vulkan/SharedBindings.h"
 
 namespace Lynx
 {
-    struct ParticleVertex
+    namespace
     {
-        glm::vec2 Pos;
-        glm::vec2 UV;
+        // Has to match ParticleConstants in Particle.slang.
+        struct ParticlePushData
+        {
+            glm::vec4 AlbedoColor;
+            glm::vec2 Tiling;
+            float EmissiveStrength;
+            uint32_t AlbedoTexture;
+            uint64_t Particles;
+            uint32_t AlbedoSampler;
+            uint32_t Padding;
+        };
+    }
+
+    struct ParticlePass::VulkanObjects
+    {
+        GraphicsContext* Context = nullptr;
+        SharedBindings* Shared = nullptr;
+        vk::Device Device;
+
+        // The same shader twice: one covers what is behind a particle by its alpha, the other adds to it.
+        vk::Pipeline AlphaPipeline;
+        vk::Pipeline AdditivePipeline;
+
+        // The renderer waits for the GPU before it destroys its passes, so nothing here is still in use.
+        ~VulkanObjects()
+        {
+            if (!Device)
+                return;
+
+            Device.destroyPipeline(AlphaPipeline);
+            Device.destroyPipeline(AdditivePipeline);
+        }
     };
 
-    struct ParticlePushData
-    {
-        glm::vec4 AlbedoColor;
-        glm::vec2 Tiling;
-        float EmissiveStrength;
-        float Padding;
-    };
-    
+    ParticlePass::ParticlePass() = default;
+    ParticlePass::~ParticlePass() = default;
+
     void ParticlePass::Init(RenderContext& ctx)
     {
-        ParticleVertex vertices[] = {
-            { {-0.5f, -0.5f}, {0.0f, 1.0f} },
-            { { 0.5f, -0.5f}, {1.0f, 1.0f} },
-            { { 0.5f,  0.5f}, {1.0f, 0.0f} },
-            { {-0.5f,  0.5f}, {0.0f, 0.0f} }
-        };
-        uint32_t indices[] = { 0, 1, 2, 2, 3, 0 };
+        m_Vulkan = std::make_unique<VulkanObjects>();
+        m_Vulkan->Context = ctx.Graphics;
+        m_Vulkan->Shared = ctx.Shared;
+        m_Vulkan->Device = ctx.Graphics->Device();
 
-        auto vbDesc = nvrhi::BufferDesc()
-            .setByteSize(sizeof(vertices))
-            .setIsVertexBuffer(true)
-            .setDebugName("ParticleQuadVB")
-            .setInitialState(nvrhi::ResourceStates::VertexBuffer)
-            .setKeepInitialState(true);
-        m_QuadVertexBuffer = ctx.Device->createBuffer(vbDesc);
-
-        auto ibDesc = nvrhi::BufferDesc()
-            .setByteSize(sizeof(indices))
-            .setIsIndexBuffer(true)
-            .setDebugName("ParticleQuadIB")
-            .setInitialState(nvrhi::ResourceStates::IndexBuffer)
-            .setKeepInitialState(true);
-        m_QuadIndexBuffer = ctx.Device->createBuffer(ibDesc);
-
-        auto cmd = ctx.Device->createCommandList();
-        cmd->open();
-        cmd->writeBuffer(m_QuadVertexBuffer, vertices, sizeof(vertices));
-        cmd->writeBuffer(m_QuadIndexBuffer, indices, sizeof(indices));
-        cmd->close();
-        ctx.Device->executeCommandList(cmd);
-
-        auto globalLayoutDesc = nvrhi::BindingLayoutDesc()
-            .setVisibility(nvrhi::ShaderType::All)
-            .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
-            .addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(1))
-            .addItem(nvrhi::BindingLayoutItem::PushConstants(1, sizeof(ParticlePushData)))
-            .setBindingOffsets({ 0, 0, 0, 0 })
-            .setRegisterSpaceAndDescriptorSet(0);
-        m_GlobalBindingLayout = ctx.Device->createBindingLayout(globalLayoutDesc);
-
-        auto materialLayoutDesc = nvrhi::BindingLayoutDesc()
-            .setVisibility(nvrhi::ShaderType::Pixel)
-            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(0))
-            .addItem(nvrhi::BindingLayoutItem::Sampler(1))
-            .setBindingOffsets({ 0, 0, 0, 0 })
-            .setRegisterSpaceAndDescriptorSet(1);
-        m_MaterialBindingLayout = ctx.Device->createBindingLayout(materialLayoutDesc);
-
-        m_PipelineState.SetShader("Shaders/Particle.glsl");
-        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
-        {
-            CreatePipelines(ctx, shader);
-        });
+        m_PipelineState.SetShader("Shaders/Particle.slang");
+        m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipelines(*shader); });
     }
 
-    void ParticlePass::CreatePipelines(RenderContext& ctx, std::shared_ptr<Shader> shader)
+    void ParticlePass::CreatePipelines(const Shader& shader)
     {
-        auto pipeDesc = nvrhi::GraphicsPipelineDesc()
-            .addBindingLayout(m_GlobalBindingLayout)
-            .addBindingLayout(m_MaterialBindingLayout)
-            .setVertexShader(shader->GetVertexShader())
-            .setPixelShader(shader->GetPixelShader())
-            .setPrimType(nvrhi::PrimitiveType::TriangleList);
-
-        nvrhi::VertexAttributeDesc attributes[] = {
-            nvrhi::VertexAttributeDesc()
-                .setName("POS")
-                .setFormat(nvrhi::Format::RG32_FLOAT)
-                .setBufferIndex(0)
-                .setOffset(0)
-                .setElementStride(sizeof(ParticleVertex)),
-            nvrhi::VertexAttributeDesc()
-                .setName("UV")
-                .setFormat(nvrhi::Format::RG32_FLOAT)
-                .setBufferIndex(0)
-                .setOffset(sizeof(glm::vec2))
-                .setElementStride(sizeof(ParticleVertex))
-        };
-        pipeDesc.inputLayout = ctx.Device->createInputLayout(attributes, 2, shader->GetVertexShader());
-
-        // Common State
-        pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::None; // Particles represent 2D sprites, usually seen from any side, but mostly front.
-        pipeDesc.renderState.depthStencilState.depthWriteEnable = false; // Soft particles
-        pipeDesc.renderState.depthStencilState.depthTestEnable = true;
-        DisableEntityIdWrites(pipeDesc, ctx.PresentationFramebufferInfo);
-
-        // Alpha Blend Pipeline
-        pipeDesc.renderState.blendState.targets[0]
-            .setBlendEnable(true)
-            .setSrcBlend(nvrhi::BlendFactor::SrcAlpha)
-            .setDestBlend(nvrhi::BlendFactor::InvSrcAlpha);
-        m_PipelineAlpha = ctx.Device->createGraphicsPipeline(pipeDesc, ctx.PresentationFramebufferInfo);
-
-        // Additive Blend Pipeline
-        pipeDesc.renderState.blendState.targets[0]
-            .setBlendEnable(true)
-            .setSrcBlend(nvrhi::BlendFactor::SrcAlpha)
-            .setDestBlend(nvrhi::BlendFactor::One);
-        m_PipelineAdditive = ctx.Device->createGraphicsPipeline(pipeDesc, ctx.PresentationFramebufferInfo);
-    }
-
-    void ParticlePass::CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData)
-    {
-        if (m_GlobalBindingSet && m_CachedInstanceBuffer == renderData.ParticleInstanceBuffer)
+        const std::shared_ptr<const ShaderProgram> program = shader.GetProgram();
+        if (!program)
             return;
 
-        m_CachedInstanceBuffer = renderData.ParticleInstanceBuffer;
-        auto desc = nvrhi::BindingSetDesc()
-            .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer))
-            .addItem(nvrhi::BindingSetItem::PushConstants(1, sizeof(ParticlePushData)))
-            .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(1, renderData.ParticleInstanceBuffer));
+        // The pass and its shader are written together. If they stop agreeing, the pipelines that work are kept.
+        if (!m_Vulkan->Shared->Supports(*program, "Particle.slang"))
+            return;
+        if (program->PushConstantSize != sizeof(ParticlePushData))
+        {
+            LX_CORE_ERROR("Particle.slang no longer has the constants the particle pass expects.");
+            return;
+        }
 
-        m_GlobalBindingSet = ctx.Device->createBindingSet(desc, m_GlobalBindingLayout);
+        // The vertex shader makes the square from the vertex index alone, and reads the particle from a buffer.
+        GraphicsPipelineDesc desc;
+        desc.Program = program.get();
+        desc.Layout = m_Vulkan->Shared->PipelineLayout();
+        desc.ColorFormat = RenderFormats::SceneColor;
+        desc.DepthFormat = RenderFormats::SceneDepth;
+        // Tested against the scene, but not written: particles are see-through and must not hide each other.
+        desc.DepthTest = true;
+        desc.DepthWrite = false;
+
+        desc.Blend = BlendMode::Alpha;
+        const vk::Pipeline alphaPipeline = CreateGraphicsPipeline(m_Vulkan->Device, desc);
+
+        desc.Blend = BlendMode::Additive;
+        const vk::Pipeline additivePipeline = CreateGraphicsPipeline(m_Vulkan->Device, desc);
+
+        // A reloaded shader replaces pipelines that frames still on the GPU may be using.
+        m_Vulkan->Context->Deletions().Retire([device = m_Vulkan->Device, oldAlpha = m_Vulkan->AlphaPipeline, oldAdditive = m_Vulkan->AdditivePipeline]()
+        {
+            device.destroyPipeline(oldAlpha);
+            device.destroyPipeline(oldAdditive);
+        });
+        m_Vulkan->AlphaPipeline = alphaPipeline;
+        m_Vulkan->AdditivePipeline = additivePipeline;
     }
 
-    void ParticlePass::Execute(RenderContext& ctx, RenderData& renderData)
+    bool ParticlePass::Declare(const RenderContext&, const RenderData& renderData, PassResources& resources)
     {
-        if (renderData.ParticleQueue.empty())
-            return;
+        m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipelines(*shader); });
 
-        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        if (renderData.ParticleQueue.empty() || !m_Vulkan->AlphaPipeline || !m_Vulkan->AdditivePipeline)
+            return false;
+
+        // The particles go into the scene's picture. The entity ID picture next to it is left alone.
+        const nvrhi::FramebufferDesc& sceneTargets = renderData.TargetFramebuffer->getDesc();
+        resources.ColorTarget = sceneTargets.colorAttachments[0].texture;
+        resources.DepthTarget = sceneTargets.depthAttachment.texture;
+        return true;
+    }
+
+    void ParticlePass::Execute(vk::CommandBuffer commands, RenderData& renderData)
+    {
+        vk::Pipeline boundPipeline;
+
+        for (const ParticleBatch& batch : renderData.ParticleQueue)
         {
-            CreatePipelines(ctx, shader);
-        });
+            const vk::Pipeline pipeline = batch.Material->Mode == AlphaMode::Additive ? m_Vulkan->AdditivePipeline : m_Vulkan->AlphaPipeline;
+            if (pipeline != boundPipeline)
+            {
+                commands.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+                boundPipeline = pipeline;
+            }
 
-        CreateGlobalBindingSet(ctx, renderData);
-
-        for (const auto& batch : renderData.ParticleQueue)
-        {
-            auto pipeline = (batch.Material->Mode == AlphaMode::Additive) ? m_PipelineAdditive : m_PipelineAlpha;
-
-            auto state = nvrhi::GraphicsState()
-                .setPipeline(pipeline)
-                .setFramebuffer(renderData.TargetFramebuffer)
-                .addVertexBuffer(nvrhi::VertexBufferBinding(m_QuadVertexBuffer, 0, 0))
-                .setIndexBuffer(nvrhi::IndexBufferBinding(m_QuadIndexBuffer, nvrhi::Format::R32_UINT))
-                .addBindingSet(m_GlobalBindingSet)
-                .addBindingSet(GetMaterialBindingSet(ctx, batch.Material));
-
-            const auto& fbInfo = renderData.TargetFramebuffer->getFramebufferInfo();
-            state.viewport.addViewport(nvrhi::Viewport(fbInfo.width, fbInfo.height));
-            state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
-
-            ctx.CommandList->setGraphicsState(state);
-
-            ParticlePushData push;
+            ParticlePushData push{};
             push.AlbedoColor = batch.Material->AlbedoColor;
             push.Tiling = batch.Material->Tiling;
             push.EmissiveStrength = batch.Material->EmissiveStrength;
-            ctx.CommandList->setPushConstants(&push, sizeof(ParticlePushData));
-            
-            ctx.CommandList->drawIndexed(nvrhi::DrawArguments()
-                .setVertexCount(6)
-                .setInstanceCount(batch.Count)
-                .setStartInstanceLocation(batch.StartOffset));
+            push.AlbedoTexture = batch.AlbedoTexture;
+            push.AlbedoSampler = batch.AlbedoSampler;
+            // The shader counts particles from the first one of this draw.
+            push.Particles = renderData.ParticleInstanceAddress + batch.StartOffset * sizeof(ParticleInstanceData);
+            m_Vulkan->Shared->Push(commands, push);
 
+            commands.draw(6, batch.Count, 0, 0);
             renderData.DrawCalls++;
         }
-    }
-
-    nvrhi::BindingSetHandle ParticlePass::GetMaterialBindingSet(RenderContext& ctx, Material* material)
-    {
-        uint32_t version = material ? material->GetVersion() : 0;
-
-        return m_MaterialBindingSetCache.Get(material, version, [&]() -> nvrhi::BindingSetHandle
-        {
-            nvrhi::TextureHandle albedo = ctx.WhiteTexture;
-            SamplerSettings samplerSettings;
-
-            if (material)
-            {
-                auto& assetManager = Engine::Get().GetAssetManager();
-                if (material->AlbedoTexture)
-                {
-                    if (auto tex = assetManager.GetAsset<Texture>(material->AlbedoTexture))
-                    {
-                        if (auto handle = tex->GetTextureHandle())
-                        {
-                            albedo = handle;
-                            samplerSettings = tex->GetSamplerSettings();
-                        }
-                    }
-                }
-            }
-            auto desc = nvrhi::BindingSetDesc()
-                .addItem(nvrhi::BindingSetItem::Texture_SRV(0, albedo))
-                .addItem(nvrhi::BindingSetItem::Sampler(1, SamplerCache::Get()->GetSampler(samplerSettings)));
-
-            return ctx.Device->createBindingSet(desc, m_MaterialBindingLayout);
-        });
     }
 }

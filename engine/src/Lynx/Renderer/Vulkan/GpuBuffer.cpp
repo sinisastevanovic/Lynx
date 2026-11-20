@@ -39,6 +39,8 @@ namespace Lynx
 
         m_Buffer = buffer;
         m_Data = allocated.pMappedData;
+        if (!desc.CpuWritable)
+            m_Address = context.Device().getBufferAddress(vk::BufferDeviceAddressInfo(m_Buffer));
         vmaSetAllocationName(context.Allocator(), m_Allocation, desc.Name);
     }
 
@@ -52,6 +54,7 @@ namespace Lynx
           m_Buffer(std::exchange(other.m_Buffer, nullptr)),
           m_Allocation(std::exchange(other.m_Allocation, nullptr)),
           m_Size(std::exchange(other.m_Size, 0)),
+          m_Address(std::exchange(other.m_Address, 0)),
           m_Data(std::exchange(other.m_Data, nullptr))
     {
     }
@@ -65,6 +68,7 @@ namespace Lynx
             m_Buffer = std::exchange(other.m_Buffer, nullptr);
             m_Allocation = std::exchange(other.m_Allocation, nullptr);
             m_Size = std::exchange(other.m_Size, 0);
+            m_Address = std::exchange(other.m_Address, 0);
             m_Data = std::exchange(other.m_Data, nullptr);
         }
         return *this;
@@ -85,5 +89,6 @@ namespace Lynx
         m_Allocation = nullptr;
         m_Data = nullptr;
         m_Size = 0;
+        m_Address = 0;
     }
 }

@@ -109,6 +109,10 @@ namespace Lynx
         Material* Material;
         uint32_t StartOffset;
         uint32_t Count;
+
+        // Where the texture and sampler tables have the material's albedo texture.
+        uint32_t AlbedoTexture;
+        uint32_t AlbedoSampler;
     };
 
     struct BloomSettings
@@ -130,7 +134,9 @@ namespace Lynx
         nvrhi::BufferHandle InstanceBuffer;
 
         std::vector<ParticleBatch> ParticleQueue;
-        nvrhi::BufferHandle ParticleInstanceBuffer;
+
+        // The address shaders read the frame's particles from, one ParticleInstanceData each.
+        uint64_t ParticleInstanceAddress = 0;
 
         // Views into the extracted scene. Valid only while it is being drawn.
         std::span<const DebugLine> DebugLines;

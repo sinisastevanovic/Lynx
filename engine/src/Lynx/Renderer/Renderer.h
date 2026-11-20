@@ -21,6 +21,7 @@ struct GLFWwindow;
 
 namespace Lynx
 {
+    class AssetManager;
     class FrameProfiler;
     class GraphicsContext;
     class RenderGraph;
@@ -57,7 +58,7 @@ namespace Lynx
             float FrameTime = 0.0f;
         };
         
-        Renderer(GLFWwindow* window, FrameProfiler& profiler, bool initIDTarget = false);
+        Renderer(GLFWwindow* window, FrameProfiler& profiler, AssetManager& assets, bool initIDTarget = false);
         ~Renderer();
 
         void Init();
@@ -122,6 +123,12 @@ namespace Lynx
 
         glm::mat4 GetLightViewProjMatrix() const { return m_CurrentFrameData.LightViewProj; }
         glm::mat4 GetCameraViewProjMatrix() const { return m_CurrentFrameData.ViewProjection; }
+
+        // Puts a texture into the table that shaders read from. The slot keeps the texture alive.
+        TextureSlot AddToTextureTable(nvrhi::TextureHandle texture);
+
+        // The index of the sampler with these settings in the sampler table.
+        uint32_t SamplerIndex(const SamplerSettings& settings);
 
         BloomSettings& GetBloomSettings() { return m_BloomSettings; }
         const BloomSettings& GetBloomSettings() const { return m_BloomSettings; }
@@ -203,6 +210,9 @@ namespace Lynx
         RenderStats m_Stats;
 
         FrameProfiler& m_Profiler;
+
+        // For the textures of the materials that are drawn.
+        AssetManager& m_Assets;
         std::chrono::steady_clock::time_point m_SubmitStart;
 
         struct PendingScreenshot

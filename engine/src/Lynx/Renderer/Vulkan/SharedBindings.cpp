@@ -79,11 +79,11 @@ namespace Lynx
         return index;
     }
 
-    void SharedBindings::ReleaseTexture(uint32_t index)
+    void SharedBindings::ReleaseTexture(uint32_t index, std::function<void()> releaseOwner)
     {
         // A frame on the GPU may still sample through the index. Handing it out again right away
         // would show that frame the next texture.
-        m_Context.Deletions().Retire([freeTextures = m_FreeTextures, index]() { freeTextures->push_back(index); });
+        m_Context.Deletions().Retire([freeTextures = m_FreeTextures, index, releaseOwner = std::move(releaseOwner)]() { freeTextures->push_back(index); });
     }
 
     uint32_t SharedBindings::SamplerIndex(vk::Sampler sampler)

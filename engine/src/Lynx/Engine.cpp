@@ -53,7 +53,7 @@ namespace Lynx
         
         m_EditorCamera = EditorCamera(45.0f, (float)m_Window->GetWidth() / (float)m_Window->GetHeight(), 0.1f, 1000.0f);
 
-        m_Renderer = std::make_unique<Renderer>(m_Window->GetNativeWindow(), m_Profiler, editorMode);
+        m_Renderer = std::make_unique<Renderer>(m_Window->GetNativeWindow(), m_Profiler, *m_AssetManager, editorMode);
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;

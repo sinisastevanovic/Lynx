@@ -156,11 +156,14 @@ namespace Lynx
     {
         m_Device.waitIdle();
 
+        // Some retired objects hold NVRHI textures, which have to go before NVRHI does.
+        m_Deletions.Flush();
+
         m_NvrhiDevice->runGarbageCollection();
         m_NvrhiDevice = nullptr;
         m_NvrhiVulkanDevice = nullptr;
 
-        // The GPU is idle, so nothing that was retired is still in use.
+        // Whatever NVRHI retired while it was destroyed. The GPU is idle, so nothing of it is still in use.
         m_Deletions.Flush();
         vmaDestroyAllocator(m_Allocator);
 

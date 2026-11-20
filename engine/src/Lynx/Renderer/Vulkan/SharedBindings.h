@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string_view>
 #include <vector>
@@ -46,7 +47,9 @@ namespace Lynx
         uint32_t AddTexture(vk::ImageView view);
 
         // Gives an index back. It is handed out again only after the frames that may still use it are done.
-        void ReleaseTexture(uint32_t index);
+        // What "releaseOwner" holds is let go at the same moment: pass whatever keeps the texture alive,
+        // unless the texture already outlives those frames by itself.
+        void ReleaseTexture(uint32_t index, std::function<void()> releaseOwner = {});
 
         // The index of a sampler, which is added to the table on first use. Samplers are never removed.
         uint32_t SamplerIndex(vk::Sampler sampler);

@@ -23,6 +23,7 @@
 #include "Lynx/Profiling/FrameProfiler.h"
 #include "Passes/DebugPass.h"
 #include "Passes/ForwardPass.h"
+#include "Lynx/Asset/AssetManager.h"
 #include "Passes/BloomPass.h"
 #include "Passes/GridPass.h"
 #include "RenderFormats.h"
@@ -124,6 +125,7 @@ namespace Lynx
         // Where the texture table has the scene's HDR picture and the black default texture.
         std::optional<uint32_t> SceneColorIndex;
         uint32_t BlackTextureIndex = 0;
+        uint32_t WhiteTextureIndex = 0;
 
         // Rewritten every frame with one entry per drawn instance. The NVRHI passes read it through
         // the wrapper, which is a second handle to the same Vulkan buffer.
@@ -173,8 +175,8 @@ namespace Lynx
         GpuTexture SceneEntityIds;
     };
 
-    Renderer::Renderer(GLFWwindow* window, FrameProfiler& profiler, bool initIdTarget)
-        : m_ShouldCreateIDTarget(initIdTarget), m_Profiler(profiler)
+    Renderer::Renderer(GLFWwindow* window, FrameProfiler& profiler, AssetManager& assets, bool initIdTarget)
+        : m_ShouldCreateIDTarget(initIdTarget), m_Profiler(profiler), m_Assets(assets)
     {
         m_Context = std::make_unique<GraphicsContext>(window);
         m_NvrhiDevice = m_Context->Nvrhi();
@@ -203,6 +205,7 @@ namespace Lynx
         const vk::Buffer sceneConstants(static_cast<VkBuffer>(m_GlobalCB->getNativeObject(nvrhi::ObjectTypes::VK_Buffer).pointer));
         m_Frame->Shared = std::make_unique<SharedBindings>(*m_Context, sceneConstants);
         m_Frame->BlackTextureIndex = m_Frame->Shared->AddTexture(vk::ImageView(static_cast<VkImageView>(m_BlackTex->getNativeView(nvrhi::ObjectTypes::VK_ImageView).pointer)));
+        m_Frame->WhiteTextureIndex = m_Frame->Shared->AddTexture(vk::ImageView(static_cast<VkImageView>(m_WhiteTex->getNativeView(nvrhi::ObjectTypes::VK_ImageView).pointer)));
     }
 
     Renderer::~Renderer()
@@ -210,6 +213,9 @@ namespace Lynx
         LX_CORE_INFO("Renderer shutting down...");
 
         m_Context->WaitIdle();
+
+        // Texture assets are gone by now. Their pictures were retired and hold NVRHI textures.
+        m_Context->Deletions().Flush();
         m_NvrhiDevice->runGarbageCollection();
 
         // Everything made from the device goes before the device does.
@@ -665,12 +671,25 @@ namespace Lynx
             batch.StartOffset = (uint32_t)allParticleData.size();
             batch.Count = (uint32_t)particles.size();
 
+            // A material without a texture, or with one that is still loading, draws with plain white.
+            batch.AlbedoTexture = m_Frame->WhiteTextureIndex;
+            batch.AlbedoSampler = SamplerIndex(SamplerSettings());
+            if (material->AlbedoTexture)
+            {
+                const std::shared_ptr<Texture> albedo = m_Assets.GetAsset<Texture>(material->AlbedoTexture);
+                if (albedo && albedo->GetTextureHandle())
+                {
+                    batch.AlbedoTexture = albedo->GetTableIndex();
+                    batch.AlbedoSampler = albedo->GetSamplerIndex();
+                }
+            }
+
             m_CurrentFrameData.ParticleQueue.push_back(batch);
             allParticleData.insert(allParticleData.end(), particles.begin(), particles.end());
         }
 
         m_Frame->ParticleInstances.Upload<ParticleInstanceData>(*m_Context, *m_Frame->Uploads, allParticleData, "ParticleInstanceBuffer");
-        m_CurrentFrameData.ParticleInstanceBuffer = m_Frame->ParticleInstances.Wrapper;
+        m_CurrentFrameData.ParticleInstanceAddress = m_Frame->ParticleInstances.Buffer.Address();
 
         // The copies go straight into the command buffer, so NVRHI must not have a render pass open.
         m_CommandList->clearState();
@@ -852,6 +871,17 @@ namespace Lynx
 
         // Let's assume for V1 we just use the currently bound texture (from SetTexture)
         // OR we implement a simple lookup.
+    }
+
+    TextureSlot Renderer::AddToTextureTable(nvrhi::TextureHandle texture)
+    {
+        return TextureSlot(*m_Frame->Shared, std::move(texture));
+    }
+
+    uint32_t Renderer::SamplerIndex(const SamplerSettings& settings)
+    {
+        const nvrhi::SamplerHandle sampler = SamplerCache::Get()->GetSampler(settings);
+        return m_Frame->Shared->SamplerIndex(vk::Sampler(static_cast<VkSampler>(sampler->getNativeObject(nvrhi::ObjectTypes::VK_Sampler).pointer)));
     }
 
     void Renderer::SubmitParticles(Material* material, const std::vector<ParticleInstanceData>& particles)
