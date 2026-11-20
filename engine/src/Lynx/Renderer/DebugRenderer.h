@@ -27,8 +27,9 @@ namespace Lynx
 
     private:
         static std::vector<DebugLine> s_Lines;
-        friend class DebugPass;
+        // The engine ends the frame for the lines, and the scene renderer copies them into the frame it extracts.
         friend class Engine;
+        friend class SceneRenderer;
     };
     
 }

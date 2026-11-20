@@ -81,7 +81,7 @@ namespace Lynx
         m_ScriptEngine = std::make_unique<ScriptEngine>();
 
         m_Scene = std::make_shared<Scene>();
-        m_SceneRenderer = std::make_unique<SceneRenderer>(m_Scene);
+        m_SceneRenderer = std::make_unique<SceneRenderer>(*m_Renderer, m_Profiler, m_Scene);
     }
 
     void Engine::SetGameModule(IGameModule* gameModule)
@@ -229,6 +229,9 @@ namespace Lynx
             // The window is presented whether or not a scene was drawn, so the ImGui layer always shows.
             if (isFrameOpen)
                 m_Renderer->EndFrame();
+
+            // Debug lines live for the time they were drawn with, and at least for one frame.
+            DebugRenderer::EndFrame(m_DeltaTime);
             Input::OnUpdate();
         }
 

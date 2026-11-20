@@ -158,16 +158,8 @@ namespace Lynx
         // 2. Collect UI Data
         m_Batcher->Begin();
 
-        auto scene = Engine::Get().GetActiveScene();
-        if (scene)
-        {
-            auto view = scene->Reg().view<UICanvasComponent>();
-            for (auto entity : view)
-            {
-                auto& comp = view.get<UICanvasComponent>(entity);
-                m_Batcher->Submit(comp.Canvas);
-            }
-        }
+        for (const std::shared_ptr<UICanvas>& canvas : renderData.Canvases)
+            m_Batcher->Submit(canvas);
 
         // 3. Render
         if (m_Batcher->HasData())

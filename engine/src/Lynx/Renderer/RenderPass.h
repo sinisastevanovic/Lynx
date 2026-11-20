@@ -3,13 +3,16 @@
 #include <glm/glm.hpp>
 
 #include <filesystem>
+#include <span>
 
+#include "DebugRenderer.h"
 #include "Lynx/Asset/StaticMesh.h"
 #include "Lynx/Asset/TextureSpecification.h"
 
 namespace Lynx
 {
     class Shader;
+    class UICanvas;
 
     enum class RenderFlags : uint8_t
     {
@@ -113,6 +116,10 @@ namespace Lynx
 
         std::vector<ParticleBatch> ParticleQueue;
         nvrhi::BufferHandle ParticleInstanceBuffer;
+
+        // Views into the extracted scene. Valid only while it is being drawn.
+        std::span<const DebugLine> DebugLines;
+        std::span<const std::shared_ptr<UICanvas>> Canvases;
 
         glm::mat4 View;
         glm::mat4 Projection;

@@ -1,20 +1,24 @@
 #include "SceneRenderer.h"
 
 #include "DebugRenderer.h"
-#include "Lynx/Engine.h"
+#include "EditorCamera.h"
+#include "Renderer.h"
+#include "Lynx/Profiling/FrameProfiler.h"
 #include "Lynx/Scene/Components/Components.h"
 #include "Lynx/Scene/Components/PhysicsComponents.h"
+#include "Lynx/Scene/Components/UIComponents.h"
+#include "Lynx/Scene/Scene.h"
 
 namespace Lynx
 {
-    SceneRenderer::SceneRenderer(std::shared_ptr<Scene> scene)
-        : m_Scene(scene)
+    SceneRenderer::SceneRenderer(Renderer& renderer, FrameProfiler& profiler, std::shared_ptr<Scene> scene)
+        : m_Renderer(renderer), m_Profiler(profiler), m_Scene(std::move(scene))
     {
     }
 
     void SceneRenderer::SetScene(std::shared_ptr<Scene> scene)
     {
-        m_Scene = scene;
+        m_Scene = std::move(scene);
         m_ViewportDirty = true;
     }
 
@@ -26,210 +30,175 @@ namespace Lynx
             m_ViewportHeight = height;
             m_ViewportDirty = true;
         }
-        
     }
 
     void SceneRenderer::RenderEditor(EditorCamera& camera, float deltaTime)
     {
         if (!m_Scene)
             return;
-        
+
         if (m_ViewportDirty)
             camera.SetViewportSize(m_ViewportWidth, m_ViewportHeight);
-        SubmitScene(camera.GetView(), camera.GetProjection(), camera.GetPosition(), deltaTime, true);
         m_ViewportDirty = false;
+
+        Extract(camera.GetView(), camera.GetProjection(), camera.GetPosition(), deltaTime, true, 0.0f);
+        m_Renderer.RenderScene(m_Extracted);
     }
 
     void SceneRenderer::RenderRuntime(float deltaTime, float physicsAlpha)
     {
         if (!m_Scene)
             return;
-        
-        {
-            auto view = m_Scene->Reg().view<TransformComponent, CameraComponent>();
-            for (auto entity : view)
-            {
-                auto [transform, camera] = view.get<TransformComponent, CameraComponent>(entity);
-                if (camera.Primary)
-                {
-                    if (!camera.FixedAspectRatio && m_ViewportDirty)
-                        camera.Camera.SetViewportSize(m_ViewportWidth, m_ViewportHeight);
-                    
-                    // TODO: Take a look at this whole physics interpolated transform thing in the future...
-                    // I don't really know if this is the correct way to do that. It works for now, but I don't know.
-                    // Calculate Interpolated World Matrix for Camera
-                    // This handles both attached (child) and detached (scripted) cameras correctly
-                    // by walking the hierarchy and interpolating each node.
-                    glm::mat4 interpolatedWorldMatrix = transform.GetPhysicsInterpolatedTransform(physicsAlpha);
-                    
-                    auto& reg = m_Scene->Reg();
-                    entt::entity current = entity;
-                    
-                    while(reg.all_of<RelationshipComponent>(current))
-                    {
-                        auto& rel = reg.get<RelationshipComponent>(current);
-                        if (rel.Parent == entt::null)
-                            break;
-                            
-                        current = rel.Parent;
-                        if (reg.all_of<TransformComponent>(current))
-                        {
-                            auto& parentTransform = reg.get<TransformComponent>(current);
-                            interpolatedWorldMatrix = parentTransform.GetPhysicsInterpolatedTransform(physicsAlpha) * interpolatedWorldMatrix;
-                        }
-                    }
 
-                    SubmitScene(glm::inverse(interpolatedWorldMatrix), camera.Camera.GetProjection(), transform.Translation, deltaTime, false, physicsAlpha);
-                    m_ViewportDirty = false;
+        auto& registry = m_Scene->Reg();
+        const auto cameras = registry.view<TransformComponent, CameraComponent>();
+        for (auto entity : cameras)
+        {
+            auto [transform, camera] = cameras.get<TransformComponent, CameraComponent>(entity);
+            if (!camera.Primary)
+                continue;
+
+            if (!camera.FixedAspectRatio && m_ViewportDirty)
+                camera.Camera.SetViewportSize(m_ViewportWidth, m_ViewportHeight);
+            m_ViewportDirty = false;
+
+            // TODO: Take a look at this whole physics interpolated transform thing in the future...
+            // The camera's pose between the last two physics steps, through every parent it is attached to.
+            glm::mat4 worldMatrix = transform.GetPhysicsInterpolatedTransform(physicsAlpha);
+            entt::entity current = entity;
+            while (registry.all_of<RelationshipComponent>(current))
+            {
+                const entt::entity parent = registry.get<RelationshipComponent>(current).Parent;
+                if (parent == entt::null)
                     break;
-                }
+
+                current = parent;
+                if (const TransformComponent* parentTransform = registry.try_get<TransformComponent>(current))
+                    worldMatrix = parentTransform->GetPhysicsInterpolatedTransform(physicsAlpha) * worldMatrix;
             }
+
+            Extract(glm::inverse(worldMatrix), camera.Camera.GetProjection(), transform.Translation, deltaTime, false, physicsAlpha);
+            m_Renderer.RenderScene(m_Extracted);
+            return;
         }
     }
 
-    void SceneRenderer::SubmitScene(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPos, float deltaTime, bool isEditor, float physicsAlpha)
+    void SceneRenderer::Extract(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPosition, float deltaTime, bool isEditor, float physicsAlpha)
     {
-        auto& renderer = Engine::Get().GetRenderer();
-        auto& assetManager = Engine::Get().GetAssetManager();
-        
-        glm::vec3 lightDir = { -0.5f, -0.7f, 1.0f };
-        glm::vec3 lightColor = { 1.0f, 1.0f, 1.0f };
-        float lightIntensity = 1.0f;
+        ProfileScope extractScope(m_Profiler, "Extract");
+        auto& registry = m_Scene->Reg();
 
-        auto sunView = m_Scene->Reg().view<TransformComponent, DirectionalLightComponent>(entt::exclude<DisabledComponent>);
-        for (auto entity : sunView)
+        m_Extracted.Clear();
+        m_Extracted.View = view;
+        m_Extracted.Projection = projection;
+        m_Extracted.CameraPosition = cameraPosition;
+        m_Extracted.IsEditorView = isEditor;
+        m_Extracted.DeltaTime = deltaTime;
+
+        // The first enabled sun lights the scene. Without one, the defaults of ExtractedScene apply.
+        const ExtractedScene defaults;
+        m_Extracted.SunDirection = defaults.SunDirection;
+        m_Extracted.SunColor = defaults.SunColor;
+        m_Extracted.SunIntensity = defaults.SunIntensity;
+
+        const auto suns = registry.view<TransformComponent, DirectionalLightComponent>(entt::exclude<DisabledComponent>);
+        for (auto entity : suns)
         {
-            auto [transform, light] = sunView.get<TransformComponent, DirectionalLightComponent>(entity);
-            lightDir = glm::rotate(transform.Rotation, glm::vec3(0.0f, 0.0f, -1.0f));
-            lightColor = light.Color;
-            lightIntensity = light.Intensity;
+            auto [transform, light] = suns.get<TransformComponent, DirectionalLightComponent>(entity);
+            m_Extracted.SunDirection = glm::rotate(transform.Rotation, glm::vec3(0.0f, 0.0f, -1.0f));
+            m_Extracted.SunColor = light.Color;
+            m_Extracted.SunIntensity = light.Intensity;
             break;
         }
-        
-        renderer.BeginScene(view, projection, cameraPos, lightDir, lightColor, lightIntensity, deltaTime, isEditor);
-        
-        Frustum camFrustum;
-        camFrustum.FromViewProjection(projection * view);
-        Frustum lightFrustum;
-        lightFrustum.FromViewProjection(renderer.GetLightViewProjMatrix());
-        
-        if (!isEditor)
+
+        ExtractMeshes(isEditor, physicsAlpha);
+
+        if (m_Renderer.GetShowColliders())
+            DrawColliders();
+        m_Extracted.DebugLines = DebugRenderer::GetLines();
+
+        m_Scene->GetParticleSystem()->Extract(*m_Scene, cameraPosition, m_Extracted.Particles);
+
+        for (auto entity : registry.view<UICanvasComponent>())
         {
-            auto physicsView = m_Scene->Reg().view<TransformComponent, MeshComponent, CharacterControllerComponent>(entt::exclude<DisabledComponent>);
-            for (auto entity : physicsView)
-            {
-                auto [transform, mesh] = physicsView.get<TransformComponent, MeshComponent>(entity);
-                if (mesh.Mesh)
-                {
-                    auto finalTransform = transform.GetPhysicsInterpolatedTransform(physicsAlpha);
-                    AABB worldBounds = TransformAABB(mesh.Mesh->GetBounds(), finalTransform);
-                    // TODO: Check if this is worth it. Using these flags splits the batches up, so more draw calls, but less geometry drawn...
-                    RenderFlags flags = RenderFlags::None;
-                    if (camFrustum.IsOnFrustum(worldBounds))
-                        flags = flags | RenderFlags::MainPass;
-                    if (lightFrustum.IsOnFrustum(worldBounds))
-                        flags = flags | RenderFlags::ShadowPass;
-                    if (flags != RenderFlags::None)
-                    {
-                        renderer.SubmitMesh(mesh.Mesh.Get(), finalTransform, flags, (int)entity);
-                    }
-                }
-            }
-            
-            auto meshView = m_Scene->Reg().view<TransformComponent, MeshComponent>(entt::exclude<DisabledComponent, CharacterControllerComponent>);
-            for (auto entity : meshView)
-            {
-                auto [transform, meshComp] = meshView.get<TransformComponent, MeshComponent>(entity);
-            
-                if (meshComp.Mesh)
-                {
-                    AABB worldBounds = TransformAABB(meshComp.Mesh->GetBounds(), transform.WorldMatrix);
-                    // TODO: Check if this is worth it. Using these flags splits the batches up, so more draw calls, but less geometry drawn...
-                    RenderFlags flags = RenderFlags::None;
-                    if (camFrustum.IsOnFrustum(worldBounds))
-                        flags = flags | RenderFlags::MainPass;
-                    if (lightFrustum.IsOnFrustum(worldBounds))
-                        flags = flags | RenderFlags::ShadowPass;
-                    if (flags != RenderFlags::None)
-                    {
-                        renderer.SubmitMesh(meshComp.Mesh.Get(), transform.WorldMatrix, flags, (int)entity);
-                    }
-                }
-            }
+            if (const std::shared_ptr<UICanvas>& canvas = registry.get<UICanvasComponent>(entity).Canvas)
+                m_Extracted.Canvases.push_back(canvas);
         }
-        else
+    }
+
+    void SceneRenderer::ExtractMeshes(bool isEditor, float physicsAlpha)
+    {
+        auto& registry = m_Scene->Reg();
+
+        const auto addMesh = [this](entt::entity entity, const MeshComponent& mesh, const glm::mat4& transform)
         {
-            auto meshView = m_Scene->Reg().view<TransformComponent, MeshComponent>(entt::exclude<DisabledComponent>);
-            for (auto entity : meshView)
-            {
-                auto [transform, meshComp] = meshView.get<TransformComponent, MeshComponent>(entity);
-            
-                if (meshComp.Mesh)
-                {
-                    AABB worldBounds = TransformAABB(meshComp.Mesh->GetBounds(), transform.WorldMatrix);
-                    // TODO: Check if this is worth it. Using these flags splits the batches up, so more draw calls, but less geometry drawn...
-                    RenderFlags flags = RenderFlags::None;
-                    if (camFrustum.IsOnFrustum(worldBounds))
-                        flags = flags | RenderFlags::MainPass;
-                    if (lightFrustum.IsOnFrustum(worldBounds))
-                        flags = flags | RenderFlags::ShadowPass;
-                    if (flags != RenderFlags::None)
-                    {
-                        renderer.SubmitMesh(meshComp.Mesh.Get(), transform.WorldMatrix, flags, (int)entity);
-                    }
-                }
-            }
-        }
-        
-        
-        
-        
-        if (renderer.GetShowColliders()) // Render collider meshes
+            if (std::shared_ptr<StaticMesh> asset = mesh.Mesh.Get())
+                m_Extracted.Meshes.push_back({ std::move(asset), transform, static_cast<int>(entity) });
+        };
+
+        if (isEditor)
         {
-            glm::vec4 debugColor = { 0.0f, 1.0f, 0.0f, 1.0f };
-                
-            auto boxView = m_Scene->Reg().view<TransformComponent, BoxColliderComponent>();
-            for (auto entity : boxView)
+            const auto meshes = registry.view<TransformComponent, MeshComponent>(entt::exclude<DisabledComponent>);
+            for (auto entity : meshes)
             {
-                auto [transform, collider] = boxView.get<TransformComponent, BoxColliderComponent>(entity);
-                
-                glm::vec3 worldOffset = transform.Rotation * collider.Offset;
-                glm::vec3 worldPos = transform.Translation + worldOffset;
-                
-                glm::mat4 colliderTransform = glm::translate(glm::mat4(1.0f), worldPos)
-                    * glm::toMat4(transform.Rotation)
-                    * glm::scale(glm::mat4(1.0f), collider.HalfSize * 2.0f);
-
-                DebugRenderer::DrawBox(colliderTransform, debugColor);
+                auto [transform, mesh] = meshes.get<TransformComponent, MeshComponent>(entity);
+                addMesh(entity, mesh, transform.WorldMatrix);
             }
-
-            auto sphereView = m_Scene->Reg().view<TransformComponent, SphereColliderComponent>();
-            for (auto entity : sphereView)
-            {
-                auto [transform, collider] = sphereView.get<TransformComponent, SphereColliderComponent>(entity);
-                glm::vec3 worldOffset = transform.Rotation * collider.Offset;
-                DebugRenderer::DrawSphere(transform.Translation + worldOffset, collider.Radius, debugColor);
-            }
-
-            auto capsuleView = m_Scene->Reg().view<TransformComponent, CapsuleColliderComponent>();
-            for (auto entity : capsuleView)
-            {
-                auto [transform, collider] = capsuleView.get<TransformComponent, CapsuleColliderComponent>(entity);
-                glm::vec3 worldOffset = transform.Rotation * collider.Offset;
-                DebugRenderer::DrawCapsule(transform.Translation + worldOffset, collider.Radius, collider.HalfHeight, transform.Rotation, debugColor);
-            }
-            
-            auto charView = m_Scene->Reg().view<TransformComponent, CharacterControllerComponent>();
-            for (auto entity : charView)
-            {
-                auto [transform, character] = charView.get<TransformComponent, CharacterControllerComponent>(entity);
-                //glm::vec3 worldOffset = transform.Rotation * character.Offset;
-                DebugRenderer::DrawCapsule(transform.Translation, character.CapsuleRadius, character.CapsuleHalfHeight, transform.Rotation, debugColor);
-            }
+            return;
         }
-        
-        m_Scene->GetParticleSystem()->OnUpdate(deltaTime, m_Scene.get(), cameraPos);
 
-        renderer.EndScene();
+        // A character moves in physics steps, which are fewer than frames, so it is drawn between its last two poses.
+        const auto characters = registry.view<TransformComponent, MeshComponent, CharacterControllerComponent>(entt::exclude<DisabledComponent>);
+        for (auto entity : characters)
+        {
+            auto [transform, mesh] = characters.get<TransformComponent, MeshComponent>(entity);
+            addMesh(entity, mesh, transform.GetPhysicsInterpolatedTransform(physicsAlpha));
+        }
+
+        const auto meshes = registry.view<TransformComponent, MeshComponent>(entt::exclude<DisabledComponent, CharacterControllerComponent>);
+        for (auto entity : meshes)
+        {
+            auto [transform, mesh] = meshes.get<TransformComponent, MeshComponent>(entity);
+            addMesh(entity, mesh, transform.WorldMatrix);
+        }
+    }
+
+    void SceneRenderer::DrawColliders()
+    {
+        auto& registry = m_Scene->Reg();
+        const glm::vec4 color = { 0.0f, 1.0f, 0.0f, 1.0f };
+
+        const auto boxes = registry.view<TransformComponent, BoxColliderComponent>();
+        for (auto entity : boxes)
+        {
+            auto [transform, collider] = boxes.get<TransformComponent, BoxColliderComponent>(entity);
+            const glm::vec3 position = transform.Translation + transform.Rotation * collider.Offset;
+            const glm::mat4 colliderTransform = glm::translate(glm::mat4(1.0f), position)
+                * glm::toMat4(transform.Rotation)
+                * glm::scale(glm::mat4(1.0f), collider.HalfSize * 2.0f);
+
+            DebugRenderer::DrawBox(colliderTransform, color);
+        }
+
+        const auto spheres = registry.view<TransformComponent, SphereColliderComponent>();
+        for (auto entity : spheres)
+        {
+            auto [transform, collider] = spheres.get<TransformComponent, SphereColliderComponent>(entity);
+            DebugRenderer::DrawSphere(transform.Translation + transform.Rotation * collider.Offset, collider.Radius, color);
+        }
+
+        const auto capsules = registry.view<TransformComponent, CapsuleColliderComponent>();
+        for (auto entity : capsules)
+        {
+            auto [transform, collider] = capsules.get<TransformComponent, CapsuleColliderComponent>(entity);
+            DebugRenderer::DrawCapsule(transform.Translation + transform.Rotation * collider.Offset, collider.Radius, collider.HalfHeight, transform.Rotation, color);
+        }
+
+        const auto characters = registry.view<TransformComponent, CharacterControllerComponent>();
+        for (auto entity : characters)
+        {
+            auto [transform, character] = characters.get<TransformComponent, CharacterControllerComponent>(entity);
+            DebugRenderer::DrawCapsule(transform.Translation, character.CapsuleRadius, character.CapsuleHalfHeight, transform.Rotation, color);
+        }
     }
 }

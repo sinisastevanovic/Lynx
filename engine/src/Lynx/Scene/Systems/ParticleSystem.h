@@ -3,18 +3,25 @@
 #include <glm/glm.hpp>
 
 #include <random>
+#include <vector>
 
 namespace Lynx
 {
     class Scene;
-    class ParticleEmitterComponent;
+    struct ExtractedParticles;
+    struct ParticleEmitterComponent;
 
     class ParticleSystem
     {
     public:
         ParticleSystem() = default;
 
-        void OnUpdate(float ts, Scene* scene, const glm::vec3& cameraPos);
+        // Emits new particles and moves the living ones.
+        void Simulate(float deltaTime, Scene& scene);
+
+        // Appends what there is to draw, grouped by material. It changes nothing, so a frame can be drawn
+        // any number of times, or not at all, without the particles moving.
+        void Extract(Scene& scene, const glm::vec3& cameraPosition, std::vector<ExtractedParticles>& particles) const;
 
     private:
         void EmitParticle(ParticleEmitterComponent& emitter, const glm::vec3& sourcePos);

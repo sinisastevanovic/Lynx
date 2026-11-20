@@ -26,6 +26,7 @@ namespace Lynx
 {
     class FrameProfiler;
     class GraphicsContext;
+    struct ExtractedScene;
     class Swapchain;
     struct ImGui_NVRHI;
     struct SwapchainSettings;
@@ -81,16 +82,15 @@ namespace Lynx
         bool BeginFrame();
         void EndFrame();
 
-        // Draws one scene into the frame. Both are called between BeginFrame and EndFrame, at most once per frame.
-        void BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, float deltaTime, bool editMode = false);
-        void EndScene();
+        // Draws a scene into the frame. Call it between BeginFrame and EndFrame, at most once per frame.
+        // Everything is read from the extracted copy, see SceneRenderer.
+        void RenderScene(const ExtractedScene& scene);
         
         nvrhi::TextureHandle GetViewportTexture() const;
         std::pair<uint32_t, uint32_t> GetViewportSize() const;
 
         std::pair<nvrhi::BufferHandle, nvrhi::BufferHandle> CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices);
-        void SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, RenderFlags flags, int entityID = -1);
-        void SubmitParticles(Material* material, const std::vector<ParticleInstanceData>& particles);
+
 
         nvrhi::DeviceHandle GetDeviceHandle() const { return m_NvrhiDevice; }
 
@@ -135,6 +135,11 @@ namespace Lynx
         float GetMaxAnisotropy() const { return m_MaxAnisotropy; }
 
     private:
+        void BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, float deltaTime, bool editMode);
+        void SubmitMesh(const std::shared_ptr<StaticMesh>& mesh, const glm::mat4& transform, RenderFlags flags, int entityID);
+        void SubmitParticles(Material* material, const std::vector<ParticleInstanceData>& particles);
+        void EndScene();
+
         void CreateDefaultTextures();
         void InitBuffers();
         void ApplySwapchainSettings(const SwapchainSettings& settings);

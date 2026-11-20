@@ -1,6 +1,6 @@
 #include "ParticleSystem.h"
 
-#include "Lynx/Engine.h"
+#include "Lynx/Renderer/ExtractedScene.h"
 #include "Lynx/Scene/Components/Components.h"
 #include "Lynx/Scene/Components/ParticleComponents.h"
 #include "Lynx/Scene/Scene.h"
@@ -14,45 +14,36 @@ namespace Lynx
         return min + unit * (max - min);
     }
     
-    void ParticleSystem::OnUpdate(float ts, Scene* scene, const glm::vec3& cameraPos)
+    void ParticleSystem::Simulate(float deltaTime, Scene& scene)
     {
-        auto view = scene->Reg().view<TransformComponent, ParticleEmitterComponent>();
+        auto view = scene.Reg().view<TransformComponent, ParticleEmitterComponent>();
         for (auto entity : view)
         {
-            auto [trans, emitter] = view.get<TransformComponent, ParticleEmitterComponent>(entity);
+            auto [transform, emitter] = view.get<TransformComponent, ParticleEmitterComponent>(entity);
 
             if (emitter.EmissionRate > 0.0f)
             {
                 if (emitter.IsLooping)
                 {
-                    emitter.TimeSinceLastEmit += ts;
-                    float emitInterval = 1.0f / emitter.EmissionRate;
+                    emitter.TimeSinceLastEmit += deltaTime;
+                    const float emitInterval = 1.0f / emitter.EmissionRate;
 
                     while (emitter.TimeSinceLastEmit >= emitInterval)
                     {
                         emitter.TimeSinceLastEmit -= emitInterval;
-                        EmitParticle(emitter, trans.GetWorldTranslation());
+                        EmitParticle(emitter, transform.GetWorldTranslation());
                     }
                 }
-                else
+                else if (!emitter.BurstDone)
                 {
-                    if (!emitter.BurstDone)
-                    {
-                        int burstCount = (int)emitter.EmissionRate;
-                        for (int i = 0; i < burstCount; i++)
-                        {
-                            EmitParticle(emitter, trans.GetWorldTranslation());
-                        }
-                        emitter.BurstDone = true;
-                    }
+                    const int burstCount = static_cast<int>(emitter.EmissionRate);
+                    for (int i = 0; i < burstCount; i++)
+                        EmitParticle(emitter, transform.GetWorldTranslation());
+                    emitter.BurstDone = true;
                 }
             }
-            
 
-            std::vector<ParticleInstanceData> activeParticles;
-            activeParticles.reserve(emitter.ParticlePool.size());
-
-            for (auto& particle : emitter.ParticlePool)
+            for (Particle& particle : emitter.ParticlePool)
             {
                 if (!particle.Active)
                     continue;
@@ -63,11 +54,31 @@ namespace Lynx
                     continue;
                 }
 
-                particle.LifeRemaining -= ts;
-                particle.Position += particle.Velocity * ts;
-                particle.Rotation += 0.01f * ts;
+                particle.LifeRemaining -= deltaTime;
+                particle.Position += particle.Velocity * deltaTime;
+                particle.Rotation += 0.01f * deltaTime;
+            }
+        }
+    }
 
-                float life = particle.LifeRemaining / particle.LifeTime;
+    void ParticleSystem::Extract(Scene& scene, const glm::vec3& cameraPosition, std::vector<ExtractedParticles>& particles) const
+    {
+        auto view = scene.Reg().view<ParticleEmitterComponent>();
+        for (auto entity : view)
+        {
+            const ParticleEmitterComponent& emitter = view.get<ParticleEmitterComponent>(entity);
+            if (!emitter.Material)
+                continue;
+
+            std::vector<ParticleInstanceData> instances;
+            instances.reserve(emitter.ParticlePool.size());
+
+            for (const Particle& particle : emitter.ParticlePool)
+            {
+                if (!particle.Active)
+                    continue;
+
+                const float life = particle.LifeRemaining / particle.LifeTime;
 
                 ParticleInstanceData data;
                 data.Position = particle.Position;
@@ -75,29 +86,31 @@ namespace Lynx
                 data.Color = glm::mix(particle.ColorEnd, particle.ColorBegin, life);
                 data.Size = glm::mix(particle.SizeEnd, particle.SizeBegin, life);
                 data.Life = life;
-                activeParticles.push_back(data);
+                instances.push_back(data);
             }
+
+            if (instances.empty())
+                continue;
 
             // TODO: Check if we actually need this?
             if (emitter.DepthSorting)
             {
-                std::sort(activeParticles.begin(), activeParticles.end(),
-                [cameraPos](const ParticleInstanceData& a, const ParticleInstanceData& b)
+                std::ranges::sort(instances, [cameraPosition](const ParticleInstanceData& a, const ParticleInstanceData& b)
                 {
-                    float d1 = glm::distance2(a.Position, cameraPos);
-                    float d2 = glm::distance2(b.Position, cameraPos);
-                    return d1 > d2;
+                    return glm::distance2(a.Position, cameraPosition) > glm::distance2(b.Position, cameraPosition);
                 });
             }
 
-            if (!activeParticles.empty() && emitter.Material)
-            {
-                auto mat = emitter.Material.Get();
-                if (mat)
-                {
-                    Engine::Get().GetRenderer().SubmitParticles(mat.get(), activeParticles);
-                }
-            }
+            std::shared_ptr<Material> material = emitter.Material.Get();
+            if (!material)
+                continue;
+
+            // Emitters that share a material are drawn with one call.
+            const auto sameMaterial = std::ranges::find_if(particles, [&material](const ExtractedParticles& batch) { return batch.Material == material; });
+            if (sameMaterial != particles.end())
+                sameMaterial->Particles.insert(sameMaterial->Particles.end(), instances.begin(), instances.end());
+            else
+                particles.push_back({ std::move(material), std::move(instances) });
         }
     }
 

@@ -67,7 +67,7 @@ namespace Lynx
     
     void DebugPass::Execute(RenderContext& ctx, RenderData& renderData)
     {
-        const auto& lines = DebugRenderer::GetLines();
+        const std::span<const DebugLine> lines = renderData.DebugLines;
         if (lines.empty()) return;
 
         m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
@@ -121,10 +121,6 @@ namespace Lynx
 
         renderData.DrawCalls++;
         renderData.IndexCount += vertices.size();
-
-        // Clear lines for next frame
-        float dt = Engine::Get().GetDeltaTime();
-        DebugRenderer::EndFrame(dt);
     }
 
 }

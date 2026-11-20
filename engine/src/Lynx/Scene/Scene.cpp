@@ -516,6 +516,9 @@ namespace Lynx
         UpdateGlobalTransforms();
         ProcessDestroyQueue();
         DispatchEvents();
+
+        // After the transforms, so particles are emitted where their emitter is in this frame.
+        m_ParticleSystem.Simulate(deltaTime, *this);
     }
 
     void Scene::OnUpdateEditor(float deltaTime, glm::vec3 cameraPos)
@@ -542,8 +545,9 @@ namespace Lynx
                 }
             }
         }
-        
+
         UpdateGlobalTransforms();
+        m_ParticleSystem.Simulate(deltaTime, *this);
     }
 
     void Scene::OnEvent(Event& event)

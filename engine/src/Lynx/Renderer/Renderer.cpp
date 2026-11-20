@@ -7,6 +7,8 @@
 #include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
+#include "ExtractedScene.h"
+#include "Frustum.h"
 #include "GpuTimers.h"
 #include "GraphicsContext.h"
 #include "SamplerCache.h"
@@ -728,7 +730,45 @@ namespace Lynx
         m_SubmitStart = std::chrono::steady_clock::now();
     }
 
-    void Renderer::SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, RenderFlags Flags, int entityID)
+    void Renderer::RenderScene(const ExtractedScene& scene)
+    {
+        BeginScene(scene.View, scene.Projection, scene.CameraPosition, scene.SunDirection, scene.SunColor, scene.SunIntensity, scene.DeltaTime, scene.IsEditorView);
+
+        // A mesh is drawn in the passes whose view it can be seen from: the camera's and the sun's.
+        Frustum cameraFrustum;
+        cameraFrustum.FromViewProjection(m_CurrentFrameData.ViewProjection);
+        Frustum lightFrustum;
+        lightFrustum.FromViewProjection(m_CurrentFrameData.LightViewProj);
+
+        for (const ExtractedMesh& mesh : scene.Meshes)
+        {
+            const AABB worldBounds = TransformAABB(mesh.Mesh->GetBounds(), mesh.Transform);
+
+            // TODO: Check if this is worth it. Using these flags splits the batches up, so more draw calls, but less geometry drawn...
+            RenderFlags flags = RenderFlags::None;
+            if (cameraFrustum.IsOnFrustum(worldBounds))
+                flags = flags | RenderFlags::MainPass;
+            if (lightFrustum.IsOnFrustum(worldBounds))
+                flags = flags | RenderFlags::ShadowPass;
+
+            if (flags != RenderFlags::None)
+                SubmitMesh(mesh.Mesh, mesh.Transform, flags, mesh.EntityId);
+        }
+
+        for (const ExtractedParticles& particles : scene.Particles)
+            SubmitParticles(particles.Material.get(), particles.Particles);
+
+        m_CurrentFrameData.DebugLines = scene.DebugLines;
+        m_CurrentFrameData.Canvases = scene.Canvases;
+
+        EndScene();
+
+        // The lists belong to the caller and may be gone after this call.
+        m_CurrentFrameData.DebugLines = {};
+        m_CurrentFrameData.Canvases = {};
+    }
+
+    void Renderer::SubmitMesh(const std::shared_ptr<StaticMesh>& mesh, const glm::mat4& transform, RenderFlags Flags, int entityID)
     {
         if (!mesh)
             return;
@@ -785,8 +825,8 @@ namespace Lynx
 
     void Renderer::EndScene()
     {
-        // Everything between BeginScene and here is the scene handing its meshes to the renderer.
-        m_Profiler.AddCpuTime("Submit", MillisecondsSince(m_SubmitStart));
+        // Everything between BeginScene and here is deciding what is visible and sorting it into batches.
+        m_Profiler.AddCpuTime("Cull", MillisecondsSince(m_SubmitStart));
 
         GpuTimers& timers = *m_Frame->Timers;
         const auto measurePass = [this, &timers](std::string_view name)
