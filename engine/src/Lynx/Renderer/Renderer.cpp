@@ -848,6 +848,16 @@ namespace Lynx
             m_CurrentFrameData.OpaqueDrawCalls.push_back({ key, startOffset, (uint32_t)instances.size() });
         }
 
+        // The batches come out of a map keyed on pointers, in an order that changes from run to run.
+        // Where two surfaces lie in the same plane, the one drawn last wins, so the order has to be fixed
+        // for a frame to look the same every time.
+        std::ranges::sort(m_CurrentFrameData.OpaqueDrawCalls, [](const BatchDrawCall& a, const BatchDrawCall& b)
+        {
+            const uint64_t meshA = a.Key.Mesh->GetHandle();
+            const uint64_t meshB = b.Key.Mesh->GetHandle();
+            return std::tie(meshA, a.Key.SubmeshIndex, a.Key.RenderFlags) < std::tie(meshB, b.Key.SubmeshIndex, b.Key.RenderFlags);
+        });
+
         std::ranges::sort(m_CurrentFrameData.TransparentQueue,
           [](const RenderCommand& a, const RenderCommand& b) {
               return a.DistanceToCamera > b.DistanceToCamera; 
