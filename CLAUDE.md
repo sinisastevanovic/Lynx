@@ -4,7 +4,8 @@ A hobby 3D game engine in C++23: Vulkan through NVRHI, EnTT, Jolt physics, Lua t
 One developer. The engine was reviewed in November 2026 and is being refactored step by step, not rewritten.
 
 Current state, open problems and the order of work: https://claude.ai/artifact/8UigvboHdEzfD3iVqeeeyy
-Read its "Status" section before starting anything larger.
+Read its "Status" section before starting anything larger. Its "Target design" section describes where the
+structure is heading, and "Toward the target design" the order of the steps.
 
 ## Repositories
 
@@ -63,6 +64,8 @@ build\bin\Debug\LynxSandboxGame.exe
 
 - New and changed code should be clean and clear even where the code around it is not. Do not copy old habits:
   no new `Engine::Get()` where a dependency can be passed in, no commented-out code, no unchecked `json["key"]`.
+- New code follows the target design: lower layers do not reach up (Scene, Assets and UI do not call the renderer),
+  editor-only code stays in the editor, and saved components hold no runtime state.
 - Comments say why, not what. Members are `m_Name`, types and functions `PascalCase`, four spaces.
 - Source files use CRLF line endings. Keep them when editing.
 - Keep each step small and leave the editor and the game runnable after it.
