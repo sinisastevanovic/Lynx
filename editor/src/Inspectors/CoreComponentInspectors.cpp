@@ -87,7 +87,7 @@ namespace Lynx
                             std::string matId = "Material " + std::to_string(index);
                             ImGui::PushID(matId.c_str());
 
-                            ImGui::Text(matId.c_str());
+                            ImGui::TextUnformatted(matId.c_str());
                             ImGui::ColorEdit4("Albedo Color", &submesh.Material->AlbedoColor.r);
                             ImGui::DragFloat("Metallic", &submesh.Material->Metallic);
                             ImGui::DragFloat("Roughness", &submesh.Material->Roughness);

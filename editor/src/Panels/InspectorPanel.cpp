@@ -1,6 +1,7 @@
 #include "InspectorPanel.h"
 #include "FieldInspector.h"
 #include <imgui.h>
+#include <misc/cpp/imgui_stdlib.h>
 
 #include "../Components/EditorComponents.h"
 #include "Lynx/Asset/Prefab.h"
@@ -42,16 +43,10 @@ namespace Lynx
             if (m_Context->Reg().all_of<TagComponent>(m_Selection))
             {
                 auto& tag = m_Context->Reg().get<TagComponent>(m_Selection).Tag;
-                char buffer[256];
-                memset(buffer, 0, sizeof(buffer));
-                strcpy_s(buffer, sizeof(buffer), tag.c_str());
                 ImGui::AlignTextToFramePadding();
                 ImGui::Text("Tag");
                 ImGui::SameLine();
-                if (ImGui::InputText("##Tag", buffer, sizeof(buffer)))
-                {
-                    tag = std::string(buffer);
-                }
+                ImGui::InputText("##Tag", &tag);
                 
                 ImGui::SameLine();
                 

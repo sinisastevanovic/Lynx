@@ -46,7 +46,7 @@ namespace Lynx
         std::vector<std::string> formatStrings = { "None", "RGBA8", "RG16F", "RG32F", "R32I", "R8", "Depth32", "Depth24Stencil8" };
         int currFormat = (int)m_EditingSpec.Format;
         
-        ImGui::Text("Format: %s", formatStrings[currFormat]);
+        ImGui::Text("Format: %s", formatStrings[currFormat].c_str());
         if (LXUI::DrawCheckBox("Generate Mips", m_EditingSpec.GenerateMips)) m_IsDirty = true;
         if (LXUI::DrawCheckBox("Is sRGB", m_EditingSpec.IsSRGB)) m_IsDirty = true;
 

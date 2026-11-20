@@ -2,6 +2,8 @@
 
 #include <imgui.h>
 
+#include <optional>
+
 #include "../Utils/PlatformUtils.h"
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Prefab.h"
@@ -19,6 +21,30 @@
 
 namespace Lynx
 {
+    namespace
+    {
+        // Moves a UI element under newParent, to the given position among its children or to the end.
+        // Refuses a move that would put an element inside itself, and leaves the root of a canvas where it is.
+        void MoveUIElement(const std::shared_ptr<UIElement>& source, const std::shared_ptr<UIElement>& newParent, std::optional<size_t> index = std::nullopt)
+        {
+            const std::shared_ptr<UIElement> oldParent = source->GetParent();
+            if (!oldParent || source == newParent || newParent->IsDescendantOf(source))
+                return;
+
+            if (oldParent == newParent)
+            {
+                newParent->MoveChild(source, index.value_or(newParent->GetChildren().size()));
+                return;
+            }
+
+            oldParent->RemoveChild(source);
+            if (index)
+                newParent->AddChildAt(source, *index);
+            else
+                newParent->AddChild(source);
+        }
+    }
+
     void SceneHierarchyPanel::OnImGuiRender()
     {
         ImGui::Begin("Scene Hierarchy");
@@ -290,13 +316,7 @@ namespace Lynx
                 UIElement* ptr = *(UIElement**)payload->Data;
                 std::shared_ptr<UIElement> source = ptr->shared_from_this();
                 
-                if (source && source != element && !element->IsDescendantOf(source))
-                {
-                    if (auto oldParent = source->GetParent())
-                        oldParent->RemoveChild(source);
-                    
-                    element->AddChild(source);
-                }
+                MoveUIElement(source, element);
             }
             ImGui::EndDragDropTarget();
         }
@@ -392,7 +412,8 @@ namespace Lynx
             if (ImGui::MenuItem("Delete"))
             {
                 // TODO: reparent children?
-                element->GetParent()->RemoveChild(element);
+                if (auto parent = element->GetParent())
+                    parent->RemoveChild(element);
                 if (m_SelectedUIElement == element)
                 {
                     m_SelectedUIElement = nullptr;
@@ -433,15 +454,7 @@ namespace Lynx
                             UIElement* sourcePtr = *(UIElement**)payload->Data;
                             auto source = sourcePtr->shared_from_this();
 
-                            if (source->GetParent() == element)
-                            {
-                                element->MoveChild(source, i);
-                            }
-                            else
-                            {
-                                source->GetParent()->RemoveChild(source);
-                                element->AddChildAt(source, i);
-                            }
+                            MoveUIElement(source, element, i);
                         }
                         ImGui::EndDragDropTarget();
                     }
@@ -459,15 +472,7 @@ namespace Lynx
                     {
                         UIElement* sourcePtr = *(UIElement**)payload->Data;
                         auto source = sourcePtr->shared_from_this();
-                        if (source->GetParent() == element)
-                        {
-                            element->MoveChild(source, element->GetChildren().size());
-                        }
-                        else
-                        {
-                            source->GetParent()->RemoveChild(source);
-                            element->AddChild(source);
-                        }
+                        MoveUIElement(source, element);
                     }
                     ImGui::EndDragDropTarget();
                 }

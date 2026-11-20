@@ -2,6 +2,7 @@
 
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <misc/cpp/imgui_stdlib.h>
 
 #include "Lynx/Engine.h"
 
@@ -84,16 +85,7 @@ namespace Lynx
         DrawLabel(label);
         std::string id = "##" + label;
 
-        char buffer[256];
-        memset(buffer, 0, sizeof(buffer));
-        strcpy_s(buffer, sizeof(buffer), value.c_str());
-
-        if (ImGui::InputText(id.c_str(), buffer, sizeof(buffer)))
-        {
-            value = std::string(buffer);
-            return true;
-        }
-        return false;
+        return ImGui::InputText(id.c_str(), &value);
     }
 
     bool LXUI::DrawTextInputMultiline(const std::string& label, std::string& value)
@@ -101,16 +93,7 @@ namespace Lynx
         DrawLabel(label);
         std::string id = "##" + label;
 
-        char buffer[256];
-        memset(buffer, 0, sizeof(buffer));
-        strcpy_s(buffer, sizeof(buffer), value.c_str());
-
-        if (ImGui::InputTextMultiline(id.c_str(), buffer, sizeof(buffer)))
-        {
-            value = std::string(buffer);
-            return true;
-        }
-        return false;
+        return ImGui::InputTextMultiline(id.c_str(), &value);
     }
 
     bool LXUI::DrawColorControl(const std::string& label, glm::vec4& value)

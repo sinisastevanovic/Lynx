@@ -222,7 +222,7 @@ namespace Lynx
                     uint64_t handleValue = (uint64_t)metadata.Handle;
              
                     ImGui::SetDragDropPayload(AssetUtils::GetDragDropPayload(metadata.Type), &handleValue, sizeof(uint64_t));
-                    ImGui::Text(path.filename().string().c_str());
+                    ImGui::TextUnformatted(path.filename().string().c_str());
                     
                     ImGui::EndDragDropSource();
                 }
@@ -282,12 +282,12 @@ namespace Lynx
 
                     if (!ImGui::IsItemActive() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
                     {
-                        m_IsDeleting = false;
+                        m_IsRenaming = false;
                     }
                 }
                 else
                 {
-                    ImGui::TextWrapped(filenameString.c_str());
+                    ImGui::TextWrapped("%s", filenameString.c_str());
                 }
 
                 if (m_IsDeleting)

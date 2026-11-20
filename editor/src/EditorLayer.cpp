@@ -455,7 +455,10 @@ namespace Lynx
             const auto& metadata = Engine::Get().GetAssetRegistry().Get(m_SelectedAsset);
             if (metadata.Type == AssetType::Scene)
             {
-                OpenScene(metadata.Handle);
+                if (m_Engine->GetSceneState() == SceneState::Play)
+                    LX_WARN("Stop the game before opening another scene.");
+                else
+                    OpenScene(metadata.Handle);
             }
         }
     }
