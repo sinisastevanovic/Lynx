@@ -14,4 +14,5 @@ public struct SceneConstants
     public float4 lightColor;
 };
 
-public ConstantBuffer<SceneConstants> scene;
+// The binding number has to match SharedBindings.h.
+[vk::binding(0, 0)] public ConstantBuffer<SceneConstants> scene;

@@ -18,6 +18,7 @@
 #include "Swapchain.h"
 #include "Vulkan/GpuBuffer.h"
 #include "Vulkan/GpuTexture.h"
+#include "Vulkan/SharedBindings.h"
 #include "Vulkan/UploadQueue.h"
 #include "Lynx/Profiling/FrameProfiler.h"
 #include "Passes/DebugPass.h"
@@ -117,6 +118,7 @@ namespace Lynx
         std::array<vk::Fence, MAX_FRAMES_IN_FLIGHT> InFlight;
         std::unique_ptr<GpuTimers> Timers;
         std::unique_ptr<UploadQueue> Uploads;
+        std::unique_ptr<SharedBindings> Shared;
 
         // Rewritten every frame with one entry per drawn instance. The NVRHI passes read it through
         // the wrapper, which is a second handle to the same Vulkan buffer.
@@ -191,6 +193,10 @@ namespace Lynx
         m_CommandList = m_NvrhiDevice->createCommandList();
         CreateDefaultTextures();
         InitBuffers();
+
+        // The scene constants are still a buffer of NVRHI's. The shared bindings point at the Vulkan buffer behind it.
+        const vk::Buffer sceneConstants(static_cast<VkBuffer>(m_GlobalCB->getNativeObject(nvrhi::ObjectTypes::VK_Buffer).pointer));
+        m_Frame->Shared = std::make_unique<SharedBindings>(*m_Context, sceneConstants);
     }
 
     Renderer::~Renderer()
@@ -207,6 +213,7 @@ namespace Lynx
         m_Frame->Uploads.reset();
         m_PendingScreenshots.clear();
         m_Graph.reset();
+        m_Frame->Shared.reset();
         m_BloomPass = nullptr;
         m_MipMapGenPass.reset();
         m_RenderContext = RenderContext();
@@ -241,6 +248,7 @@ namespace Lynx
         // TODO: Move these members to the struct, useless to have duplicates!
         m_RenderContext.Graphics = m_Context.get();
         m_RenderContext.Uploads = m_Frame->Uploads.get();
+        m_RenderContext.Shared = m_Frame->Shared.get();
         m_RenderContext.Device = m_NvrhiDevice;
         m_RenderContext.CommandList = m_CommandList;
         m_RenderContext.GlobalConstantBuffer = m_GlobalCB;

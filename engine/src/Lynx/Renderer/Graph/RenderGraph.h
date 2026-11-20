@@ -38,7 +38,8 @@ namespace Lynx
     };
 
     // A pass that draws with Vulkan directly. It never changes the layout of a texture, never begins
-    // or ends rendering and never sets the viewport: it declares what it needs, and records its draws.
+    // or ends rendering, never sets the viewport and never binds a descriptor set: it declares what it needs,
+    // and records its draws. Its shaders read the camera and all textures through the shared bindings.
     class VulkanPass
     {
     public:
@@ -49,7 +50,8 @@ namespace Lynx
         // Called every frame before Execute. Returns false if the pass has nothing to draw in this frame.
         virtual bool Declare(const RenderContext& ctx, const RenderData& renderData, PassResources& resources) = 0;
 
-        // Called with rendering into the declared targets already begun, and viewport and scissor set to cover them.
+        // Called with rendering into the declared targets already begun, viewport and scissor set to cover them,
+        // and the shared bindings bound.
         // What the pass queued for upload in Declare has arrived by then.
         virtual void Execute(vk::CommandBuffer commands, RenderData& renderData) = 0;
     };

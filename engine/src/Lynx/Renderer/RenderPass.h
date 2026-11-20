@@ -13,6 +13,7 @@ namespace Lynx
 {
     class GraphicsContext;
     class Shader;
+    class SharedBindings;
     class UploadQueue;
     class UICanvas;
 
@@ -158,6 +159,7 @@ namespace Lynx
         // For passes that draw with Vulkan directly.
         GraphicsContext* Graphics = nullptr;
         UploadQueue* Uploads = nullptr;
+        SharedBindings* Shared = nullptr;
 
         nvrhi::DeviceHandle Device;
         nvrhi::CommandListHandle CommandList;

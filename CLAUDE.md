@@ -65,6 +65,9 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Shaders.** New shaders are written in Slang (`.slang`), old ones are GLSL until their pass is ported. A Slang
   shader is compiled once and cached in `temp\ShaderCache` together with what it expects to be bound. Passes build
   their layouts from that, so no binding number is written in C++. Mark entry points with `[shader("vertex")]`.
+- **Shared bindings.** Passes on the Vulkan layer bind nothing themselves. One descriptor set (`Vulkan/SharedBindings`)
+  holds the scene constants and a table of all textures and samplers, and the render graph binds it. A shader imports
+  `Scene` or `Textures` and gets texture indices and everything else through push constants (128 bytes at most).
 - **Renderer.** NVRHI validation is on in debug builds. A new binding layout or set that is wrong shows up in the log
   as `NVRHI:` errors right at startup.
 

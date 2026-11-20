@@ -54,6 +54,7 @@ namespace Lynx
             // One table of all textures, indexed in the shader.
             LX_FEATURE(Vulkan12, descriptorIndexing),
             LX_FEATURE(Vulkan12, runtimeDescriptorArray),
+            LX_FEATURE(Core.features, shaderSampledImageArrayDynamicIndexing),
             LX_FEATURE(Vulkan12, shaderSampledImageArrayNonUniformIndexing),
             LX_FEATURE(Vulkan12, descriptorBindingPartiallyBound),
             LX_FEATURE(Vulkan12, descriptorBindingVariableDescriptorCount),

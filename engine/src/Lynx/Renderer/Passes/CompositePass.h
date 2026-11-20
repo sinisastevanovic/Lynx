@@ -16,8 +16,15 @@ namespace Lynx
         void Execute(vk::CommandBuffer commands, RenderData& renderData) override;
 
     private:
+        // A texture this pass reads, and where it put it in the texture table.
+        struct Input
+        {
+            nvrhi::TextureHandle Texture;
+            uint32_t Index = 0;
+        };
+
         void CreatePipeline(const Shader& shader);
-        void BindInputs(nvrhi::ITexture* sceneColor, nvrhi::ITexture* bloom);
+        void UseInput(Input& input, nvrhi::ITexture* texture);
 
     private:
         struct VulkanObjects;
@@ -25,8 +32,8 @@ namespace Lynx
 
         PipelineState m_PipelineState;
 
-        // The textures the descriptor set currently points at.
-        nvrhi::TextureHandle m_BoundSceneColor;
-        nvrhi::TextureHandle m_BoundBloom;
+        Input m_SceneColor;
+        Input m_Bloom;
+        uint32_t m_LinearSampler = 0;
     };
 }

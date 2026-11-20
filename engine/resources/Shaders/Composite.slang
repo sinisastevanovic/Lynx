@@ -1,13 +1,16 @@
 // Turns the finished HDR picture into what the window shows: anti-aliasing, bloom, tone mapping and gamma.
 
-Texture2D sceneTexture;
-SamplerState linearSampler;
-Texture2D bloomTexture;
+import Textures;
 
 struct CompositeConstants
 {
     float bloomIntensity;
     int fxaaEnabled;
+
+    // Indices into the texture and sampler tables.
+    uint sceneTexture;
+    uint bloomTexture;
+    uint linearSampler;
 };
 [vk::push_constant] ConstantBuffer<CompositeConstants> constants;
 
@@ -27,6 +30,11 @@ VertexOutput vertexMain(uint vertexIndex : SV_VertexID)
     return output;
 }
 
+float3 sampleScene(float2 uv)
+{
+    return textures[constants.sceneTexture].Sample(samplers[constants.linearSampler], uv).rgb;
+}
+
 float3 acesToneMapping(float3 color)
 {
     const float a = 2.51;
@@ -44,11 +52,11 @@ static const float fxaaReduceMin = 1.0 / 128.0;
 // The standard fast FXAA: blurs along the direction of the strongest edge at each pixel.
 float3 fxaa(float2 uv, float2 texelSize)
 {
-    float3 rgbNW = sceneTexture.Sample(linearSampler, uv + float2(-1.0, -1.0) * texelSize).xyz;
-    float3 rgbNE = sceneTexture.Sample(linearSampler, uv + float2(1.0, -1.0) * texelSize).xyz;
-    float3 rgbSW = sceneTexture.Sample(linearSampler, uv + float2(-1.0, 1.0) * texelSize).xyz;
-    float3 rgbSE = sceneTexture.Sample(linearSampler, uv + float2(1.0, 1.0) * texelSize).xyz;
-    float3 rgbM = sceneTexture.Sample(linearSampler, uv).xyz;
+    float3 rgbNW = sampleScene(uv + float2(-1.0, -1.0) * texelSize);
+    float3 rgbNE = sampleScene(uv + float2(1.0, -1.0) * texelSize);
+    float3 rgbSW = sampleScene(uv + float2(-1.0, 1.0) * texelSize);
+    float3 rgbSE = sampleScene(uv + float2(1.0, 1.0) * texelSize);
+    float3 rgbM = sampleScene(uv);
 
     const float3 lumaWeights = float3(0.299, 0.587, 0.114);
     float lumaNW = dot(rgbNW, lumaWeights);
@@ -70,12 +78,12 @@ float3 fxaa(float2 uv, float2 texelSize)
     direction = min(float2(fxaaSpanMax, fxaaSpanMax), max(float2(-fxaaSpanMax, -fxaaSpanMax), direction * inverseSmallest)) * texelSize;
 
     float3 rgbA = (1.0 / 2.0) * (
-        sceneTexture.Sample(linearSampler, uv + direction * (1.0 / 3.0 - 0.5)).xyz +
-        sceneTexture.Sample(linearSampler, uv + direction * (2.0 / 3.0 - 0.5)).xyz);
+        sampleScene(uv + direction * (1.0 / 3.0 - 0.5)) +
+        sampleScene(uv + direction * (2.0 / 3.0 - 0.5)));
 
     float3 rgbB = rgbA * (1.0 / 2.0) + (1.0 / 4.0) * (
-        sceneTexture.Sample(linearSampler, uv + direction * (0.0 / 3.0 - 0.5)).xyz +
-        sceneTexture.Sample(linearSampler, uv + direction * (3.0 / 3.0 - 0.5)).xyz);
+        sampleScene(uv + direction * (0.0 / 3.0 - 0.5)) +
+        sampleScene(uv + direction * (3.0 / 3.0 - 0.5)));
 
     float lumaB = dot(rgbB, lumaWeights);
     if (lumaB < lumaMin || lumaB > lumaMax)
@@ -90,16 +98,16 @@ float4 fragmentMain(VertexOutput input) : SV_Target
     float2 sceneUV = float2(input.uv.x, 1.0 - input.uv.y);
 
     uint width, height;
-    sceneTexture.GetDimensions(width, height);
+    textures[constants.sceneTexture].GetDimensions(width, height);
     float2 texelSize = 1.0 / float2(width, height);
 
     float3 sceneColor;
     if (constants.fxaaEnabled == 1)
         sceneColor = fxaa(sceneUV, texelSize);
     else
-        sceneColor = sceneTexture.Sample(linearSampler, sceneUV).rgb;
+        sceneColor = sampleScene(sceneUV);
 
-    float3 bloomColor = bloomTexture.Sample(linearSampler, input.uv).rgb;
+    float3 bloomColor = textures[constants.bloomTexture].Sample(samplers[constants.linearSampler], input.uv).rgb;
     sceneColor += bloomColor * constants.bloomIntensity;
 
     float3 mapped = acesToneMapping(sceneColor);

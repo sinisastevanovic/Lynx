@@ -2,6 +2,7 @@
 
 #include "Lynx/Profiling/FrameProfiler.h"
 #include "Lynx/Renderer/GpuTimers.h"
+#include "Lynx/Renderer/Vulkan/SharedBindings.h"
 #include "Lynx/Renderer/Vulkan/UploadQueue.h"
 
 namespace Lynx
@@ -142,6 +143,9 @@ namespace Lynx
         // for that, so passes on Vulkan get the same viewport until the last NVRHI pass is gone.
         commands.setViewport(0, vk::Viewport(0.0f, height, width, -height, 0.0f, 1.0f));
         commands.setScissor(0, vk::Rect2D({ 0, 0 }, extent));
+
+        // The NVRHI pass before this one may have bound something else in its place.
+        ctx.Shared->Bind(commands);
 
         pass.Execute(commands, renderData);
 
