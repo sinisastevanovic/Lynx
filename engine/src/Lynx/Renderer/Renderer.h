@@ -25,7 +25,10 @@ struct GLFWwindow;
 namespace Lynx
 {
     class FrameProfiler;
+    class GraphicsContext;
+    class Swapchain;
     struct ImGui_NVRHI;
+    struct SwapchainSettings;
     
     class LX_API Renderer
     {
@@ -66,8 +69,19 @@ namespace Lynx
         // With VSync on, frames are presented in step with the display refresh.
         // Off presents as fast as the GPU allows, without tearing where the driver supports it.
         void SetVSync(bool enabled);
-        bool IsVSync() const { return m_VSync; }
+        bool IsVSync() const;
 
+        // One window image more than the driver's minimum. With VSync it lets the CPU start the next frame
+        // without waiting for the display, at the price of memory and of a frame that may wait in line.
+        void SetExtraSwapchainImage(bool enabled);
+        bool HasExtraSwapchainImage() const;
+
+        // A frame is everything that ends up in the window at once: the scene, if one is drawn, and the ImGui layer.
+        // BeginFrame returns false if the window cannot be drawn to right now. The frame is then skipped: do not call EndFrame.
+        bool BeginFrame();
+        void EndFrame();
+
+        // Draws one scene into the frame. Both are called between BeginFrame and EndFrame, at most once per frame.
         void BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, float deltaTime, bool editMode = false);
         void EndScene();
         
@@ -121,22 +135,24 @@ namespace Lynx
         float GetMaxAnisotropy() const { return m_MaxAnisotropy; }
 
     private:
-        void InitVulkan(GLFWwindow* window);
-        void InitNVRHI();
+        void CreateDefaultTextures();
         void InitBuffers();
-        void CreateSwapchain(uint32_t fallbackWidth, uint32_t fallbackHeight);
-        void CreateSwapchainFramebuffers();
-        void RecreateSwapchain(uint32_t width, uint32_t height);
+        void ApplySwapchainSettings(const SwapchainSettings& settings);
+        void ReleaseSwapchainImages();
         void CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height);
         void PrepareDrawCalls();
         void CopyFrameForScreenshots(nvrhi::ITexture* frame);
         void ReportMemoryUse();
 
     private:
-        // TODO: Pimpl idiom
-        struct VulkanState;
-        std::unique_ptr<VulkanState> m_VulkanState;
-        
+        // Declared in this order because each one needs the ones before it, and they are destroyed in reverse.
+        std::unique_ptr<GraphicsContext> m_Context;
+        std::unique_ptr<Swapchain> m_Swapchain;
+
+        struct FrameResources;
+        std::unique_ptr<FrameResources> m_Frame;
+
+        // The context's device. Kept as a member because every part of this class uses it.
         nvrhi::DeviceHandle m_NvrhiDevice;
         nvrhi::CommandListHandle m_CommandList;
         nvrhi::StagingTextureHandle m_StageBuffer;
@@ -148,10 +164,10 @@ namespace Lynx
         nvrhi::TextureHandle m_BlackTex;
         nvrhi::TextureHandle m_MetallicRoughnessTex;
 
-        // One NVRHI framebuffer wrapper per swapchain image
-        std::vector<nvrhi::FramebufferHandle> m_SwapchainFramebuffers;
-        uint32_t m_CurrentImageIndex = 0;
         uint32_t m_CurrentFrame = 0;
+
+        // The picture the scene of this frame ended up in. Null if no scene was drawn in this frame.
+        nvrhi::TextureHandle m_SceneOutput;
         static const int MAX_FRAMES_IN_FLIGHT = 2;
 
         std::unique_ptr<RenderTarget> m_SceneTarget;
@@ -178,7 +194,6 @@ namespace Lynx
         bool m_ShowColliders = false;
         bool m_ShowUI = true;
         bool m_FXAAEnabled = true;
-        bool m_VSync = true;
         float m_MaxAnisotropy = 16.0f;
 
         RenderStats m_Stats;

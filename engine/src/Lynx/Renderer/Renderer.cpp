@@ -7,9 +7,10 @@
 #include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
-#include "DeviceSelection.h"
 #include "GpuTimers.h"
+#include "GraphicsContext.h"
 #include "SamplerCache.h"
+#include "Swapchain.h"
 #include "Lynx/Profiling/FrameProfiler.h"
 #include "Passes/DebugPass.h"
 #include "Passes/ForwardPass.h"
@@ -17,11 +18,8 @@
 #include "Passes/ShadowPass.h"
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
-#include "nvrhi/validation.h"
 #include "Passes/DepthPass.h"
 #include "Passes/ParticlePass.h"
-
-VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 #include <shaderc/shaderc.hpp>
 
@@ -37,29 +35,6 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 namespace Lynx
 {
-#ifdef _DEBUG
-    const bool enableValidationLayers = true;
-#else
-    const bool enableValidationLayers = false;
-#endif
-    
-    const std::vector<const char*> validationLayers = {
-        "VK_LAYER_KHRONOS_validation"
-    };
-
-    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity, vk::DebugUtilsMessageTypeFlagsEXT messageTypes, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
-    {
-        if (messageSeverity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eError)
-            LX_CORE_ERROR("Vulkan Validation Layer: {0}", pCallbackData->pMessage);
-        else if (messageSeverity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning)
-            LX_CORE_WARN("Vulkan Validation Layer: {0}", pCallbackData->pMessage);
-        else if (messageSeverity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo)
-            LX_CORE_INFO("Vulkan Validation Layer: {0}", pCallbackData->pMessage);
-        else
-            LX_CORE_TRACE("Vulkan Validation Layer: {0}", pCallbackData->pMessage);
-        return VK_FALSE;
-    }
-
     namespace Helpers
     {
         static nvrhi::Format TextureFormatToNvrhi(TextureFormat format, bool sRGB)
@@ -104,46 +79,11 @@ namespace Lynx
     
     namespace
     {
-        // NVRHI reports its own errors, and those of its validation layer, through this.
-        class NvrhiMessageLogger : public nvrhi::IMessageCallback
-        {
-        public:
-            void message(nvrhi::MessageSeverity severity, const char* messageText) override
-            {
-                switch (severity)
-                {
-                    case nvrhi::MessageSeverity::Info:    LX_CORE_INFO("NVRHI: {0}", messageText); break;
-                    case nvrhi::MessageSeverity::Warning: LX_CORE_WARN("NVRHI: {0}", messageText); break;
-                    case nvrhi::MessageSeverity::Error:   LX_CORE_ERROR("NVRHI: {0}", messageText); break;
-                    case nvrhi::MessageSeverity::Fatal:   LX_CORE_CRITICAL("NVRHI: {0}", messageText); break;
-                }
-            }
-        };
-
-        NvrhiMessageLogger s_NvrhiMessageLogger;
-
         // An asset can be loaded in the middle of a frame, while the frame's command list is open.
         // NVRHI allows only one immediate command list to be open at a time, so uploads use one that is not immediate.
         nvrhi::CommandListHandle CreateUploadCommandList(nvrhi::IDevice* device)
         {
             return device->createCommandList(nvrhi::CommandListParameters().setEnableImmediateExecution(false));
-        }
-
-        vk::PresentModeKHR ChoosePresentMode(vk::PhysicalDevice physicalDevice, vk::SurfaceKHR surface, bool vsync)
-        {
-            // FIFO waits for the display refresh, and every Vulkan implementation supports it.
-            if (vsync)
-                return vk::PresentModeKHR::eFifo;
-
-            // Without VSync, mailbox is preferred because it does not tear. Immediate does.
-            const std::vector<vk::PresentModeKHR> supportedModes = physicalDevice.getSurfacePresentModesKHR(surface);
-            for (vk::PresentModeKHR preferredMode : { vk::PresentModeKHR::eMailbox, vk::PresentModeKHR::eImmediate })
-            {
-                if (std::find(supportedModes.begin(), supportedModes.end(), preferredMode) != supportedModes.end())
-                    return preferredMode;
-            }
-
-            return vk::PresentModeKHR::eFifo;
         }
 
         vk::CommandBuffer NativeCommandBuffer(nvrhi::ICommandList* commandList)
@@ -185,69 +125,50 @@ namespace Lynx
         }
     }
 
-    struct Renderer::VulkanState
+    // What a frame needs from Vulkan directly. Two frames can be under way at once:
+    // the CPU records one while the GPU still draws the one before.
+    struct Renderer::FrameResources
     {
-        vk::Instance Instance;
-        vk::SurfaceKHR Surface;
-        vk::PhysicalDevice PhysicalDevice;
-        vk::Device Device;
-        vk::Queue GraphicsQueue;
-        uint32_t GraphicsQueueFamily = 0;
-        vk::SwapchainKHR Swapchain;
-        vk::Format SwapchainFormat;
-        vk::Extent2D SwapchainExtent;
-        std::vector<vk::Image> SwapchainImages;
-
-        std::vector<vk::Semaphore> ImageAvailableSemaphores;
-        std::vector<vk::Semaphore> RenderFinishedSemaphores;
-        std::vector<vk::Fence> InFlightFences;
-        
-        vk::DebugUtilsMessengerEXT DebugMessenger;
-
-        // The NVRHI device as its Vulkan type, for the Vulkan-only calls. m_NvrhiDevice is the same device
-        // in release builds, but in debug builds it is the validation layer wrapped around this one.
-        nvrhi::vulkan::DeviceHandle NvrhiVulkanDevice;
-
+        std::array<vk::Semaphore, MAX_FRAMES_IN_FLIGHT> ImageAvailable;
+        std::array<vk::Fence, MAX_FRAMES_IN_FLIGHT> InFlight;
         std::unique_ptr<GpuTimers> Timers;
-
-        // What the instance and the device were created with. NVRHI is told, so it knows what it may use.
-        std::vector<const char*> InstanceExtensions;
-        std::vector<const char*> DeviceExtensions;
-
-        // Set when presenting reported that the swapchain no longer matches the window.
-        bool SwapchainIsStale = false;
-
-        // Whether the driver can report how much memory this process uses per heap.
-        bool HasMemoryBudget = false;
     };
 
     Renderer::Renderer(GLFWwindow* window, FrameProfiler& profiler, bool initIdTarget)
         : m_ShouldCreateIDTarget(initIdTarget), m_Profiler(profiler)
     {
-        m_VulkanState = std::make_unique<VulkanState>();
-        InitVulkan(window);
-        InitNVRHI();
-        InitBuffers();
-        
-        LX_CORE_INFO("Renderer created (Vulkan/NVRHI ready. Pipeline pending.");
-    }
+        m_Context = std::make_unique<GraphicsContext>(window);
+        m_NvrhiDevice = m_Context->Nvrhi();
 
+        int framebufferWidth = 0;
+        int framebufferHeight = 0;
+        glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
+        m_Swapchain = std::make_unique<Swapchain>(*m_Context, static_cast<uint32_t>(framebufferWidth), static_cast<uint32_t>(framebufferHeight), SwapchainSettings());
+
+        m_Frame = std::make_unique<FrameResources>();
+        for (int frame = 0; frame < MAX_FRAMES_IN_FLIGHT; ++frame)
+        {
+            // The fences start signalled, because the first frames wait for them before anything was submitted.
+            m_Frame->ImageAvailable[frame] = m_Context->Device().createSemaphore(vk::SemaphoreCreateInfo());
+            m_Frame->InFlight[frame] = m_Context->Device().createFence(vk::FenceCreateInfo(vk::FenceCreateFlagBits::eSignaled));
+        }
+        m_Frame->Timers = std::make_unique<GpuTimers>(m_Context->PhysicalDevice(), m_Context->Device(), m_Context->GraphicsQueueFamily());
+
+        m_CommandList = m_NvrhiDevice->createCommandList();
+        CreateDefaultTextures();
+        InitBuffers();
+    }
 
     Renderer::~Renderer()
     {
         LX_CORE_INFO("Renderer shutting down...");
-        
-        if (!m_VulkanState->Device)
-            return;
 
-        m_VulkanState->Device.waitIdle();
+        m_Context->WaitIdle();
+        m_NvrhiDevice->runGarbageCollection();
 
-        if (m_NvrhiDevice)
-            m_NvrhiDevice->runGarbageCollection();
-
+        // Everything made from the device goes before the device does.
+        ReleaseSwapchainImages();
         m_PendingScreenshots.clear();
-        m_VulkanState->Timers.reset();
-
         m_Pipeline.Clear();
         m_BloomPass.reset();
         m_CompositePass.reset();
@@ -267,32 +188,21 @@ namespace Lynx
         m_GlobalCB = nullptr;
         m_InstanceBuffer = nullptr;
         m_CommandList = nullptr;
-        m_SwapchainFramebuffers.clear();
         m_SceneTarget.reset();
-        m_NvrhiDevice = nullptr;
         m_ImGuiBackend.reset();
-        m_VulkanState->NvrhiVulkanDevice = nullptr;
+        m_NvrhiDevice = nullptr;
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        for (int frame = 0; frame < MAX_FRAMES_IN_FLIGHT; ++frame)
         {
-            m_VulkanState->Device.destroySemaphore(m_VulkanState->ImageAvailableSemaphores[i]);
-            m_VulkanState->Device.destroyFence(m_VulkanState->InFlightFences[i]);
+            m_Context->Device().destroySemaphore(m_Frame->ImageAvailable[frame]);
+            m_Context->Device().destroyFence(m_Frame->InFlight[frame]);
         }
+        m_Frame.reset();
 
-        for (auto& sem : m_VulkanState->RenderFinishedSemaphores) {
-            m_VulkanState->Device.destroySemaphore(sem);
-        }
-        
-        m_VulkanState->Device.destroySwapchainKHR(m_VulkanState->Swapchain);
-        m_VulkanState->Device.destroy();
-        m_VulkanState->Instance.destroySurfaceKHR(m_VulkanState->Surface);
-
-        if (m_VulkanState->DebugMessenger)
-            m_VulkanState->Instance.destroyDebugUtilsMessengerEXT(m_VulkanState->DebugMessenger);
-        
-        m_VulkanState->Instance.destroy();
+        m_Swapchain.reset();
+        m_Context.reset();
     }
-        
+
     void Renderer::Init()
     {
         // TODO: Move these members to the struct, useless to have duplicates!
@@ -466,233 +376,45 @@ namespace Lynx
         memset(&m_Stats, 0, sizeof(RenderStats));
     }
 
-    void Renderer::InitVulkan(GLFWwindow* window)
-    {
-        PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(glfwGetInstanceProcAddress(NULL, "vkGetInstanceProcAddr"));
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
-        
-        // 1. Instance
-        vk::ApplicationInfo appInfo;
-        appInfo.apiVersion = VK_API_VERSION_1_3;
-        
-        vk::InstanceCreateInfo instInfo;
-        
-        uint32_t count;
-        const char** glfweExtensions = glfwGetRequiredInstanceExtensions(&count);
-        std::vector<const char*> extensions(glfweExtensions, glfweExtensions + count);
-
-        if (enableValidationLayers)
-        {
-            instInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-            instInfo.ppEnabledLayerNames = validationLayers.data();
-
-            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-        }
-        else
-        {
-            instInfo.enabledLayerCount = 0;
-        }
-
-        instInfo.pApplicationInfo = &appInfo;
-        instInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-        instInfo.ppEnabledExtensionNames = extensions.data();
-        m_VulkanState->Instance = vk::createInstance(instInfo);
-        m_VulkanState->InstanceExtensions = extensions;
-
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(m_VulkanState->Instance);
-
-        // Setup Debug Messenger
-        if (enableValidationLayers)
-        {
-            vk::DebugUtilsMessengerCreateInfoEXT debugInfo;
-            debugInfo.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError | 
-                                        vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning;
-            debugInfo.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | 
-                                    vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation | 
-                                    vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance;
-            debugInfo.pfnUserCallback = debugCallback;
-            
-            m_VulkanState->DebugMessenger = m_VulkanState->Instance.createDebugUtilsMessengerEXT(debugInfo);
-        }
-
-        // 2. Surface
-        VkSurfaceKHR rawSurface;
-        if (glfwCreateWindowSurface(m_VulkanState->Instance, window, nullptr, &rawSurface) != VK_SUCCESS)
-        {
-            throw std::runtime_error("Failed to create window surface!");
-        }
-        m_VulkanState->Surface = rawSurface;
-
-        // 3. The GPU and the device on it
-        auto graphicsDevice = CreateGraphicsDevice(m_VulkanState->Instance, m_VulkanState->Surface);
-        if (!graphicsDevice)
-        {
-            LX_CORE_CRITICAL("{0}", graphicsDevice.error());
-            throw std::runtime_error(graphicsDevice.error());
-        }
-
-        m_VulkanState->PhysicalDevice = graphicsDevice->PhysicalDevice;
-        m_VulkanState->Device = graphicsDevice->Device;
-        m_VulkanState->GraphicsQueueFamily = graphicsDevice->GraphicsQueueFamily;
-        m_VulkanState->DeviceExtensions = graphicsDevice->Extensions;
-        m_VulkanState->HasMemoryBudget = graphicsDevice->HasMemoryBudget;
-
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(m_VulkanState->Device);
-
-        m_VulkanState->GraphicsQueue = m_VulkanState->Device.getQueue(m_VulkanState->GraphicsQueueFamily, 0);
-        m_VulkanState->Timers = std::make_unique<GpuTimers>(m_VulkanState->PhysicalDevice, m_VulkanState->Device, m_VulkanState->GraphicsQueueFamily);
-
-        // 6. Swapchain, its images and the per-image semaphores
-        m_VulkanState->SwapchainFormat = vk::Format::eB8G8R8A8Unorm;
-        const std::vector<vk::SurfaceFormatKHR> surfaceFormats = m_VulkanState->PhysicalDevice.getSurfaceFormatsKHR(m_VulkanState->Surface);
-        const bool hasSwapchainFormat = std::ranges::any_of(surfaceFormats, [this](const vk::SurfaceFormatKHR& format)
-        {
-            return format.format == m_VulkanState->SwapchainFormat && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
-        });
-        if (!hasSwapchainFormat)
-        {
-            // The composite pass and the ImGui layer write this format, so there is nothing to fall back to yet.
-            LX_CORE_CRITICAL("The window cannot show 8-bit BGRA pictures, which is the only format the renderer presents.");
-            throw std::runtime_error("Unsupported surface format");
-        }
-
-        int framebufferWidth = 0;
-        int framebufferHeight = 0;
-        glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
-        CreateSwapchain(static_cast<uint32_t>(framebufferWidth), static_cast<uint32_t>(framebufferHeight));
-
-        // 7. Per-frame sync objects
-        m_VulkanState->ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        m_VulkanState->InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-
-        vk::SemaphoreCreateInfo semInfo;
-        vk::FenceCreateInfo fenceInfo;
-        fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
-
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-        {
-            m_VulkanState->ImageAvailableSemaphores[i] = m_VulkanState->Device.createSemaphore(semInfo);
-            m_VulkanState->InFlightFences[i] = m_VulkanState->Device.createFence(fenceInfo);
-        }
-    }
-
-    void Renderer::CreateSwapchain(uint32_t fallbackWidth, uint32_t fallbackHeight)
-    {
-        vk::SurfaceCapabilitiesKHR caps = m_VulkanState->PhysicalDevice.getSurfaceCapabilitiesKHR(m_VulkanState->Surface);
-
-        // Some surfaces leave the extent to the application and report it as UINT32_MAX.
-        m_VulkanState->SwapchainExtent = caps.currentExtent;
-        if (m_VulkanState->SwapchainExtent.width == UINT32_MAX)
-        {
-            m_VulkanState->SwapchainExtent.width = fallbackWidth;
-            m_VulkanState->SwapchainExtent.height = fallbackHeight;
-        }
-
-        vk::SwapchainCreateInfoKHR swapInfo;
-        swapInfo.surface = m_VulkanState->Surface;
-        // The fewest images the driver works with. One more is the usual advice, so that the CPU does not
-        // have to wait for the display to release an image. Measured without VSync on an RTX 5080 it changed
-        // no frame time and cost 25 MB. It has not been measured with VSync on, where it matters most.
-        swapInfo.minImageCount = caps.minImageCount;
-        swapInfo.imageFormat = m_VulkanState->SwapchainFormat;
-        swapInfo.imageColorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
-        swapInfo.imageExtent = m_VulkanState->SwapchainExtent;
-        swapInfo.imageArrayLayers = 1;
-        // Transfer source lets a screenshot be copied out of a finished frame.
-        swapInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc;
-        swapInfo.preTransform = caps.currentTransform;
-        swapInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-        swapInfo.presentMode = ChoosePresentMode(m_VulkanState->PhysicalDevice, m_VulkanState->Surface, m_VSync);
-        swapInfo.clipped = VK_TRUE;
-
-        m_VulkanState->Swapchain = m_VulkanState->Device.createSwapchainKHR(swapInfo);
-        LX_CORE_INFO("Swapchain created: {0}x{1}, present mode {2}", swapInfo.imageExtent.width, swapInfo.imageExtent.height, vk::to_string(swapInfo.presentMode));
-        m_VulkanState->SwapchainImages = m_VulkanState->Device.getSwapchainImagesKHR(m_VulkanState->Swapchain);
-
-        vk::SemaphoreCreateInfo semInfo;
-        m_VulkanState->RenderFinishedSemaphores.resize(m_VulkanState->SwapchainImages.size());
-        for (vk::Semaphore& semaphore : m_VulkanState->RenderFinishedSemaphores)
-            semaphore = m_VulkanState->Device.createSemaphore(semInfo);
-    }
-
-    void Renderer::CreateSwapchainFramebuffers()
-    {
-        for (auto vkImage : m_VulkanState->SwapchainImages)
-        {
-            nvrhi::TextureDesc desc;
-            desc.width = m_VulkanState->SwapchainExtent.width;
-            desc.height = m_VulkanState->SwapchainExtent.height;
-            desc.format = nvrhi::Format::BGRA8_UNORM;
-            desc.isRenderTarget = true;
-            desc.initialState = nvrhi::ResourceStates::Present;
-            desc.keepInitialState = true;
-
-            nvrhi::TextureHandle texture = m_NvrhiDevice->createHandleForNativeTexture(nvrhi::ObjectTypes::VK_Image, (VkImage)vkImage, desc);
-            nvrhi::FramebufferDesc fbDesc;
-            fbDesc.addColorAttachment(texture);
-            m_SwapchainFramebuffers.push_back(m_NvrhiDevice->createFramebuffer(fbDesc));
-        }
-    }
-
-    void Renderer::RecreateSwapchain(uint32_t width, uint32_t height)
-    {
-        m_VulkanState->Device.waitIdle();
-        m_VulkanState->SwapchainIsStale = false;
-
-        for (auto& sem : m_VulkanState->RenderFinishedSemaphores)
-            m_VulkanState->Device.destroySemaphore(sem);
-
-        m_SwapchainFramebuffers.clear();
-        m_CurrentFrameData.TargetFramebuffer = nullptr;
-        m_VulkanState->SwapchainImages.clear();
-
-        m_VulkanState->Device.destroySwapchainKHR(m_VulkanState->Swapchain);
-
-        CreateSwapchain(width, height);
-        CreateSwapchainFramebuffers();
-    }
-
     void Renderer::SetVSync(bool enabled)
     {
-        if (m_VSync == enabled)
-            return;
-
-        m_VSync = enabled;
-
-        // The present mode is fixed when a swapchain is created, so changing it needs a new swapchain.
-        RecreateSwapchain(m_VulkanState->SwapchainExtent.width, m_VulkanState->SwapchainExtent.height);
+        SwapchainSettings settings = m_Swapchain->Settings();
+        settings.VSync = enabled;
+        ApplySwapchainSettings(settings);
     }
 
-    void Renderer::InitNVRHI()
+    bool Renderer::IsVSync() const
     {
-        // 1. Initialize NVRHI on top of Vulkan
-        nvrhi::vulkan::DeviceDesc deviceDesc;
-        deviceDesc.instance = m_VulkanState->Instance;
-        deviceDesc.physicalDevice = m_VulkanState->PhysicalDevice;
-        deviceDesc.device = m_VulkanState->Device;
-        deviceDesc.graphicsQueue = m_VulkanState->GraphicsQueue;
-        deviceDesc.graphicsQueueIndex = m_VulkanState->GraphicsQueueFamily;
-        deviceDesc.errorCB = &s_NvrhiMessageLogger;
-        deviceDesc.instanceExtensions = m_VulkanState->InstanceExtensions.data();
-        deviceDesc.numInstanceExtensions = m_VulkanState->InstanceExtensions.size();
-        deviceDesc.deviceExtensions = m_VulkanState->DeviceExtensions.data();
-        deviceDesc.numDeviceExtensions = m_VulkanState->DeviceExtensions.size();
-        deviceDesc.bufferDeviceAddressSupported = true;
+        return m_Swapchain->Settings().VSync;
+    }
 
-        m_VulkanState->NvrhiVulkanDevice = nvrhi::vulkan::createDevice(deviceDesc);
-        m_NvrhiDevice = m_VulkanState->NvrhiVulkanDevice;
+    void Renderer::SetExtraSwapchainImage(bool enabled)
+    {
+        SwapchainSettings settings = m_Swapchain->Settings();
+        settings.ExtraImage = enabled;
+        ApplySwapchainSettings(settings);
+    }
 
-        // Checks every NVRHI call against the state NVRHI expects, which catches mistakes
-        // that the Vulkan validation layer cannot see, such as a binding set that does not match its layout.
-        if (enableValidationLayers)
-            m_NvrhiDevice = nvrhi::validation::createValidationLayer(m_NvrhiDevice);
+    bool Renderer::HasExtraSwapchainImage() const
+    {
+        return m_Swapchain->Settings().ExtraImage;
+    }
 
-        CreateSwapchainFramebuffers();
+    void Renderer::ApplySwapchainSettings(const SwapchainSettings& settings)
+    {
+        ReleaseSwapchainImages();
+        m_Swapchain->ApplySettings(settings);
+    }
 
-        // 3. Create Command List
-        m_CommandList = m_NvrhiDevice->createCommandList();
+    void Renderer::ReleaseSwapchainImages()
+    {
+        // Both may refer to an image of the window. A swapchain cannot be replaced or destroyed while one is held.
+        m_CurrentFrameData.TargetFramebuffer = nullptr;
+        m_SceneOutput = nullptr;
+    }
 
-        // 4. Create Default White Texture
+    void Renderer::CreateDefaultTextures()
+    {
         nvrhi::TextureDesc defaultTexDesc;
         defaultTexDesc.width = 1;
         defaultTexDesc.height = 1;
@@ -918,49 +640,6 @@ namespace Lynx
         ResetStats();
         m_Stats.FrameTime = deltaTime;
 
-        {
-            // Waiting here is where the CPU is held back by the GPU or, with VSync, by the display.
-            ProfileScope waitScope(m_Profiler, "WaitForGpu");
-
-            // 0. Wait for Fence
-            if (m_VulkanState->Device.waitForFences(1, &m_VulkanState->InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
-            {
-                 LX_CORE_ERROR("Failed to wait for fence!");
-            }
-            m_VulkanState->Device.resetFences(1, &m_VulkanState->InFlightFences[m_CurrentFrame]);
-
-            // 1. Acquire Image from Vulkan
-            // A swapchain stops matching its window when the window is resized or moved to another display.
-            // The driver then refuses to hand out images, and a new swapchain has to be made.
-            if (m_VulkanState->SwapchainIsStale)
-                RecreateSwapchain(m_VulkanState->SwapchainExtent.width, m_VulkanState->SwapchainExtent.height);
-
-            // The overload that takes a pointer reports an out-of-date swapchain as a result. The other one throws.
-            const auto acquireImage = [this]()
-            {
-                return m_VulkanState->Device.acquireNextImageKHR(m_VulkanState->Swapchain, UINT64_MAX,
-                    m_VulkanState->ImageAvailableSemaphores[m_CurrentFrame], nullptr, &m_CurrentImageIndex);
-            };
-
-            vk::Result acquired = acquireImage();
-            if (acquired == vk::Result::eErrorOutOfDateKHR)
-            {
-                RecreateSwapchain(m_VulkanState->SwapchainExtent.width, m_VulkanState->SwapchainExtent.height);
-                acquired = acquireImage();
-            }
-
-            // Suboptimal still gives a usable image. The swapchain is replaced before the next frame.
-            if (acquired == vk::Result::eSuboptimalKHR)
-                m_VulkanState->SwapchainIsStale = true;
-            else if (acquired != vk::Result::eSuccess)
-                LX_CORE_ERROR("Could not acquire a swapchain image: {0}", vk::to_string(acquired));
-        }
-
-        // 2. Start recording
-        m_CommandList->open();
-        m_VulkanState->Timers->BeginFrame(m_Profiler);
-        m_VulkanState->Timers->Begin(NativeCommandBuffer(m_CommandList), "Frame");
-
         m_OpaqueBatches.clear();
         m_ParticleBatches.clear();
         m_CurrentFrameData.OpaqueDrawCalls.clear();
@@ -1109,7 +788,7 @@ namespace Lynx
         // Everything between BeginScene and here is the scene handing its meshes to the renderer.
         m_Profiler.AddCpuTime("Submit", MillisecondsSince(m_SubmitStart));
 
-        GpuTimers& timers = *m_VulkanState->Timers;
+        GpuTimers& timers = *m_Frame->Timers;
         const auto measurePass = [this, &timers](std::string_view name)
         {
             return PassScope(m_Profiler, timers, m_CommandList, name);
@@ -1140,7 +819,7 @@ namespace Lynx
         }
         else
         {
-            m_CurrentFrameData.TargetFramebuffer = m_SwapchainFramebuffers[m_CurrentImageIndex];
+            m_CurrentFrameData.TargetFramebuffer = m_Swapchain->Framebuffer();
         }
 
         {
@@ -1154,51 +833,72 @@ namespace Lynx
             m_UIPass->Execute(m_RenderContext, m_CurrentFrameData);
         }
 
-        if (!m_ScreenshotRequests.empty())
-            CopyFrameForScreenshots(m_CurrentFrameData.TargetFramebuffer->getDesc().colorAttachments[0].texture);
+        m_SceneOutput = m_CurrentFrameData.TargetFramebuffer->getDesc().colorAttachments[0].texture;
+    }
 
-        timers.End(NativeCommandBuffer(m_CommandList), "Frame");
+    bool Renderer::BeginFrame()
+    {
+        // Acquiring an image may replace the swapchain.
+        ReleaseSwapchainImages();
+
+        {
+            // Waiting here is where the CPU is held back by the GPU or, with VSync, by the display.
+            ProfileScope waitScope(m_Profiler, "WaitForGpu");
+
+            const vk::Device device = m_Context->Device();
+            if (device.waitForFences(1, &m_Frame->InFlight[m_CurrentFrame], VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
+                LX_CORE_ERROR("Failed to wait for fence!");
+
+            if (!m_Swapchain->AcquireImage(m_Frame->ImageAvailable[m_CurrentFrame]))
+                return false;
+
+            // Reset only now: a frame that is skipped submits nothing that would signal the fence again.
+            device.resetFences(1, &m_Frame->InFlight[m_CurrentFrame]);
+        }
+
+        m_CommandList->open();
+        m_Frame->Timers->BeginFrame(m_Profiler);
+        m_Frame->Timers->Begin(NativeCommandBuffer(m_CommandList), "Frame");
+        return true;
+    }
+
+    void Renderer::EndFrame()
+    {
+        nvrhi::IFramebuffer* windowFramebuffer = m_Swapchain->Framebuffer();
+
+        if (m_SceneOutput)
+        {
+            if (!m_ScreenshotRequests.empty())
+                CopyFrameForScreenshots(m_SceneOutput);
+        }
+        else
+        {
+            // No scene was drawn, for example because it has no camera. Nothing else writes the whole window,
+            // and what a swapchain image holds before it is written is undefined.
+            nvrhi::utils::ClearColorAttachment(m_CommandList, windowFramebuffer, 0, nvrhi::Color(0.0f, 0.0f, 0.0f, 1.0f));
+        }
+
+        m_Frame->Timers->End(NativeCommandBuffer(m_CommandList), "Frame");
 
         // Submitting and presenting, including the ImGui layer.
         ProfileScope presentScope(m_Profiler, "Present");
 
-        // 1. Close recording
         m_CommandList->close();
 
-        // 2. Execute
-        nvrhi::vulkan::IDevice* vkDevice = m_VulkanState->NvrhiVulkanDevice;
-
-        // SYNC: Wait for the image to be available before executing
-        vkDevice->queueWaitForSemaphore(nvrhi::CommandQueue::Graphics, (VkSemaphore)m_VulkanState->ImageAvailableSemaphores[m_CurrentFrame], 0);
-
-        // SYNC: Signal RenderFinished after executing
-        vkDevice->queueSignalSemaphore(nvrhi::CommandQueue::Graphics, (VkSemaphore)m_VulkanState->RenderFinishedSemaphores[m_CurrentImageIndex], 0);
-
+        // The frame's commands wait for the window's image and signal when it is ready to be shown.
+        nvrhi::vulkan::IDevice* vulkanDevice = m_Context->NvrhiVulkan();
+        vulkanDevice->queueWaitForSemaphore(nvrhi::CommandQueue::Graphics, static_cast<VkSemaphore>(m_Frame->ImageAvailable[m_CurrentFrame]), 0);
+        vulkanDevice->queueSignalSemaphore(nvrhi::CommandQueue::Graphics, static_cast<VkSemaphore>(m_Swapchain->RenderFinished()), 0);
         m_NvrhiDevice->executeCommandList(m_CommandList);
 
-        m_ImGuiBackend->render(m_SwapchainFramebuffers[m_CurrentImageIndex]);
+        m_ImGuiBackend->render(windowFramebuffer);
 
-        // Signal Fence for CPU Sync
-        vk::SubmitInfo submitInfo;
-        m_VulkanState->GraphicsQueue.submit(submitInfo, m_VulkanState->InFlightFences[m_CurrentFrame]);
+        // An empty submission whose only purpose is to signal the fence once everything before it is done.
+        m_Context->GraphicsQueue().submit(vk::SubmitInfo(), m_Frame->InFlight[m_CurrentFrame]);
 
         m_NvrhiDevice->runGarbageCollection();
 
-        // 3. Present to Screen
-        vk::PresentInfoKHR presentInfo;
-        presentInfo.swapchainCount = 1;
-        presentInfo.pSwapchains = &m_VulkanState->Swapchain;
-        presentInfo.pImageIndices = &m_CurrentImageIndex;
-        
-        presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = &m_VulkanState->RenderFinishedSemaphores[m_CurrentImageIndex];
-        
-        const vk::Result presented = m_VulkanState->GraphicsQueue.presentKHR(&presentInfo);
-        if (presented == vk::Result::eErrorOutOfDateKHR || presented == vk::Result::eSuboptimalKHR)
-            m_VulkanState->SwapchainIsStale = true;
-        else if (presented != vk::Result::eSuccess)
-            LX_CORE_ERROR("Could not present the frame: {0}", vk::to_string(presented));
-
+        m_Swapchain->Present();
         m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 
         ReportMemoryUse();
@@ -1292,33 +992,18 @@ namespace Lynx
     void Renderer::FlushGpuTimers()
     {
         m_NvrhiDevice->waitForIdle();
-        m_VulkanState->Timers->Flush(m_Profiler);
+        m_Frame->Timers->Flush(m_Profiler);
     }
 
     std::string Renderer::GetAdapterName() const
     {
-        const vk::PhysicalDeviceProperties properties = m_VulkanState->PhysicalDevice.getProperties();
-        return std::string(properties.deviceName.data());
+        return m_Context->AdapterName();
     }
 
     void Renderer::ReportMemoryUse()
     {
-        if (!m_VulkanState->HasMemoryBudget)
-            return;
-
-        const auto properties = m_VulkanState->PhysicalDevice.getMemoryProperties2<vk::PhysicalDeviceMemoryProperties2, vk::PhysicalDeviceMemoryBudgetPropertiesEXT>();
-        const vk::PhysicalDeviceMemoryProperties& memory = properties.get<vk::PhysicalDeviceMemoryProperties2>().memoryProperties;
-        const vk::PhysicalDeviceMemoryBudgetPropertiesEXT& budget = properties.get<vk::PhysicalDeviceMemoryBudgetPropertiesEXT>();
-
-        // Only the heaps on the graphics card count as video memory.
-        uint64_t usedBytes = 0;
-        for (uint32_t heap = 0; heap < memory.memoryHeapCount; ++heap)
-        {
-            if (memory.memoryHeaps[heap].flags & vk::MemoryHeapFlagBits::eDeviceLocal)
-                usedBytes += budget.heapUsage[heap];
-        }
-
-        m_Profiler.SetCounter("VideoMemoryMB", static_cast<double>(usedBytes) / (1024.0 * 1024.0));
+        if (const std::optional<uint64_t> usedBytes = m_Context->VideoMemoryInUse())
+            m_Profiler.SetCounter("VideoMemoryMB", static_cast<double>(*usedBytes) / (1024.0 * 1024.0));
     }
 
     std::pair<nvrhi::BufferHandle, nvrhi::BufferHandle> Renderer::CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices)
@@ -1351,10 +1036,11 @@ namespace Lynx
 
     void Renderer::OnResize(uint32_t width, uint32_t height)
     {
-        if (width == 0 || height == 0) return;
+        if (width == 0 || height == 0)
+            return;
 
-        RecreateSwapchain(width, height);
-
+        ReleaseSwapchainImages();
+        m_Swapchain->Resize(width, height);
     }
 
     void Renderer::EnsureEditorViewport(uint32_t width, uint32_t height)
@@ -1369,7 +1055,7 @@ namespace Lynx
         }
         else if (m_SceneTarget->Width != width || m_SceneTarget->Height != height)
         {
-            m_VulkanState->Device.waitIdle();
+            m_Context->WaitIdle();
             m_SceneTarget.reset();
             m_SceneTarget = std::make_unique<RenderTarget>();
             CreateRenderTarget(*m_SceneTarget, width, height);
@@ -1386,6 +1072,6 @@ namespace Lynx
         if (m_SceneTarget)
             return { m_SceneTarget->Width, m_SceneTarget->Height };
 
-        return { m_VulkanState->SwapchainExtent.width, m_VulkanState->SwapchainExtent.height };
+        return { m_Swapchain->Width(), m_Swapchain->Height() };
     }
 }

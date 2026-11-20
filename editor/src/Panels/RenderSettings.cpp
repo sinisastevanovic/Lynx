@@ -18,6 +18,11 @@ namespace Lynx
                 bool vsync = renderer.IsVSync();
                 if (ImGui::Checkbox("VSync", &vsync))
                     renderer.SetVSync(vsync);
+
+                bool extraImage = renderer.HasExtraSwapchainImage();
+                if (ImGui::Checkbox("Extra swapchain image", &extraImage))
+                    renderer.SetExtraSwapchainImage(extraImage);
+                ImGui::SetItemTooltip("One window image more than the driver's minimum.\nWith VSync the CPU can start the next frame without waiting for the display.");
             }
 
             if (ImGui::CollapsingHeader("Bloom", ImGuiTreeNodeFlags_DefaultOpen))

@@ -191,13 +191,18 @@ namespace Lynx
                 ImGui::Render();
             }
 
+            // The frame is begun here and not earlier: the ImGui callback above may read back the picking buffer,
+            // which uses the same command list as the frame.
+            const bool isFrameOpen = m_Renderer->BeginFrame();
+
             // TODO: We should load all the textures and meshes before we run the scene!!!
             if (m_SceneState == SceneState::Edit)
             {
                 m_EditorCamera.OnUpdate(m_UnscaledDeltaTime);
                 m_Scene->OnUpdateEditor(m_UnscaledDeltaTime, m_EditorCamera.GetPosition());
                 
-                m_SceneRenderer->RenderEditor(m_EditorCamera, m_UnscaledDeltaTime);
+                if (isFrameOpen)
+                    m_SceneRenderer->RenderEditor(m_EditorCamera, m_UnscaledDeltaTime);
             }
             else if (m_SceneState == SceneState::Play)
             {
@@ -217,8 +222,13 @@ namespace Lynx
                 }
 
                 float alpha = accumulator / fixedTimestep;
-                m_SceneRenderer->RenderRuntime(m_DeltaTime, alpha);
+                if (isFrameOpen)
+                    m_SceneRenderer->RenderRuntime(m_DeltaTime, alpha);
             }
+
+            // The window is presented whether or not a scene was drawn, so the ImGui layer always shows.
+            if (isFrameOpen)
+                m_Renderer->EndFrame();
             Input::OnUpdate();
         }
 
