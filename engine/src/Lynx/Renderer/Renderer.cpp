@@ -17,6 +17,7 @@
 #include "SamplerCache.h"
 #include "Swapchain.h"
 #include "Vulkan/GpuBuffer.h"
+#include "Vulkan/GpuTexture.h"
 #include "Vulkan/UploadQueue.h"
 #include "Lynx/Profiling/FrameProfiler.h"
 #include "Passes/DebugPass.h"
@@ -156,6 +157,12 @@ namespace Lynx
         };
         InstanceStorage MeshInstances;
         InstanceStorage ParticleInstances;
+
+        // The pictures a scene is drawn into. The handles in RenderTarget are NVRHI's view of these.
+        GpuTexture SceneColor;
+        GpuTexture SceneDepth;
+        GpuTexture SceneOutput;
+        GpuTexture SceneEntityIds;
     };
 
     Renderer::Renderer(GLFWwindow* window, FrameProfiler& profiler, bool initIdTarget)
@@ -504,6 +511,28 @@ namespace Lynx
         target.Width = width;
         target.Height = height;
 
+        // The renderer owns the picture. NVRHI gets a handle to the same picture, which its passes draw with
+        // and through which it keeps track of the picture's layout. The first use moves it out of its undefined
+        // starting layout, as NVRHI does for a handle whose state it has not seen yet.
+        const auto createTarget = [this, width, height](GpuTexture& texture, vk::Format format, vk::ImageUsageFlags usage, const nvrhi::TextureDesc& desc)
+        {
+            GpuTextureDesc textureDesc;
+            textureDesc.Width = width;
+            textureDesc.Height = height;
+            textureDesc.Format = format;
+            textureDesc.Usage = usage;
+            textureDesc.Name = desc.debugName.c_str();
+
+            texture = GpuTexture(*m_Context, textureDesc);
+            return m_NvrhiDevice->createHandleForNativeTexture(nvrhi::ObjectTypes::VK_Image, nvrhi::Object(static_cast<VkImage>(texture.Image())), desc);
+        };
+
+        // Drawn into, read by shaders, copied from for screenshots and picking, and cleared by a copy command.
+        const vk::ImageUsageFlags colorUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled
+            | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst;
+        const vk::ImageUsageFlags depthUsage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled
+            | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst;
+
         auto colorDesc = nvrhi::TextureDesc()
             .setWidth(width)
             .setHeight(height)
@@ -512,7 +541,7 @@ namespace Lynx
             .setDebugName("SceneHDR")
             .setInitialState(nvrhi::ResourceStates::ShaderResource)
             .setKeepInitialState(true);
-        target.Color = m_NvrhiDevice->createTexture(colorDesc);
+        target.Color = createTarget(m_Frame->SceneColor, vk::Format::eR16G16B16A16Sfloat, colorUsage, colorDesc);
 
         auto depthDesc = nvrhi::TextureDesc()
             .setWidth(width)
@@ -522,7 +551,7 @@ namespace Lynx
             .setDebugName("SceneDepth")
             .setInitialState(nvrhi::ResourceStates::DepthWrite)
             .setKeepInitialState(true);
-        target.Depth = m_NvrhiDevice->createTexture(depthDesc);
+        target.Depth = createTarget(m_Frame->SceneDepth, vk::Format::eD32Sfloat, depthUsage, depthDesc);
 
         auto outputDesc = nvrhi::TextureDesc()
             .setWidth(width)
@@ -532,7 +561,7 @@ namespace Lynx
             .setDebugName("SceneLDR")
             .setInitialState(nvrhi::ResourceStates::ShaderResource)
             .setKeepInitialState(true);
-        target.Output = m_NvrhiDevice->createTexture(outputDesc);
+        target.Output = createTarget(m_Frame->SceneOutput, vk::Format::eB8G8R8A8Unorm, colorUsage, outputDesc);
 
         if (m_ShouldCreateIDTarget)
         {
@@ -545,7 +574,7 @@ namespace Lynx
                 .setInitialState(nvrhi::ResourceStates::RenderTarget)
                 .setKeepInitialState(true)
                 .setClearValue(nvrhi::Color(-1.0f, 0.0f, 0.0f, 0.0f));
-            target.IdBuffer = m_NvrhiDevice->createTexture(idDesc);
+            target.IdBuffer = createTarget(m_Frame->SceneEntityIds, vk::Format::eR32Sint, colorUsage, idDesc);
         }
 
         auto hdrFBDesc = nvrhi::FramebufferDesc()
@@ -1060,7 +1089,7 @@ namespace Lynx
         }
         else if (m_SceneTarget->Width != width || m_SceneTarget->Height != height)
         {
-            m_Context->WaitIdle();
+            // No waiting for the GPU: the old pictures are released once the frames that use them are done.
             m_SceneTarget.reset();
             m_SceneTarget = std::make_unique<RenderTarget>();
             CreateRenderTarget(*m_SceneTarget, width, height);
