@@ -107,11 +107,19 @@ namespace Lynx
         return index;
     }
 
-    bool SharedBindings::Supports(const ShaderProgram& program, std::string_view shaderName) const
+    bool SharedBindings::Supports(const ShaderProgram& program, std::string_view shaderName, uint32_t pushConstantSize) const
     {
         if (program.PushConstantSize > MaxPushConstantSize)
         {
             LX_CORE_ERROR("Shader {0}: {1} bytes of push constants, but {2} is the limit.", shaderName, program.PushConstantSize, MaxPushConstantSize);
+            return false;
+        }
+
+        // A shader pads its constants to a multiple of their largest member, so the two sizes differ
+        // if the struct in C++ lacks that padding.
+        if (program.PushConstantSize != pushConstantSize)
+        {
+            LX_CORE_ERROR("Shader {0}: its push constants are {1} bytes, but the pass sends {2}.", shaderName, program.PushConstantSize, pushConstantSize);
             return false;
         }
 

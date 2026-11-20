@@ -54,8 +54,9 @@ namespace Lynx
         // The index of a sampler, which is added to the table on first use. Samplers are never removed.
         uint32_t SamplerIndex(vk::Sampler sampler);
 
-        // True if the set and the layout provide everything the program expects. Logs what is missing otherwise.
-        bool Supports(const ShaderProgram& program, std::string_view shaderName) const;
+        // True if the set provides everything the program expects, and the program's push constants are
+        // exactly as large as the data the pass sends. Logs what does not fit otherwise.
+        bool Supports(const ShaderProgram& program, std::string_view shaderName, uint32_t pushConstantSize) const;
 
         vk::PipelineLayout PipelineLayout() const { return m_PipelineLayout; }
 

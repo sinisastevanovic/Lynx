@@ -50,7 +50,7 @@ namespace Lynx
             return;
 
         // If the shader stops fitting the pass, the pipeline that works is kept.
-        if (!m_Vulkan->Shared->Supports(*program, "DebugLine.slang"))
+        if (!m_Vulkan->Shared->Supports(*program, "DebugLine.slang", 0))
             return;
 
         GraphicsPipelineDesc desc;

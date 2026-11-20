@@ -1,7 +1,6 @@
 #include "BloomPass.h"
 
 #include "Lynx/Asset/Shader.h"
-#include "Lynx/Log.h"
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
 #include "Lynx/Renderer/SamplerCache.h"
@@ -144,13 +143,8 @@ namespace Lynx
             return;
 
         // The pass and its shader are written together. If they stop agreeing, the pipelines that work are kept.
-        if (!m_Vulkan->Shared->Supports(*program, "Bloom.slang"))
+        if (!m_Vulkan->Shared->Supports(*program, "Bloom.slang", sizeof(BloomPushData)))
             return;
-        if (program->PushConstantSize != sizeof(BloomPushData))
-        {
-            LX_CORE_ERROR("Bloom.slang no longer has the constants the bloom pass expects.");
-            return;
-        }
 
         // The vertex shader makes a triangle that covers the target from the vertex index alone.
         GraphicsPipelineDesc desc;

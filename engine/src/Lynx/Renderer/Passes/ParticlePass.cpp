@@ -2,7 +2,6 @@
 
 #include "Lynx/Asset/Material.h"
 #include "Lynx/Asset/Shader.h"
-#include "Lynx/Log.h"
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
@@ -67,13 +66,8 @@ namespace Lynx
             return;
 
         // The pass and its shader are written together. If they stop agreeing, the pipelines that work are kept.
-        if (!m_Vulkan->Shared->Supports(*program, "Particle.slang"))
+        if (!m_Vulkan->Shared->Supports(*program, "Particle.slang", sizeof(ParticlePushData)))
             return;
-        if (program->PushConstantSize != sizeof(ParticlePushData))
-        {
-            LX_CORE_ERROR("Particle.slang no longer has the constants the particle pass expects.");
-            return;
-        }
 
         // The vertex shader makes the square from the vertex index alone, and reads the particle from a buffer.
         GraphicsPipelineDesc desc;

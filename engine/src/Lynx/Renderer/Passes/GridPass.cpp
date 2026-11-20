@@ -1,7 +1,6 @@
 #include "GridPass.h"
 
 #include "Lynx/Asset/Shader.h"
-#include "Lynx/Log.h"
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
@@ -54,13 +53,8 @@ namespace Lynx
             return;
 
         // The pass and its shader are written together. If they stop agreeing, the pipeline that works is kept.
-        if (!m_Vulkan->Shared->Supports(*program, "Grid.slang"))
+        if (!m_Vulkan->Shared->Supports(*program, "Grid.slang", sizeof(GridPushData)))
             return;
-        if (program->PushConstantSize != sizeof(GridPushData))
-        {
-            LX_CORE_ERROR("Grid.slang no longer has the constants the grid pass expects.");
-            return;
-        }
 
         // The vertex shader makes two triangles that cover the screen from the vertex index alone.
         GraphicsPipelineDesc desc;
