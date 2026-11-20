@@ -1,0 +1,6 @@
+{
+    "Name": "RenderBench",
+    "AssetDirectory": "assets",
+    "StartScene": "Scenes/Features.lxscene",
+    "GameModule": "RenderBenchModule"
+}

@@ -1,0 +1,219 @@
+# Compares the benchmark results of two labels written by tools/bench.ps1: timings, counters and pictures.
+#
+#   tools/bench-compare.ps1 -Before <label> -After <label> [-Bench <name>,...] [-Threshold <percent>] [-All]
+#
+# A timing that changed by less than the threshold is treated as unchanged, because frame times vary
+# by a few percent between runs of the same build. Rows that changed more are marked "faster" or "SLOWER".
+# Measured on an RTX 5080: the frame median and the GPU times repeat within 2.5 %, the CPU times of
+# single passes within 10 %, and the 99th percentile not at all (up to 30 %), so it gets no verdict.
+# Rows whose time is too small to measure reliably are left out unless -All is given.
+# For every picture that differs, a picture showing where is written next to the "after" result.
+param(
+    [Parameter(Mandatory)][string]$Before,
+    [Parameter(Mandatory)][string]$After,
+    [string[]]$Bench = @(),
+    [double]$Threshold = 3.0,
+    [switch]$All
+)
+
+$ErrorActionPreference = "Stop"
+
+Add-Type -AssemblyName System.Drawing
+Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
+
+public static class LynxPictureCompare
+{
+    public class Difference
+    {
+        public bool SameSize;
+        public long DifferentPixels;
+        public long TotalPixels;
+        public int LargestChannelDifference;
+        public double MeanChannelDifference;
+    }
+
+    static byte[] Pixels(Bitmap bitmap)
+    {
+        BitmapData data = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        byte[] pixels = new byte[data.Stride * data.Height];
+        Marshal.Copy(data.Scan0, pixels, 0, pixels.Length);
+        bitmap.UnlockBits(data);
+        return pixels;
+    }
+
+    // Writes a picture to differencePath in which every differing pixel is bright, when the pictures differ.
+    public static Difference Compare(string beforePath, string afterPath, string differencePath)
+    {
+        using (Bitmap before = new Bitmap(beforePath))
+        using (Bitmap after = new Bitmap(afterPath))
+        {
+            Difference difference = new Difference();
+            difference.SameSize = before.Width == after.Width && before.Height == after.Height;
+            if (!difference.SameSize)
+                return difference;
+
+            byte[] beforePixels = Pixels(before);
+            byte[] afterPixels = Pixels(after);
+            byte[] differencePixels = new byte[beforePixels.Length];
+            long channelSum = 0;
+
+            for (int offset = 0; offset < beforePixels.Length; offset += 4)
+            {
+                int largest = 0;
+                for (int channel = 0; channel < 3; channel++)
+                {
+                    int delta = Math.Abs(beforePixels[offset + channel] - afterPixels[offset + channel]);
+                    channelSum += delta;
+                    if (delta > largest) largest = delta;
+                }
+
+                if (largest > 0)
+                {
+                    difference.DifferentPixels++;
+                    if (largest > difference.LargestChannelDifference) difference.LargestChannelDifference = largest;
+                }
+
+                // Small differences are hard to see, so they are amplified.
+                byte shade = (byte)Math.Min(255, largest * 8 + (largest > 0 ? 64 : 0));
+                differencePixels[offset + 0] = shade;
+                differencePixels[offset + 1] = shade;
+                differencePixels[offset + 2] = shade;
+                differencePixels[offset + 3] = 255;
+            }
+
+            difference.TotalPixels = beforePixels.Length / 4;
+            difference.MeanChannelDifference = (double)channelSum / (difference.TotalPixels * 3);
+
+            if (difference.DifferentPixels > 0)
+            {
+                using (Bitmap picture = new Bitmap(before.Width, before.Height, PixelFormat.Format32bppArgb))
+                {
+                    BitmapData data = picture.LockBits(new Rectangle(0, 0, picture.Width, picture.Height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+                    Marshal.Copy(differencePixels, 0, data.Scan0, differencePixels.Length);
+                    picture.UnlockBits(data);
+                    picture.Save(differencePath, ImageFormat.Png);
+                }
+            }
+
+            return difference;
+        }
+    }
+}
+'@
+
+$engineRoot = Split-Path -Parent $PSScriptRoot
+$benchRoot = Join-Path $engineRoot "samples\RenderBench\temp\bench"
+$beforeRoot = Join-Path $benchRoot $Before
+$afterRoot = Join-Path $benchRoot $After
+
+foreach ($root in @($beforeRoot, $afterRoot)) {
+    if (-not (Test-Path $root)) {
+        "No results found at $root"
+        exit 1
+    }
+}
+
+if ($Bench.Count -eq 0) {
+    $Bench = @(Get-ChildItem -Directory $afterRoot | Where-Object { Test-Path (Join-Path $beforeRoot $_.Name) } | ForEach-Object { $_.Name })
+}
+
+# Times below this are dominated by measuring noise.
+$smallestMeasurableMs = 0.02
+
+# $rowThreshold is the change in percent from which a time counts as changed. Zero gives no verdict,
+# and a negative one marks the row as a count, which is "changed" whenever it differs at all.
+function Compare-Row($name, $beforeValue, $afterValue, $rowThreshold) {
+    $change = 0.0
+    if ($beforeValue -ne 0) { $change = ($afterValue - $beforeValue) / $beforeValue * 100.0 }
+
+    $verdict = ""
+    $format = "{0:N3}"
+    if ($rowThreshold -lt 0) {
+        $format = "{0:N0}"
+        if ($beforeValue -ne $afterValue) { $verdict = "changed" }
+    }
+    elseif ($rowThreshold -gt 0 -and [math]::Abs($change) -ge $rowThreshold) {
+        if ($change -lt 0) { $verdict = "faster" } else { $verdict = "SLOWER" }
+    }
+
+    [pscustomobject]@{
+        Measure = $name
+        Before = $format -f $beforeValue
+        After = $format -f $afterValue
+        Change = "{0:+0.0;-0.0;0.0} %" -f $change
+        Verdict = $verdict
+    }
+}
+
+function Compare-Group($title, $beforeGroup, $afterGroup, $rowThreshold) {
+    $isTime = $rowThreshold -ge 0
+    $rows = @()
+    if ($null -eq $afterGroup) { return $rows }
+
+    foreach ($property in $afterGroup.PSObject.Properties) {
+        $afterValue = $property.Value.Median
+        $beforeValue = 0.0
+        if ($null -ne $beforeGroup -and $null -ne $beforeGroup.($property.Name)) { $beforeValue = $beforeGroup.($property.Name).Median }
+
+        if ($isTime -and -not $All -and $beforeValue -lt $smallestMeasurableMs -and $afterValue -lt $smallestMeasurableMs) { continue }
+        $rows += Compare-Row "$title $($property.Name)" $beforeValue $afterValue $rowThreshold
+    }
+    return $rows
+}
+
+foreach ($benchName in $Bench) {
+    $beforeFile = Join-Path $beforeRoot "$benchName\result.json"
+    $afterFile = Join-Path $afterRoot "$benchName\result.json"
+    if (-not (Test-Path $beforeFile) -or -not (Test-Path $afterFile)) {
+        "${benchName}: no result in one of the labels, skipped."
+        continue
+    }
+
+    $beforeResult = Get-Content $beforeFile -Raw | ConvertFrom-Json
+    $afterResult = Get-Content $afterFile -Raw | ConvertFrom-Json
+
+    ""
+    "=== $benchName   $Before ($($beforeResult.Build), $($beforeResult.Width)x$($beforeResult.Height))  ->  $After ($($afterResult.Build), $($afterResult.Width)x$($afterResult.Height)) ==="
+    if ($beforeResult.Build -ne $afterResult.Build -or $beforeResult.Width -ne $afterResult.Width -or $beforeResult.Height -ne $afterResult.Height -or $beforeResult.Adapter -ne $afterResult.Adapter) {
+        "    The two results were measured under different conditions: their timings are not comparable."
+    }
+
+    $rows = @()
+    $cpuThreshold = $Threshold * 4
+    $noVerdict = 0.0
+    $isCount = -1.0
+
+    $rows += Compare-Row "Frame median" $beforeResult.FrameMs.Median $afterResult.FrameMs.Median $Threshold
+    $rows += Compare-Row "Frame P99" $beforeResult.FrameMs.P99 $afterResult.FrameMs.P99 $noVerdict
+    $rows += Compare-Group "GPU" $beforeResult.GpuMs $afterResult.GpuMs $Threshold
+    $rows += Compare-Group "CPU" $beforeResult.CpuMs $afterResult.CpuMs $cpuThreshold
+    $rows += Compare-Group "Count" $beforeResult.Counters $afterResult.Counters $isCount
+    $rows | Format-Table -AutoSize | Out-String -Width 200
+
+    foreach ($picture in $afterResult.Screenshots) {
+        $beforePicture = Join-Path $beforeRoot "$benchName\$picture"
+        $afterPicture = Join-Path $afterRoot "$benchName\$picture"
+        if (-not (Test-Path $beforePicture)) {
+            "    ${picture}: not in $Before"
+            continue
+        }
+
+        $differencePicture = Join-Path $afterRoot ("$benchName\" + [System.IO.Path]::GetFileNameWithoutExtension($picture) + "_difference_to_$Before.png")
+        $difference = [LynxPictureCompare]::Compare($beforePicture, $afterPicture, $differencePicture)
+
+        if (-not $difference.SameSize) {
+            "    ${picture}: the sizes differ"
+        }
+        elseif ($difference.DifferentPixels -eq 0) {
+            "    ${picture}: identical"
+        }
+        else {
+            $share = $difference.DifferentPixels / $difference.TotalPixels * 100.0
+            "    {0}: DIFFERENT in {1:N2} % of the pixels, largest difference {2} of 255, mean {3:N4}. See {4}" -f $picture, $share, $difference.LargestChannelDifference, $difference.MeanChannelDifference, $differencePicture
+        }
+    }
+}

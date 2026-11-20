@@ -12,3 +12,6 @@ build/
 Roadmap.md
 *.log
 *.lnk
+
+# Engine scratch space of the projects in samples/
+temp/

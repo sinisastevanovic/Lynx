@@ -31,6 +31,7 @@ the steps under "Stage 1 in detail" as they land. The non-renderer steps of the 
 - `engine/launch/` sources compiled into every game: module exports and the standalone `main`
 - `editor/src/` the editor: `EditorLayer`, `Panels/`, `Inspectors/`
 - `cmake/LynxGame.cmake` `lynx_add_game()`, which builds a game
+- `samples/RenderBench/` the project the renderer is measured with: benchmark scenes, and one file per benchmark in `bench/`
 - `tools/` scripts for verifying changes
 
 ## Build and run
@@ -77,7 +78,12 @@ build\bin\Debug\LynxSandboxGame.exe
 ## Verifying a change
 
 - Build, then run the editor and the game and read `temp\engine.log` for `[error]`, `[critical]` and `NVRHI:` lines.
-- Rendering: `tools/capture-window.ps1` saves a picture of the window. Compare one from before with one from after.
+- Rendering and speed: `tools/bench.ps1 -Label <name>` runs the RenderBench benchmarks in Release and stores timings
+  and pictures under the label. Run it before and after a change, then `tools/bench-compare.ps1 -Before <a> -After <b>`.
+  Pictures are identical between runs of the same code, so any difference comes from the change. Frame and GPU times
+  repeat within about 2.5 %. A benchmark renders nothing the benchmark scenes do not contain: no UI and no particles yet.
+- The editor window: `tools/capture-window.ps1` saves a picture of it. Compare one from before with one from after.
+- F3, or `--profiler` on the command line, shows frame, CPU and GPU times on screen in the editor and in a game.
 - Serialization: re-save every scene and prefab with the old and the new code and compare the JSON.
 - Editor interaction (clicking, dragging, pressing Play) cannot be automated. Say so, and ask for it to be checked.
 - Running the game locks the mouse cursor on the machine for as long as it runs.

@@ -1,0 +1,102 @@
+{
+    "Entities": [
+        {
+            "ID": 7000000000000000001,
+            "Tag": {
+                "Tag": "Sun"
+            },
+            "Transform": {
+                "Translation": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Rotation": [
+                    0.781300520396941,
+                    -0.5995129750225789,
+                    0.13776436178754503,
+                    0.10571031278128072
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "DirectionalLight": {
+                "Color": [
+                    1.0,
+                    0.96,
+                    0.9
+                ],
+                "Intensity": 5.0,
+                "CastShadows": true
+            }
+        },
+        {
+            "ID": 7000000000000000002,
+            "Tag": {
+                "Tag": "Sponza"
+            },
+            "Transform": {
+                "Translation": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Rotation": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "Mesh": {
+                "Mesh": 3722861597442906936
+            }
+        },
+        {
+            "ID": 7200000000000000007,
+            "Tag": {
+                "Tag": "Camera"
+            },
+            "Transform": {
+                "Translation": [
+                    -11.0,
+                    1.6,
+                    -0.4
+                ],
+                "Rotation": [
+                    0.6935624719929829,
+                    0.02830703780707623,
+                    -0.7192413277326324,
+                    0.029355093850500766
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "Camera": {
+                "FixedAspectRatio": false,
+                "Primary": true,
+                "SceneCamera": {
+                    "OrthographicFar": 1.0,
+                    "OrthographicNear": -1.0,
+                    "OrthographicSize": 10.0,
+                    "PerspectiveFOV": 1.0471975511965976,
+                    "PerspectiveFar": 1000.0,
+                    "PerspectiveNear": 0.1,
+                    "ProjectionType": 0
+                }
+            }
+        }
+    ],
+    "Scene": "Sponza"
+}

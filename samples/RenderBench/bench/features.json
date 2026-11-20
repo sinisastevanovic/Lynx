@@ -1,0 +1,51 @@
+{
+    "Name": "features",
+    "Scene": "Scenes/Features.lxscene",
+    "Frames": 300,
+    "ScreenshotFrames": [
+        0,
+        150,
+        299
+    ],
+    "CameraPath": [
+        {
+            "Frame": 0,
+            "Position": [
+                -9.0,
+                4.0,
+                11.0
+            ],
+            "Target": [
+                0.0,
+                2.5,
+                -1.0
+            ]
+        },
+        {
+            "Frame": 150,
+            "Position": [
+                0.0,
+                3.5,
+                13.0
+            ],
+            "Target": [
+                0.0,
+                3.0,
+                -1.0
+            ]
+        },
+        {
+            "Frame": 299,
+            "Position": [
+                9.0,
+                4.0,
+                11.0
+            ],
+            "Target": [
+                0.0,
+                2.5,
+                -1.0
+            ]
+        }
+    ]
+}

@@ -80,3 +80,10 @@ include(cmake/LynxGame.cmake)
 
 add_subdirectory(engine)
 add_subdirectory(editor)
+
+# The project the renderer is measured with, see tools/bench.ps1. It is built along with every game
+# so that the benchmarks always match the engine they run on.
+option(LYNX_BUILD_RENDER_BENCH "Build the RenderBench project" ON)
+if(LYNX_BUILD_RENDER_BENCH)
+    add_subdirectory(samples/RenderBench)
+endif()

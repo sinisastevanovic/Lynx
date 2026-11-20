@@ -1,0 +1,54 @@
+{
+    "Name": "grid",
+    "Scene": "Scenes/Grid.lxscene",
+    "Frames": 600,
+    "ScreenshotFrames": [
+        0,
+        300,
+        599
+    ],
+    "Parameters": {
+        "Instances": 10000
+    },
+    "CameraPath": [
+        {
+            "Frame": 0,
+            "Position": [
+                -110.0,
+                25.0,
+                -110.0
+            ],
+            "Target": [
+                0.0,
+                0.0,
+                0.0
+            ]
+        },
+        {
+            "Frame": 300,
+            "Position": [
+                0.0,
+                12.0,
+                0.0
+            ],
+            "Target": [
+                60.0,
+                0.0,
+                60.0
+            ]
+        },
+        {
+            "Frame": 599,
+            "Position": [
+                90.0,
+                40.0,
+                90.0
+            ],
+            "Target": [
+                0.0,
+                0.0,
+                0.0
+            ]
+        }
+    ]
+}

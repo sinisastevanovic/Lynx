@@ -1,0 +1,77 @@
+{
+    "Name": "sponza",
+    "Scene": "Scenes/Sponza.lxscene",
+    "Frames": 600,
+    "ScreenshotFrames": [
+        0,
+        300,
+        599
+    ],
+    "CameraPath": [
+        {
+            "Frame": 0,
+            "Position": [
+                -12.0,
+                1.8,
+                0.0
+            ],
+            "Target": [
+                0.0,
+                3.0,
+                0.0
+            ]
+        },
+        {
+            "Frame": 200,
+            "Position": [
+                -2.0,
+                2.2,
+                0.0
+            ],
+            "Target": [
+                10.0,
+                4.0,
+                0.5
+            ]
+        },
+        {
+            "Frame": 300,
+            "Position": [
+                3.0,
+                4.0,
+                -0.5
+            ],
+            "Target": [
+                6.0,
+                3.0,
+                6.0
+            ]
+        },
+        {
+            "Frame": 400,
+            "Position": [
+                6.0,
+                6.0,
+                0.0
+            ],
+            "Target": [
+                -6.0,
+                2.0,
+                1.0
+            ]
+        },
+        {
+            "Frame": 599,
+            "Position": [
+                -8.0,
+                8.0,
+                0.0
+            ],
+            "Target": [
+                6.0,
+                0.5,
+                0.0
+            ]
+        }
+    ]
+}
