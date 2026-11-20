@@ -75,6 +75,7 @@ find_package(unofficial-shaderc CONFIG REQUIRED)
 find_package(Jolt CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)
+find_package(slang CONFIG REQUIRED)
 
 target_link_libraries(engine PUBLIC
 
@@ -99,4 +100,25 @@ target_link_libraries(engine PUBLIC
     GPUOpen::VulkanMemoryAllocator
 
     ${LUA_LIBRARIES}
+)
+
+# The Slang shader compiler. Only the engine uses it, and it needs its own files next to the engine at run time:
+# the compiler, the SPIR-V optimizer it loads on demand, and its standard modules.
+target_link_libraries(engine PRIVATE slang::slang)
+
+set(LYNX_SLANG_RUNTIME_DIR "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<$<CONFIG:Debug>:debug/>bin")
+file(GLOB LYNX_SLANG_STANDARD_MODULES RELATIVE "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+    "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/slang-standard-module-*")
+
+add_custom_command(TARGET engine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${LYNX_SLANG_RUNTIME_DIR}/slang.dll"
+        "${LYNX_SLANG_RUNTIME_DIR}/slang-compiler.dll"
+        "${LYNX_SLANG_RUNTIME_DIR}/slang-glslang.dll"
+        "${LYNX_SLANG_RUNTIME_DIR}/slang.slang"
+        "$<TARGET_FILE_DIR:engine>"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${LYNX_SLANG_RUNTIME_DIR}/${LYNX_SLANG_STANDARD_MODULES}"
+        "$<TARGET_FILE_DIR:engine>/${LYNX_SLANG_STANDARD_MODULES}"
+    VERBATIM
 )

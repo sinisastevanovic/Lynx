@@ -62,6 +62,9 @@ build\bin\Debug\LynxSandboxGame.exe
   scene is played, never the loaded asset itself.
 - **Assets.** Reading a file may happen on any thread. Creating GPU resources happens on the main thread only.
 - **Shutdown order matters.** Scenes go before the script engine, assets before the renderer. See `Engine::Shutdown`.
+- **Shaders.** New shaders are written in Slang (`.slang`), old ones are GLSL until their pass is ported. A Slang
+  shader is compiled once and cached in `temp\ShaderCache` together with what it expects to be bound. Passes build
+  their layouts from that, so no binding number is written in C++. Mark entry points with `[shader("vertex")]`.
 - **Renderer.** NVRHI validation is on in debug builds. A new binding layout or set that is wrong shows up in the log
   as `NVRHI:` errors right at startup.
 

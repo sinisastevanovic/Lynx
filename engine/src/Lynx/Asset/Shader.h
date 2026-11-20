@@ -4,6 +4,8 @@
 
 namespace Lynx
 {
+    struct ShaderProgram;
+
     enum class ShaderType
     {
         Standard,
@@ -25,6 +27,10 @@ namespace Lynx
         nvrhi::ShaderHandle GetPixelShader() const { return m_PixelShader; }
         nvrhi::ShaderHandle GetComputeShader() const { return m_ComputeShader; }
 
+        // The compiled program of a .slang file, with what it expects to be bound. Null for a .glsl file,
+        // and null if the file has never compiled. After a failed reload it is still the last one that compiled.
+        std::shared_ptr<const ShaderProgram> GetProgram() const { return m_Program; }
+
     private:
         void LoadAndCompile();
         std::unordered_map<nvrhi::ShaderType, std::string> PreProcess(const std::string& source);
@@ -35,6 +41,8 @@ namespace Lynx
         nvrhi::ShaderHandle m_VertexShader;
         nvrhi::ShaderHandle m_PixelShader;
         nvrhi::ShaderHandle m_ComputeShader;
+
+        std::shared_ptr<const ShaderProgram> m_Program;
     };
 
 }

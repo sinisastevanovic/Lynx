@@ -248,7 +248,7 @@ foreach ($benchName in $Bench) {
         }
         else {
             $share = $difference.DifferentPixels / $difference.TotalPixels * 100.0
-            "    {0}: DIFFERENT in {1:N2} % of the pixels, largest difference {2} of 255, mean {3:N4}. See {4}" -f $picture, $share, $difference.LargestChannelDifference, $difference.MeanChannelDifference, $differencePicture
+            "    {0}: DIFFERENT in {1:N0} of {2:N0} pixels ({3:N4} %), largest difference {4} of 255. See {5}" -f $picture, $difference.DifferentPixels, $difference.TotalPixels, $share, $difference.LargestChannelDifference, $differencePicture
         }
     }
 }

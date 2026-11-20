@@ -16,6 +16,7 @@
         "nlohmann-json",
         "freetype",
         "libpng",
+        "shader-slang",
         "vulkan-memory-allocator"
     ]
 }

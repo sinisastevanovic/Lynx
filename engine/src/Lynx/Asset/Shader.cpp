@@ -3,6 +3,7 @@
 #include <shaderc/shaderc.h>
 
 #include "Lynx/Engine.h"
+#include "Lynx/Renderer/Shader/ShaderCompiler.h"
 #include "Lynx/Renderer/ShaderUtils.h"
 
 namespace Lynx
@@ -21,6 +22,16 @@ namespace Lynx
 
     void Shader::LoadAndCompile()
     {
+        if (std::filesystem::path(m_FilePath).extension() == ".slang")
+        {
+            if (std::shared_ptr<const ShaderProgram> program = Engine::Get().GetShaderCompiler().Load(m_FilePath))
+            {
+                m_Program = std::move(program);
+                IncrementVersion();
+            }
+            return;
+        }
+
         std::ifstream in(m_FilePath, std::ios::in | std::ios::binary);
         if (in)
         {

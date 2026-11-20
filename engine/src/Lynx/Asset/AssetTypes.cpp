@@ -20,7 +20,7 @@ namespace Lynx::AssetUtils
         { AssetType::Scene, { "Lynx Scene", { "*.lxscene" }, "ASSET_SCENE" } },
         { AssetType::Texture, {"Texture File",  { "*.png", "*.jpg", "*.jpeg", "*.tga" },"ASSET_TEXTURE" } },
         { AssetType::Material, { "Material File", { "*.lxmat" },"ASSET_MATERIAL" } },
-        { AssetType::Shader, { "Shader File", { "*.glsl" },"ASSET_SHADER" } },
+        { AssetType::Shader, { "Shader File", { "*.glsl", "*.slang" },"ASSET_SHADER" } },
         //{ AssetType::Mesh, { "3D Model",      { "*.fbx", "*.obj", "*.gltf" } } }
         { AssetType::StaticMesh, { "3D Model",      { "*.gltf" },"ASSET_STATICMESH" } },
         { AssetType::Script , { "Lua Script", { "*.lua" }, "ASSET_SCRIPT" } },

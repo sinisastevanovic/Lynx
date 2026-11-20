@@ -1,8 +1,10 @@
 #include "CompositePass.h"
 
 #include "Lynx/Asset/Shader.h"
+#include "Lynx/Log.h"
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/SamplerCache.h"
+#include "Lynx/Renderer/Vulkan/ShaderLayout.h"
 
 #include <vulkan/vulkan.hpp>
 
@@ -10,11 +12,11 @@ namespace Lynx
 {
     namespace
     {
+        // Has to match CompositeConstants in Composite.slang.
         struct CompositePushData
         {
             float BloomIntensity;
             int FXAAEnabled;
-            float Padding[2];
         };
 
         // The format of every picture this pass writes: the window's images and the editor's viewport.
@@ -38,7 +40,13 @@ namespace Lynx
         vk::DescriptorPool DescriptorPool;
         vk::DescriptorSet DescriptorSet;
 
-        // The renderer waits for the GPU before it destroys its passes, so nothing here is still in use.
+        // Where the shader expects its inputs, read from the compiled program.
+        uint32_t SceneTextureBinding = 0;
+        uint32_t SamplerBinding = 0;
+        uint32_t BloomTextureBinding = 0;
+        vk::ShaderStageFlags PushConstantStages;
+
+        // The renderer waitsfor the GPU before it destroys its passes, so nothing here is still in use.
         ~VulkanObjects()
         {
             if (!Device)
@@ -59,35 +67,58 @@ namespace Lynx
         m_Vulkan = std::make_unique<VulkanObjects>();
         m_Vulkan->Context = ctx.Graphics;
         m_Vulkan->Device = ctx.Graphics->Device();
-        const vk::Device device = m_Vulkan->Device;
-
-        // Matches set 0 of Composite.glsl: the scene, a sampler, the bloom.
-        const vk::DescriptorSetLayoutBinding bindings[] = {
-            { 0, vk::DescriptorType::eSampledImage, 1, vk::ShaderStageFlagBits::eFragment },
-            { 1, vk::DescriptorType::eSampler, 1, vk::ShaderStageFlagBits::eFragment },
-            { 2, vk::DescriptorType::eSampledImage, 1, vk::ShaderStageFlagBits::eFragment },
-        };
-        m_Vulkan->SetLayout = device.createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo({}, bindings));
-
-        const vk::PushConstantRange pushRange(vk::ShaderStageFlagBits::eFragment, 0, sizeof(CompositePushData));
-        m_Vulkan->PipelineLayout = device.createPipelineLayout(vk::PipelineLayoutCreateInfo({}, m_Vulkan->SetLayout, pushRange));
-
-        m_PipelineState.SetShader("Shaders/Composite.glsl");
+        m_PipelineState.SetShader("Shaders/Composite.slang");
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
     }
 
     void CompositePass::CreatePipeline(const Shader& shader)
     {
+        const std::shared_ptr<const ShaderProgram> program = shader.GetProgram();
+        if (!program)
+            return;
+
+        const ShaderStageCode* vertexCode = program->FindStage(ShaderStage::Vertex);
+        const ShaderStageCode* fragmentCode = program->FindStage(ShaderStage::Fragment);
+        const std::optional<uint32_t> sceneTexture = FindBinding(*program, "sceneTexture");
+        const std::optional<uint32_t> sampler = FindBinding(*program, "linearSampler");
+        const std::optional<uint32_t> bloomTexture = FindBinding(*program, "bloomTexture");
+
+        // The pass and its shader are written together. If they stop agreeing, the pipeline that works is kept.
+        if (!vertexCode || !fragmentCode || !sceneTexture || !sampler || !bloomTexture || program->PushConstantSize != sizeof(CompositePushData))
+        {
+            LX_CORE_ERROR("Composite.slang no longer has the stages, parameters or constants the composite pass expects.");
+            return;
+        }
+
+        // A reloaded shader replaces objects that frames still on the GPU may be using.
         const vk::Device device = m_Vulkan->Device;
+        m_Vulkan->Context->Deletions().Retire([device, pipeline = m_Vulkan->Pipeline, pipelineLayout = m_Vulkan->PipelineLayout, setLayout = m_Vulkan->SetLayout, pool = m_Vulkan->DescriptorPool]()
+        {
+            device.destroyPipeline(pipeline);
+            device.destroyPipelineLayout(pipelineLayout);
+            device.destroyDescriptorPool(pool);
+            device.destroyDescriptorSetLayout(setLayout);
+        });
 
-        // A hot-reloaded shader replaces a pipeline that frames still on the GPU may be using.
-        if (m_Vulkan->Pipeline)
-            m_Vulkan->Context->Deletions().Retire([device, pipeline = m_Vulkan->Pipeline]() { device.destroyPipeline(pipeline); });
+        // The layout is whatever the shader declares. Nothing about it is repeated here.
+        m_Vulkan->SetLayout = CreateSetLayout(device, *program, 0);
+        m_Vulkan->PipelineLayout = CreatePipelineLayout(device, *program, m_Vulkan->SetLayout);
+        m_Vulkan->PushConstantStages = ToVulkan(program->StageMask());
+        m_Vulkan->SceneTextureBinding = *sceneTexture;
+        m_Vulkan->SamplerBinding = *sampler;
+        m_Vulkan->BloomTextureBinding = *bloomTexture;
 
-        // A pipeline keeps nothing of the shader modules it was made from, so NVRHI stays their only owner.
+        // The descriptor set belonged to the old layout, so the inputs are bound again.
+        m_Vulkan->DescriptorPool = nullptr;
+        m_BoundSceneColor = nullptr;
+        m_BoundBloom = nullptr;
+
+        // A pipeline keeps nothing of the modules it was made from, so they only live until it exists.
+        const vk::ShaderModule vertexModule = CreateShaderModule(device, *vertexCode);
+        const vk::ShaderModule fragmentModule = CreateShaderModule(device, *fragmentCode);
         const vk::PipelineShaderStageCreateInfo stages[] = {
-            { {}, vk::ShaderStageFlagBits::eVertex, Native<vk::ShaderModule>(shader.GetVertexShader()->getNativeObject(nvrhi::ObjectTypes::VK_ShaderModule)), "main" },
-            { {}, vk::ShaderStageFlagBits::eFragment, Native<vk::ShaderModule>(shader.GetPixelShader()->getNativeObject(nvrhi::ObjectTypes::VK_ShaderModule)), "main" },
+            { {}, vk::ShaderStageFlagBits::eVertex, vertexModule, "main" },
+            { {}, vk::ShaderStageFlagBits::eFragment, fragmentModule, "main" },
         };
 
         // The vertex shader makes a triangle that covers the screen from the vertex index alone.
@@ -128,6 +159,9 @@ namespace Lynx
         pipelineInfo.layout = m_Vulkan->PipelineLayout;
 
         m_Vulkan->Pipeline = device.createGraphicsPipeline(nullptr, pipelineInfo).value;
+
+        device.destroyShaderModule(vertexModule);
+        device.destroyShaderModule(fragmentModule);
     }
 
     void CompositePass::BindInputs(nvrhi::ITexture* sceneColor, nvrhi::ITexture* bloom)
@@ -156,9 +190,9 @@ namespace Lynx
         const vk::DescriptorImageInfo samplerInfo(Native<vk::Sampler>(SamplerCache::Get()->GetSampler(SamplerSettings())->getNativeObject(nvrhi::ObjectTypes::VK_Sampler)));
 
         const vk::WriteDescriptorSet writes[] = {
-            { m_Vulkan->DescriptorSet, 0, 0, vk::DescriptorType::eSampledImage, sceneInfo },
-            { m_Vulkan->DescriptorSet, 1, 0, vk::DescriptorType::eSampler, samplerInfo },
-            { m_Vulkan->DescriptorSet, 2, 0, vk::DescriptorType::eSampledImage, bloomInfo },
+            { m_Vulkan->DescriptorSet, m_Vulkan->SceneTextureBinding, 0, vk::DescriptorType::eSampledImage, sceneInfo },
+            { m_Vulkan->DescriptorSet, m_Vulkan->SamplerBinding, 0, vk::DescriptorType::eSampler, samplerInfo },
+            { m_Vulkan->DescriptorSet, m_Vulkan->BloomTextureBinding, 0, vk::DescriptorType::eSampledImage, bloomInfo },
         };
         device.updateDescriptorSets(writes, nullptr);
     }
@@ -166,6 +200,10 @@ namespace Lynx
     void CompositePass::Execute(RenderContext& ctx, RenderData& renderData)
     {
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
+
+        // The shader has never compiled. The error is in the log, and the window stays as the scene passes left it.
+        if (!m_Vulkan->Pipeline)
+            return;
 
         nvrhi::ITexture* sceneColor = renderData.SceneColorInput;
         nvrhi::ITexture* bloom = renderData.BloomTexture ? renderData.BloomTexture.Get() : ctx.BlackTexture.Get();
@@ -211,7 +249,7 @@ namespace Lynx
         CompositePushData push{};
         push.BloomIntensity = renderData.BloomIntensity;
         push.FXAAEnabled = renderData.FXAAEnabled ? 1 : 0;
-        commands.pushConstants(m_Vulkan->PipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(push), &push);
+        commands.pushConstants(m_Vulkan->PipelineLayout, m_Vulkan->PushConstantStages, 0, sizeof(push), &push);
 
         commands.draw(3, 1, 0, 0);
         commands.endRendering();
