@@ -194,11 +194,12 @@ namespace Lynx
     {
     public:
         // The path is relative to the engine resource directory, e.g. "Shaders/Bloom.glsl".
-        void SetShader(const std::filesystem::path& engineShaderPath) { m_ShaderPath = engineShaderPath; }
+        void SetShader(const std::filesystem::path& engineShaderPath) { m_ShaderPath = engineShaderPath; m_Shader = nullptr; }
         bool Update(std::function<void(std::shared_ptr<Shader>)> builder);
 
     private:
         std::filesystem::path m_ShaderPath;
+        std::shared_ptr<Shader> m_Shader;
         uint32_t m_Version = -1;
     };
 }

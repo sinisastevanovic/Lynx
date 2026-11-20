@@ -7,11 +7,15 @@ namespace Lynx
 {
     bool PipelineState::Update(std::function<void(std::shared_ptr<Shader>)> builder)
     {
-        auto shader = Engine::Get().GetAssetManager().GetEngineAsset<Shader>(m_ShaderPath);
-        if (shader && shader->GetVersion() != m_Version)
+        // Looked up once. A reload changes the asset in place and raises its version,
+        // so comparing versions is all that is needed in the frames after.
+        if (!m_Shader)
+            m_Shader = Engine::Get().GetAssetManager().GetEngineAsset<Shader>(m_ShaderPath);
+
+        if (m_Shader && m_Shader->GetVersion() != m_Version)
         {
-            builder(shader);
-            m_Version = shader->GetVersion();
+            builder(m_Shader);
+            m_Version = m_Shader->GetVersion();
             return true;
         }
         return false;
