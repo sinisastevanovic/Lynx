@@ -5,7 +5,7 @@
 # The timings compared are the "clean" ones, see tools/bench.ps1. A timing that changed by less than
 # the threshold is treated as unchanged. Rows that changed more are marked "faster" or "SLOWER".
 # Measured on an RTX 5080 with five runs: clean GPU times repeat within 1.3 % and the clean frame time
-# within 1.6 %. CPU times of single passes vary more and get four times the threshold.
+# within 2.0 %. CPU times of single passes vary by up to 8 % and get four times the threshold.
 # The 99th percentile is raw and varies by up to 50 % on its own, so it gets no verdict.
 # Between sessions the same build drifts, so the script warns when the two results are far apart in time.
 # Rows whose time is too small to measure reliably are left out unless -All is given.
@@ -14,7 +14,7 @@ param(
     [Parameter(Mandatory)][string]$Before,
     [Parameter(Mandatory)][string]$After,
     [string[]]$Bench = @(),
-    [double]$Threshold = 2.0,
+    [double]$Threshold = 2.5,
     [switch]$All
 )
 
@@ -126,14 +126,6 @@ if ($Bench.Count -eq 0) {
     $Bench = @(Get-ChildItem -Directory $afterRoot | Where-Object { Test-Path (Join-Path $beforeRoot $_.Name) } | ForEach-Object { $_.Name })
 }
 
->>>>
-<<<<
-function Compare-Group($title, $beforeGroup, $afterGroup, $rowThreshold) {
-    $isTime = $rowThreshold -ge 0
-====
-# Times below $smallestMeasurableMs are dominated by measuring noise and are left out.
-function Compare-Group($title, $beforeGroup, $afterGroup, $rowThreshold, $smallestMeasurableMs) {
-    $isTime = $rowThreshold -ge 0
 # $rowThreshold is the change in percent from which a time counts as changed. Zero gives no verdict,
 # and a negative one marks the row as a count, which is "changed" whenever it differs at all.
 function Compare-Row($name, $beforeValue, $afterValue, $rowThreshold) {
@@ -165,7 +157,8 @@ function Get-Number($value) {
     return $value
 }
 
-function Compare-Group($title, $beforeGroup, $afterGroup, $rowThreshold) {
+# Times below $smallestMeasurableMs are dominated by measuring noise and are left out.
+function Compare-Group($title, $beforeGroup, $afterGroup, $rowThreshold, $smallestMeasurableMs) {
     $isTime = $rowThreshold -ge 0
     $rows = @()
     if ($null -eq $afterGroup) { return $rows }
