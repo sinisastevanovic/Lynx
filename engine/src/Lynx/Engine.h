@@ -3,6 +3,9 @@
 #include "Window.h"
 #include "Asset/AssetManager.h"
 #include "Core/ContentPaths.h"
+#include "ImGui/ProfilerOverlay.h"
+#include "Profiling/Benchmark.h"
+#include "Profiling/FrameProfiler.h"
 #include "Project/Project.h"
 #include "Renderer/Renderer.h"
 #include "Event/Event.h"
@@ -38,6 +41,17 @@ namespace Lynx
         void PreGameShutdown();
         void Shutdown();
 
+        // Turns the session into a benchmark: the game plays the benchmark's scene with a scripted camera,
+        // the engine measures a fixed number of frames, writes the results and then leaves Run.
+        // Call it after Initialize and before the scene starts playing.
+        void SetBenchmark(BenchmarkSettings settings);
+        const Benchmark* GetBenchmark() const { return m_Benchmark.get(); }
+
+        FrameProfiler& GetProfiler() { return m_Profiler; }
+
+        // The overlay shows frame, CPU and GPU times on top of the picture. F3 toggles it.
+        void SetProfilerOverlayVisible(bool visible) { m_ShowProfilerOverlay = visible; }
+
         inline Window& GetWindow() { return *m_Window; }
         const Project& GetProject() const { return m_Project; }
         const ContentPaths& GetContentPaths() const { return *m_ContentPaths; }
@@ -61,6 +75,7 @@ namespace Lynx
 
         // Loads the project's start scene and plays a copy of it. This is how a standalone game,
         // which has no editor to press Play, gets into Play state. Returns false if the scene cannot be loaded.
+        // A benchmark that names a scene replaces the start scene.
         bool PlayStartScene();
         void LoadScene(std::shared_ptr<Scene> newScene);
         void LoadScene(const std::filesystem::path& path);
@@ -103,6 +118,12 @@ namespace Lynx
         std::unique_ptr<ContentPaths> m_ContentPaths;
         std::unique_ptr<ShaderCache> m_ShaderCache;
         std::string m_ImGuiLayoutFile;
+
+        // Declared before the renderer, which holds a reference to it.
+        FrameProfiler m_Profiler;
+        ProfilerOverlay m_ProfilerOverlay;
+        bool m_ShowProfilerOverlay = false;
+        std::unique_ptr<Benchmark> m_Benchmark;
 
         std::unique_ptr<Window> m_Window;
         std::unique_ptr<Renderer> m_Renderer;

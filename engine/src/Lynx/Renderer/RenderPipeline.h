@@ -6,21 +6,28 @@ namespace Lynx
     class RenderPipeline
     {
     public:
-        void AddPass(std::unique_ptr<RenderPass> pass)
+        // The name identifies the pass in profiler output.
+        void AddPass(std::string name, std::unique_ptr<RenderPass> pass)
         {
-            m_Passes.push_back(std::move(pass));
+            m_Passes.push_back({ std::move(name), std::move(pass) });
         }
 
         void Init(RenderContext& ctx)
         {
-            for (auto& pass : m_Passes)
-                pass->Init(ctx);
+            for (auto& entry : m_Passes)
+                entry.Pass->Init(ctx);
         }
 
-        void Execute(RenderContext& ctx, RenderData& renderData)
+        // makeScope is called with the name of each pass before it runs, and what it returns is
+        // destroyed after the pass has run. That is where a caller measures the pass.
+        template<typename MakeScope>
+        void Execute(RenderContext& ctx, RenderData& renderData, MakeScope&& makeScope)
         {
-            for (auto& pass : m_Passes)
-                pass->Execute(ctx, renderData);
+            for (auto& entry : m_Passes)
+            {
+                auto scope = makeScope(entry.Name);
+                entry.Pass->Execute(ctx, renderData);
+            }
         }
 
         void Clear()
@@ -29,6 +36,11 @@ namespace Lynx
         }
 
     private:
-        std::vector<std::unique_ptr<RenderPass>> m_Passes;
+        struct NamedPass
+        {
+            std::string Name;
+            std::unique_ptr<RenderPass> Pass;
+        };
+        std::vector<NamedPass> m_Passes;
     };
 }

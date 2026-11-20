@@ -2,13 +2,14 @@
 # Used to check rendering changes by comparing a picture from before a change with one from after.
 #
 #   tools/capture-window.ps1 -Exe <path> -WorkingDirectory <project folder> -Output <png>
-#       [-Wait <seconds>] [-ResizeWidth <px> -ResizeHeight <px>]
+#       [-Arguments <text>] [-Wait <seconds>] [-ResizeWidth <px> -ResizeHeight <px>]
 #
 # The window does not have to be in front. Note that a game may lock the mouse cursor while it runs.
 param(
     [Parameter(Mandatory)][string]$Exe,
     [Parameter(Mandatory)][string]$WorkingDirectory,
     [Parameter(Mandatory)][string]$Output,
+    [string]$Arguments = "",
     [int]$Wait = 12,
     [int]$ResizeWidth = 0,
     [int]$ResizeHeight = 0
@@ -24,6 +25,7 @@ Add-Type -Namespace LynxCapture -Name Win -MemberDefinition @'
 
 $startInfo = New-Object System.Diagnostics.ProcessStartInfo
 $startInfo.FileName = $Exe
+$startInfo.Arguments = $Arguments
 $startInfo.WorkingDirectory = $WorkingDirectory
 $startInfo.UseShellExecute = $false
 $startInfo.RedirectStandardOutput = $true

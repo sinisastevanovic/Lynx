@@ -3,6 +3,10 @@
 #include <nvrhi/nvrhi.h>
 #include <glm/glm.hpp>
 
+#include <chrono>
+#include <string>
+#include <vector>
+
 #include "Passes/MipMapGenPass.h"
 #include "Lynx/Asset/Texture.h"
 #include "Lynx/Asset/StaticMesh.h"
@@ -10,6 +14,7 @@
 
 #include "RenderPipeline.h"
 #include "RenderPass.h"
+#include "Screenshot.h"
 #include "Lynx/UI/Rendering/UIPass.h"
 #include "Passes/BloomPass.h"
 #include "Passes/CompositePass.h"
@@ -19,6 +24,7 @@ struct GLFWwindow;
 
 namespace Lynx
 {
+    class FrameProfiler;
     struct ImGui_NVRHI;
     
     class LX_API Renderer
@@ -49,7 +55,7 @@ namespace Lynx
             float FrameTime = 0.0f;
         };
         
-        Renderer(GLFWwindow* window, bool initIDTarget = false);
+        Renderer(GLFWwindow* window, FrameProfiler& profiler, bool initIDTarget = false);
         ~Renderer();
 
         void Init();
@@ -90,6 +96,18 @@ namespace Lynx
         const RenderStats& GetRenderStats() const { return m_Stats; }
         void ResetStats();
 
+        // Copies the picture of the frame that is rendered next, without the ImGui layer.
+        // The copy is read back a few frames later, so asking for it does not stall the frame.
+        void RequestScreenshot(uint64_t tag);
+
+        // Returns the screenshots that have arrived. With waitForAll, waits for the GPU and returns every one requested.
+        std::vector<Screenshot> TakeScreenshots(bool waitForAll = false);
+
+        // Waits for the GPU and reports the GPU times of the frames that are still outstanding.
+        void FlushGpuTimers();
+
+        std::string GetAdapterName() const;
+
         glm::mat4 GetLightViewProjMatrix() const { return m_CurrentFrameData.LightViewProj; }
         glm::mat4 GetCameraViewProjMatrix() const { return m_CurrentFrameData.ViewProjection; }
 
@@ -111,6 +129,8 @@ namespace Lynx
         void RecreateSwapchain(uint32_t width, uint32_t height);
         void CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height);
         void PrepareDrawCalls();
+        void CopyFrameForScreenshots(nvrhi::ITexture* frame);
+        void ReportMemoryUse();
 
     private:
         // TODO: Pimpl idiom
@@ -162,6 +182,18 @@ namespace Lynx
         float m_MaxAnisotropy = 16.0f;
 
         RenderStats m_Stats;
+
+        FrameProfiler& m_Profiler;
+        std::chrono::steady_clock::time_point m_SubmitStart;
+
+        struct PendingScreenshot
+        {
+            uint64_t Tag = 0;
+            uint64_t Frame = 0;
+            nvrhi::StagingTextureHandle Staging;
+        };
+        std::vector<uint64_t> m_ScreenshotRequests;
+        std::vector<PendingScreenshot> m_PendingScreenshots;
     };
 }
 

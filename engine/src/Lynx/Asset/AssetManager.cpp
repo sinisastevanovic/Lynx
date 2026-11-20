@@ -65,6 +65,17 @@ namespace Lynx
         return LoadAsset(metadata, mode);
     }
 
+    bool AssetManager::HasPendingLoads() const
+    {
+        std::lock_guard<std::mutex> lock(m_AssetsMutex);
+        for (const auto& [handle, asset] : m_LoadedAssets)
+        {
+            if (asset->GetState() == AssetState::Loading)
+                return true;
+        }
+        return false;
+    }
+
     std::shared_ptr<Asset> AssetManager::LoadAsset(const AssetMetadata& metadata, AssetLoadMode mode)
     {
         std::shared_ptr<Asset> asset = CreateAssetInstance(metadata);

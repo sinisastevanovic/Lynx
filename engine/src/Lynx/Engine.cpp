@@ -52,7 +52,7 @@ namespace Lynx
         
         m_EditorCamera = EditorCamera(45.0f, (float)m_Window->GetWidth() / (float)m_Window->GetHeight(), 0.1f, 1000.0f);
 
-        m_Renderer = std::make_unique<Renderer>(m_Window->GetNativeWindow(), editorMode);
+        m_Renderer = std::make_unique<Renderer>(m_Window->GetNativeWindow(), m_Profiler, editorMode);
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
@@ -91,6 +91,14 @@ namespace Lynx
         GameTypeRegistry gameRegistry(m_ComponentRegistry);
         m_GameModule->RegisterScripts(&gameRegistry);
         m_GameModule->RegisterComponents(&gameRegistry);
+    }
+
+    void Engine::SetBenchmark(BenchmarkSettings settings)
+    {
+        // A benchmark measures the renderer, not the display: its frames must not wait for the refresh.
+        m_Renderer->SetVSync(false);
+        m_Window->SetSize(settings.Width, settings.Height);
+        m_Benchmark = std::make_unique<Benchmark>(std::move(settings));
     }
 
     void Engine::Run()
@@ -132,13 +140,23 @@ namespace Lynx
         // This is a placeholder for the real game loop
         while (m_IsRunning)
         {
+            m_Profiler.NewFrame();
             ProcessPendingScene();
-            
+
             float time = (float)glfwGetTime();
             m_UnscaledDeltaTime = time - lastFrameTime;
             lastFrameTime = time;
-            
+
             m_UnscaledDeltaTime = std::min(m_UnscaledDeltaTime, fixedTimestep * maxSubSteps);
+
+            // A benchmark decides how far each frame advances the game, so that every run renders the same frames.
+            if (m_Benchmark && m_SceneState == SceneState::Play)
+            {
+                m_UnscaledDeltaTime = m_Benchmark->BeginFrame(*m_Scene, *m_Renderer, *m_AssetManager, m_Profiler);
+                if (m_Benchmark->IsFinished())
+                    m_IsRunning = false;
+            }
+
             m_DeltaTime = m_Paused ? 0.0f : m_UnscaledDeltaTime * m_TimeScale;
 
             // Fixed steps follow game time, so pausing the game and the time scale apply to physics too.
@@ -154,15 +172,24 @@ namespace Lynx
             if (m_Window->GetWidth() == 0 || m_Window->GetHeight() == 0 || viewportSize.first == 0 || viewportSize.second == 0)
                 continue;
 
-            m_AssetManager->Update();
+            {
+                ProfileScope assetScope(m_Profiler, "Assets");
+                m_AssetManager->Update();
+            }
 
-            ImGui_ImplGlfw_NewFrame();
-            ImGui::NewFrame();
+            {
+                ProfileScope imguiScope(m_Profiler, "ImGui");
+                ImGui_ImplGlfw_NewFrame();
+                ImGui::NewFrame();
 
-            if (m_ImGuiCallback)
-                m_ImGuiCallback();
+                if (m_ImGuiCallback)
+                    m_ImGuiCallback();
 
-            ImGui::Render();
+                if (m_ShowProfilerOverlay)
+                    m_ProfilerOverlay.Draw(m_Profiler.Latest());
+
+                ImGui::Render();
+            }
 
             // TODO: We should load all the textures and meshes before we run the scene!!!
             if (m_SceneState == SceneState::Edit)
@@ -174,18 +201,21 @@ namespace Lynx
             }
             else if (m_SceneState == SceneState::Play)
             {
-                m_Scene->OnUpdateRuntime(m_DeltaTime);
-                if (m_GameModule)
-                    m_GameModule->OnUpdate(m_DeltaTime);
-                
-                while (accumulator >= fixedTimestep)
                 {
-                    m_Scene->OnFixedUpdate(fixedTimestep);
-                    accumulator -= fixedTimestep;
+                    ProfileScope updateScope(m_Profiler, "Update");
+                    m_Scene->OnUpdateRuntime(m_DeltaTime);
+                    if (m_GameModule)
+                        m_GameModule->OnUpdate(m_DeltaTime);
+
+                    while (accumulator >= fixedTimestep)
+                    {
+                        m_Scene->OnFixedUpdate(fixedTimestep);
+                        accumulator -= fixedTimestep;
+                    }
+
+                    m_Scene->OnLateUpdate(m_DeltaTime);
                 }
-                
-                m_Scene->OnLateUpdate(m_DeltaTime);
-                
+
                 float alpha = accumulator / fixedTimestep;
                 m_SceneRenderer->RenderRuntime(m_DeltaTime, alpha);
             }
@@ -262,7 +292,10 @@ namespace Lynx
 
     bool Engine::PlayStartScene()
     {
-        const std::filesystem::path& startScene = m_Project.StartScene;
+        std::filesystem::path startScene = m_Project.StartScene;
+        if (m_Benchmark && !m_Benchmark->Settings().Scene.empty())
+            startScene = m_ContentPaths->ProjectAsset(m_Benchmark->Settings().Scene);
+
         if (startScene.empty())
         {
             LX_CORE_ERROR("Project '{0}' does not name a start scene.", m_Project.Name);
@@ -347,6 +380,9 @@ namespace Lynx
         EventDispatcher dispatcher(e);
         dispatcher.Dispatch<KeyPressedEvent>([this](KeyPressedEvent& event)
         {
+            if (event.GetKeyCode() == KeyCode::F3 && event.GetRepeatCount() == 0)
+                m_ShowProfilerOverlay = !m_ShowProfilerOverlay;
+
             if (m_SceneState == SceneState::Play)
             {
                 ImGuiIO& io = ImGui::GetIO();

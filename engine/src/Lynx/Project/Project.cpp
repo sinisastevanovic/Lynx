@@ -1,5 +1,6 @@
 #include "Project.h"
 
+#include "Lynx/Core/CommandLine.h"
 #include "Lynx/Core/ContentPaths.h"
 
 #include <nlohmann/json.hpp>
@@ -40,10 +41,10 @@ namespace Lynx
         }
     }
 
-    std::expected<Project, std::string> Project::LoadFromCommandLine(int argc, char** argv)
+    std::expected<Project, std::string> Project::LoadFromCommandLine(const CommandLine& commandLine)
     {
-        if (argc > 1)
-            return Load(argv[1]);
+        if (!commandLine.Arguments().empty())
+            return Load(commandLine.Arguments().front());
 
         const std::filesystem::path directory = std::filesystem::current_path();
 

@@ -75,6 +75,9 @@ namespace Lynx
         AssetHandle GetAssetHandle(const std::filesystem::path& path) const;
 
         bool IsAssetLoaded(AssetHandle handle) const;
+
+        // True while an asset is being read or waits for the main thread to finish it.
+        bool HasPendingLoads() const;
         std::filesystem::path GetAssetPath(AssetHandle handle) const;
         std::string GetAssetName(AssetHandle handle) const;
         void AddRuntimeAsset(std::shared_ptr<Asset> asset);

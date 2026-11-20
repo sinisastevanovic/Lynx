@@ -7,7 +7,9 @@
 #include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
+#include "GpuTimers.h"
 #include "SamplerCache.h"
+#include "Lynx/Profiling/FrameProfiler.h"
 #include "Passes/DebugPass.h"
 #include "Passes/ForwardPass.h"
 #include "Passes/GridPass.h"
@@ -142,6 +144,44 @@ namespace Lynx
 
             return vk::PresentModeKHR::eFifo;
         }
+
+        vk::CommandBuffer NativeCommandBuffer(nvrhi::ICommandList* commandList)
+        {
+            return vk::CommandBuffer(static_cast<VkCommandBuffer>(commandList->getNativeObject(nvrhi::ObjectTypes::VK_CommandBuffer)));
+        }
+
+        // Measures what is recorded during its lifetime: the CPU time to record it and the GPU time to run it.
+        class PassScope
+        {
+        public:
+            PassScope(FrameProfiler& profiler, GpuTimers& timers, nvrhi::ICommandList* commandList, std::string_view name)
+                : m_CpuScope(profiler, name), m_Timers(timers), m_CommandList(commandList), m_Name(name)
+            {
+                m_Timers.Begin(NativeCommandBuffer(m_CommandList), m_Name);
+            }
+
+            ~PassScope()
+            {
+                m_Timers.End(NativeCommandBuffer(m_CommandList), m_Name);
+            }
+
+            PassScope(const PassScope&) = delete;
+            PassScope& operator=(const PassScope&) = delete;
+
+        private:
+            ProfileScope m_CpuScope;
+            GpuTimers& m_Timers;
+            nvrhi::ICommandList* m_CommandList;
+            std::string_view m_Name;
+        };
+
+        // A screenshot is read this many frames after it was copied, when the GPU has certainly finished the copy.
+        constexpr uint64_t ScreenshotReadDelay = 3;
+
+        double MillisecondsSince(std::chrono::steady_clock::time_point start)
+        {
+            return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        }
     }
 
     struct Renderer::VulkanState
@@ -166,10 +206,15 @@ namespace Lynx
         // The NVRHI device as its Vulkan type, for the Vulkan-only calls. m_NvrhiDevice is the same device
         // in release builds, but in debug builds it is the validation layer wrapped around this one.
         nvrhi::vulkan::DeviceHandle NvrhiVulkanDevice;
+
+        std::unique_ptr<GpuTimers> Timers;
+
+        // Whether the driver can report how much memory this process uses per heap.
+        bool HasMemoryBudget = false;
     };
-    
-    Renderer::Renderer(GLFWwindow* window, bool initIdTarget)
-        : m_ShouldCreateIDTarget(initIdTarget)
+
+    Renderer::Renderer(GLFWwindow* window, FrameProfiler& profiler, bool initIdTarget)
+        : m_ShouldCreateIDTarget(initIdTarget), m_Profiler(profiler)
     {
         m_VulkanState = std::make_unique<VulkanState>();
         InitVulkan(window);
@@ -191,6 +236,9 @@ namespace Lynx
 
         if (m_NvrhiDevice)
             m_NvrhiDevice->runGarbageCollection();
+
+        m_PendingScreenshots.clear();
+        m_VulkanState->Timers.reset();
 
         m_Pipeline.Clear();
         m_BloomPass.reset();
@@ -260,15 +308,15 @@ namespace Lynx
 
         SamplerCache::Init(m_NvrhiDevice, m_MaxAnisotropy);
 
-        m_Pipeline.AddPass(std::make_unique<ShadowPass>(m_ShadowMapResolution));
-        m_Pipeline.AddPass(std::make_unique<DepthPass>());
-        m_Pipeline.AddPass(std::make_unique<ForwardPass>());
-        m_Pipeline.AddPass(std::make_unique<ParticlePass>());
+        m_Pipeline.AddPass("Shadow", std::make_unique<ShadowPass>(m_ShadowMapResolution));
+        m_Pipeline.AddPass("Depth", std::make_unique<DepthPass>());
+        m_Pipeline.AddPass("Forward", std::make_unique<ForwardPass>());
+        m_Pipeline.AddPass("Particles", std::make_unique<ParticlePass>());
         if (m_ShouldCreateIDTarget)
         {
-            m_Pipeline.AddPass(std::make_unique<GridPass>());
+            m_Pipeline.AddPass("Grid", std::make_unique<GridPass>());
         }
-        m_Pipeline.AddPass(std::make_unique<DebugPass>());
+        m_Pipeline.AddPass("Debug", std::make_unique<DebugPass>());
 
         m_Pipeline.Init(m_RenderContext);
 
@@ -484,6 +532,8 @@ namespace Lynx
         features12.bufferDeviceAddress = VK_TRUE;
         features12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
         features12.runtimeDescriptorArray = VK_TRUE;
+        // The GPU timers reset their queries from the CPU.
+        features12.hostQueryReset = VK_TRUE;
 
         vk::PhysicalDeviceFeatures features10;
         features10.geometryShader = VK_TRUE;
@@ -498,9 +548,18 @@ namespace Lynx
         queueInfo.queueCount = 1;
         queueInfo.pQueuePriorities = &priority;
 
-        std::vector<const char*> deviceExtensions = { 
+        std::vector<const char*> deviceExtensions = {
             VK_KHR_SWAPCHAIN_EXTENSION_NAME
         };
+
+        for (const vk::ExtensionProperties& extension : m_VulkanState->PhysicalDevice.enumerateDeviceExtensionProperties())
+        {
+            if (std::string_view(extension.extensionName) == VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)
+            {
+                deviceExtensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+                m_VulkanState->HasMemoryBudget = true;
+            }
+        }
         vk::DeviceCreateInfo devInfo;
         devInfo.queueCreateInfoCount = 1;
         devInfo.pQueueCreateInfos = &queueInfo;
@@ -513,7 +572,8 @@ namespace Lynx
         VULKAN_HPP_DEFAULT_DISPATCHER.init(m_VulkanState->Device);
 
         m_VulkanState->GraphicsQueue = m_VulkanState->Device.getQueue(m_VulkanState->GraphicsQueueFamily, 0);
-        
+        m_VulkanState->Timers = std::make_unique<GpuTimers>(m_VulkanState->PhysicalDevice, m_VulkanState->Device, m_VulkanState->GraphicsQueueFamily);
+
         // 6. Swapchain, its images and the per-image semaphores
         m_VulkanState->SwapchainFormat = vk::Format::eB8G8R8A8Unorm; // Forced simplified format
 
@@ -556,7 +616,8 @@ namespace Lynx
         swapInfo.imageColorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
         swapInfo.imageExtent = m_VulkanState->SwapchainExtent;
         swapInfo.imageArrayLayers = 1;
-        swapInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
+        // Transfer source lets a screenshot be copied out of a finished frame.
+        swapInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc;
         swapInfo.preTransform = caps.currentTransform;
         swapInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
         swapInfo.presentMode = ChoosePresentMode(m_VulkanState->PhysicalDevice, m_VulkanState->Surface, m_VSync);
@@ -815,8 +876,9 @@ namespace Lynx
 
             m_CommandList->writeBuffer(m_InstanceBuffer, allInstanceData.data(), requiredSize);
         }
-        
+
         m_CurrentFrameData.InstanceBuffer = m_InstanceBuffer;
+        m_Profiler.SetCounter("Instances", static_cast<double>(allInstanceData.size()));
 
         std::vector<ParticleInstanceData> allParticleData;
         m_CurrentFrameData.ParticleQueue.clear();
@@ -858,27 +920,34 @@ namespace Lynx
     {
         ResetStats();
         m_Stats.FrameTime = deltaTime;
-        
-        // 0. Wait for Fence
-        if (m_VulkanState->Device.waitForFences(1, &m_VulkanState->InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
+
         {
-             LX_CORE_ERROR("Failed to wait for fence!");
+            // Waiting here is where the CPU is held back by the GPU or, with VSync, by the display.
+            ProfileScope waitScope(m_Profiler, "WaitForGpu");
+
+            // 0. Wait for Fence
+            if (m_VulkanState->Device.waitForFences(1, &m_VulkanState->InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX) != vk::Result::eSuccess)
+            {
+                 LX_CORE_ERROR("Failed to wait for fence!");
+            }
+            m_VulkanState->Device.resetFences(1, &m_VulkanState->InFlightFences[m_CurrentFrame]);
+
+            // 1. Acquire Image from Vulkan
+            // TODO: handle resizing (VK_ERROR_OUT_OF_DATE_KHR)
+            auto result = m_VulkanState->Device.acquireNextImageKHR(
+                m_VulkanState->Swapchain,
+                UINT64_MAX,
+                vk::Semaphore(m_VulkanState->ImageAvailableSemaphores[m_CurrentFrame]),
+                nullptr
+            );
+
+            m_CurrentImageIndex = result.value;
         }
-        m_VulkanState->Device.resetFences(1, &m_VulkanState->InFlightFences[m_CurrentFrame]);
-
-        // 1. Acquire Image from Vulkan
-        // TODO: handle resizing (VK_ERROR_OUT_OF_DATE_KHR)
-        auto result = m_VulkanState->Device.acquireNextImageKHR(
-            m_VulkanState->Swapchain,
-            UINT64_MAX,
-            vk::Semaphore(m_VulkanState->ImageAvailableSemaphores[m_CurrentFrame]),
-            nullptr
-        );
-
-        m_CurrentImageIndex = result.value;
 
         // 2. Start recording
         m_CommandList->open();
+        m_VulkanState->Timers->BeginFrame(m_Profiler);
+        m_VulkanState->Timers->Begin(NativeCommandBuffer(m_CommandList), "Frame");
 
         m_OpaqueBatches.clear();
         m_ParticleBatches.clear();
@@ -964,6 +1033,8 @@ namespace Lynx
         // 3. Clear Screen
         nvrhi::utils::ClearColorAttachment(m_CommandList, m_CurrentFrameData.TargetFramebuffer, 0, nvrhi::Color(0.05f, 0.05f, 0.05f, 1.0f));
         nvrhi::utils::ClearDepthStencilAttachment(m_CommandList, m_CurrentFrameData.TargetFramebuffer, 1.0f, 0);
+
+        m_SubmitStart = std::chrono::steady_clock::now();
     }
 
     void Renderer::SubmitMesh(std::shared_ptr<StaticMesh> mesh, const glm::mat4& transform, RenderFlags Flags, int entityID)
@@ -1023,16 +1094,33 @@ namespace Lynx
 
     void Renderer::EndScene()
     {
-        PrepareDrawCalls();
-        
-        m_Pipeline.Execute(m_RenderContext, m_CurrentFrameData);
+        // Everything between BeginScene and here is the scene handing its meshes to the renderer.
+        m_Profiler.AddCpuTime("Submit", MillisecondsSince(m_SubmitStart));
+
+        GpuTimers& timers = *m_VulkanState->Timers;
+        const auto measurePass = [this, &timers](std::string_view name)
+        {
+            return PassScope(m_Profiler, timers, m_CommandList, name);
+        };
+
+        {
+            ProfileScope prepareScope(m_Profiler, "PrepareDraws");
+            PrepareDrawCalls();
+        }
+
+        m_Pipeline.Execute(m_RenderContext, m_CurrentFrameData, measurePass);
 
         m_Stats.DrawCalls = m_CurrentFrameData.DrawCalls;
         m_Stats.IndexCount = m_CurrentFrameData.IndexCount;
+        m_Profiler.SetCounter("DrawCalls", m_Stats.DrawCalls);
+        m_Profiler.SetCounter("Triangles", m_Stats.IndexCount / 3);
 
         m_CurrentFrameData.SceneColorInput = m_SceneTarget->Color;
         m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled;
-        m_BloomPass->Execute(m_RenderContext, m_CurrentFrameData);
+        {
+            auto scope = measurePass("Bloom");
+            m_BloomPass->Execute(m_RenderContext, m_CurrentFrameData);
+        }
 
         if (m_ShouldCreateIDTarget)
         {
@@ -1043,11 +1131,25 @@ namespace Lynx
             m_CurrentFrameData.TargetFramebuffer = m_SwapchainFramebuffers[m_CurrentImageIndex];
         }
 
-        m_CompositePass->Execute(m_RenderContext, m_CurrentFrameData);
+        {
+            auto scope = measurePass("Composite");
+            m_CompositePass->Execute(m_RenderContext, m_CurrentFrameData);
+        }
 
         if (m_ShowUI)
+        {
+            auto scope = measurePass("UI");
             m_UIPass->Execute(m_RenderContext, m_CurrentFrameData);
-        
+        }
+
+        if (!m_ScreenshotRequests.empty())
+            CopyFrameForScreenshots(m_CurrentFrameData.TargetFramebuffer->getDesc().colorAttachments[0].texture);
+
+        timers.End(NativeCommandBuffer(m_CommandList), "Frame");
+
+        // Submitting and presenting, including the ImGui layer.
+        ProfileScope presentScope(m_Profiler, "Present");
+
         // 1. Close recording
         m_CommandList->close();
 
@@ -1080,8 +1182,127 @@ namespace Lynx
         presentInfo.pWaitSemaphores = &m_VulkanState->RenderFinishedSemaphores[m_CurrentImageIndex];
         
         m_VulkanState->GraphicsQueue.presentKHR(&presentInfo);
-        
+
         m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+        ReportMemoryUse();
+    }
+
+    void Renderer::RequestScreenshot(uint64_t tag)
+    {
+        m_ScreenshotRequests.push_back(tag);
+    }
+
+    void Renderer::CopyFrameForScreenshots(nvrhi::ITexture* frame)
+    {
+        const nvrhi::TextureDesc& frameDesc = frame->getDesc();
+
+        for (uint64_t tag : m_ScreenshotRequests)
+        {
+            nvrhi::TextureDesc stagingDesc;
+            stagingDesc.width = frameDesc.width;
+            stagingDesc.height = frameDesc.height;
+            stagingDesc.format = frameDesc.format;
+            stagingDesc.debugName = "Screenshot";
+
+            PendingScreenshot pending;
+            pending.Tag = tag;
+            pending.Frame = m_Profiler.CurrentFrame();
+            pending.Staging = m_NvrhiDevice->createStagingTexture(stagingDesc, nvrhi::CpuAccessMode::Read);
+
+            m_CommandList->copyTexture(pending.Staging, nvrhi::TextureSlice(), frame, nvrhi::TextureSlice());
+            m_PendingScreenshots.push_back(std::move(pending));
+        }
+
+        m_ScreenshotRequests.clear();
+    }
+
+    std::vector<Screenshot> Renderer::TakeScreenshots(bool waitForAll)
+    {
+        if (waitForAll && !m_PendingScreenshots.empty())
+            m_NvrhiDevice->waitForIdle();
+
+        std::vector<Screenshot> finished;
+        const uint64_t currentFrame = m_Profiler.CurrentFrame();
+
+        for (auto pending = m_PendingScreenshots.begin(); pending != m_PendingScreenshots.end();)
+        {
+            if (!waitForAll && currentFrame < pending->Frame + ScreenshotReadDelay)
+            {
+                ++pending;
+                continue;
+            }
+
+            const nvrhi::TextureDesc& desc = pending->Staging->getDesc();
+
+            size_t rowPitch = 0;
+            const auto* source = static_cast<const uint8_t*>(m_NvrhiDevice->mapStagingTexture(pending->Staging, nvrhi::TextureSlice(), nvrhi::CpuAccessMode::Read, &rowPitch));
+            if (source)
+            {
+                Screenshot screenshot;
+                screenshot.Tag = pending->Tag;
+                screenshot.Width = desc.width;
+                screenshot.Height = desc.height;
+                screenshot.Rgba.resize(static_cast<size_t>(desc.width) * desc.height * 4);
+
+                // The frame is BGRA. Its alpha channel does not describe coverage, so the picture is made opaque.
+                for (uint32_t y = 0; y < desc.height; ++y)
+                {
+                    const uint8_t* sourceRow = source + y * rowPitch;
+                    uint8_t* targetRow = screenshot.Rgba.data() + static_cast<size_t>(y) * desc.width * 4;
+                    for (uint32_t x = 0; x < desc.width; ++x)
+                    {
+                        targetRow[x * 4 + 0] = sourceRow[x * 4 + 2];
+                        targetRow[x * 4 + 1] = sourceRow[x * 4 + 1];
+                        targetRow[x * 4 + 2] = sourceRow[x * 4 + 0];
+                        targetRow[x * 4 + 3] = 255;
+                    }
+                }
+
+                m_NvrhiDevice->unmapStagingTexture(pending->Staging);
+                finished.push_back(std::move(screenshot));
+            }
+            else
+            {
+                LX_CORE_ERROR("Could not read back screenshot {0}.", pending->Tag);
+            }
+
+            pending = m_PendingScreenshots.erase(pending);
+        }
+
+        return finished;
+    }
+
+    void Renderer::FlushGpuTimers()
+    {
+        m_NvrhiDevice->waitForIdle();
+        m_VulkanState->Timers->Flush(m_Profiler);
+    }
+
+    std::string Renderer::GetAdapterName() const
+    {
+        const vk::PhysicalDeviceProperties properties = m_VulkanState->PhysicalDevice.getProperties();
+        return std::string(properties.deviceName.data());
+    }
+
+    void Renderer::ReportMemoryUse()
+    {
+        if (!m_VulkanState->HasMemoryBudget)
+            return;
+
+        const auto properties = m_VulkanState->PhysicalDevice.getMemoryProperties2<vk::PhysicalDeviceMemoryProperties2, vk::PhysicalDeviceMemoryBudgetPropertiesEXT>();
+        const vk::PhysicalDeviceMemoryProperties& memory = properties.get<vk::PhysicalDeviceMemoryProperties2>().memoryProperties;
+        const vk::PhysicalDeviceMemoryBudgetPropertiesEXT& budget = properties.get<vk::PhysicalDeviceMemoryBudgetPropertiesEXT>();
+
+        // Only the heaps on the graphics card count as video memory.
+        uint64_t usedBytes = 0;
+        for (uint32_t heap = 0; heap < memory.memoryHeapCount; ++heap)
+        {
+            if (memory.memoryHeaps[heap].flags & vk::MemoryHeapFlagBits::eDeviceLocal)
+                usedBytes += budget.heapUsage[heap];
+        }
+
+        m_Profiler.SetCounter("VideoMemoryMB", static_cast<double>(usedBytes) / (1024.0 * 1024.0));
     }
 
     std::pair<nvrhi::BufferHandle, nvrhi::BufferHandle> Renderer::CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices)

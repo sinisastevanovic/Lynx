@@ -9,6 +9,7 @@
 #include "Components/EditorComponents.h"
 #include "Inspectors/CoreComponentInspectors.h"
 #include "ImGui/EditorTheme.h"
+#include "Lynx/Core/CommandLine.h"
 #include "Lynx/Core/DllLoader.h"
 
 void RegisterEditorComponents(TypeRegistry& registry)
@@ -30,7 +31,8 @@ int main(int argc, char** argv)
 {
     std::cout << "--- Starting Editor ---" << std::endl;
 
-    const auto project = Project::LoadFromCommandLine(argc, argv);
+    const CommandLine commandLine(argc, argv);
+    const auto project = Project::LoadFromCommandLine(commandLine);
     if (!project)
     {
         std::cerr << project.error() << std::endl;
@@ -39,6 +41,7 @@ int main(int argc, char** argv)
 
     Engine engine;
     engine.Initialize(*project, true);
+    engine.SetProfilerOverlayVisible(commandLine.Has("profiler"));
     EditorTheme::ApplyTheme();
     
     auto& registry = engine.GetComponentRegistry();

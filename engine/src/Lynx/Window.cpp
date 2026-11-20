@@ -257,4 +257,9 @@ namespace Lynx
         glfwSetWindowSize(m_Window, bounds.Width, bounds.Height);
         return true;
     }
+
+    void Window::SetSize(uint32_t width, uint32_t height)
+    {
+        glfwSetWindowSize(m_Window, static_cast<int>(width), static_cast<int>(height));
+    }
 }

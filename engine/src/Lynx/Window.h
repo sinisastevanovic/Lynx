@@ -62,6 +62,9 @@ namespace Lynx
         // where it cannot be reached on the monitors that are connected now.
         bool SetBounds(const WindowBounds& bounds);
 
+        // Resizes the content area and leaves the window where it is. The desktop may limit the size.
+        void SetSize(uint32_t width, uint32_t height);
+
         GLFWwindow* GetNativeWindow() const { return m_Window; }
         void* GetNativeWindowHandle() const;
         

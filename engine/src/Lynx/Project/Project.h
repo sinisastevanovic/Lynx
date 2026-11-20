@@ -8,6 +8,8 @@
 
 namespace Lynx
 {
+    class CommandLine;
+
     // A game project, described by a .lxproj file in the project's root folder.
     struct LX_API Project
     {
@@ -23,8 +25,8 @@ namespace Lynx
         // because a project is loaded before the engine and its logger exist.
         static std::expected<Project, std::string> Load(const std::filesystem::path& projectFile);
 
-        // Loads the project file named by the first command-line argument.
-        // Without an argument, loads the only .lxproj file in the working directory.
-        static std::expected<Project, std::string> LoadFromCommandLine(int argc, char** argv);
+        // Loads the project file named by the first command-line argument that is not an option.
+        // Without one, loads the only .lxproj file in the working directory.
+        static std::expected<Project, std::string> LoadFromCommandLine(const CommandLine& commandLine);
     };
 }
