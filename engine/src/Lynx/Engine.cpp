@@ -180,6 +180,7 @@ namespace Lynx
 
             {
                 ProfileScope imguiScope(m_Profiler, "ImGui");
+                m_Renderer->BeginImGuiFrame();
                 ImGui_ImplGlfw_NewFrame();
                 ImGui::NewFrame();
 
@@ -262,6 +263,7 @@ namespace Lynx
         m_AssetManager.reset();
         m_ScriptEngine.reset();
 
+        m_Renderer->ShutdownImGui();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
         m_Renderer.reset();

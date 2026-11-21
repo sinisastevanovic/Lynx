@@ -74,8 +74,11 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Lifetimes.** A frame is still on the GPU while the next ones are recorded. What a pass binds directly has to
   outlive those frames: `GpuBuffer` and `GpuTexture` do that by themselves, `TextureSlot` and `MeshBuffer` do it for
   the NVRHI textures and buffers that assets still hold.
-- **NVRHI.** Still records the frame's command buffer, creates asset textures and mesh buffers, clears the scene
-  targets and draws ImGui. Its validation is on in debug builds and shows up in the log as `NVRHI:` lines.
+- **NVRHI.** Still records the frame's command buffer, creates asset textures and mesh buffers and clears the scene
+  targets. Its validation is on in debug builds and shows up in the log as `NVRHI:` lines.
+- **ImGui.** Drawn by its official Vulkan backend, wrapped in `ImGui/ImGuiVulkan`. To show a texture, pass
+  `Renderer::GetImGuiTexture(texture->GetTableIndex())` to `ImGui::Image`, cast to `ImTextureID`.
+- **Picking.** `Renderer::RequestEntityIdAt` asks, `TakeEntityId` hands out the answer three frames later.
 
 ## Conventions
 

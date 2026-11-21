@@ -18,6 +18,7 @@
 #include "Swapchain.h"
 #include "Vulkan/GpuBuffer.h"
 #include "Vulkan/GpuTexture.h"
+#include "Vulkan/Rendering.h"
 #include "Vulkan/SharedBindings.h"
 #include "Vulkan/UploadQueue.h"
 #include "Lynx/Profiling/FrameProfiler.h"
@@ -41,7 +42,7 @@
 
 #include "nvrhi/utils.h"
 
-#include "Lynx/ImGui/imgui_nvrhi.h"
+#include "Lynx/ImGui/ImGuiVulkan.h"
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 
@@ -125,6 +126,9 @@ namespace Lynx
 
         // Where the texture table has the scene's HDR picture and the black default texture.
         TextureSlot SceneColorSlot;
+
+        // The finished scene picture, which the editor shows in a panel through ImGui.
+        TextureSlot SceneOutputSlot;
 
         // Picking: the pixel that was asked for, the buffer its entity ID is copied into, the frame the copy
         // was recorded in, and an answer that needed no copy.
@@ -225,6 +229,7 @@ namespace Lynx
         m_Graph.reset();
         m_MaterialTextures.reset();
         m_Frame->SceneColorSlot = TextureSlot();
+        m_Frame->SceneOutputSlot = TextureSlot();
         m_Frame->Shared.reset();
         m_MipMapGenPass.reset();
         m_RenderContext = RenderContext();
@@ -239,7 +244,7 @@ namespace Lynx
         m_GlobalCB = nullptr;
         m_CommandList = nullptr;
         m_SceneTarget.reset();
-        m_ImGuiBackend.reset();
+        m_ImGui.reset();
         m_NvrhiDevice = nullptr;
 
         for (int frame = 0; frame < MAX_FRAMES_IN_FLIGHT; ++frame)
@@ -293,8 +298,9 @@ namespace Lynx
         m_Graph->Add("UI", std::make_unique<UIPass>(), [this]() { return m_ShowUI; });
         m_Graph->Init(m_RenderContext);
 
-        m_ImGuiBackend= std::make_unique<ImGui_NVRHI>();
-        m_ImGuiBackend->init(m_NvrhiDevice);
+        const nvrhi::SamplerHandle imguiSampler = SamplerCache::Get()->GetSampler(SamplerSettings());
+        m_ImGui = std::make_unique<ImGuiVulkan>(*m_Context, *m_Frame->Shared, RenderFormats::Output,
+            vk::Sampler(static_cast<VkSampler>(imguiSampler->getNativeObject(nvrhi::ObjectTypes::VK_Sampler).pointer)));
 
         m_MipMapGenPass = std::make_unique<MipMapBlitPass>();
         m_MipMapGenPass->Init(m_NvrhiDevice);
@@ -580,6 +586,7 @@ namespace Lynx
             .setInitialState(nvrhi::ResourceStates::ShaderResource)
             .setKeepInitialState(true);
         target.Output = createTarget(m_Frame->SceneOutput, RenderFormats::Output, colorUsage, outputDesc);
+        m_Frame->SceneOutputSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SceneOutput.View()));
 
         if (m_ShouldCreateIDTarget)
         {
@@ -962,9 +969,11 @@ namespace Lynx
             nvrhi::utils::ClearColorAttachment(m_CommandList, windowFramebuffer, 0, nvrhi::Color(0.0f, 0.0f, 0.0f, 1.0f));
         }
 
+        DrawImGui(windowFramebuffer);
+
         m_Frame->Timers->End(NativeCommandBuffer(m_CommandList), "Frame");
 
-        // Submitting and presenting, including the ImGui layer.
+        // Submitting and presenting.
         ProfileScope presentScope(m_Profiler, "Present");
 
         m_CommandList->close();
@@ -975,8 +984,6 @@ namespace Lynx
         vulkanDevice->queueSignalSemaphore(nvrhi::CommandQueue::Graphics, static_cast<VkSemaphore>(m_Swapchain->RenderFinished()), 0);
         m_NvrhiDevice->executeCommandList(m_CommandList);
 
-        m_ImGuiBackend->render(windowFramebuffer);
-
         // An empty submission whose only purpose is to signal the fence once everything before it is done.
         m_Context->GraphicsQueue().submit(vk::SubmitInfo(), m_Frame->InFlight[m_CurrentFrame]);
 
@@ -985,7 +992,56 @@ namespace Lynx
         m_Swapchain->Present();
         m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 
+        m_ImGui->RenderOtherWindows();
+
         ReportMemoryUse();
+    }
+
+    void Renderer::DrawImGui(nvrhi::IFramebuffer* windowFramebuffer)
+    {
+        ProfileScope scope(m_Profiler, "ImGuiDraw");
+        m_Frame->Timers->Begin(NativeCommandBuffer(m_CommandList), "ImGui");
+
+        // NVRHI keeps track of the layouts: the window's picture is drawn into, and the editor shows
+        // the finished scene picture in a panel, so that one has to be readable.
+        nvrhi::ITexture* window = windowFramebuffer->getDesc().colorAttachments[0].texture;
+        m_CommandList->setTextureState(window, nvrhi::AllSubresources, nvrhi::ResourceStates::RenderTarget);
+        if (m_SceneTarget && m_SceneTarget->Output != window)
+            m_CommandList->setTextureState(m_SceneTarget->Output, nvrhi::AllSubresources, nvrhi::ResourceStates::ShaderResource);
+        m_CommandList->commitBarriers();
+        m_CommandList->clearState();
+
+        const vk::CommandBuffer commands = NativeCommandBuffer(m_CommandList);
+
+        RenderingTargets targets;
+        targets.Color = vk::ImageView(static_cast<VkImageView>(window->getNativeView(nvrhi::ObjectTypes::VK_ImageView).pointer));
+        targets.Extent = vk::Extent2D(window->getDesc().width, window->getDesc().height);
+        BeginRendering(commands, targets);
+        m_ImGui->Render(commands);
+        commands.endRendering();
+
+        m_Frame->Timers->End(commands, "ImGui");
+    }
+
+    void Renderer::BeginImGuiFrame()
+    {
+        m_ImGui->NewFrame();
+    }
+
+    void Renderer::ShutdownImGui()
+    {
+        m_Context->WaitIdle();
+        m_ImGui.reset();
+    }
+
+    uint64_t Renderer::GetViewportImGuiTexture() const
+    {
+        return m_Frame->SceneOutputSlot ? m_ImGui->TextureId(m_Frame->SceneOutputSlot.Index()) : 0;
+    }
+
+    uint64_t Renderer::GetImGuiTexture(uint32_t tableIndex) const
+    {
+        return m_ImGui->TextureId(tableIndex);
     }
 
     void Renderer::RequestScreenshot(uint64_t tag)
@@ -1144,11 +1200,6 @@ namespace Lynx
             m_SceneTarget = std::make_unique<RenderTarget>();
             CreateRenderTarget(*m_SceneTarget, width, height);
         }
-    }
-
-    nvrhi::TextureHandle Renderer::GetViewportTexture() const
-    {
-        return m_SceneTarget ? m_SceneTarget->Output : nullptr;
     }
 
     std::pair<uint32_t, uint32_t> Renderer::GetViewportSize() const

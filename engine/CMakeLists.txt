@@ -14,6 +14,8 @@ target_compile_definitions(engine
         LX_BUILD_DLL
         GLFW_STATIC
         VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
+        # The engine does not link the Vulkan library, so ImGui's Vulkan backend loads its functions at run time.
+        IMGUI_IMPL_VULKAN_NO_PROTOTYPES
         "IMGUI_API=__declspec(dllexport)"
         "LX_ENGINE_RESOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/resources\""
     # Everything that uses the engine must see the same GLM depth range.
@@ -45,6 +47,7 @@ target_sources(engine PRIVATE
 
 target_sources(engine PRIVATE
     ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
 )
 
 FetchContent_GetProperties(nvrhi)

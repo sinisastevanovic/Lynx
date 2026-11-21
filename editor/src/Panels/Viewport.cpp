@@ -38,10 +38,10 @@ namespace Lynx
         if (viewportSize.x > 0 && viewportSize.y > 0)
             renderer.EnsureEditorViewport((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
         
-        auto texture = renderer.GetViewportTexture();
+        const ImTextureID texture = static_cast<ImTextureID>(renderer.GetViewportImGuiTexture());
         if (texture)
         {
-            ImGui::Image((ImTextureID)texture.Get(), viewportSize);
+            ImGui::Image(texture, viewportSize);
         }
 
         // UI GIZMOS

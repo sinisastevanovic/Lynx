@@ -53,6 +53,12 @@ namespace Lynx
         // unless the texture already outlives those frames by itself.
         void ReleaseTexture(uint32_t index, std::function<void()> releaseOwner = {});
 
+        // The view that was added under an index.
+        vk::ImageView TextureView(uint32_t index) const { return m_TextureViews[index]; }
+
+        // Called with the index whenever a texture leaves the table, for code that keeps something per texture.
+        void SetTextureReleaseListener(std::function<void(uint32_t)> listener) { m_ReleaseListener = std::move(listener); }
+
         // The index of a sampler, which is added to the table on first use. Samplers are never removed.
         uint32_t SamplerIndex(vk::Sampler sampler);
 
@@ -88,6 +94,8 @@ namespace Lynx
         // which may return an index after this object is gone.
         std::shared_ptr<std::vector<uint32_t>> m_FreeTextures;
         uint32_t m_TextureCount = 0;
+        std::vector<vk::ImageView> m_TextureViews;
+        std::function<void(uint32_t)> m_ReleaseListener;
 
         // The position of a sampler is its index.
         std::vector<vk::Sampler> m_Samplers;

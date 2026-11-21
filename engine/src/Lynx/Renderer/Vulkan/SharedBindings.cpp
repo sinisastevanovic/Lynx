@@ -75,6 +75,10 @@ namespace Lynx
             return 0;
         }
 
+        if (m_TextureViews.size() <= index)
+            m_TextureViews.resize(index + 1);
+        m_TextureViews[index] = view;
+
         const vk::DescriptorImageInfo imageInfo({}, view, vk::ImageLayout::eShaderReadOnlyOptimal);
         m_Device.updateDescriptorSets(vk::WriteDescriptorSet(m_Set, TextureBinding, index, vk::DescriptorType::eSampledImage, imageInfo), nullptr);
         return index;
@@ -82,6 +86,9 @@ namespace Lynx
 
     void SharedBindings::ReleaseTexture(uint32_t index, std::function<void()> releaseOwner)
     {
+        if (m_ReleaseListener)
+            m_ReleaseListener(index);
+
         // A frame on the GPU may still sample through the index. Handing it out again right away
         // would show that frame the next texture.
         m_Context.Deletions().Retire([freeTextures = m_FreeTextures, index, releaseOwner = std::move(releaseOwner)]() { freeTextures->push_back(index); });

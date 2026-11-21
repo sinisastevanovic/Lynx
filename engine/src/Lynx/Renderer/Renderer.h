@@ -29,7 +29,7 @@ namespace Lynx
     class RenderGraph;
     struct ExtractedScene;
     class Swapchain;
-    struct ImGui_NVRHI;
+    class ImGuiVulkan;
     struct SwapchainSettings;
     
     class LX_API Renderer
@@ -87,7 +87,17 @@ namespace Lynx
         // Everything is read from the extracted copy, see SceneRenderer.
         void RenderScene(const ExtractedScene& scene);
         
-        nvrhi::TextureHandle GetViewportTexture() const;
+        // The ImTextureID that ImGui::Image takes to show the finished scene picture, and to show a texture of
+        // the texture table (see Texture::GetTableIndex). Zero if there is no scene picture yet.
+        // Returned as a plain number so that this header does not need ImGui's.
+        uint64_t GetViewportImGuiTexture() const;
+        uint64_t GetImGuiTexture(uint32_t tableIndex) const;
+
+        // Call before ImGui::NewFrame.
+        void BeginImGuiFrame();
+
+        // Has to run before the ImGui context is destroyed, which happens before the renderer is.
+        void ShutdownImGui();
         std::pair<uint32_t, uint32_t> GetViewportSize() const;
 
         std::pair<MeshBuffer, MeshBuffer> CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices);
@@ -160,6 +170,7 @@ namespace Lynx
         void PrepareDrawCalls();
         void CopyFrameForScreenshots(nvrhi::ITexture* frame);
         void CopyRequestedEntityId();
+        void DrawImGui(nvrhi::IFramebuffer* windowFramebuffer);
         void ReportMemoryUse();
 
     private:
@@ -188,7 +199,7 @@ namespace Lynx
         static const int MAX_FRAMES_IN_FLIGHT = 2;
 
         std::unique_ptr<RenderTarget> m_SceneTarget;
-        std::unique_ptr<ImGui_NVRHI> m_ImGuiBackend;
+        std::unique_ptr<ImGuiVulkan> m_ImGui;
         bool m_ShouldCreateIDTarget = false;
         
         std::unordered_map<SamplerSettings, nvrhi::SamplerHandle> m_SamplerCache;

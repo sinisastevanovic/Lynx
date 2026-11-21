@@ -178,11 +178,11 @@ namespace Lynx
                 ImTextureID texID = (ImTextureID)0;
                 if (icon && icon->GetHandle() && icon->GetTextureHandle())
                 {
-                    texID = (ImTextureID)icon->GetTextureHandle().Get();
+                    texID = static_cast<ImTextureID>(Engine::Get().GetRenderer().GetImGuiTexture(icon->GetTableIndex()));
                 }
                 else
                 {
-                    texID = (ImTextureID)m_FileIcon->GetTextureHandle().Get();
+                    texID = static_cast<ImTextureID>(Engine::Get().GetRenderer().GetImGuiTexture(m_FileIcon->GetTableIndex()));
                 }
 
                 bool clicked = ImGui::ImageButton("btn", texID, { m_ThumbnailSize, m_ThumbnailSize }, { minUV.x, minUV.y }, { maxUV.x, maxUV.y });

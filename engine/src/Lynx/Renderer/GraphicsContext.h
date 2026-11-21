@@ -30,6 +30,7 @@ namespace Lynx
         GraphicsContext(const GraphicsContext&) = delete;
         GraphicsContext& operator=(const GraphicsContext&) = delete;
 
+        vk::Instance Instance() const { return m_Instance; }
         vk::SurfaceKHR Surface() const { return m_Surface; }
         vk::PhysicalDevice PhysicalDevice() const { return m_PhysicalDevice; }
         vk::Device Device() const { return m_Device; }
