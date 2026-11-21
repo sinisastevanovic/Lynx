@@ -1,6 +1,6 @@
 # LynxEngine
 
-A hobby 3D game engine in C++23: Vulkan through NVRHI, EnTT, Jolt physics, Lua through sol2, an ImGui editor.
+A hobby 3D game engine in C++23: Vulkan 1.3 through a thin layer of its own, EnTT, Jolt physics, Lua through sol2, an ImGui editor.
 One developer. The engine was reviewed in November 2026 and is being refactored step by step, not rewritten.
 
 Current state, open problems and the order of work: https://claude.ai/artifact/8UigvboHdEzfD3iVqeeeyy
@@ -25,7 +25,7 @@ the steps under "Stage 1 in detail" as they land. The non-renderer steps of the 
   - `Reflection/` field lists for components
   - `Scene/` scene, entities, components, serializer. Engine components are registered in `Scene/Components/CoreComponentRegistration.cpp`
   - `Asset/` asset registry and manager
-  - `Renderer/` renderer and `Passes/`. `Renderer/Vulkan/` is the engine's own thin layer over Vulkan, which replaces NVRHI step by step
+  - `Renderer/` renderer and `Passes/`. `Renderer/Vulkan/` is the engine's own thin layer over Vulkan
   - `Physics/`, `Scripting/`, `UI/` (the in-game UI), `ImGui/` (editor widgets, `LXUI`)
 - `engine/resources/` shaders, default textures, the default editor layout
 - `engine/launch/` sources compiled into every game: module exports and the standalone `main`
@@ -64,18 +64,25 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Shutdown order matters.** Scenes go before the script engine, assets before the renderer. See `Engine::Shutdown`.
 - **Shaders.** Shaders are written in Slang (`.slang`) and compiled once into `temp\ShaderCache`. Mark entry points
   with `[shader("vertex")]`. Shared code lives in modules (`Scene`, `Textures`, `Mesh`, `StandardShading`) that a
-  shader imports. Two GLSL shaders are left, for mip generation, which still runs through NVRHI.
+  shader imports. There is no GLSL any more.
 - **Passes.** Every pass of a frame is a `VulkanPass` in the render graph (`Renderer/Graph`). A pass declares what it
   reads and draws into, and records draws. The graph does layouts, begins rendering and binds the shared set.
 - **Shared bindings.** Passes bind nothing themselves. One descriptor set (`Vulkan/SharedBindings`) holds the scene
   constants and tables of all textures and samplers. A shader gets texture indices, buffer addresses and everything
   else through push constants (128 bytes at most). Slang pads push constants to a multiple of their largest member:
   the struct in C++ needs the same padding, and `SharedBindings::Supports` reports both sizes if they differ.
-- **Lifetimes.** A frame is still on the GPU while the next ones are recorded. What a pass binds directly has to
-  outlive those frames: `GpuBuffer` and `GpuTexture` do that by themselves, `TextureSlot` and `MeshBuffer` do it for
-  the NVRHI textures and buffers that assets still hold.
-- **NVRHI.** Still records the frame's command buffer, creates asset textures and mesh buffers and clears the scene
-  targets. Its validation is on in debug builds and shows up in the log as `NVRHI:` lines.
+- **Lifetimes.** A frame is still on the GPU while the next ones are recorded. `GpuBuffer` and `GpuTexture` are
+  released a few frames after they are given up, so nothing has to wait for the GPU. `TextureSlot` does the same
+  for a texture's place in the texture table.
+- **Layouts.** A `GpuTexture` remembers the layout it is in. `Transition` changes it. The render graph does that
+  for everything a pass declares.
+- **Uploads.** Data for buffers and pixels for textures go through the `UploadQueue`, which copies them to the GPU
+  with the next frame. Nothing is submitted on its own.
+- **Memory.** Textures come from a pool of their own (`GraphicsContext::TexturePool`), apart from buffers. Sharing
+  blocks cost 7 to 10 % of GPU time in the mesh passes when measured.
+- **Y axis.** The engine's matrices have +Y up, as GLM makes them. Vulkan has +Y down. Shaders get matrices that
+  are turned around for that (`RenderData::ClipViewProjection`), and nothing else in a shader turns Y around.
+- **NVRHI is gone.** The engine no longer uses it. Its sources are still fetched for the Vulkan headers in them.
 - **ImGui.** Drawn by its official Vulkan backend, wrapped in `ImGui/ImGuiVulkan`. To show a texture, pass
   `Renderer::GetImGuiTexture(texture->GetTableIndex())` to `ImGui::Image`, cast to `ImTextureID`.
 - **Picking.** `Renderer::RequestEntityIdAt` asks, `TakeEntityId` hands out the answer three frames later.
@@ -92,7 +99,7 @@ build\bin\Debug\LynxSandboxGame.exe
 
 ## Verifying a change
 
-- Build, then run the editor and the game and read `temp\engine.log` for `[error]`, `[critical]` and `NVRHI:` lines.
+- Build, then run the editor and the game and read `temp\engine.log` for `[error]`, `[critical]` and `VUID` lines.
 - Rendering and speed: `tools/bench.ps1 -Label <name>` runs the RenderBench benchmarks in Release and stores timings
   and pictures under the label. Run it before and after a change, then `tools/bench-compare.ps1 -Before <a> -After <b>`.
   Pictures are identical between runs of the same code, so any difference comes from the change. The timings compared
