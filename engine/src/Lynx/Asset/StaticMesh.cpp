@@ -292,42 +292,66 @@ namespace Lynx
 
             if (tangents.empty())
             {
-                for (size_t i = 0; i < sourceData.Indices.size(); i += 3)
+                // For every vertex, the directions in which the texture's two axes run across the surface,
+                // summed over its triangles. A larger triangle counts for more.
+                std::vector<glm::vec3> alongU(vertexCount, glm::vec3(0.0f));
+                std::vector<glm::vec3> alongV(vertexCount, glm::vec3(0.0f));
+
+                for (size_t i = 0; i + 2 < sourceData.Indices.size(); i += 3)
                 {
-                    uint32_t idx0 = sourceData.Indices[i];
-                    uint32_t idx1 = sourceData.Indices[i+1];
-                    uint32_t idx2 = sourceData.Indices[i+2];
+                    const uint32_t corners[3] = { sourceData.Indices[i], sourceData.Indices[i + 1], sourceData.Indices[i + 2] };
+                    const Vertex& v0 = sourceData.Vertices[corners[0]];
+                    const Vertex& v1 = sourceData.Vertices[corners[1]];
+                    const Vertex& v2 = sourceData.Vertices[corners[2]];
 
-                    auto& v0 = sourceData.Vertices[idx0];
-                    auto& v1 = sourceData.Vertices[idx1];
-                    auto& v2 = sourceData.Vertices[idx2];
+                    const glm::vec3 edge1 = v1.Position - v0.Position;
+                    const glm::vec3 edge2 = v2.Position - v0.Position;
+                    const glm::vec2 deltaUV1 = v1.TexCoord - v0.TexCoord;
+                    const glm::vec2 deltaUV2 = v2.TexCoord - v0.TexCoord;
 
-                    glm::vec3 edge1 = v1.Position - v0.Position;
-                    glm::vec3 edge2 = v2.Position - v0.Position;
+                    // Only the sign of the area in the texture is used, and the two directions are normalised.
+                    // Dividing by the area instead goes wrong on a detailed mesh, whose triangles are tiny in
+                    // the texture: a threshold on it would drop nearly all of them.
+                    const float areaInTexture = deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y;
+                    if (areaInTexture == 0.0f)
+                        continue;
 
-                    glm::vec2 deltaUV1 = v1.TexCoord - v0.TexCoord;
-                    glm::vec2 deltaUV2 = v2.TexCoord - v0.TexCoord;
+                    const float direction = areaInTexture < 0.0f ? -1.0f : 1.0f;
+                    const glm::vec3 u = direction * (deltaUV2.y * edge1 - deltaUV1.y * edge2);
+                    const glm::vec3 v = direction * (deltaUV1.x * edge2 - deltaUV2.x * edge1);
+                    const float lengthU = glm::length(u);
+                    const float lengthV = glm::length(v);
+                    if (!(lengthU > 0.0f) || !(lengthV > 0.0f) || !std::isfinite(lengthU) || !std::isfinite(lengthV))
+                        continue;
 
-                    float det = (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
-                    if (abs(det) < 0.0001f) continue;
-                    float f = 1.0f / det;
-
-                    glm::vec3 tangent;
-                    tangent.x = f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
-                    tangent.y = f * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
-                    tangent.z = f * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
-
-                    v0.Tangent += glm::vec4(tangent, 0.0f);
-                    v1.Tangent += glm::vec4(tangent, 0.0f);
-                    v2.Tangent += glm::vec4(tangent, 0.0f);
+                    const float weight = glm::length(glm::cross(edge1, edge2));
+                    for (const uint32_t corner : corners)
+                    {
+                        alongU[corner] += u * (weight / lengthU);
+                        alongV[corner] += v * (weight / lengthV);
+                    }
                 }
 
-                for (auto& v : sourceData.Vertices)
+                for (size_t i = 0; i < vertexCount; ++i)
                 {
-                    if (glm::length(glm::vec3(v.Tangent)) > 0.0f)
-                        v.Tangent = glm::vec4(glm::normalize(glm::vec3(v.Tangent)), 1.0f);
-                    else
-                        v.Tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+                    Vertex& vertex = sourceData.Vertices[i];
+                    const glm::vec3 normal = vertex.Normal;
+
+                    // The tangent lies in the surface, at a right angle to the normal.
+                    glm::vec3 tangent = alongU[i] - normal * glm::dot(normal, alongU[i]);
+                    if (!(glm::dot(tangent, tangent) > 1e-12f))
+                    {
+                        // The texture gives no direction here. Any direction in the surface will do, as long
+                        // as it is one: a tangent along the normal makes the shader divide by zero.
+                        const glm::vec3 other = std::abs(normal.x) < 0.9f ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+                        tangent = other - normal * glm::dot(normal, other);
+                    }
+                    tangent = glm::normalize(tangent);
+
+                    // The third direction is cross(normal, tangent) times w, and points up in the texture,
+                    // which is against v. Where the texture is mirrored on the surface, w is -1.
+                    const float w = glm::dot(glm::cross(normal, tangent), -alongV[i]) < 0.0f ? -1.0f : 1.0f;
+                    vertex.Tangent = glm::vec4(tangent, w);
                 }
             }
 
