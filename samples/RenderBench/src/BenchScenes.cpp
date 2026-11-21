@@ -259,3 +259,51 @@ void CreateBlocks(Scene& scene, const ShapeLibrary& shapes, uint32_t blocksPerSi
 
     LX_INFO("Created {0} blocks with {1} props between them.", blocksPerSide * blocksPerSide, propIndex);
 }
+
+void CreateDenseField(Scene& scene, AssetManager& assetManager, uint32_t count)
+{
+    // The scale brings every model to a few metres, so that none of them fills the view alone.
+    struct Kind
+    {
+        const char* Path;
+        float Scale;
+    };
+
+    const Kind kinds[] = {
+        { "Models/coast_rocks_05/coast_rocks_05_2k.gltf", 1.0f },
+        { "Models/root_cluster_01/root_cluster_01_2k.gltf", 1.0f },
+        { "Models/potted_plant_01/potted_plant_01_2k.gltf", 2.5f },
+        { "Models/shrub_01/shrub_01_2k.gltf", 1.5f },
+        { "Models/dutch_ship_large_01/dutch_ship_large_01_2k.gltf", 0.2f },
+        { "Models/FlightHelmet/FlightHelmet.gltf", 5.0f },
+    };
+
+    std::vector<std::shared_ptr<StaticMesh>> meshes;
+    for (const Kind& kind : kinds)
+    {
+        meshes.push_back(assetManager.GetProjectAsset<StaticMesh>(kind.Path, AssetLoadMode::Blocking));
+        if (!meshes.back())
+            LX_ERROR("RenderBench: cannot load {0}", kind.Path);
+    }
+
+    const float spacing = 8.0f;
+    const uint32_t side = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<float>(count))));
+    const float origin = -0.5f * spacing * static_cast<float>(side - 1);
+
+    for (uint32_t index = 0; index < count; ++index)
+    {
+        // Mixed by a hash, so that no row or column holds one kind only.
+        const size_t kind = Hash(index * 16u + 0u) % std::size(kinds);
+        if (!meshes[kind])
+            continue;
+
+        const glm::vec3 position(
+            origin + spacing * static_cast<float>(index % side) + Random(index, 3, -1.0f, 1.0f),
+            GroundHeight,
+            origin + spacing * static_cast<float>(index / side) + Random(index, 4, -1.0f, 1.0f));
+
+        CreateMeshEntity(scene, "Model", meshes[kind], position, TurnedAroundUp(Random(index, 5)), glm::vec3(kinds[kind].Scale));
+    }
+
+    LX_INFO("Created a field of {0} detailed models.", count);
+}

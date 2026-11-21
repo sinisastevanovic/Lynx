@@ -55,3 +55,8 @@ private:
 // A city of tall blocks with small props in the streets between them. Seen from a street, the blocks
 // hide nearly everything that lies inside the camera's view.
 void CreateBlocks(Scene& scene, const ShapeLibrary& shapes, uint32_t blocksPerSide, uint32_t propsPerBlock);
+
+// A field of a few detailed models, each a hundred thousand triangles or more: scanned rocks and roots,
+// plants with leaves, and models made of several parts. Where the other scenes are about the number of
+// objects, this one is about the number of triangles and vertices.
+void CreateDenseField(Scene& scene, AssetManager& assetManager, uint32_t count);

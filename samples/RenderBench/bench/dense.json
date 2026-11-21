@@ -1,0 +1,54 @@
+{
+    "Name": "dense",
+    "Scene": "Scenes/Dense.lxscene",
+    "Frames": 600,
+    "ScreenshotFrames": [
+        0,
+        300,
+        599
+    ],
+    "Parameters": {
+        "Dense": 400
+    },
+    "CameraPath": [
+        {
+            "Frame": 0,
+            "Position": [
+                -70.0,
+                6.0,
+                -70.0
+            ],
+            "Target": [
+                0.0,
+                0.0,
+                0.0
+            ]
+        },
+        {
+            "Frame": 300,
+            "Position": [
+                0.0,
+                4.0,
+                0.0
+            ],
+            "Target": [
+                40.0,
+                1.0,
+                40.0
+            ]
+        },
+        {
+            "Frame": 599,
+            "Position": [
+                60.0,
+                30.0,
+                -60.0
+            ],
+            "Target": [
+                0.0,
+                0.0,
+                0.0
+            ]
+        }
+    ]
+}

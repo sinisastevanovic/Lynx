@@ -29,6 +29,9 @@ public:
         if (const uint32_t instances = count("Instances"))
             CreateInstanceGrid(scene, assetManager, instances);
 
+        if (const uint32_t dense = count("Dense"))
+            CreateDenseField(scene, assetManager, dense);
+
         const uint32_t crowd = count("Crowd");
         const uint32_t blocksPerSide = count("BlocksPerSide");
         if (crowd == 0 && blocksPerSide == 0)
