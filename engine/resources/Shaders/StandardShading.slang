@@ -139,11 +139,19 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     // brought into the world with the surface's own three directions.
     float3 normal = normalize(input.normal);
     float3 tangent = normalize(input.tangent.xyz);
-    tangent = normalize(tangent - dot(tangent, normal) * normal);
-    float3 bitangent = cross(normal, tangent) * input.tangent.w;
+    tangent = tangent - dot(tangent, normal) * normal;
 
-    float3 mapped = sampleMaterialTexture(material.normalTexture, material.materialSampler, input.uv).rgb * 2.0 - 1.0;
-    normal = normalize(tangent * mapped.x + bitangent * mapped.y + normal * mapped.z);
+    // A mesh can come with a tangent that is useless at a pixel: one of no length, or one along the normal.
+    // Normalising it would divide by zero, and bloom spreads such a pixel into a black square.
+    // The normal map is left out there. The comparison is also false for a tangent that is not a number.
+    if (length(tangent) > 0.0001)
+    {
+        tangent = normalize(tangent);
+        float3 bitangent = cross(normal, tangent) * input.tangent.w;
+
+        float3 mapped = sampleMaterialTexture(material.normalTexture, material.materialSampler, input.uv).rgb * 2.0 - 1.0;
+        normal = normalize(tangent * mapped.x + bitangent * mapped.y + normal * mapped.z);
+    }
 
     float3 toEye = normalize(scene.cameraPosition.xyz - input.worldPosition);
     float3 toLight = normalize(-scene.lightDirection.xyz);
@@ -159,7 +167,10 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
 
     float4 metallicRoughness = sampleMaterialTexture(material.metallicRoughnessTexture, material.materialSampler, input.uv);
     float metallic = metallicRoughness.b * material.metallic;
-    float roughness = metallicRoughness.g * material.roughness;
+
+    // A roughness of zero is a perfect mirror, whose highlight is a single point of infinite brightness:
+    // the formula below divides zero by zero there. No real surface is that smooth, so it is kept away from zero.
+    float roughness = max(metallicRoughness.g * material.roughness, 0.045);
 
     float3 emissive = sampleMaterialTexture(material.emissiveTexture, material.materialSampler, input.uv).rgb
         * material.emissiveColorStrength.rgb * material.emissiveColorStrength.a;
