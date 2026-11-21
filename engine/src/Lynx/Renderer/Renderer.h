@@ -163,7 +163,6 @@ namespace Lynx
         void EndScene();
 
         void CreateDefaultTextures();
-        void InitBuffers();
         void ApplySwapchainSettings(const SwapchainSettings& settings);
         void ReleaseSwapchainImages();
         void CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height);
@@ -185,7 +184,6 @@ namespace Lynx
         nvrhi::DeviceHandle m_NvrhiDevice;
         nvrhi::CommandListHandle m_CommandList;
 
-        nvrhi::BufferHandle m_GlobalCB;
 
         nvrhi::TextureHandle m_WhiteTex;
         nvrhi::TextureHandle m_NormalTex;

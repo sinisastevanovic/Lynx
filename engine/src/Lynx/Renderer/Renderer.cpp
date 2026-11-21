@@ -166,6 +166,9 @@ namespace Lynx
                 uploads.Upload(Buffer.Handle(), 0, std::as_bytes(instances));
             }
         };
+        // The camera and the sun of the scene being drawn, which every shader can read. Rewritten for every scene.
+        GpuBuffer SceneConstants;
+
         InstanceStorage MeshInstances;
         InstanceStorage ParticleInstances;
 
@@ -200,11 +203,13 @@ namespace Lynx
 
         m_CommandList = m_NvrhiDevice->createCommandList();
         CreateDefaultTextures();
-        InitBuffers();
 
-        // The scene constants are still a buffer of NVRHI's. The shared bindings point at the Vulkan buffer behind it.
-        const vk::Buffer sceneConstants(static_cast<VkBuffer>(m_GlobalCB->getNativeObject(nvrhi::ObjectTypes::VK_Buffer).pointer));
-        m_Frame->Shared = std::make_unique<SharedBindings>(*m_Context, sceneConstants);
+        GpuBufferDesc sceneConstantsDesc;
+        sceneConstantsDesc.Size = sizeof(SceneData);
+        sceneConstantsDesc.Usage = vk::BufferUsageFlagBits::eUniformBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        sceneConstantsDesc.Name = "SceneConstants";
+        m_Frame->SceneConstants = GpuBuffer(*m_Context, sceneConstantsDesc);
+        m_Frame->Shared = std::make_unique<SharedBindings>(*m_Context, m_Frame->SceneConstants.Handle());
         m_Frame->BlackTextureIndex = m_Frame->Shared->AddTexture(vk::ImageView(static_cast<VkImageView>(m_BlackTex->getNativeView(nvrhi::ObjectTypes::VK_ImageView).pointer)));
         m_Frame->WhiteTextureIndex = m_Frame->Shared->AddTexture(vk::ImageView(static_cast<VkImageView>(m_WhiteTex->getNativeView(nvrhi::ObjectTypes::VK_ImageView).pointer)));
     }
@@ -224,6 +229,7 @@ namespace Lynx
         m_Frame->MeshInstances = {};
         m_Frame->ParticleInstances = {};
         m_Frame->PickReadback = {};
+        m_Frame->SceneConstants = {};
         m_Frame->Uploads.reset();
         m_PendingScreenshots.clear();
         m_Graph.reset();
@@ -241,7 +247,6 @@ namespace Lynx
         m_NormalTex = nullptr;
         m_BlackTex = nullptr;
         m_MetallicRoughnessTex = nullptr;
-        m_GlobalCB = nullptr;
         m_CommandList = nullptr;
         m_SceneTarget.reset();
         m_ImGui.reset();
@@ -510,21 +515,6 @@ namespace Lynx
         m_NvrhiDevice->executeCommandList(m_CommandList);
     }
     
-    void Renderer::InitBuffers()
-    {
-        nvrhi::BufferDesc cbDesc;
-        cbDesc.byteSize = sizeof(SceneData);
-        cbDesc.isConstantBuffer = true;
-        cbDesc.initialState = nvrhi::ResourceStates::ConstantBuffer;
-        cbDesc.keepInitialState = true;
-        m_GlobalCB = m_NvrhiDevice->createBuffer(cbDesc);
-
-        if (!m_GlobalCB)
-        {
-            LX_CORE_ERROR("Failed to create Constant Buffer!");
-        }
-    }
-    
     void Renderer::CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height)
     {
         target.Width = width;
@@ -780,7 +770,7 @@ namespace Lynx
         sceneData.CameraPosition = glm::vec4(cameraPosition, 1.0f);
         sceneData.LightDirection = glm::vec4(lightDir, lightIntensity);
         sceneData.LightColor = glm::vec4(lightColor, 1.0f);
-        m_CommandList->writeBuffer(m_GlobalCB, &sceneData, sizeof(SceneData));
+        m_Frame->Uploads->Upload(m_Frame->SceneConstants.Handle(), 0, std::as_bytes(std::span<const SceneData>(&sceneData, 1)));
 
         // 3. Clear Screen
         nvrhi::utils::ClearColorAttachment(m_CommandList, m_CurrentFrameData.TargetFramebuffer, 0, nvrhi::Color(0.05f, 0.05f, 0.05f, 1.0f));
@@ -1145,30 +1135,23 @@ namespace Lynx
 
     std::pair<MeshBuffer, MeshBuffer> Renderer::CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices)
     {
-        auto vbDesc = nvrhi::BufferDesc()
-           .setByteSize(vertices.size() * sizeof(Vertex))
-           .setIsVertexBuffer(true)
-           .setDebugName("MeshVertexBuffer")
-           .enableAutomaticStateTracking(nvrhi::ResourceStates::CopyDest);
-        nvrhi::BufferHandle vb = m_NvrhiDevice->createBuffer(vbDesc);
+        // The data is copied into staging memory here and reaches the buffers with the next frame,
+        // before anything can draw with them.
+        const auto create = [this](std::span<const std::byte> bytes, vk::BufferUsageFlagBits usage, const char* name)
+        {
+            GpuBufferDesc desc;
+            desc.Size = bytes.size();
+            desc.Usage = usage | vk::BufferUsageFlagBits::eTransferDst;
+            desc.Name = name;
+            auto buffer = std::make_shared<GpuBuffer>(*m_Context, desc);
+            m_Frame->Uploads->Upload(buffer->Handle(), 0, bytes);
+            return MeshBuffer(std::move(buffer));
+        };
 
-        auto ibDesc = nvrhi::BufferDesc()
-            .setByteSize(indices.size() * sizeof(uint32_t))
-            .setIsIndexBuffer(true)
-            .setDebugName("MeshIndexBuffer")
-            .enableAutomaticStateTracking(nvrhi::ResourceStates::CopyDest);
-        nvrhi::BufferHandle ib = m_NvrhiDevice->createBuffer(ibDesc);
-
-        // TODO: We use a temporary command list here to immediately upload the buffers,
-        // in the future, we should maybe batch these things? 
-        nvrhi::CommandListHandle commandList = CreateUploadCommandList(m_NvrhiDevice);
-        commandList->open();
-        commandList->writeBuffer(vb, vertices.data(), vbDesc.byteSize);
-        commandList->writeBuffer(ib, indices.data(), ibDesc.byteSize);
-        commandList->close();
-        m_NvrhiDevice->executeCommandList(commandList);
-
-        return { MeshBuffer(m_Context->Deletions(), vb), MeshBuffer(m_Context->Deletions(), ib) };
+        return {
+            create(std::as_bytes(std::span<const Vertex>(vertices)), vk::BufferUsageFlagBits::eVertexBuffer, "MeshVertices"),
+            create(std::as_bytes(std::span<const uint32_t>(indices)), vk::BufferUsageFlagBits::eIndexBuffer, "MeshIndices"),
+        };
     }
 
     void Renderer::OnResize(uint32_t width, uint32_t height)

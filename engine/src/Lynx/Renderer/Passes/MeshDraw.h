@@ -2,6 +2,7 @@
 
 #include "Lynx/Asset/StaticMesh.h"
 #include "Lynx/Renderer/RenderPass.h"
+#include "Lynx/Renderer/Vulkan/GpuBuffer.h"
 
 #include <vulkan/vulkan.hpp>
 
@@ -18,14 +19,11 @@ namespace Lynx
         static constexpr vk::Format ColorFormat = vk::Format::eR32G32B32A32Sfloat;
     };
 
-    // Binds the vertices and indices of a submesh. The buffers are still made through NVRHI, which never
-    // moves them between states after their upload, so they can be bound directly.
+    // Binds the vertices and indices of a submesh.
     inline void BindSubmesh(vk::CommandBuffer commands, const Submesh& submesh)
     {
-        const vk::Buffer vertices(static_cast<VkBuffer>(submesh.VertexBuffer.Get()->getNativeObject(nvrhi::ObjectTypes::VK_Buffer).pointer));
-        const vk::Buffer indices(static_cast<VkBuffer>(submesh.IndexBuffer.Get()->getNativeObject(nvrhi::ObjectTypes::VK_Buffer).pointer));
-        commands.bindVertexBuffers(0, vertices, vk::DeviceSize(0));
-        commands.bindIndexBuffer(indices, 0, vk::IndexType::eUint32);
+        commands.bindVertexBuffers(0, submesh.VertexBuffer.Get().Handle(), vk::DeviceSize(0));
+        commands.bindIndexBuffer(submesh.IndexBuffer.Get().Handle(), 0, vk::IndexType::eUint32);
     }
 
     // The address of an instance in the frame's instance buffer. A draw passes the address of its first

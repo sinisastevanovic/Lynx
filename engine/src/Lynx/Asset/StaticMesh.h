@@ -1,7 +1,6 @@
 #pragma once
 #include "Lynx/Core.h"
 #include "Asset.h"
-#include <nvrhi/nvrhi.h>
 #include <glm/glm.hpp>
 
 #include "MeshSpecification.h"
