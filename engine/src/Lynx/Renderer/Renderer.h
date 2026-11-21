@@ -124,6 +124,10 @@ namespace Lynx
         // Puts a texture into the table that shaders read from. The slot keeps the texture alive.
         TextureSlot AddToTextureTable(const GpuTexture& texture);
 
+        // Puts the texture in a second time, read as sRGB: what a shader samples there is linear light.
+        // An empty slot for a texture whose format has no sRGB form.
+        TextureSlot AddColorToTextureTable(const GpuTexture& texture);
+
         // The index of the sampler with these settings in the sampler table.
         uint32_t SamplerIndex(const SamplerSettings& settings);
 

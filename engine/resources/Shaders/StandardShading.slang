@@ -19,7 +19,8 @@ public struct StandardConstants
     // Pixels whose alpha is below this are left out. Negative for a material without cut-outs.
     public float alphaCutoff;
 
-    // Indices into the texture and sampler tables.
+    // Indices into the texture and sampler tables. Albedo and emissive are the sRGB readings of their
+    // textures, so sampling them gives linear light.
     public uint albedoTexture;
     public uint normalTexture;
     public uint metallicRoughnessTexture;
@@ -166,7 +167,7 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
         if (albedoSample.a < constants.alphaCutoff)
             discard;
     }
-    float3 albedo = pow(albedoSample.rgb, float3(2.2, 2.2, 2.2)) * constants.albedoColor.rgb;
+    float3 albedo = albedoSample.rgb * constants.albedoColor.rgb;
 
     float4 metallicRoughness = textures[constants.metallicRoughnessTexture].Sample(materialSampler, input.uv);
     float metallic = metallicRoughness.b * constants.metallic;

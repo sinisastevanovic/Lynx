@@ -27,6 +27,12 @@ namespace Lynx
             }
         }
 
+        // The format with the same bytes, read as sRGB. Undefined if there is none.
+        vk::Format SrgbFormOf(vk::Format format)
+        {
+            return format == vk::Format::eR8G8B8A8Unorm ? vk::Format::eR8G8B8A8Srgb : vk::Format::eUndefined;
+        }
+
         // What the GPU does with a picture in a layout: at which point of its work, and reading or writing.
         // A change of layout waits for the old use to finish and holds back the new one until the change is done.
         struct LayoutUse
@@ -70,6 +76,17 @@ namespace Lynx
         imageInfo.samples = vk::SampleCountFlagBits::e1;
         imageInfo.usage = desc.Usage;
 
+        // A view in another format than the picture's has to be allowed when the picture is made. Naming
+        // the formats lets the driver keep the optimisations it would drop for "any format".
+        const std::array<vk::Format, 2> viewFormats = { desc.Format, SrgbFormOf(desc.Format) };
+        vk::ImageFormatListCreateInfo viewFormatList;
+        if (desc.SrgbView && viewFormats[1] != vk::Format::eUndefined)
+        {
+            viewFormatList.setViewFormats(viewFormats);
+            imageInfo.flags = vk::ImageCreateFlagBits::eMutableFormat;
+            imageInfo.pNext = &viewFormatList;
+        }
+
         VmaAllocationCreateInfo allocationInfo{};
         allocationInfo.usage = VMA_MEMORY_USAGE_AUTO;
         allocationInfo.pool = context.TexturePool();
@@ -110,6 +127,13 @@ namespace Lynx
         viewInfo.subresourceRange = vk::ImageSubresourceRange(AspectOf(m_Desc.Format), 0, m_Desc.MipLevels, 0, 1);
         m_View = context.Device().createImageView(viewInfo);
 
+        if (m_Desc.SrgbView && SrgbFormOf(m_Desc.Format) != vk::Format::eUndefined)
+        {
+            viewInfo.format = SrgbFormOf(m_Desc.Format);
+            m_SrgbView = context.Device().createImageView(viewInfo);
+            viewInfo.format = m_Desc.Format;
+        }
+
         if (m_Desc.ViewPerMip)
         {
             m_MipViews.reserve(m_Desc.MipLevels);
@@ -131,6 +155,7 @@ namespace Lynx
         : m_Context(std::exchange(other.m_Context, nullptr)),
           m_Image(std::exchange(other.m_Image, nullptr)),
           m_View(std::exchange(other.m_View, nullptr)),
+          m_SrgbView(std::exchange(other.m_SrgbView, nullptr)),
           m_MipViews(std::move(other.m_MipViews)),
           m_Allocation(std::exchange(other.m_Allocation, nullptr)),
           m_Desc(std::exchange(other.m_Desc, {})),
@@ -146,6 +171,7 @@ namespace Lynx
             m_Context = std::exchange(other.m_Context, nullptr);
             m_Image = std::exchange(other.m_Image, nullptr);
             m_View = std::exchange(other.m_View, nullptr);
+            m_SrgbView = std::exchange(other.m_SrgbView, nullptr);
             m_MipViews = std::move(other.m_MipViews);
             m_Allocation = std::exchange(other.m_Allocation, nullptr);
             m_Desc = std::exchange(other.m_Desc, {});
@@ -200,9 +226,11 @@ namespace Lynx
             return;
 
         // A frame that is still on the GPU may be drawing into the texture or reading it.
-        m_Context->Deletions().Retire([device = m_Context->Device(), allocator = m_Context->Allocator(), image = static_cast<VkImage>(m_Image), view = m_View, mipViews = std::move(m_MipViews), allocation = m_Allocation]()
+        m_Context->Deletions().Retire([device = m_Context->Device(), allocator = m_Context->Allocator(), image = static_cast<VkImage>(m_Image), view = m_View, srgbView = m_SrgbView, mipViews = std::move(m_MipViews), allocation = m_Allocation]()
         {
             device.destroyImageView(view);
+            if (srgbView)
+                device.destroyImageView(srgbView);
             for (const vk::ImageView mipView : mipViews)
                 device.destroyImageView(mipView);
 
@@ -213,6 +241,7 @@ namespace Lynx
 
         m_Image = nullptr;
         m_View = nullptr;
+        m_SrgbView = nullptr;
         m_MipViews.clear();
         m_Allocation = nullptr;
         m_Desc = {};

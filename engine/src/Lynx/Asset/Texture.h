@@ -28,6 +28,12 @@ namespace Lynx
         // Where the renderer's texture and sampler tables have this texture and its sampler.
         // Valid once the texture is on the GPU.
         uint32_t GetTableIndex() const { return m_TableSlot.Index(); }
+
+        // The same texture read as colours painted for the screen (sRGB): sampling it gives linear light,
+        // which is what lighting computes with. For a material's albedo and emissive textures.
+        // GetTableIndex gives the stored numbers as they are: for normal maps, roughness, and for pictures
+        // that go to the screen unlit, like the UI's.
+        uint32_t GetColorTableIndex() const { return m_ColorTableSlot ? m_ColorTableSlot.Index() : m_TableSlot.Index(); }
         uint32_t GetSamplerIndex() const { return m_SamplerIndex; }
 
         uint32_t GetWidth() const { return m_Specification.Width; }
@@ -45,6 +51,9 @@ namespace Lynx
         TextureSpecification m_Specification;
         std::unique_ptr<GpuTexture> m_GpuTexture;
         TextureSlot m_TableSlot;
+
+        // Empty for a format without an sRGB form, such as a font's single channel.
+        TextureSlot m_ColorTableSlot;
         uint32_t m_SamplerIndex = 0;
 
         unsigned char* m_PixelData = nullptr;

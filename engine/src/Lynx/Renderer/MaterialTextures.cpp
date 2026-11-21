@@ -40,10 +40,11 @@ namespace Lynx
             return texture && texture->IsOnGpu() ? texture : nullptr;
         };
 
+        // Albedo and emissive are colours, the other two are plain numbers.
         // All textures of a material are read with the sampler of its albedo texture.
         if (const std::shared_ptr<Texture> albedo = loaded(material.AlbedoTexture))
         {
-            indices.Albedo = albedo->GetTableIndex();
+            indices.Albedo = albedo->GetColorTableIndex();
             indices.Sampler = albedo->GetSamplerIndex();
         }
         if (const std::shared_ptr<Texture> normal = loaded(material.NormalMap))
@@ -51,7 +52,7 @@ namespace Lynx
         if (const std::shared_ptr<Texture> metallicRoughness = loaded(material.MetallicRoughnessTexture))
             indices.MetallicRoughness = metallicRoughness->GetTableIndex();
         if (const std::shared_ptr<Texture> emissive = loaded(material.EmissiveTexture))
-            indices.Emissive = emissive->GetTableIndex();
+            indices.Emissive = emissive->GetColorTableIndex();
 
         return indices;
     }

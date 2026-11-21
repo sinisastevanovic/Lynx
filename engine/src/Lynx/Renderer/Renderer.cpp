@@ -49,14 +49,14 @@ namespace Lynx
 {
     namespace Helpers
     {
-        vk::Format ToVulkan(TextureFormat format, bool sRGB)
+        vk::Format ToVulkan(TextureFormat format)
         {
             switch (format)
             {
-                case TextureFormat::RGBA8: return sRGB ? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm;
+                case TextureFormat::RGBA8: return vk::Format::eR8G8B8A8Unorm;
                 case TextureFormat::RG16F: return vk::Format::eR16G16Sfloat;
                 case TextureFormat::RG32F: return vk::Format::eR32G32Sfloat;
-                case TextureFormat::R32I:  return sRGB ? vk::Format::eR32Sint : vk::Format::eR32Uint;
+                case TextureFormat::R32I:  return vk::Format::eR32Uint;
                 case TextureFormat::R8:    return vk::Format::eR8Unorm;
 
                 // Depth formats are for render targets, which are not made from pixels.
@@ -306,7 +306,7 @@ namespace Lynx
         if (!data)
             return nullptr;
 
-        const vk::Format format = Helpers::ToVulkan(specification.Format, specification.IsSRGB);
+        const vk::Format format = Helpers::ToVulkan(specification.Format);
         if (format == vk::Format::eUndefined)
         {
             LX_CORE_ERROR("Texture '{0}' has a format that cannot be filled from pixels.", specification.DebugName);
@@ -317,6 +317,12 @@ namespace Lynx
         desc.Width = specification.Width;
         desc.Height = specification.Height;
         desc.Format = format;
+
+        // Whether a texture holds colours painted for the screen or plain numbers (a normal map, roughness)
+        // depends on what it is used for, and one texture can be both: a material's colour and a UI picture.
+        // So every texture offers both readings, and the user picks one.
+        desc.SrgbView = true;
+
         // Smaller sizes are made by copying from the size above, so the texture is both read from and written to.
         desc.Usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc;
         desc.Name = specification.DebugName.c_str();
@@ -571,7 +577,7 @@ namespace Lynx
                 const std::shared_ptr<Texture> albedo = m_Assets.GetAsset<Texture>(material->AlbedoTexture);
                 if (albedo && albedo->IsOnGpu())
                 {
-                    batch.AlbedoTexture = albedo->GetTableIndex();
+                    batch.AlbedoTexture = albedo->GetColorTableIndex();
                     batch.AlbedoSampler = albedo->GetSamplerIndex();
                 }
             }
@@ -803,6 +809,13 @@ namespace Lynx
     TextureSlot Renderer::AddToTextureTable(const GpuTexture& texture)
     {
         return TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(texture.View()));
+    }
+
+    TextureSlot Renderer::AddColorToTextureTable(const GpuTexture& texture)
+    {
+        if (!texture.SrgbView())
+            return TextureSlot();
+        return TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(texture.SrgbView()));
     }
 
     uint32_t Renderer::SamplerIndex(const SamplerSettings& settings)

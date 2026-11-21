@@ -78,21 +78,23 @@ namespace Lynx
     {
         if (!m_PixelData)
             return false;
-        
+
         Renderer& renderer = Engine::Get().GetRenderer();
 
-        // The place in the table goes before the picture it points at.
+        // The places in the table go before the picture they point at.
         m_TableSlot = TextureSlot();
+        m_ColorTableSlot = TextureSlot();
         m_GpuTexture = renderer.CreateTexture(m_Specification, m_PixelData);
 
         if (!m_FilePath.empty())
             stbi_image_free(m_PixelData);
-        
+
         m_PixelData = nullptr;
-        
+
         if (m_GpuTexture)
         {
             m_TableSlot = renderer.AddToTextureTable(*m_GpuTexture);
+            m_ColorTableSlot = renderer.AddColorToTextureTable(*m_GpuTexture);
             m_SamplerIndex = renderer.SamplerIndex(m_Specification.SamplerSettings);
             LX_CORE_TRACE("Texture loaded successfully: {0} ({1}x{2})", m_FilePath, GetWidth(), GetHeight());
             IncrementVersion();

@@ -23,6 +23,10 @@ namespace Lynx
         // Also make a view of every mip level on its own, for a texture whose levels are drawn into one by one.
         bool ViewPerMip = false;
 
+        // Also make a view that reads the stored bytes as sRGB, so that a shader gets linear light from a
+        // picture painted for the screen. Ignored for a format that has no sRGB form.
+        bool SrgbView = false;
+
         // Shown in RenderDoc and in validation messages.
         const char* Name = "";
     };
@@ -53,6 +57,9 @@ namespace Lynx
 
         vk::Image Image() const { return m_Image; }
         vk::ImageView View() const { return m_View; }
+
+        // Null unless the texture was made with SrgbView and its format has an sRGB form.
+        vk::ImageView SrgbView() const { return m_SrgbView; }
         const GpuTextureDesc& Desc() const { return m_Desc; }
 
         // Only for a texture made with ViewPerMip.
@@ -75,6 +82,7 @@ namespace Lynx
         GraphicsContext* m_Context = nullptr;
         vk::Image m_Image;
         vk::ImageView m_View;
+        vk::ImageView m_SrgbView;
         std::vector<vk::ImageView> m_MipViews;
 
         // Null for a wrapped picture, whose memory is not this object's.
