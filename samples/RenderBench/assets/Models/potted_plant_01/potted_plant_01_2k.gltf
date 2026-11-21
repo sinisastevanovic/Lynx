@@ -185,9 +185,9 @@
       "uri": "textures/potted_plant_01_leaves_nor_gl_2k.jpg"
     },
     {
-      "mimeType": "image/jpeg",
+      "mimeType": "image/png",
       "name": "potted_plant_01_leaves_diff.png",
-      "uri": "textures/potted_plant_01_leaves_diff_2k.jpg"
+      "uri": "textures/potted_plant_01_leaves_diff_2k.png"
     },
     {
       "mimeType": "image/jpeg",
