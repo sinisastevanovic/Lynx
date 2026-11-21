@@ -159,7 +159,7 @@ namespace Lynx
         for (const UIBatch& batch : m_Batcher.GetBatches())
         {
             // A texture that is still loading has no picture yet. Its elements appear once it has one.
-            if (!batch.Texture || !batch.Texture->GetTextureHandle())
+            if (!batch.Texture || !batch.Texture->IsOnGpu())
                 continue;
 
             const vk::Pipeline pipeline = batch.Type == UIBatchType::Text ? m_Vulkan->TextPipeline : m_Vulkan->StandardPipeline;

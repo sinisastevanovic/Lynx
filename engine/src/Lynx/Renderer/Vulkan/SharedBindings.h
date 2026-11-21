@@ -49,9 +49,7 @@ namespace Lynx
         uint32_t AddTexture(vk::ImageView view);
 
         // Gives an index back. It is handed out again only after the frames that may still use it are done.
-        // What "releaseOwner" holds is let go at the same moment: pass whatever keeps the texture alive,
-        // unless the texture already outlives those frames by itself.
-        void ReleaseTexture(uint32_t index, std::function<void()> releaseOwner = {});
+        void ReleaseTexture(uint32_t index);
 
         // The view that was added under an index.
         vk::ImageView TextureView(uint32_t index) const { return m_TextureViews[index]; }

@@ -45,14 +45,14 @@ namespace Lynx
         glm::vec2 uvMin, glm::vec2 uvMax)
     {
         std::shared_ptr<Texture> resolvedTexture = nullptr;
-        if (textureOverride && textureOverride->GetTextureHandle())
+        if (textureOverride && textureOverride->IsOnGpu())
         {
             resolvedTexture = textureOverride;
         }
         else if (material && material->AlbedoTexture)
         {
             auto texAsset = Engine::Get().GetAssetManager().GetAsset<Texture>(material->AlbedoTexture);
-            if (texAsset && texAsset->GetTextureHandle())
+            if (texAsset && texAsset->IsOnGpu())
                 resolvedTexture = texAsset;
         }
 
@@ -82,14 +82,14 @@ namespace Lynx
         std::shared_ptr<Texture> textureOverride, glm::vec2 uvMin, glm::vec2 uvMax)
     {
         std::shared_ptr<Texture> resolvedTexture = nullptr;
-        if (textureOverride && textureOverride->GetTextureHandle())
+        if (textureOverride && textureOverride->IsOnGpu())
         {
             resolvedTexture = textureOverride;
         }
         else if (material && material->AlbedoTexture)
         {
             auto texAsset = Engine::Get().GetAssetManager().GetAsset<Texture>(material->AlbedoTexture);
-            if (texAsset && texAsset->GetTextureHandle())
+            if (texAsset && texAsset->IsOnGpu())
                 resolvedTexture = texAsset;
         }
 

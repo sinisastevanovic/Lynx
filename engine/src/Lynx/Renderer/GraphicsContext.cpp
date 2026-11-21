@@ -130,6 +130,16 @@ namespace Lynx
         if (vmaCreateAllocator(&allocatorInfo, &m_Allocator) != VK_SUCCESS)
             throw std::runtime_error("Could not create the GPU memory allocator");
 
+        // A pool of its own for textures, in the kind of memory the allocator would pick for them anyway.
+        VmaAllocationCreateInfo textureMemory{};
+        textureMemory.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        VmaPoolCreateInfo poolInfo{};
+        if (vmaFindMemoryTypeIndex(m_Allocator, UINT32_MAX, &textureMemory, &poolInfo.memoryTypeIndex) != VK_SUCCESS
+            || vmaCreatePool(m_Allocator, &poolInfo, &m_TexturePool) != VK_SUCCESS)
+        {
+            throw std::runtime_error("Could not create the memory pool for textures");
+        }
+
         // NVRHI is told what the instance and the device were created with, so it knows what it may use.
         nvrhi::vulkan::DeviceDesc nvrhiDesc;
         nvrhiDesc.errorCB = &s_NvrhiMessageLogger;
@@ -165,6 +175,7 @@ namespace Lynx
 
         // Whatever NVRHI retired while it was destroyed. The GPU is idle, so nothing of it is still in use.
         m_Deletions.Flush();
+        vmaDestroyPool(m_Allocator, m_TexturePool);
         vmaDestroyAllocator(m_Allocator);
 
         m_Device.destroy();

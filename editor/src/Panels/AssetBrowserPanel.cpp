@@ -132,7 +132,7 @@ namespace Lynx
                                     auto texture = Engine::Get().GetAssetManager().GetAsset<Texture>(metadata.Handle);
                                     if (texture)
                                     {
-                                        if (texture->GetTextureHandle())
+                                        if (texture->IsOnGpu())
                                         {
                                             ThumbnailData thumbnailData;
                                             thumbnailData.Texture = texture;
@@ -176,7 +176,7 @@ namespace Lynx
 
 
                 ImTextureID texID = (ImTextureID)0;
-                if (icon && icon->GetHandle() && icon->GetTextureHandle())
+                if (icon && icon->GetHandle() && icon->IsOnGpu())
                 {
                     texID = static_cast<ImTextureID>(Engine::Get().GetRenderer().GetImGuiTexture(icon->GetTableIndex()));
                 }

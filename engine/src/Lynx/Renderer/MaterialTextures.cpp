@@ -37,7 +37,7 @@ namespace Lynx
                 return nullptr;
 
             std::shared_ptr<Texture> texture = m_Assets.GetAsset<Texture>(handle);
-            return texture && texture->GetTextureHandle() ? texture : nullptr;
+            return texture && texture->IsOnGpu() ? texture : nullptr;
         };
 
         // All textures of a material are read with the sampler of its albedo texture.

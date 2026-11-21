@@ -42,10 +42,17 @@ namespace Lynx
 
         VmaAllocationCreateInfo allocationInfo{};
         allocationInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        allocationInfo.pool = context.TexturePool();
 
         VkImage image = VK_NULL_HANDLE;
         const VkImageCreateInfo& rawImageInfo = imageInfo;
-        const VkResult result = vmaCreateImage(context.Allocator(), &rawImageInfo, &allocationInfo, &image, &m_Allocation, nullptr);
+        VkResult result = vmaCreateImage(context.Allocator(), &rawImageInfo, &allocationInfo, &image, &m_Allocation, nullptr);
+        if (result != VK_SUCCESS)
+        {
+            // The pool has one kind of memory. A texture that cannot live in it is given whatever fits.
+            allocationInfo.pool = nullptr;
+            result = vmaCreateImage(context.Allocator(), &rawImageInfo, &allocationInfo, &image, &m_Allocation, nullptr);
+        }
         if (result != VK_SUCCESS)
             throw std::runtime_error("Could not create a GPU texture: " + vk::to_string(static_cast<vk::Result>(result)));
 

@@ -1,13 +1,16 @@
 #pragma once
 #include "Lynx/Core.h"
 #include "Asset.h"
-#include <nvrhi/nvrhi.h>
 
 #include "TextureSpecification.h"
 #include "Lynx/Renderer/TextureSlot.h"
 
+#include <memory>
+
 namespace Lynx
 {
+    class GpuTexture;
+
     class LX_API Texture : public Asset
     {
     public:
@@ -19,10 +22,11 @@ namespace Lynx
         static AssetType GetStaticType() { return AssetType::Texture; }
         virtual AssetType GetType() const override { return GetStaticType(); }
 
-        nvrhi::TextureHandle GetTextureHandle() const { return m_TextureHandle; }
+        // True once the picture exists on the GPU. Until then the texture cannot be drawn with.
+        bool IsOnGpu() const { return m_GpuTexture != nullptr; }
 
         // Where the renderer's texture and sampler tables have this texture and its sampler.
-        // Valid once the texture handle is.
+        // Valid once the texture is on the GPU.
         uint32_t GetTableIndex() const { return m_TableSlot.Index(); }
         uint32_t GetSamplerIndex() const { return m_SamplerIndex; }
 
@@ -39,7 +43,7 @@ namespace Lynx
 
     private:
         TextureSpecification m_Specification;
-        nvrhi::TextureHandle m_TextureHandle;
+        std::unique_ptr<GpuTexture> m_GpuTexture;
         TextureSlot m_TableSlot;
         uint32_t m_SamplerIndex = 0;
 

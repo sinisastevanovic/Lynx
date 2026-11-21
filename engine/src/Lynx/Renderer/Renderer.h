@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "Passes/MipMapGenPass.h"
 #include "Lynx/Asset/Texture.h"
 #include "Lynx/Asset/StaticMesh.h"
 #include "Lynx/Asset/TextureSpecification.h"
@@ -16,13 +15,13 @@
 
 #include "RenderPass.h"
 #include "Screenshot.h"
-#include "Passes/MipMapBlitPass.h"
 
 struct GLFWwindow;
 
 namespace Lynx
 {
     class AssetManager;
+    class GpuTexture;
     class MaterialTextures;
     class FrameProfiler;
     class GraphicsContext;
@@ -105,7 +104,9 @@ namespace Lynx
 
         nvrhi::DeviceHandle GetDeviceHandle() const { return m_NvrhiDevice; }
 
-        nvrhi::TextureHandle CreateTexture(const TextureSpecification& specification, unsigned char* data);
+        // Makes a texture on the GPU from pixels, with all its smaller sizes if the specification asks for them.
+        // Null if the pixels are missing or the format cannot be used.
+        std::unique_ptr<GpuTexture> CreateTexture(const TextureSpecification& specification, const unsigned char* data);
 
         // Asks which entity the scene picture shows at a pixel. The answer arrives a few frames later,
         // so that no frame has to wait for the GPU. A new request replaces one that is still under way.
@@ -142,7 +143,7 @@ namespace Lynx
         glm::mat4 GetCameraViewProjMatrix() const { return m_CurrentFrameData.ViewProjection; }
 
         // Puts a texture into the table that shaders read from. The slot keeps the texture alive.
-        TextureSlot AddToTextureTable(nvrhi::TextureHandle texture);
+        TextureSlot AddToTextureTable(const GpuTexture& texture);
 
         // The index of the sampler with these settings in the sampler table.
         uint32_t SamplerIndex(const SamplerSettings& settings);
@@ -185,11 +186,6 @@ namespace Lynx
         nvrhi::CommandListHandle m_CommandList;
 
 
-        nvrhi::TextureHandle m_WhiteTex;
-        nvrhi::TextureHandle m_NormalTex;
-        nvrhi::TextureHandle m_BlackTex;
-        nvrhi::TextureHandle m_MetallicRoughnessTex;
-
         uint32_t m_CurrentFrame = 0;
 
         // The picture the scene of this frame ended up in. Null if no scene was drawn in this frame.
@@ -209,7 +205,6 @@ namespace Lynx
         std::unique_ptr<RenderGraph> m_Graph;
 
         BloomSettings m_BloomSettings;
-        std::unique_ptr<MipMapBlitPass> m_MipMapGenPass;
 
         RenderContext m_RenderContext;
         RenderData m_CurrentFrameData;

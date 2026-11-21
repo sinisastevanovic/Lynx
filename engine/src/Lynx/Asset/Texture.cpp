@@ -4,6 +4,7 @@
 #include <stb_image.h>
 
 #include "Lynx/Engine.h"
+#include "Lynx/Renderer/Vulkan/GpuTexture.h"
 
 namespace Lynx
 {
@@ -78,17 +79,20 @@ namespace Lynx
         if (!m_PixelData)
             return false;
         
-        m_TextureHandle = Engine::Get().GetRenderer().CreateTexture(m_Specification, m_PixelData);
+        Renderer& renderer = Engine::Get().GetRenderer();
+
+        // The place in the table goes before the picture it points at.
+        m_TableSlot = TextureSlot();
+        m_GpuTexture = renderer.CreateTexture(m_Specification, m_PixelData);
 
         if (!m_FilePath.empty())
             stbi_image_free(m_PixelData);
         
         m_PixelData = nullptr;
         
-        if (m_TextureHandle)
+        if (m_GpuTexture)
         {
-            Renderer& renderer = Engine::Get().GetRenderer();
-            m_TableSlot = renderer.AddToTextureTable(m_TextureHandle);
+            m_TableSlot = renderer.AddToTextureTable(*m_GpuTexture);
             m_SamplerIndex = renderer.SamplerIndex(m_Specification.SamplerSettings);
             LX_CORE_TRACE("Texture loaded successfully: {0} ({1}x{2})", m_FilePath, GetWidth(), GetHeight());
             IncrementVersion();
@@ -103,7 +107,6 @@ namespace Lynx
         // TODO: This could be done async too. Add later and keep old texture handle alive until new one is loaded.
         if (LoadSourceData())
         {
-            m_TextureHandle = nullptr;
             return CreateRenderResources();
         }
         return false;
