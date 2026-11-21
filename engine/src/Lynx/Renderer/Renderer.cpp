@@ -663,9 +663,19 @@ namespace Lynx
         m_CurrentFrameData.SceneDepth = &m_Frame->SceneDepth;
         m_CurrentFrameData.SceneEntityIds = m_Frame->SceneEntityIds ? &m_Frame->SceneEntityIds : nullptr;
 
+        // Negating the second row turns the Y of every position a shader computes with the matrix.
+        const auto toVulkanClip = [](glm::mat4 matrix)
+        {
+            for (int column = 0; column < 4; ++column)
+                matrix[column][1] = -matrix[column][1];
+            return matrix;
+        };
+        m_CurrentFrameData.ClipViewProjection = toVulkanClip(m_CurrentFrameData.ViewProjection);
+        m_CurrentFrameData.ClipLightViewProjection = toVulkanClip(lightViewProj);
+
         SceneData sceneData;
-        sceneData.ViewProjectionMatrix = m_CurrentFrameData.ViewProjection;
-        sceneData.LightViewProjection = lightViewProj;
+        sceneData.ViewProjectionMatrix = m_CurrentFrameData.ClipViewProjection;
+        sceneData.LightViewProjection = m_CurrentFrameData.ClipLightViewProjection;
         sceneData.CameraPosition = glm::vec4(cameraPosition, 1.0f);
         sceneData.LightDirection = glm::vec4(lightDir, lightIntensity);
         sceneData.LightColor = glm::vec4(lightColor, 1.0f);

@@ -39,9 +39,8 @@ namespace Lynx
         vk::PrimitiveTopology Topology = vk::PrimitiveTopology::eTriangleList;
         vk::CullModeFlags CullMode = vk::CullModeFlagBits::eNone;
 
-        // Which winding is the front, as seen through the upside-down viewport all passes draw with.
-        // Meshes are counter-clockwise.
-        vk::FrontFace FrontFace = vk::FrontFace::eClockwise;
+        // Which winding is the front. Only matters with a cull mode. The engine's meshes are counter-clockwise.
+        vk::FrontFace FrontFace = vk::FrontFace::eCounterClockwise;
 
         // Pushes what is drawn away from the camera: by a fixed amount, and by more the steeper the surface is.
         // Used for shadow maps, where a surface would otherwise shadow itself.

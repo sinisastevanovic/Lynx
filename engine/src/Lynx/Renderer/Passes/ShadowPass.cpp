@@ -114,7 +114,6 @@ namespace Lynx
         };
         desc.VertexStride = sizeof(Vertex);
         desc.CullMode = vk::CullModeFlagBits::eBack;
-        desc.FrontFace = vk::FrontFace::eCounterClockwise;
         desc.DepthFormat = RenderFormats::ShadowMap;
         desc.DepthTest = true;
         desc.DepthWrite = true;
@@ -153,7 +152,7 @@ namespace Lynx
         commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->Pipeline);
 
         ShadowPushData push{};
-        push.LightViewProjection = renderData.LightViewProj;
+        push.LightViewProjection = renderData.ClipLightViewProjection;
 
         for (const BatchDrawCall& batch : renderData.OpaqueDrawCalls)
         {

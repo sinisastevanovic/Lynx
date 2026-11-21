@@ -73,7 +73,6 @@ namespace Lynx
         };
         desc.VertexStride = sizeof(Vertex);
         desc.CullMode = vk::CullModeFlagBits::eBack;
-        desc.FrontFace = vk::FrontFace::eCounterClockwise;
         desc.DepthFormat = RenderFormats::SceneDepth;
         desc.DepthTest = true;
         desc.DepthWrite = true;

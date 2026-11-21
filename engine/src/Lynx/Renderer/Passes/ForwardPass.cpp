@@ -106,7 +106,6 @@ namespace Lynx
         };
         desc.VertexStride = sizeof(Vertex);
         desc.CullMode = vk::CullModeFlagBits::eBack;
-        desc.FrontFace = vk::FrontFace::eCounterClockwise;
         desc.ColorFormat = RenderFormats::SceneColor;
         if (m_WritesEntityIds)
             desc.IdFormat = RenderFormats::EntityIds;

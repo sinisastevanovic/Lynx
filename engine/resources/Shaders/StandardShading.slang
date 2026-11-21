@@ -56,10 +56,10 @@ public struct StandardVaryings
 };
 
 // From the sun's clip space, where x and y run from -1 to 1, to texture coordinates from 0 to 1.
-// Y is turned around because texture coordinates start at the top.
+// Both start at the top left, so nothing is turned around.
 static const float4x4 clipToTexture = float4x4(
     0.5,  0.0, 0.0, 0.5,
-    0.0, -0.5, 0.0, 0.5,
+    0.0,  0.5, 0.0, 0.5,
     0.0,  0.0, 1.0, 0.0,
     0.0,  0.0, 0.0, 1.0);
 

@@ -94,8 +94,7 @@ float3 fxaa(float2 uv, float2 texelSize)
 [shader("fragment")]
 float4 fragmentMain(VertexOutput input) : SV_Target
 {
-    // The scene is drawn with the viewport turned upside down, see CompositePass.cpp. The bloom is not.
-    float2 sceneUV = float2(input.uv.x, 1.0 - input.uv.y);
+    float2 sceneUV = input.uv;
 
     uint width, height;
     textures[constants.sceneTexture].GetDimensions(width, height);

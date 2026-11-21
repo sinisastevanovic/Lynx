@@ -52,7 +52,7 @@ VertexOutput vertexMain(VertexInput input)
     output.clipRect = input.clipRect;
 
     float x = (input.position.x / constants.screenSize.x) * 2.0 - 1.0;
-    float y = 1.0 - (input.position.y / constants.screenSize.y) * 2.0;
+    float y = (input.position.y / constants.screenSize.y) * 2.0 - 1.0;
     output.position = float4(x, y, 0.0, 1.0);
     return output;
 }

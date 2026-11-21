@@ -28,7 +28,7 @@ namespace Lynx
     };
     inline RenderFlags operator|(RenderFlags a, RenderFlags b) { return (RenderFlags)((uint8_t)a | (uint8_t)b); }
     inline bool operator&(RenderFlags a, RenderFlags b) { return ((uint8_t)a & (uint8_t)b) != 0; }
-    
+
     struct GPUInstanceData
     {
         glm::mat4 Model;
@@ -77,7 +77,7 @@ namespace Lynx
         uint32_t InstanceCount;
         MaterialTextureIndices Textures;
     };
-    
+
     struct SceneData
     {
         glm::mat4 ViewProjectionMatrix;
@@ -86,12 +86,12 @@ namespace Lynx
         glm::vec4 LightDirection; // w is intensity
         glm::vec4 LightColor;
     };
-    
+
     struct RenderCommand
     {
         std::shared_ptr<StaticMesh> Mesh;
         int SubmeshIndex;
-        GPUInstanceData InstanceData; 
+        GPUInstanceData InstanceData;
         float DistanceToCamera;
         int InstanceOffset = -1;
         RenderFlags Flags = RenderFlags::All;
@@ -158,6 +158,11 @@ namespace Lynx
         float LightIntensity;
 
         glm::mat4 LightViewProj; // TODO: Can't we use the normal ViewProjection for this?
+
+        // The two above as shaders get them. The engine's matrices have +Y up on screen, as GLM makes them.
+        // Vulkan has +Y down, so what goes to a shader is turned around once, here.
+        glm::mat4 ClipViewProjection;
+        glm::mat4 ClipLightViewProjection;
         // The shadow map, and where the texture table and the table of comparing samplers have it and its sampler.
         GpuTexture* ShadowMap = nullptr;
         uint32_t ShadowMapIndex = 0;
@@ -178,7 +183,7 @@ namespace Lynx
 
         BloomSettings Bloom;
         bool ShowGrid = true;
-        bool FXAAEnabled; 
+        bool FXAAEnabled;
 
         uint32_t DrawCalls = 0;
         uint32_t IndexCount = 0;

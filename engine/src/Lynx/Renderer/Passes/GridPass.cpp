@@ -93,7 +93,7 @@ namespace Lynx
         commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->Pipeline);
 
         GridPushData push;
-        push.InverseViewProjection = glm::inverse(renderData.ViewProjection);
+        push.InverseViewProjection = glm::inverse(renderData.ClipViewProjection);
         m_Vulkan->Shared->Push(commands, push);
 
         commands.draw(6, 1, 0, 0);
