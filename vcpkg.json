@@ -10,7 +10,6 @@
         "lua",
         "sol2",
         "joltphysics",
-        "shaderc",
         "tinygltf",
         "stb",
         "nlohmann-json",

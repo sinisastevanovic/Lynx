@@ -15,7 +15,7 @@ namespace Lynx
         uint8_t a = (uint8_t)(glm::clamp(color.a, 0.0f, 1.0f) * 255.0f);
         return (a << 24) | (b << 16) | (g << 8) | r; // Little Endian (R G B A in memory)
     }
-    
+
     UIBatcher::UIBatcher()
     {
         m_CurrentClipRect = { -FLT_MAX, -FLT_MAX, FLT_MAX, FLT_MAX };
@@ -113,7 +113,7 @@ namespace Lynx
 
         // TODO:
         // BETTER: The user provides border in PIXELS (or DP). We convert to UVs.
-        
+
         float x[4] = { rect.X, rect.X + border.Left, rect.X + rect.Width - border.Right, rect.X + rect.Width };
         float y[4] = { rect.Y, rect.Y + border.Top, rect.Y + rect.Height - border.Bottom, rect.Y + rect.Height };
 
@@ -141,7 +141,7 @@ namespace Lynx
             uvMax.y - borderV_Bottom,
             uvMax.y
         };
-        
+
         uint32_t packedColor = PackColor(color);
 
         uint32_t startIndex = (uint32_t)m_Vertices.size();
@@ -218,29 +218,29 @@ namespace Lynx
         m_CurrentOpacity = finalOpacity;
         if (finalOpacity <= 0.01f)
             return;
-        
+
         glm::vec4 currentTint = parentTint * element->GetContentColor();
 
         UIRect cachedRect = element->GetCachedRect();
 
         UIRect pixelRect;
-        
+
         float pX = cachedRect.X * scale;
         float pY = cachedRect.Y * scale;
         float pW = cachedRect.Width * scale;
         float pH = cachedRect.Height * scale;
-        
+
         // Pixel snap
         pixelRect.X = std::round(pX);
         pixelRect.Y = std::round(pY);
-        
+
         float pRight = pX + pW;
         float pBottom = pY + pH;
         pixelRect.Width = std::round(pRight) - pixelRect.X;
         pixelRect.Height = std::round(pBottom) - pixelRect.Y;
 
         element->OnDraw(*this, pixelRect, scale, parentTint);
-        
+
         bool clip = element->GetClipChildren();
         if (clip)
         {
@@ -250,13 +250,13 @@ namespace Lynx
                 (cachedRect.X + cachedRect.Width) * scale,
                 (cachedRect.Y + cachedRect.Height) * scale
             };
-            
+
             glm::vec4 newClip;
             newClip.x = std::max(m_CurrentClipRect.x, elementRect.x);
             newClip.y = std::max(m_CurrentClipRect.y, elementRect.y);
             newClip.z = std::min(m_CurrentClipRect.z, elementRect.z);
             newClip.w = std::min(m_CurrentClipRect.w, elementRect.w);
-            
+
             m_ClipStack.push_back(m_CurrentClipRect);
             m_CurrentClipRect = newClip;
         }
@@ -265,21 +265,21 @@ namespace Lynx
         {
             TraverseAndCollect(child, scale, finalOpacity, currentTint);
         }
-        
+
         if (clip)
         {
             m_CurrentClipRect = m_ClipStack.back();
             m_ClipStack.pop_back();
         }
     }
-    
+
     void UIBatcher::AddQuad(const UIRect& rect, const glm::vec4& color, glm::vec2 uvMin, glm::vec2 uvMax, const glm::vec4& outlineColor, float outlineWidth)
     {
         uint32_t startIndex = (uint32_t)m_Vertices.size();
 
         glm::vec4 finalColor = color;
         finalColor.a *= m_CurrentOpacity;
-        
+
         uint32_t packedColor = PackColor(finalColor);
         uint32_t packedOutline = PackColor(outlineColor);
 
@@ -328,7 +328,6 @@ namespace Lynx
         });
 
         // CCW winding (0-2-1, 1-2-3) or similar depending on cull mode.
-        // Standard NVRHI/Vulkan usually wants Clockwise or check CullMode.
         // Let's use: 0->1->2, 2->1->3
 
         m_Indices.push_back(startIndex + 0);

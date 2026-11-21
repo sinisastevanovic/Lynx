@@ -1,6 +1,5 @@
 ﻿#pragma once
 
-#include <nvrhi/nvrhi.h>
 #include <glm/glm.hpp>
 
 #include <chrono>
@@ -30,7 +29,7 @@ namespace Lynx
     class Swapchain;
     class ImGuiVulkan;
     struct SwapchainSettings;
-    
+
     class LX_API Renderer
     {
     public:
@@ -40,12 +39,12 @@ namespace Lynx
             uint32_t IndexCount = 0;
             float FrameTime = 0.0f;
         };
-        
+
         Renderer(GLFWwindow* window, FrameProfiler& profiler, AssetManager& assets, bool initIDTarget = false);
         ~Renderer();
 
         void Init();
-        
+
         void OnResize(uint32_t width, uint32_t height);
         void EnsureEditorViewport(uint32_t width, uint32_t height);
 
@@ -67,7 +66,7 @@ namespace Lynx
         // Draws a scene into the frame. Call it between BeginFrame and EndFrame, at most once per frame.
         // Everything is read from the extracted copy, see SceneRenderer.
         void RenderScene(const ExtractedScene& scene);
-        
+
         // The ImTextureID that ImGui::Image takes to show the finished scene picture, and to show a texture of
         // the texture table (see Texture::GetTableIndex). Zero if there is no scene picture yet.
         // Returned as a plain number so that this header does not need ImGui's.
@@ -83,8 +82,6 @@ namespace Lynx
 
         std::pair<MeshBuffer, MeshBuffer> CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices);
 
-
-        nvrhi::DeviceHandle GetDeviceHandle() const { return m_NvrhiDevice; }
 
         // Makes a texture on the GPU from pixels, with all its smaller sizes if the specification asks for them.
         // Null if the pixels are missing or the format cannot be used.
@@ -163,10 +160,6 @@ namespace Lynx
         struct FrameResources;
         std::unique_ptr<FrameResources> m_Frame;
 
-        // The context's device. Kept as a member because every part of this class uses it.
-        nvrhi::DeviceHandle m_NvrhiDevice;
-        nvrhi::CommandListHandle m_CommandList;
-
 
         uint32_t m_CurrentFrame = 0;
 
@@ -178,7 +171,7 @@ namespace Lynx
         std::optional<std::pair<uint32_t, uint32_t>> m_SceneSize;
         std::unique_ptr<ImGuiVulkan> m_ImGui;
         bool m_ShouldCreateIDTarget = false;
-        
+
 
         std::unordered_map<BatchKey, std::vector<GPUInstanceData>, BatchKeyHasher> m_OpaqueBatches;
         std::unordered_map<Material*, std::vector<ParticleInstanceData>> m_ParticleBatches;

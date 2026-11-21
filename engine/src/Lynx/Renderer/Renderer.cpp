@@ -3,8 +3,6 @@
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
 
-#include "ShaderUtils.h"
-#include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
 #include "ExtractedScene.h"
@@ -37,12 +35,10 @@
 #include "Passes/DepthPass.h"
 #include "Passes/ParticlePass.h"
 
-#include <shaderc/shaderc.hpp>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "nvrhi/utils.h"
 
 #include "Lynx/ImGui/ImGuiVulkan.h"
 #include <imgui.h>
@@ -90,11 +86,6 @@ namespace Lynx
 
     namespace
     {
-        vk::CommandBuffer NativeCommandBuffer(nvrhi::ICommandList* commandList)
-        {
-            return vk::CommandBuffer(static_cast<VkCommandBuffer>(commandList->getNativeObject(nvrhi::ObjectTypes::VK_CommandBuffer)));
-        }
-
         // A screenshot is read this many frames after it was copied, when the GPU has certainly finished the copy.
         constexpr uint64_t ReadbackDelay = 3;
 
@@ -110,6 +101,14 @@ namespace Lynx
     {
         std::array<vk::Semaphore, MAX_FRAMES_IN_FLIGHT> ImageAvailable;
         std::array<vk::Fence, MAX_FRAMES_IN_FLIGHT> InFlight;
+
+        // A command buffer per frame that can be under way, each from a pool of its own, so that starting
+        // a frame gives all of the last one's memory back in one call.
+        std::array<vk::CommandPool, MAX_FRAMES_IN_FLIGHT> CommandPools;
+        std::array<vk::CommandBuffer, MAX_FRAMES_IN_FLIGHT> CommandBuffers;
+
+        // The command buffer of the frame that is being recorded.
+        vk::CommandBuffer Commands;
         std::unique_ptr<GpuTimers> Timers;
         std::unique_ptr<UploadQueue> Uploads;
         std::unique_ptr<SharedBindings> Shared;
@@ -135,8 +134,7 @@ namespace Lynx
         GpuTexture NormalTexture;
         GpuTexture MetallicRoughnessTexture;
 
-        // Rewritten every frame with one entry per drawn instance. The NVRHI passes read it through
-        // the wrapper, which is a second handle to the same Vulkan buffer.
+        // Rewritten every frame with one entry per drawn instance. Shaders read it through its address.
         struct InstanceStorage
         {
             GpuBuffer Buffer;
@@ -190,7 +188,6 @@ namespace Lynx
         : m_ShouldCreateIDTarget(initIdTarget), m_Profiler(profiler), m_Assets(assets)
     {
         m_Context = std::make_unique<GraphicsContext>(window);
-        m_NvrhiDevice = m_Context->Nvrhi();
 
         int framebufferWidth = 0;
         int framebufferHeight = 0;
@@ -203,12 +200,13 @@ namespace Lynx
             // The fences start signalled, because the first frames wait for them before anything was submitted.
             m_Frame->ImageAvailable[frame] = m_Context->Device().createSemaphore(vk::SemaphoreCreateInfo());
             m_Frame->InFlight[frame] = m_Context->Device().createFence(vk::FenceCreateInfo(vk::FenceCreateFlagBits::eSignaled));
+
+            m_Frame->CommandPools[frame] = m_Context->Device().createCommandPool(vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eTransient, m_Context->GraphicsQueueFamily()));
+            m_Frame->CommandBuffers[frame] = m_Context->Device().allocateCommandBuffers(vk::CommandBufferAllocateInfo(m_Frame->CommandPools[frame], vk::CommandBufferLevel::ePrimary, 1)).front();
         }
         m_Frame->Timers = std::make_unique<GpuTimers>(m_Context->PhysicalDevice(), m_Context->Device(), m_Context->GraphicsQueueFamily());
         m_Frame->Uploads = std::make_unique<UploadQueue>(*m_Context);
         m_Graph = std::make_unique<RenderGraph>(m_Profiler, *m_Frame->Timers);
-
-        m_CommandList = m_NvrhiDevice->createCommandList();
 
         GpuBufferDesc sceneConstantsDesc;
         sceneConstantsDesc.Size = sizeof(SceneData);
@@ -224,10 +222,6 @@ namespace Lynx
         LX_CORE_INFO("Renderer shutting down...");
 
         m_Context->WaitIdle();
-
-        // Texture assets are gone by now. Their pictures were retired and hold NVRHI textures.
-        m_Context->Deletions().Flush();
-        m_NvrhiDevice->runGarbageCollection();
 
         // Everything made from the device goes before the device does.
         ReleaseSwapchainImages();
@@ -251,18 +245,17 @@ namespace Lynx
         m_Frame->WhiteTexture = {};
         m_Frame->NormalTexture = {};
         m_Frame->MetallicRoughnessTexture = {};
-        m_CommandList = nullptr;
         m_Frame->SceneColor = {};
         m_Frame->SceneDepth = {};
         m_Frame->SceneOutput = {};
         m_Frame->SceneEntityIds = {};
         m_ImGui.reset();
-        m_NvrhiDevice = nullptr;
 
         for (int frame = 0; frame < MAX_FRAMES_IN_FLIGHT; ++frame)
         {
             m_Context->Device().destroySemaphore(m_Frame->ImageAvailable[frame]);
             m_Context->Device().destroyFence(m_Frame->InFlight[frame]);
+            m_Context->Device().destroyCommandPool(m_Frame->CommandPools[frame]);
         }
         m_Frame.reset();
 
@@ -383,7 +376,7 @@ namespace Lynx
             m_Frame->PickReadback = GpuBuffer(*m_Context, desc);
         }
 
-        const vk::CommandBuffer commands = NativeCommandBuffer(m_CommandList);
+        const vk::CommandBuffer commands = m_Frame->Commands;
         m_Frame->SceneEntityIds.Transition(commands, vk::ImageLayout::eTransferSrcOptimal);
 
         vk::BufferImageCopy region;
@@ -590,8 +583,8 @@ namespace Lynx
         m_Frame->ParticleInstances.Upload<ParticleInstanceData>(*m_Context, *m_Frame->Uploads, allParticleData, "ParticleInstanceBuffer");
         m_CurrentFrameData.ParticleInstanceAddress = m_Frame->ParticleInstances.Buffer.Address();
 
-        // The copies go straight into the command buffer, so NVRHI must not have a render pass open.
-        m_Frame->Uploads->Flush(NativeCommandBuffer(m_CommandList));
+        // Brings this frame's instances and the scene constants to the GPU before the first pass.
+        m_Frame->Uploads->Flush(m_Frame->Commands);
     }
 
     void Renderer::BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, float deltaTime, bool editMode)
@@ -679,7 +672,7 @@ namespace Lynx
         m_Frame->Uploads->Upload(m_Frame->SceneConstants.Handle(), 0, std::as_bytes(std::span<const SceneData>(&sceneData, 1)));
 
         // The scene starts as a dark grey with everything farthest away, and with no entity anywhere.
-        const vk::CommandBuffer commands = NativeCommandBuffer(m_CommandList);
+        const vk::CommandBuffer commands = m_Frame->Commands;
         m_Frame->SceneColor.ClearColor(commands, vk::ClearColorValue(0.05f, 0.05f, 0.05f, 1.0f));
         m_Frame->SceneDepth.ClearDepth(commands, 1.0f);
         if (m_Frame->SceneEntityIds)
@@ -842,16 +835,19 @@ namespace Lynx
         m_Context->Deletions().BeginFrame();
         m_Frame->Uploads->BeginFrame();
 
-        m_CommandList->open();
-        m_RenderContext.Commands = NativeCommandBuffer(m_CommandList);
+        // Resetting the pool is allowed now: the fence above says the GPU is done with this frame's last commands.
+        m_Context->Device().resetCommandPool(m_Frame->CommandPools[m_CurrentFrame]);
+        m_Frame->Commands = m_Frame->CommandBuffers[m_CurrentFrame];
+        m_Frame->Commands.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+        m_RenderContext.Commands = m_Frame->Commands;
         m_Frame->Timers->BeginFrame(m_Profiler);
-        m_Frame->Timers->Begin(NativeCommandBuffer(m_CommandList), "Frame");
+        m_Frame->Timers->Begin(m_Frame->Commands, "Frame");
         return true;
     }
 
     void Renderer::EndFrame()
     {
-        const vk::CommandBuffer commands = NativeCommandBuffer(m_CommandList);
+        const vk::CommandBuffer commands = m_Frame->Commands;
         GpuTexture& window = m_Swapchain->Image();
 
         if (m_SceneOutput)
@@ -876,18 +872,16 @@ namespace Lynx
         // Submitting and presenting.
         ProfileScope presentScope(m_Profiler, "Present");
 
-        m_CommandList->close();
+        commands.end();
 
-        // The frame's commands wait for the window's image and signal when it is ready to be shown.
-        nvrhi::vulkan::IDevice* vulkanDevice = m_Context->NvrhiVulkan();
-        vulkanDevice->queueWaitForSemaphore(nvrhi::CommandQueue::Graphics, static_cast<VkSemaphore>(m_Frame->ImageAvailable[m_CurrentFrame]), 0);
-        vulkanDevice->queueSignalSemaphore(nvrhi::CommandQueue::Graphics, static_cast<VkSemaphore>(m_Swapchain->RenderFinished()), 0);
-        m_NvrhiDevice->executeCommandList(m_CommandList);
-
-        // An empty submission whose only purpose is to signal the fence once everything before it is done.
-        m_Context->GraphicsQueue().submit(vk::SubmitInfo(), m_Frame->InFlight[m_CurrentFrame]);
-
-        m_NvrhiDevice->runGarbageCollection();
+        // The frame's commands wait for the window's image, signal when the image is ready to be shown,
+        // and signal the fence that the next use of this frame slot waits for. None of the frame runs
+        // before the image is there, because its very first use may be a clear or a change of layout.
+        const vk::Semaphore imageAvailable = m_Frame->ImageAvailable[m_CurrentFrame];
+        const vk::Semaphore renderFinished = m_Swapchain->RenderFinished();
+        const vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eAllCommands;
+        const vk::SubmitInfo submitInfo(imageAvailable, waitStage, commands, renderFinished);
+        m_Context->GraphicsQueue().submit(submitInfo, m_Frame->InFlight[m_CurrentFrame]);
 
         m_Swapchain->Present();
         m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -900,7 +894,7 @@ namespace Lynx
     void Renderer::DrawImGui(GpuTexture& window)
     {
         ProfileScope scope(m_Profiler, "ImGuiDraw");
-        const vk::CommandBuffer commands = NativeCommandBuffer(m_CommandList);
+        const vk::CommandBuffer commands = m_Frame->Commands;
         m_Frame->Timers->Begin(commands, "ImGui");
 
         // The editor shows the finished scene picture in a panel, so that one has to be readable.
@@ -950,7 +944,7 @@ namespace Lynx
 
     void Renderer::CopyFrameForScreenshots(GpuTexture& frame)
     {
-        const vk::CommandBuffer commands = NativeCommandBuffer(m_CommandList);
+        const vk::CommandBuffer commands = m_Frame->Commands;
         const uint32_t width = frame.Desc().Width;
         const uint32_t height = frame.Desc().Height;
 
@@ -1022,7 +1016,7 @@ namespace Lynx
 
     void Renderer::FlushGpuTimers()
     {
-        m_NvrhiDevice->waitForIdle();
+        m_Context->WaitIdle();
         m_Frame->Timers->Flush(m_Profiler);
     }
 

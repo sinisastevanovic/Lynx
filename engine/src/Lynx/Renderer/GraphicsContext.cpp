@@ -3,7 +3,6 @@
 #include "DeviceSelection.h"
 #include "Lynx/Log.h"
 
-#include <nvrhi/validation.h>
 #include <vk_mem_alloc.h>
 
 #define GLFW_INCLUDE_VULKAN
@@ -36,24 +35,6 @@ namespace Lynx
                 LX_CORE_TRACE("Vulkan Validation Layer: {0}", data->pMessage);
             return VK_FALSE;
         }
-
-        // NVRHI reports its own errors, and those of its validation layer, through this.
-        class NvrhiMessageLogger : public nvrhi::IMessageCallback
-        {
-        public:
-            void message(nvrhi::MessageSeverity severity, const char* messageText) override
-            {
-                switch (severity)
-                {
-                    case nvrhi::MessageSeverity::Info:    LX_CORE_INFO("NVRHI: {0}", messageText); break;
-                    case nvrhi::MessageSeverity::Warning: LX_CORE_WARN("NVRHI: {0}", messageText); break;
-                    case nvrhi::MessageSeverity::Error:   LX_CORE_ERROR("NVRHI: {0}", messageText); break;
-                    case nvrhi::MessageSeverity::Fatal:   LX_CORE_CRITICAL("NVRHI: {0}", messageText); break;
-                }
-            }
-        };
-
-        NvrhiMessageLogger s_NvrhiMessageLogger;
     }
 
     GraphicsContext::GraphicsContext(GLFWwindow* window)
@@ -140,40 +121,13 @@ namespace Lynx
             throw std::runtime_error("Could not create the memory pool for textures");
         }
 
-        // NVRHI is told what the instance and the device were created with, so it knows what it may use.
-        nvrhi::vulkan::DeviceDesc nvrhiDesc;
-        nvrhiDesc.errorCB = &s_NvrhiMessageLogger;
-        nvrhiDesc.instance = m_Instance;
-        nvrhiDesc.physicalDevice = m_PhysicalDevice;
-        nvrhiDesc.device = m_Device;
-        nvrhiDesc.graphicsQueue = m_GraphicsQueue;
-        nvrhiDesc.graphicsQueueIndex = static_cast<int>(m_GraphicsQueueFamily);
-        nvrhiDesc.instanceExtensions = instanceExtensions.data();
-        nvrhiDesc.numInstanceExtensions = instanceExtensions.size();
-        nvrhiDesc.deviceExtensions = graphicsDevice->Extensions.data();
-        nvrhiDesc.numDeviceExtensions = graphicsDevice->Extensions.size();
-        nvrhiDesc.bufferDeviceAddressSupported = true;
-
-        m_NvrhiVulkanDevice = nvrhi::vulkan::createDevice(nvrhiDesc);
-        m_NvrhiDevice = m_NvrhiVulkanDevice;
-
-        // Catches mistakes that the Vulkan validation layer cannot see, such as a binding set that does not match its layout.
-        if (EnableValidation)
-            m_NvrhiDevice = nvrhi::validation::createValidationLayer(m_NvrhiDevice);
     }
 
     GraphicsContext::~GraphicsContext()
     {
         m_Device.waitIdle();
 
-        // Some retired objects hold NVRHI textures, which have to go before NVRHI does.
-        m_Deletions.Flush();
-
-        m_NvrhiDevice->runGarbageCollection();
-        m_NvrhiDevice = nullptr;
-        m_NvrhiVulkanDevice = nullptr;
-
-        // Whatever NVRHI retired while it was destroyed. The GPU is idle, so nothing of it is still in use.
+        // The GPU is idle, so nothing that was retired is still in use.
         m_Deletions.Flush();
         vmaDestroyPool(m_Allocator, m_TexturePool);
         vmaDestroyAllocator(m_Allocator);

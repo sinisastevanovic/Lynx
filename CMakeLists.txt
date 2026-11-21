@@ -44,12 +44,13 @@ FetchContent_Declare(
     GIT_TAG v1.3
 )
 
-# The engine renders through Vulkan only.
-set(NVRHI_WITH_DX11 OFF CACHE BOOL "" FORCE)
-set(NVRHI_WITH_DX12 OFF CACHE BOOL "" FORCE)
-set(NVRHI_INSTALL OFF CACHE BOOL "" FORCE)
+# NVRHI is not built or linked any more. Its sources are still fetched, only for the Vulkan headers
+# that come with them, until the headers come from a package of their own.
+FetchContent_GetProperties(nvrhi)
+if(NOT nvrhi_POPULATED)
+    FetchContent_Populate(nvrhi)
+endif()
 
-FetchContent_MakeAvailable(nvrhi)
 FetchContent_MakeAvailable(imgui)
 
 set(MSDF_ATLAS_BUILD_STANDALONE OFF CACHE BOOL "" FORCE)
@@ -62,7 +63,7 @@ set(MSDFGEN_DYNAMIC_RUNTIME ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(msdf-atlas-gen)
 
 # Keep third-party targets and CMake's own targets out of the way in the IDE.
-set_target_properties(nvrhi nvrhi_vk msdf-atlas-gen msdfgen-core msdfgen-ext PROPERTIES FOLDER "ThirdParty")
+set_target_properties(msdf-atlas-gen msdfgen-core msdfgen-ext PROPERTIES FOLDER "ThirdParty")
 set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "CMake")
 
 # This enables vcpkg's manifest mode. It will automatically download

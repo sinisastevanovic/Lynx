@@ -8,7 +8,7 @@
 namespace Lynx::AssetUtils
 {
     using namespace std::string_literals;
-    
+
     struct AssetFilter
     {
         const char* Description;
@@ -20,7 +20,7 @@ namespace Lynx::AssetUtils
         { AssetType::Scene, { "Lynx Scene", { "*.lxscene" }, "ASSET_SCENE" } },
         { AssetType::Texture, {"Texture File",  { "*.png", "*.jpg", "*.jpeg", "*.tga" },"ASSET_TEXTURE" } },
         { AssetType::Material, { "Material File", { "*.lxmat" },"ASSET_MATERIAL" } },
-        { AssetType::Shader, { "Shader File", { "*.glsl", "*.slang" },"ASSET_SHADER" } },
+        { AssetType::Shader, { "Shader File", { "*.slang" },"ASSET_SHADER" } },
         //{ AssetType::Mesh, { "3D Model",      { "*.fbx", "*.obj", "*.gltf" } } }
         { AssetType::StaticMesh, { "3D Model",      { "*.gltf" },"ASSET_STATICMESH" } },
         { AssetType::Script , { "Lua Script", { "*.lua" }, "ASSET_SCRIPT" } },
@@ -29,7 +29,7 @@ namespace Lynx::AssetUtils
         { AssetType::Prefab , { "Prefab Asset", { "*.lxprefab" }, "ASSET_PREFAB" } }
     };
 
-    
+
     const char* GetFilterForSupportedAssets()
     {
         static std::string filterString;
@@ -89,7 +89,7 @@ namespace Lynx::AssetUtils
         ss << extensionsPart << ")\0"s << extensionsPart << "\0"s;
         filterString = ss.str();
         ss << '\0';
-        
+
         return filterString.c_str();
     }
 
@@ -98,7 +98,7 @@ namespace Lynx::AssetUtils
         std::string extension = path.extension().string();
         if (extension.empty())
             return AssetType::None;
-        
+
         for (const auto& [type, filter] : s_AssetFilters)
         {
             for (const auto& ext : filter.Extensions)
@@ -115,7 +115,7 @@ namespace Lynx::AssetUtils
     bool IsAssetExtensionSupported(const std::filesystem::path& path)
     {
         static std::unordered_set<std::string> s_SupportedExtensions;
-        
+
         if (s_SupportedExtensions.empty())
         {
             for (const auto& [type, filter] : s_AssetFilters)

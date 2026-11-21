@@ -2,8 +2,6 @@
 
 #include "Vulkan/DeletionQueue.h"
 
-#include <nvrhi/nvrhi.h>
-#include <nvrhi/vulkan.h>
 #include <vulkan/vulkan.hpp>
 
 #include <optional>
@@ -17,7 +15,7 @@ struct VmaPool_T;
 namespace Lynx
 {
     // Everything that exists once per program run and outlives every frame: the Vulkan instance,
-    // the window's surface, the GPU, the device on it and its queue, and the NVRHI device on top.
+    // the window's surface, the GPU, the device on it, its queue and the memory allocator.
     // It knows nothing about swapchains, frames or scenes.
     class GraphicsContext
     {
@@ -37,13 +35,6 @@ namespace Lynx
         vk::Device Device() const { return m_Device; }
         vk::Queue GraphicsQueue() const { return m_GraphicsQueue; }
         uint32_t GraphicsQueueFamily() const { return m_GraphicsQueueFamily; }
-
-        // The device all rendering code uses. In debug builds it is NVRHI's validation layer,
-        // which checks every call against the state NVRHI expects.
-        nvrhi::IDevice* Nvrhi() const { return m_NvrhiDevice; }
-
-        // The same device as its Vulkan type, for the calls only that type has.
-        nvrhi::vulkan::IDevice* NvrhiVulkan() const { return m_NvrhiVulkanDevice; }
 
         // Hands out the memory of every buffer the renderer creates itself, see GpuBuffer.
         VmaAllocator_T* Allocator() const { return m_Allocator; }
@@ -78,7 +69,5 @@ namespace Lynx
         VmaPool_T* m_TexturePool = nullptr;
         DeletionQueue m_Deletions;
 
-        nvrhi::vulkan::DeviceHandle m_NvrhiVulkanDevice;
-        nvrhi::DeviceHandle m_NvrhiDevice;
     };
 }

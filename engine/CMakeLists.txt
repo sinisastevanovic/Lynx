@@ -50,11 +50,7 @@ target_sources(engine PRIVATE
     ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
 )
 
-FetchContent_GetProperties(nvrhi)
-if(NOT nvrhi_POPULATED)
-    FetchContent_Populate(nvrhi)
-endif()
-
+# The Vulkan headers, taken from the NVRHI sources that the top-level file fetches for this purpose.
 set(NVRHI_INTERNAL_VK_HEADERS "${nvrhi_SOURCE_DIR}/thirdparty/Vulkan-Headers/include")
 
 target_include_directories(engine
@@ -74,7 +70,6 @@ find_package(entt CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
-find_package(unofficial-shaderc CONFIG REQUIRED)
 find_package(Jolt CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)
@@ -82,9 +77,6 @@ find_package(slang CONFIG REQUIRED)
 
 target_link_libraries(engine PUBLIC
 
-    nvrhi
-
-    nvrhi_vk
 
     EnTT::EnTT
 
@@ -93,8 +85,6 @@ target_link_libraries(engine PUBLIC
     glm::glm
 
     spdlog::spdlog
-
-    unofficial::shaderc::shaderc
 
     Jolt::Jolt
 
