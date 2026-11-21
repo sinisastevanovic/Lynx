@@ -2,6 +2,7 @@
 
 #include "Lynx/Core.h"
 #include "Lynx/Renderer/Screenshot.h"
+#include "Lynx/Scene/Entity.h"
 
 #include <glm/glm.hpp>
 
@@ -113,6 +114,9 @@ namespace Lynx
         uint32_t m_WarmupFramesDone = 0;
         uint32_t m_Frame = 0;
         bool m_Succeeded = false;
+
+        // Kept, because looking it up by name in every frame costs measured time in a scene of 100,000 entities.
+        Entity m_Camera;
 
         // Screenshots are kept in memory and encoded after the last frame, so that saving them costs no measured time.
         std::vector<Screenshot> m_Screenshots;

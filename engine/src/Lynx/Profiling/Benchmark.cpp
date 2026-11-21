@@ -326,28 +326,27 @@ namespace Lynx
         if (m_Settings.CameraPath.empty())
             return;
 
-        Entity cameraEntity = scene.FindEntityByName(CameraEntityName);
-        if (!cameraEntity)
+        if (!m_Camera)
         {
             // The benchmark's camera replaces whichever camera the scene was saved with.
             for (const auto entity : scene.Reg().view<CameraComponent>())
                 scene.Reg().get<CameraComponent>(entity).Primary = false;
 
-            cameraEntity = scene.CreateEntity(CameraEntityName);
-            CameraComponent& camera = cameraEntity.AddComponent<CameraComponent>();
+            m_Camera = scene.CreateEntity(CameraEntityName);
+            CameraComponent& camera = m_Camera.AddComponent<CameraComponent>();
             camera.Primary = true;
             camera.Camera.SetPerspective(glm::radians(m_Settings.FieldOfViewDegrees), m_Settings.NearClip, m_Settings.FarClip);
         }
 
         const auto [viewportWidth, viewportHeight] = renderer.GetViewportSize();
-        cameraEntity.GetComponent<CameraComponent>().Camera.SetViewportSize(viewportWidth, viewportHeight);
+        m_Camera.GetComponent<CameraComponent>().Camera.SetViewportSize(viewportWidth, viewportHeight);
 
         const BenchmarkSettings::CameraKey key = SampleCameraPath(m_Settings.CameraPath, frame);
         const glm::vec3 forward = glm::normalize(key.Target - key.Position);
         const glm::vec3 up = std::abs(forward.y) > 0.999f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
 
         // The renderer blends between the previous and the current pose, so both are set.
-        TransformComponent& transform = cameraEntity.GetComponent<TransformComponent>();
+        TransformComponent& transform = m_Camera.GetComponent<TransformComponent>();
         transform.Translation = key.Position;
         transform.Rotation = glm::quatLookAt(forward, up);
         transform.PreviousTranslation = transform.Translation;
