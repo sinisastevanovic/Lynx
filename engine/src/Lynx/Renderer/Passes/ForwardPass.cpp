@@ -78,7 +78,7 @@ namespace Lynx
         m_Vulkan->Shared = ctx.Shared;
         m_Vulkan->Device = ctx.Graphics->Device();
 
-        m_WritesEntityIds = ctx.PresentationFramebufferInfo.colorFormats.size() > 1;
+        m_WritesEntityIds = ctx.WritesEntityIds;
         m_PipelineState.SetShader(m_WritesEntityIds ? "Shaders/StandardEditor.slang" : "Shaders/Standard.slang");
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipelines(*shader); });
     }

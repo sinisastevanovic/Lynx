@@ -48,7 +48,7 @@ namespace Lynx
         void Sample(nvrhi::ITexture* texture) { Sampled[SampledCount++] = texture; }
     };
 
-    // A pass that draws with Vulkan directly. It never changes the layout of a texture, never begins
+    // A pass of the frame. It never changes the layout of a texture, never begins
     // or ends rendering, never sets the viewport and never binds a descriptor set: it declares what it needs,
     // and records its draws. Its shaders read the camera and all textures through the shared bindings.
     class VulkanPass
@@ -69,9 +69,8 @@ namespace Lynx
 
     // The passes of a frame, in the order they run.
     //
-    // The graph measures every pass. For a pass that draws with Vulkan directly it also prepares what the
-    // pass declared: textures are brought into the right layouts and rendering into the target is begun and ended.
-    // Passes that still draw through NVRHI are run as they are, because NVRHI does those things for them.
+    // The graph measures every pass and prepares what the pass declared: textures are brought into
+    // the right layouts, and rendering into the targets is begun and ended.
     class RenderGraph
     {
     public:
@@ -79,7 +78,6 @@ namespace Lynx
         ~RenderGraph();
 
         // The name identifies the pass in profiler output. A pass with a condition runs only in frames where it holds.
-        RenderPass& Add(std::string name, std::unique_ptr<RenderPass> pass, std::function<bool()> condition = {});
         VulkanPass& Add(std::string name, std::unique_ptr<VulkanPass> pass, std::function<bool()> condition = {});
 
         void Init(RenderContext& ctx);
@@ -92,12 +90,11 @@ namespace Lynx
         struct Entry
         {
             std::string Name;
-            std::unique_ptr<RenderPass> NvrhiPass;
-            std::unique_ptr<VulkanPass> DirectPass;
+            std::unique_ptr<VulkanPass> Pass;
             std::function<bool()> Condition;
         };
 
-        void ExecuteDirectPass(VulkanPass& pass, RenderContext& ctx, RenderData& renderData);
+        void ExecutePass(VulkanPass& pass, RenderContext& ctx, RenderData& renderData);
 
     private:
         FrameProfiler& m_Profiler;

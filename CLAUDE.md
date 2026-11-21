@@ -62,14 +62,20 @@ build\bin\Debug\LynxSandboxGame.exe
   scene is played, never the loaded asset itself.
 - **Assets.** Reading a file may happen on any thread. Creating GPU resources happens on the main thread only.
 - **Shutdown order matters.** Scenes go before the script engine, assets before the renderer. See `Engine::Shutdown`.
-- **Shaders.** New shaders are written in Slang (`.slang`), old ones are GLSL until their pass is ported. A Slang
-  shader is compiled once and cached in `temp\ShaderCache` together with what it expects to be bound. Passes build
-  their layouts from that, so no binding number is written in C++. Mark entry points with `[shader("vertex")]`.
-- **Shared bindings.** Passes on the Vulkan layer bind nothing themselves. One descriptor set (`Vulkan/SharedBindings`)
-  holds the scene constants and a table of all textures and samplers, and the render graph binds it. A shader imports
-  `Scene` or `Textures` and gets texture indices and everything else through push constants (128 bytes at most).
-- **Renderer.** NVRHI validation is on in debug builds. A new binding layout or set that is wrong shows up in the log
-  as `NVRHI:` errors right at startup.
+- **Shaders.** Shaders are written in Slang (`.slang`) and compiled once into `temp\ShaderCache`. Mark entry points
+  with `[shader("vertex")]`. Shared code lives in modules (`Scene`, `Textures`, `Mesh`, `StandardShading`) that a
+  shader imports. Two GLSL shaders are left, for mip generation, which still runs through NVRHI.
+- **Passes.** Every pass of a frame is a `VulkanPass` in the render graph (`Renderer/Graph`). A pass declares what it
+  reads and draws into, and records draws. The graph does layouts, begins rendering and binds the shared set.
+- **Shared bindings.** Passes bind nothing themselves. One descriptor set (`Vulkan/SharedBindings`) holds the scene
+  constants and tables of all textures and samplers. A shader gets texture indices, buffer addresses and everything
+  else through push constants (128 bytes at most). Slang pads push constants to a multiple of their largest member:
+  the struct in C++ needs the same padding, and `SharedBindings::Supports` reports both sizes if they differ.
+- **Lifetimes.** A frame is still on the GPU while the next ones are recorded. What a pass binds directly has to
+  outlive those frames: `GpuBuffer` and `GpuTexture` do that by themselves, `TextureSlot` and `MeshBuffer` do it for
+  the NVRHI textures and buffers that assets still hold.
+- **NVRHI.** Still records the frame's command buffer, creates asset textures and mesh buffers, clears the scene
+  targets and draws ImGui. Its validation is on in debug builds and shows up in the log as `NVRHI:` lines.
 
 ## Conventions
 

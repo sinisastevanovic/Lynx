@@ -76,16 +76,6 @@ namespace Lynx
         MaterialTextureIndices Textures;
     };
     
-    struct PushData
-    {
-        glm::vec4 AlbedoColor;
-        glm::vec4 EmissiveColorStrength;
-        float MetallicStrength;
-        float RoughnessStrength;
-        float AlphaCutoff;
-        float Padding;
-    };
-
     struct SceneData
     {
         glm::mat4 ViewProjectionMatrix;
@@ -143,7 +133,6 @@ namespace Lynx
     {
         std::vector<RenderCommand> TransparentQueue;
         std::vector<BatchDrawCall> OpaqueDrawCalls;
-        nvrhi::BufferHandle InstanceBuffer;
 
         std::vector<ParticleBatch> ParticleQueue;
 
@@ -195,53 +184,24 @@ namespace Lynx
 
     struct RenderContext
     {
-        // For passes that draw with Vulkan directly.
         GraphicsContext* Graphics = nullptr;
         UploadQueue* Uploads = nullptr;
         SharedBindings* Shared = nullptr;
 
+        // NVRHI still records the frame's command buffer and makes the textures that assets and a few passes hold.
         nvrhi::DeviceHandle Device;
         nvrhi::CommandListHandle CommandList;
 
-        nvrhi::FramebufferInfo PresentationFramebufferInfo;
-        nvrhi::FramebufferInfo FinalFramebufferInfo;
-
-        nvrhi::BufferHandle GlobalConstantBuffer;
-        nvrhi::TextureHandle WhiteTexture;
-        nvrhi::TextureHandle BlackTexture;
-        nvrhi::TextureHandle NormalTexture;
-        nvrhi::TextureHandle MetallicRoughnessTexture;
+        // True in the editor, where the scene has a second target that holds entity IDs for picking.
+        bool WritesEntityIds = false;
     };
 
-    struct MaterialCacheEntry
-    {
-        nvrhi::BindingSetHandle BindingSet;
-        uint32_t Version;
-    };
-    
-
-    class RenderPass
-    {
-    public:
-        virtual ~RenderPass() = default;
-        virtual void Init(RenderContext& ctx) = 0;
-        virtual void Execute(RenderContext& ctx, RenderData& renderData) = 0;
-    };
-
-    // The editor's scene target has a second color attachment that holds entity IDs for picking.
-    // A pass whose shader does not output an ID has to leave it alone: without this,
-    // every pixel the pass draws gets an undefined ID.
-    inline void DisableEntityIdWrites(nvrhi::GraphicsPipelineDesc& pipelineDesc, const nvrhi::FramebufferInfo& framebufferInfo)
-    {
-        for (size_t target = 1; target < framebufferInfo.colorFormats.size(); ++target)
-            pipelineDesc.renderState.blendState.targets[target].setColorWriteMask(static_cast<nvrhi::ColorMask>(0));
-    }
 
     // Rebuilds a pass's pipelines whenever its shader is loaded or hot-reloaded.
     class PipelineState
     {
     public:
-        // The path is relative to the engine resource directory, e.g. "Shaders/Bloom.glsl".
+        // The path is relative to the engine resource directory, e.g. "Shaders/Bloom.slang".
         void SetShader(const std::filesystem::path& engineShaderPath) { m_ShaderPath = engineShaderPath; m_Shader = nullptr; }
         bool Update(std::function<void(std::shared_ptr<Shader>)> builder);
 

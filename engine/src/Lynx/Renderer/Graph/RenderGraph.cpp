@@ -28,33 +28,19 @@ namespace Lynx
 
     RenderGraph::~RenderGraph() = default;
 
-    RenderPass& RenderGraph::Add(std::string name, std::unique_ptr<RenderPass> pass, std::function<bool()> condition)
-    {
-        Entry& entry = m_Passes.emplace_back();
-        entry.Name = std::move(name);
-        entry.NvrhiPass = std::move(pass);
-        entry.Condition = std::move(condition);
-        return *entry.NvrhiPass;
-    }
-
     VulkanPass& RenderGraph::Add(std::string name, std::unique_ptr<VulkanPass> pass, std::function<bool()> condition)
     {
         Entry& entry = m_Passes.emplace_back();
         entry.Name = std::move(name);
-        entry.DirectPass = std::move(pass);
+        entry.Pass = std::move(pass);
         entry.Condition = std::move(condition);
-        return *entry.DirectPass;
+        return *entry.Pass;
     }
 
     void RenderGraph::Init(RenderContext& ctx)
     {
         for (Entry& entry : m_Passes)
-        {
-            if (entry.NvrhiPass)
-                entry.NvrhiPass->Init(ctx);
-            else
-                entry.DirectPass->Init(ctx);
-        }
+            entry.Pass->Init(ctx);
     }
 
     void RenderGraph::Execute(RenderContext& ctx, RenderData& renderData)
@@ -68,16 +54,13 @@ namespace Lynx
             ProfileScope cpuScope(m_Profiler, entry.Name);
             m_Timers.Begin(NativeCommandBuffer(ctx.CommandList), entry.Name);
 
-            if (entry.NvrhiPass)
-                entry.NvrhiPass->Execute(ctx, renderData);
-            else
-                ExecuteDirectPass(*entry.DirectPass, ctx, renderData);
+            ExecutePass(*entry.Pass, ctx, renderData);
 
             m_Timers.End(NativeCommandBuffer(ctx.CommandList), entry.Name);
         }
     }
 
-    void RenderGraph::ExecuteDirectPass(VulkanPass& pass, RenderContext& ctx, RenderData& renderData)
+    void RenderGraph::ExecutePass(VulkanPass& pass, RenderContext& ctx, RenderData& renderData)
     {
         PassResources resources;
         if (!pass.Declare(ctx, renderData, resources))
@@ -98,7 +81,8 @@ namespace Lynx
                 return;
         }
 
-        // The hand-over from NVRHI to Vulkan, in three steps. It lives here so that no pass has to know it.
+        // NVRHI still records the command buffer, clears the scene's targets and draws the editor's own UI.
+        // Handing the command buffer over to a pass takes three steps, which live here so that no pass has to know them.
         // 1. NVRHI tracks which layout every texture is in. It is asked to put the textures into the layouts
         //    the pass needs, and they are left in those layouts, so its bookkeeping stays right.
         for (uint32_t index = 0; index < resources.SampledCount; ++index)
@@ -122,7 +106,7 @@ namespace Lynx
         // once rendering has begun, so this is the last moment for them.
         ctx.Uploads->Flush(commands);
 
-        // The NVRHI pass before this one may have bound something else in its place.
+        // Clearing NVRHI's state leaves nothing bound.
         ctx.Shared->Bind(commands);
 
         if (resources.OwnTargets)

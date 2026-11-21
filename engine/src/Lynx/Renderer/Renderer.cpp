@@ -133,7 +133,6 @@ namespace Lynx
         struct InstanceStorage
         {
             GpuBuffer Buffer;
-            nvrhi::BufferHandle Wrapper;
 
             // Makes sure the buffer can hold the instances, then queues them for upload.
             template<typename Instance>
@@ -151,16 +150,6 @@ namespace Lynx
                     desc.Usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
                     desc.Name = name;
                     Buffer = GpuBuffer(context, desc);
-
-                    // The upload queue makes the buffer readable after every write, so NVRHI may treat it
-                    // as a shader resource at all times and never has to change its state.
-                    nvrhi::BufferDesc wrapperDesc;
-                    wrapperDesc.byteSize = desc.Size;
-                    wrapperDesc.structStride = sizeof(Instance);
-                    wrapperDesc.debugName = name;
-                    wrapperDesc.initialState = nvrhi::ResourceStates::ShaderResource;
-                    wrapperDesc.keepInitialState = true;
-                    Wrapper = context.Nvrhi()->createHandleForNativeBuffer(nvrhi::ObjectTypes::VK_Buffer, nvrhi::Object(static_cast<VkBuffer>(Buffer.Handle())), wrapperDesc);
                 }
 
                 uploads.Upload(Buffer.Handle(), 0, std::as_bytes(instances));
@@ -264,21 +253,7 @@ namespace Lynx
         m_RenderContext.Shared = m_Frame->Shared.get();
         m_RenderContext.Device = m_NvrhiDevice;
         m_RenderContext.CommandList = m_CommandList;
-        m_RenderContext.GlobalConstantBuffer = m_GlobalCB;
-        m_RenderContext.WhiteTexture = m_WhiteTex;
-        m_RenderContext.BlackTexture = m_BlackTex;
-        m_RenderContext.NormalTexture = m_NormalTex;
-        m_RenderContext.MetallicRoughnessTexture = m_MetallicRoughnessTex;
-
-        // TODO: Make sure this is up-to-date...
-        nvrhi::FramebufferInfo fbInfo;
-        fbInfo.addColorFormat(nvrhi::Format::RGBA16_FLOAT);
-        if (m_ShouldCreateIDTarget) fbInfo.addColorFormat(nvrhi::Format::R32_SINT);
-        fbInfo.setDepthFormat(nvrhi::Format::D32);
-        m_RenderContext.PresentationFramebufferInfo = fbInfo;
-        nvrhi::FramebufferInfo finalfbInfo;
-        finalfbInfo.addColorFormat(nvrhi::Format::BGRA8_UNORM);
-        m_RenderContext.FinalFramebufferInfo = finalfbInfo;
+        m_RenderContext.WritesEntityIds = m_ShouldCreateIDTarget;
 
         SamplerCache::Init(m_NvrhiDevice, m_MaxAnisotropy);
 
@@ -616,7 +591,7 @@ namespace Lynx
                 .setInitialState(nvrhi::ResourceStates::RenderTarget)
                 .setKeepInitialState(true)
                 .setClearValue(nvrhi::Color(-1.0f, 0.0f, 0.0f, 0.0f));
-            target.IdBuffer = createTarget(m_Frame->SceneEntityIds, vk::Format::eR32Sint, colorUsage, idDesc);
+            target.IdBuffer = createTarget(m_Frame->SceneEntityIds, RenderFormats::EntityIds, colorUsage, idDesc);
         }
 
         auto hdrFBDesc = nvrhi::FramebufferDesc()
@@ -674,7 +649,6 @@ namespace Lynx
         }
 
         m_Frame->MeshInstances.Upload<GPUInstanceData>(*m_Context, *m_Frame->Uploads, allInstanceData, "InstanceBuffer");
-        m_CurrentFrameData.InstanceBuffer = m_Frame->MeshInstances.Wrapper;
         m_CurrentFrameData.MeshInstanceAddress = m_Frame->MeshInstances.Buffer.Address();
         m_Profiler.SetCounter("Instances", static_cast<double>(allInstanceData.size()));
 
