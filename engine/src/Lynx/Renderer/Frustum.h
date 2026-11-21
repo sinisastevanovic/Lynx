@@ -85,6 +85,17 @@ namespace Lynx
             }
         }
 
+        // False only if the sphere lies wholly behind one of the six planes.
+        bool IsOnFrustum(const glm::vec3& centre, float radius) const
+        {
+            for (const auto& plane : Planes)
+            {
+                if (glm::dot(glm::vec3(plane), centre) + plane.w < -radius)
+                    return false;
+            }
+            return true;
+        }
+
         bool IsOnFrustum(const AABB& aabb) const
         {
             // Check if AABB is strictly BEHIND any plane

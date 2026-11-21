@@ -2,7 +2,6 @@
 
 #include <glm/glm.hpp>
 
-#include <chrono>
 #include <optional>
 #include <span>
 #include <string>
@@ -21,6 +20,7 @@ struct GLFWwindow;
 namespace Lynx
 {
     class AssetManager;
+    class GpuScene;
     class GpuTexture;
     class MaterialTable;
     class FrameProfiler;
@@ -65,8 +65,11 @@ namespace Lynx
         void EndFrame();
 
         // Draws a scene into the frame. Call it between BeginFrame and EndFrame, at most once per frame.
-        // Everything is read from the extracted copy, see SceneRenderer.
+        // The meshes are those in GetGpuScene. Everything else is read from the extracted copy, see SceneRenderer.
         void RenderScene(const ExtractedScene& scene);
+
+        // The meshes that RenderScene draws. Whoever feeds the renderer keeps it in step with the scene.
+        GpuScene& GetGpuScene() { return *m_GpuScene; }
 
         // The ImTextureID that ImGui::Image takes to show the finished scene picture, and to show a texture of
         // the texture table (see Texture::GetTableIndex). Zero if there is no scene picture yet.
@@ -144,7 +147,6 @@ namespace Lynx
 
     private:
         void BeginScene(const glm::mat4& view, const glm::mat4 projection, const glm::vec3& cameraPosition, const glm::vec3& lightDir, const glm::vec3& lightColor, float lightIntensity, float deltaTime, bool editMode);
-        void SubmitMesh(const std::shared_ptr<StaticMesh>& mesh, const glm::mat4& transform, RenderFlags flags, int entityID);
         void SubmitParticles(Material* material, const std::vector<ParticleInstanceData>& particles);
         void EndScene();
 
@@ -179,7 +181,6 @@ namespace Lynx
         bool m_ShouldCreateIDTarget = false;
 
 
-        std::unordered_map<BatchKey, std::vector<GPUInstanceData>, BatchKeyHasher> m_OpaqueBatches;
         std::unordered_map<Material*, std::vector<ParticleInstanceData>> m_ParticleBatches;
 
 
@@ -201,26 +202,14 @@ namespace Lynx
 
         RenderStats m_Stats;
 
-        // What culling let through in this frame. An instance is one submesh of one mesh in the scene,
-        // which is what the GPU culls and draws one by one from step 2.8 of Renderer V2 on.
-        // The camera's view and the sun's are counted apart, and a triangle counts once per view,
-        // however many passes draw it.
-        struct MeshCounts
-        {
-            uint64_t InstancesTested = 0;
-            uint64_t InstancesDrawn = 0;
-            uint64_t TrianglesDrawn = 0;
-            uint64_t ShadowInstancesDrawn = 0;
-            uint64_t ShadowTrianglesDrawn = 0;
-        };
-        MeshCounts m_MeshCounts;
-
         FrameProfiler& m_Profiler;
 
         // For the textures of the materials that are drawn.
         AssetManager& m_Assets;
         std::unique_ptr<MaterialTable> m_Materials;
-        std::chrono::steady_clock::time_point m_SubmitStart;
+
+        // The meshes of the scene that is drawn, kept on the GPU across frames.
+        std::unique_ptr<GpuScene> m_GpuScene;
 
         std::vector<uint64_t> m_ScreenshotRequests;
     };

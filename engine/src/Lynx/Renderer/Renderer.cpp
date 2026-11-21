@@ -10,6 +10,7 @@
 #include "Graph/RenderGraph.h"
 #include "Passes/CompositePass.h"
 #include "Lynx/UI/Rendering/UIPass.h"
+#include "GpuScene.h"
 #include "GpuTimers.h"
 #include "GraphicsContext.h"
 #include "SamplerCache.h"
@@ -89,11 +90,6 @@ namespace Lynx
     {
         // A screenshot is read this many frames after it was copied, when the GPU has certainly finished the copy.
         constexpr uint64_t ReadbackDelay = 3;
-
-        double MillisecondsSince(std::chrono::steady_clock::time_point start)
-        {
-            return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-        }
     }
 
     // What a frame needs from Vulkan directly. Two frames can be under way at once:
@@ -136,8 +132,8 @@ namespace Lynx
         GpuTexture NormalTexture;
         GpuTexture MetallicRoughnessTexture;
 
-        // A buffer that is rewritten every frame with a list whose length changes: the instances that are
-        // drawn, which shaders read through the buffer's address, or the draw commands.
+        // A buffer that is rewritten every frame with a list whose length changes, which shaders read
+        // through the buffer's address.
         struct FrameList
         {
             GpuBuffer Buffer;
@@ -166,8 +162,6 @@ namespace Lynx
         // The camera and the sun of the scene being drawn, which every shader can read. Rewritten for every scene.
         GpuBuffer SceneConstants;
 
-        FrameList MeshInstances;
-        FrameList MeshDrawCommands;
         FrameList ParticleInstances;
 
         // A copy of a finished frame that is waiting to be read back.
@@ -230,23 +224,21 @@ namespace Lynx
 
         // Everything made from the device goes before the device does.
         ReleaseSwapchainImages();
-        m_Frame->MeshInstances = {};
-        m_Frame->MeshDrawCommands = {};
         m_Frame->ParticleInstances = {};
         m_Frame->PickReadback = {};
         m_Frame->SceneConstants = {};
         m_Frame->Uploads.reset();
         m_Frame->PendingScreenshots.clear();
         m_Graph.reset();
+        m_GpuScene.reset();
         m_Materials.reset();
         m_Frame->SceneColorSlot = TextureSlot();
         m_Frame->SceneOutputSlot = TextureSlot();
         m_Frame->Shared.reset();
         m_RenderContext = RenderContext();
         m_CurrentFrameData = RenderData();
-        m_OpaqueBatches.clear();
 
-        // After the frame data: its list of see-through draws holds meshes, whose geometry lives in the pool.
+        // After the scene's instances, which hold meshes whose geometry lives in the pool.
         m_Frame->Geometry.reset();
 
         SamplerCache::Shutdown();
@@ -289,6 +281,7 @@ namespace Lynx
         defaults.Emissive = m_Frame->WhiteTextureIndex;
         defaults.Sampler = SamplerIndex(SamplerSettings());
         m_Materials = std::make_unique<MaterialTable>(*m_Context, *m_Frame->Uploads, m_Assets, defaults);
+        m_GpuScene = std::make_unique<GpuScene>(*m_Context, *m_Frame->Uploads, *m_Materials);
 
         // The frame, start to finish. The scene passes draw the HDR picture, bloom reads it and composite
         // turns both into the output. What is not part of the scene is drawn on top of the output, so that
@@ -424,7 +417,6 @@ namespace Lynx
         m_CurrentFrameData.DrawCalls = 0;
         m_CurrentFrameData.IndexCount = 0;
         memset(&m_Stats, 0, sizeof(RenderStats));
-        m_MeshCounts = {};
     }
 
     void Renderer::SetVSync(bool enabled)
@@ -525,96 +517,37 @@ namespace Lynx
 
     void Renderer::PrepareDrawCalls()
     {
-        // The instances of one submesh that are seen from the same views.
-        struct Batch
         {
-            BatchKey Key;
-            uint32_t FirstInstance;
-            uint32_t InstanceCount;
-        };
+            // Deciding what the camera and the sun see, and bringing what changed in the scene to the GPU.
+            ProfileScope cullScope(m_Profiler, "Cull");
 
-        std::vector<GPUInstanceData> allInstanceData;
-        std::vector<Batch> batches;
+            Frustum cameraFrustum;
+            cameraFrustum.FromViewProjection(m_CurrentFrameData.ViewProjection);
+            Frustum sunFrustum;
+            sunFrustum.FromViewProjection(m_CurrentFrameData.LightViewProj);
 
-        // Flatten all batches into single array
-        for (auto& [key, instances] : m_OpaqueBatches)
-        {
-            if (instances.empty())
-                continue;
+            const GpuScene::Frame meshes = m_GpuScene->Prepare(cameraFrustum, sunFrustum, m_CurrentFrameData.CameraPosition);
+            m_CurrentFrameData.MeshDraws = meshes.Draws;
+            m_CurrentFrameData.TransparentDraws = meshes.TransparentDraws;
+            m_CurrentFrameData.MeshInstanceAddress = meshes.InstanceAddress;
+            m_CurrentFrameData.VisibleInstanceAddress = meshes.VisibleAddress;
+            m_CurrentFrameData.IndexCount += static_cast<uint32_t>(meshes.TrianglesDrawn * 3);
 
-            uint32_t startOffset = (uint32_t)allInstanceData.size();
-            allInstanceData.insert(allInstanceData.end(), instances.begin(), instances.end());
-
-            // A batch is the instances of one submesh, which all have its material.
-            const uint32_t material = m_Materials->IndexOf(key.Mesh->GetSubmeshes()[key.SubmeshIndex].Material);
-            for (size_t instance = startOffset; instance < allInstanceData.size(); ++instance)
-                allInstanceData[instance].Material = material;
-
-            batches.push_back({ key, startOffset, (uint32_t)instances.size() });
+            // An instance is one submesh of one mesh in the scene. The camera's view and the sun's are
+            // counted apart, and a triangle counts once per view, however many passes draw it.
+            m_Profiler.SetCounter("InstancesTested", static_cast<double>(meshes.InstancesTested));
+            m_Profiler.SetCounter("InstancesDrawn", static_cast<double>(meshes.InstancesDrawn));
+            m_Profiler.SetCounter("TrianglesDrawn", static_cast<double>(meshes.TrianglesDrawn));
+            m_Profiler.SetCounter("ShadowInstancesDrawn", static_cast<double>(meshes.ShadowInstancesDrawn));
+            m_Profiler.SetCounter("ShadowTrianglesDrawn", static_cast<double>(meshes.ShadowTrianglesDrawn));
+            m_Profiler.SetCounter("DrawCommands", static_cast<double>(meshes.DrawCommands));
         }
 
-        // The batches come out of a map keyed on pointers, in an order that changes from run to run.
-        // Where two surfaces lie in the same plane, the one drawn last wins, so the order has to be fixed
-        // for a frame to look the same every time.
-        std::ranges::sort(batches, [](const Batch& a, const Batch& b)
-        {
-            const uint64_t meshA = a.Key.Mesh->GetHandle();
-            const uint64_t meshB = b.Key.Mesh->GetHandle();
-            return std::tie(meshA, a.Key.SubmeshIndex, a.Key.RenderFlags) < std::tie(meshB, b.Key.SubmeshIndex, b.Key.RenderFlags);
-        });
-
-        // One draw command per batch and view that sees it. Culling still happens on the CPU: only what
-        // passed it gets a command. The GPU takes that over in step 2.8 of Renderer V2.
-        std::vector<vk::DrawIndexedIndirectCommand> drawCommands;
-        const auto addCommands = [&](RenderFlags view, bool withCutOuts)
-        {
-            DrawRange range;
-            range.First = static_cast<uint32_t>(drawCommands.size());
-
-            for (const Batch& batch : batches)
-            {
-                const Submesh& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
-                const bool hasCutOuts = submesh.Material->Mode == AlphaMode::Mask;
-                if (!(batch.Key.RenderFlags & view) || hasCutOuts != withCutOuts)
-                    continue;
-
-                drawCommands.emplace_back(submesh.IndexCount, batch.InstanceCount, submesh.Geometry.FirstIndex(), submesh.Geometry.VertexOffset(), batch.FirstInstance);
-                if (view == RenderFlags::MainPass)
-                    m_CurrentFrameData.IndexCount += submesh.IndexCount * batch.InstanceCount;
-            }
-
-            range.Count = static_cast<uint32_t>(drawCommands.size()) - range.First;
-            return range;
-        };
-
-        MeshDrawCommands& draws = m_CurrentFrameData.MeshDraws;
-        draws.CameraOpaque = addCommands(RenderFlags::MainPass, false);
-        draws.CameraCutOut = addCommands(RenderFlags::MainPass, true);
-        draws.ShadowOpaque = addCommands(RenderFlags::ShadowPass, false);
-        draws.ShadowCutOut = addCommands(RenderFlags::ShadowPass, true);
-
-        m_Frame->MeshDrawCommands.Upload<vk::DrawIndexedIndirectCommand>(*m_Context, *m_Frame->Uploads, drawCommands, vk::BufferUsageFlagBits::eIndirectBuffer, "MeshDrawCommands");
-        draws.Buffer = &m_Frame->MeshDrawCommands.Buffer;
-        m_Profiler.SetCounter("DrawCommands", static_cast<double>(drawCommands.size()));
-
-        std::ranges::sort(m_CurrentFrameData.TransparentQueue,
-          [](const RenderCommand& a, const RenderCommand& b) {
-              return a.DistanceToCamera > b.DistanceToCamera;
-          });
-
-        for (auto& cmd : m_CurrentFrameData.TransparentQueue)
-        {
-            cmd.InstanceOffset = (int)allInstanceData.size();
-            allInstanceData.push_back({ cmd.InstanceData.Model, cmd.InstanceData.EntityID, m_Materials->IndexOf(cmd.Mesh->GetSubmeshes()[cmd.SubmeshIndex].Material) });
-        }
-
-        m_Frame->MeshInstances.Upload<GPUInstanceData>(*m_Context, *m_Frame->Uploads, allInstanceData, vk::BufferUsageFlagBits::eStorageBuffer, "InstanceBuffer");
-        m_CurrentFrameData.MeshInstanceAddress = m_Frame->MeshInstances.Buffer.Address();
+        ProfileScope prepareScope(m_Profiler, "PrepareDraws");
         m_CurrentFrameData.Geometry = m_Frame->Geometry.get();
 
         // Asked for after the last material of the frame is in: the table moves when it grows.
         m_CurrentFrameData.MaterialAddress = m_Materials->Address();
-        m_Profiler.SetCounter("Instances", static_cast<double>(allInstanceData.size()));
 
         std::vector<ParticleInstanceData> allParticleData;
         m_CurrentFrameData.ParticleQueue.clear();
@@ -658,10 +591,9 @@ namespace Lynx
         ResetStats();
         m_Stats.FrameTime = deltaTime;
 
-        m_OpaqueBatches.clear();
         m_ParticleBatches.clear();
         m_CurrentFrameData.MeshDraws = {};
-        m_CurrentFrameData.TransparentQueue.clear();
+        m_CurrentFrameData.TransparentDraws = {};
         m_CurrentFrameData.ParticleQueue.clear();
 
         glm::vec3 center = cameraPosition;
@@ -778,35 +710,11 @@ namespace Lynx
         m_Frame->SceneDepth.ClearDepth(commands, 0.0f);
         if (m_Frame->SceneEntityIds)
             m_Frame->SceneEntityIds.ClearColor(commands, vk::ClearColorValue(std::array<int32_t, 4>{ -1, 0, 0, 0 }));
-
-        m_SubmitStart = std::chrono::steady_clock::now();
     }
 
     void Renderer::RenderScene(const ExtractedScene& scene)
     {
         BeginScene(scene.View, scene.Projection, scene.CameraPosition, scene.SunDirection, scene.SunColor, scene.SunIntensity, scene.DeltaTime, scene.IsEditorView);
-
-        // A mesh is drawn in the passes whose view it can be seen from: the camera's and the sun's.
-        Frustum cameraFrustum;
-        cameraFrustum.FromViewProjection(m_CurrentFrameData.ViewProjection);
-        Frustum lightFrustum;
-        lightFrustum.FromViewProjection(m_CurrentFrameData.LightViewProj);
-
-        for (const ExtractedMesh& mesh : scene.Meshes)
-        {
-            const AABB worldBounds = TransformAABB(mesh.Mesh->GetBounds(), mesh.Transform);
-            m_MeshCounts.InstancesTested += mesh.Mesh->GetSubmeshes().size();
-
-            // TODO: Check if this is worth it. Using these flags splits the batches up, so more draw calls, but less geometry drawn...
-            RenderFlags flags = RenderFlags::None;
-            if (cameraFrustum.IsOnFrustum(worldBounds))
-                flags = flags | RenderFlags::MainPass;
-            if (lightFrustum.IsOnFrustum(worldBounds))
-                flags = flags | RenderFlags::ShadowPass;
-
-            if (flags != RenderFlags::None)
-                SubmitMesh(mesh.Mesh, mesh.Transform, flags, mesh.EntityId);
-        }
 
         for (const ExtractedParticles& particles : scene.Particles)
             SubmitParticles(particles.Material.get(), particles.Particles);
@@ -816,69 +724,10 @@ namespace Lynx
 
         EndScene();
 
-        // The lists belong to the caller and may be gone after this call.
+        // The lists belong to the caller or last for one frame, and may be gone after this call.
         m_CurrentFrameData.DebugLines = {};
         m_CurrentFrameData.Canvases = {};
-    }
-
-    void Renderer::SubmitMesh(const std::shared_ptr<StaticMesh>& mesh, const glm::mat4& transform, RenderFlags Flags, int entityID)
-    {
-        if (!mesh)
-            return;
-
-        float dist = glm::distance(m_CurrentFrameData.CameraPosition, glm::vec3(transform[3]));
-
-        for (int i = 0; i < mesh->GetSubmeshes().size(); ++i)
-        {
-            const auto& submesh = mesh->GetSubmeshes()[i];
-            if (!submesh.Material || !submesh.Geometry)
-                continue;
-
-            GPUInstanceData instance = { transform, entityID };
-            BatchKey key = { mesh.get(), (uint32_t)i, submesh.Material.get(), Flags };
-
-            // See-through surfaces cast no shadow: the shadow pass draws the opaque batches only.
-            const bool isTranslucent = submesh.Material->Mode == AlphaMode::Translucent;
-            const uint32_t triangles = submesh.IndexCount / 3;
-            if (Flags & RenderFlags::MainPass)
-            {
-                m_MeshCounts.InstancesDrawn++;
-                m_MeshCounts.TrianglesDrawn += triangles;
-            }
-            if ((Flags & RenderFlags::ShadowPass) && !isTranslucent)
-            {
-                m_MeshCounts.ShadowInstancesDrawn++;
-                m_MeshCounts.ShadowTrianglesDrawn += triangles;
-            }
-
-            if (isTranslucent)
-            {
-                RenderCommand cmd;
-                cmd.Mesh = mesh;
-                cmd.SubmeshIndex = i;
-                cmd.InstanceData = instance;
-                cmd.DistanceToCamera = dist;
-                cmd.Flags = Flags;
-                m_CurrentFrameData.TransparentQueue.push_back(cmd);
-            }
-            else
-            {
-                m_OpaqueBatches[key].push_back(instance);
-            }
-        }
-        // 1. Bind Texture
-        // Check if mesh has a texture. If so, bind it. If not, use white texture.
-        // NOTE: This is expensive to do per-draw-call (creating BindingSet).
-        // Optimization for later: Cache BindingSets in the Mesh or a Material.
-
-        // For now, let's reuse SetTexture logic or just call it here.
-        // We need to access the AssetManager to get the texture by UUID,
-        // OR just assume Mesh holds the Texture pointer directly?
-        // You implemented Mesh. Does it hold UUID or shared_ptr?
-        // If UUID, we need AssetManager. If ptr, easy.
-
-        // Let's assume for V1 we just use the currently bound texture (from SetTexture)
-        // OR we implement a simple lookup.
+        m_CurrentFrameData.TransparentDraws = {};
     }
 
     TextureSlot Renderer::AddToTextureTable(const GpuTexture& texture)
@@ -909,13 +758,7 @@ namespace Lynx
 
     void Renderer::EndScene()
     {
-        // Everything between BeginScene and here is deciding what is visible and sorting it into batches.
-        m_Profiler.AddCpuTime("Cull", MillisecondsSince(m_SubmitStart));
-
-        {
-            ProfileScope prepareScope(m_Profiler, "PrepareDraws");
-            PrepareDrawCalls();
-        }
+        PrepareDrawCalls();
 
         // The editor shows the finished picture inside its viewport panel. A game shows it in the window.
         m_CurrentFrameData.Output = m_ShouldCreateIDTarget ? &m_Frame->SceneOutput : &m_Swapchain->Image();
@@ -931,11 +774,6 @@ namespace Lynx
         m_Stats.IndexCount = m_CurrentFrameData.IndexCount;
         m_Profiler.SetCounter("DrawCalls", m_Stats.DrawCalls);
         m_Profiler.SetCounter("Triangles", m_Stats.IndexCount / 3);
-        m_Profiler.SetCounter("InstancesTested", static_cast<double>(m_MeshCounts.InstancesTested));
-        m_Profiler.SetCounter("InstancesDrawn", static_cast<double>(m_MeshCounts.InstancesDrawn));
-        m_Profiler.SetCounter("TrianglesDrawn", static_cast<double>(m_MeshCounts.TrianglesDrawn));
-        m_Profiler.SetCounter("ShadowInstancesDrawn", static_cast<double>(m_MeshCounts.ShadowInstancesDrawn));
-        m_Profiler.SetCounter("ShadowTrianglesDrawn", static_cast<double>(m_MeshCounts.ShadowTrianglesDrawn));
 
         m_SceneOutput = m_CurrentFrameData.Output;
     }

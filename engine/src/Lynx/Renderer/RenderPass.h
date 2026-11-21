@@ -21,51 +21,6 @@ namespace Lynx
     class UploadQueue;
     class UICanvas;
 
-    enum class RenderFlags : uint8_t
-    {
-        None = 0,
-        MainPass = 1 << 0,
-        ShadowPass = 1 << 1,
-        All = MainPass | ShadowPass
-    };
-    inline RenderFlags operator|(RenderFlags a, RenderFlags b) { return (RenderFlags)((uint8_t)a | (uint8_t)b); }
-    inline bool operator&(RenderFlags a, RenderFlags b) { return ((uint8_t)a & (uint8_t)b) != 0; }
-
-    // One drawn copy of a submesh. Has to match MeshInstance in Mesh.slang.
-    struct GPUInstanceData
-    {
-        glm::mat4 Model;
-        int EntityID;
-
-        // The place of the instance's material in the material table.
-        uint32_t Material;
-        float Padding[2];
-    };
-
-    struct BatchKey
-    {
-        StaticMesh* Mesh;
-        uint32_t SubmeshIndex;
-        Material* Material;
-        RenderFlags RenderFlags;
-
-        bool operator==(const BatchKey& other) const
-        {
-            return Mesh == other.Mesh && SubmeshIndex == other.SubmeshIndex && Material == other.Material && RenderFlags == other.RenderFlags;
-        }
-    };
-
-    struct BatchKeyHasher
-    {
-        std::size_t operator()(const BatchKey& key) const
-        {
-            size_t h1 = std::hash<void*>()(key.Mesh);
-            size_t h2 = std::hash<uint32_t>()(key.SubmeshIndex);
-            size_t h3 = std::hash<void*>()(key.Material);
-            return h1 ^ (h2 << 1) ^ (h3 << 2);
-        }
-    };
-
     // A run of draw commands in the buffer of a frame's draw commands.
     struct DrawRange
     {
@@ -97,14 +52,14 @@ namespace Lynx
         glm::vec4 LightColor;
     };
 
-    struct RenderCommand
+    // One see-through instance, drawn on its own: these are sorted by distance, which a shared draw
+    // command cannot do. FirstInstance is its place in the frame's list of drawn instances.
+    struct TransparentDraw
     {
-        std::shared_ptr<StaticMesh> Mesh;
-        int SubmeshIndex;
-        GPUInstanceData InstanceData;
-        float DistanceToCamera;
-        int InstanceOffset = -1;
-        RenderFlags Flags = RenderFlags::All;
+        uint32_t IndexCount;
+        uint32_t FirstIndex;
+        int32_t VertexOffset;
+        uint32_t FirstInstance;
     };
 
     struct ParticleInstanceData
@@ -142,7 +97,8 @@ namespace Lynx
 
     struct RenderData
     {
-        std::vector<RenderCommand> TransparentQueue;
+        // In the order they are drawn, the farthest first. Valid only while the frame is drawn.
+        std::span<const TransparentDraw> TransparentDraws;
         MeshDrawCommands MeshDraws;
 
         std::vector<ParticleBatch> ParticleQueue;
@@ -150,8 +106,10 @@ namespace Lynx
         // Holds the vertices and indices of every mesh. A pass that draws meshes binds it once.
         const GeometryPool* Geometry = nullptr;
 
-        // The address shaders read the frame's mesh instances from, one GPUInstanceData each.
+        // The addresses shaders read the scene's mesh instances from, one GpuInstance each, and the list
+        // of the places of those that this frame draws. A draw command covers a run of that list. See GpuScene.
         uint64_t MeshInstanceAddress = 0;
+        uint64_t VisibleInstanceAddress = 0;
 
         // The address shaders read the material table from, see MaterialTable.
         uint64_t MaterialAddress = 0;

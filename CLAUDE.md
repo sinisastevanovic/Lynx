@@ -86,10 +86,16 @@ build\bin\Debug\LynxSandboxGame.exe
   the GPU draws fastest, with meshoptimizer, and vertices are packed from 64 into 28 bytes (`Renderer/MeshVertex.h`).
   The result is kept in `temp\MeshCache` and used until the model file or its `.bin` changes. A change to cooking or
   to `PackedVertex` needs the version in `MeshCache.cpp` bumped. Texture coordinates stay exact on purpose.
+- **Scene on the GPU.** Every submesh of every mesh in the scene is an instance in one buffer that stays on the GPU
+  (`Renderer/GpuScene`). `SceneRenderer` keeps it in step with the scene and passes on only what changed: mesh
+  entities that came or went (EnTT signals), entities that moved (`Scene::GetMovedEntities`), meshes that were
+  reloaded. What it keeps per entity is a component of its own in the scene's registry (`MeshInstances`), which is
+  never saved. A frame draws a list of places in the instance buffer, which culling writes.
 - **Mesh draws.** Meshes that are not see-through are drawn from a buffer of draw commands, one per submesh with all
-  its instances (`RenderData::MeshDraws`). A pass draws a whole range of them with one call (`DrawMeshes`). The CPU
-  still culls and writes the commands. Depth and shadow use a pipeline without a fragment shader for opaque
-  materials and a second one for cut-outs. See-through meshes are sorted and drawn one by one.
+  its instances that are seen (`RenderData::MeshDraws`). A pass draws a whole range of them with one call
+  (`DrawMeshes`). The CPU still culls, with a sphere per instance, and writes the commands. Depth and shadow use a
+  pipeline without a fragment shader for opaque materials and a second one for cut-outs. See-through meshes are
+  sorted and drawn one by one.
 - **Uploads.** Data for buffers and pixels for textures go through the `UploadQueue`, which copies them to the GPU
   with the next frame. Nothing is submitted on its own.
 - **Memory.** Textures come from a pool of their own (`GraphicsContext::TexturePool`), apart from buffers. Sharing

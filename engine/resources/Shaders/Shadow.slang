@@ -10,9 +10,14 @@ struct ShadowConstants
     // From the world to the sun's view of it.
     float4x4 lightViewProjection;
 
-    // The instances of the whole frame, and the material table, which is read for cut-outs only.
+    // The instances of the scene, the places of those this frame draws, and the material table,
+    // which is read for cut-outs only.
     MeshInstance* instances;
+    uint* visibleInstances;
     StandardMaterial* materials;
+
+    // The matrix makes the size a multiple of 16 bytes.
+    uint64_t padding;
 };
 [vk::push_constant] ConstantBuffer<ShadowConstants> constants;
 
@@ -32,7 +37,7 @@ struct VertexOutput
 [shader("vertex")]
 VertexOutput vertexMain(VertexInput input, uint instanceIndex : SV_VulkanInstanceID)
 {
-    MeshInstance instance = constants.instances[instanceIndex];
+    MeshInstance instance = meshInstance(constants.instances, constants.visibleInstances, instanceIndex);
 
     VertexOutput output;
     output.position = mul(mul(constants.lightViewProjection, instance.model), float4(input.position, 1.0));

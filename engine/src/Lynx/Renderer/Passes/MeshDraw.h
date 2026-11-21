@@ -29,11 +29,11 @@ namespace Lynx
         commands.drawIndexedIndirect(draws.Buffer->Handle(), vk::DeviceSize(range.First) * commandSize, range.Count, commandSize);
     }
 
-    // Draws a number of instances of a submesh from the geometry pool, which has to be bound.
-    // firstInstance is where they start in the frame's instance buffer. The shader finds them by it,
-    // and their materials through them, so a draw needs no push constants of its own.
-    inline void DrawSubmesh(vk::CommandBuffer commands, const Submesh& submesh, uint32_t firstInstance, uint32_t instanceCount)
+    // Draws one see-through instance. The geometry pool has to be bound. The shader finds the instance
+    // by its place in the list of drawn instances, and its material through it, so a draw needs no
+    // push constants of its own.
+    inline void DrawTransparent(vk::CommandBuffer commands, const TransparentDraw& draw)
     {
-        commands.drawIndexed(submesh.IndexCount, instanceCount, submesh.Geometry.FirstIndex(), submesh.Geometry.VertexOffset(), firstInstance);
+        commands.drawIndexed(draw.IndexCount, 1, draw.FirstIndex, draw.VertexOffset, draw.FirstInstance);
     }
 }

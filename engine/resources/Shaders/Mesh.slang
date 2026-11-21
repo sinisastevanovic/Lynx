@@ -3,22 +3,39 @@ module Mesh;
 
 import Scene;
 
-// One drawn copy of a mesh. Has to match GPUInstanceData in RenderPass.h.
+// One submesh of one mesh in the scene. The instances of the whole scene are in one buffer that stays
+// on the GPU from frame to frame. Has to match GpuInstance in GpuScene.h.
 public struct MeshInstance
 {
     public float4x4 model;
 
-    // Written to the picking buffer in the editor. -1 for none.
-    public int entityId;
+    // A sphere around the submesh in the mesh's own space: the centre in xyz, the radius in w.
+    public float4 boundingSphere;
+
+    // The submesh's place in the geometry pool.
+    public uint firstIndex;
+    public uint indexCount;
+    public int vertexOffset;
 
     // The place of the instance's material in the material table, see Material.slang.
     public uint material;
+
+    // Written to the picking buffer in the editor. -1 for none.
+    public int entityId;
     int padding0;
     int padding1;
+    int padding2;
 };
 
-// The semantic to give a vertex shader's instance index: SV_VulkanInstanceID counts from the first
-// instance of the draw call, as the instance buffer does. SV_InstanceID would start at zero in every draw.
+// The instance a vertex belongs to. A frame draws the instances in a list of places in the instance
+// buffer, and drawnIndex is where the vertex's instance stands in that list.
+public MeshInstance meshInstance(MeshInstance* instances, uint* visibleInstances, uint drawnIndex)
+{
+    return instances[visibleInstances[drawnIndex]];
+}
+
+// The semantic to give a vertex shader's instance index: SV_VulkanInstanceID counts on from the first
+// instance of the draw call, as the list of drawn instances does. SV_InstanceID would start at zero in every draw.
 
 // Where a vertex is in the world and on the screen.
 public struct MeshPosition

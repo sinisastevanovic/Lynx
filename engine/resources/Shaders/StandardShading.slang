@@ -11,8 +11,9 @@ import Material;
 // The same for every draw of the pass. What differs between draws comes from the instance and its material.
 public struct StandardConstants
 {
-    // The instances of the whole frame, and the material table.
+    // The instances of the scene, the places of those this frame draws, and the material table.
     public MeshInstance* instances;
+    public uint* visibleInstances;
     public StandardMaterial* materials;
 
     // Indices into the texture table and the table of comparing samplers.
@@ -54,7 +55,7 @@ static const float4x4 clipToTexture = float4x4(
 
 public StandardVaryings standardVertex(StandardConstants constants, StandardVertex input, uint instanceIndex)
 {
-    MeshInstance instance = constants.instances[instanceIndex];
+    MeshInstance instance = meshInstance(constants.instances, constants.visibleInstances, instanceIndex);
     MeshPosition position = meshPosition(instance, input.position);
 
     StandardVaryings output;

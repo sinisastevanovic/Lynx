@@ -16,6 +16,7 @@ namespace Lynx
         struct StandardPushData
         {
             uint64_t Instances;
+            uint64_t VisibleInstances;
             uint64_t Materials;
             uint32_t ShadowMap;
             uint32_t ShadowSampler;
@@ -113,7 +114,7 @@ namespace Lynx
         if (!m_Vulkan->OpaquePipeline || !m_Vulkan->TransparentPipeline)
             return false;
         const MeshDrawCommands& draws = renderData.MeshDraws;
-        if (draws.CameraOpaque.Count + draws.CameraCutOut.Count == 0 && renderData.TransparentQueue.empty())
+        if (draws.CameraOpaque.Count + draws.CameraCutOut.Count == 0 && renderData.TransparentDraws.empty())
             return false;
 
         resources.ColorTarget = renderData.SceneColor;
@@ -133,6 +134,7 @@ namespace Lynx
         // Push constants stay set across pipelines too, because all pipelines share one layout.
         StandardPushData push{};
         push.Instances = renderData.MeshInstanceAddress;
+        push.VisibleInstances = renderData.VisibleInstanceAddress;
         push.Materials = renderData.MaterialAddress;
         push.ShadowMap = renderData.ShadowMapIndex;
         push.ShadowSampler = renderData.ShadowSamplerIndex;
@@ -148,20 +150,14 @@ namespace Lynx
             renderData.DrawCalls++;
         }
 
-        if (renderData.TransparentQueue.empty())
+        if (renderData.TransparentDraws.empty())
             return;
 
         commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->TransparentPipeline);
-        for (const RenderCommand& command : renderData.TransparentQueue)
+        for (const TransparentDraw& draw : renderData.TransparentDraws)
         {
-            if (!(command.Flags & RenderFlags::MainPass))
-                continue;
-
-            const Submesh& submesh = command.Mesh->GetSubmeshes()[command.SubmeshIndex];
-            DrawSubmesh(commands, submesh, static_cast<uint32_t>(command.InstanceOffset), 1);
-
+            DrawTransparent(commands, draw);
             renderData.DrawCalls++;
-            renderData.IndexCount += submesh.IndexCount;
         }
     }
 }

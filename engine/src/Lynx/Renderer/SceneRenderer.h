@@ -4,7 +4,11 @@
 
 #include <glm/glm.hpp>
 
+#include <entt/entt.hpp>
+
 #include <memory>
+#include <unordered_map>
+#include <vector>
 
 namespace Lynx
 {
@@ -12,13 +16,16 @@ namespace Lynx
     class FrameProfiler;
     class Renderer;
     class Scene;
+    class StaticMesh;
 
-    // Copies what a frame of the scene looks like out of the scene and hands it to the renderer.
-    // This is the only place where rendering reads the scene.
+    // Brings a scene to the renderer. Its meshes are kept in step with the renderer's copy of them on the
+    // GPU: only what was added, removed or moved since the last frame is passed on. Everything else is
+    // copied out of the scene anew for every frame. This is the only place where rendering reads the scene.
     class SceneRenderer
     {
     public:
         SceneRenderer(Renderer& renderer, FrameProfiler& profiler, std::shared_ptr<Scene> scene);
+        ~SceneRenderer();
 
         void SetScene(std::shared_ptr<Scene> scene);
         void SetViewportSize(uint32_t width, uint32_t height);
@@ -32,8 +39,19 @@ namespace Lynx
 
     private:
         void Extract(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPosition, float deltaTime, bool isEditor, float physicsAlpha);
-        void ExtractMeshes(bool isEditor, float physicsAlpha);
         void DrawColliders();
+
+        // Following a scene: the renderer learns of mesh entities that come and go as it happens.
+        void Follow(Scene& scene);
+        void Unfollow(Scene& scene);
+        void OnMeshAdded(entt::registry& registry, entt::entity entity);
+        void OnMeshRemoved(entt::registry& registry, entt::entity entity);
+        void OnEntityEnabled(entt::registry& registry, entt::entity entity);
+        void OnEntityDisabled(entt::registry& registry, entt::entity entity);
+        void OnInstancesRemoved(entt::registry& registry, entt::entity entity);
+
+        void SyncMeshes(bool isEditor, float physicsAlpha);
+        void AddInstances(entt::entity entity, bool isEditor, float physicsAlpha);
 
     private:
         Renderer& m_Renderer;
@@ -45,5 +63,19 @@ namespace Lynx
 
         // Reused every frame for its memory.
         ExtractedScene m_Extracted;
+
+        // Entities that may need instances: new mesh entities, and ones whose mesh was replaced.
+        // Looked at when the frame is drawn, by which time whoever made them has finished setting them up.
+        std::vector<entt::entity> m_PendingEntities;
+
+        // Every mesh that has instances, with the entities that use it. When a mesh is loaded or
+        // reloaded it gets a new version, and the instances of its users are made anew.
+        struct MeshUse
+        {
+            std::shared_ptr<StaticMesh> Mesh;
+            uint32_t Version = 0;
+            std::vector<entt::entity> Users;
+        };
+        std::unordered_map<const StaticMesh*, MeshUse> m_MeshUses;
     };
 }
