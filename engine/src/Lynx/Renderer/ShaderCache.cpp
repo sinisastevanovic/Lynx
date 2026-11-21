@@ -1,6 +1,7 @@
 #include "ShaderCache.h"
 
 #include "Shader/ShaderProgram.h"
+#include "Lynx/Core/BinaryFile.h"
 
 #include <fstream>
 
@@ -13,78 +14,6 @@ namespace Lynx
         // Bump this when the format of a stored program or the compile settings in ShaderCompiler change.
         constexpr uint32_t s_ProgramVersion = 3;
         constexpr uint32_t s_ProgramMagicNumber = 0x5053584c; // "LXSP"
-
-        // FNV-1a. std::hash is not guaranteed to give the same value in another build, and the keys are file names.
-        uint64_t HashBytes(uint64_t hash, const void* data, size_t size)
-        {
-            const auto* bytes = static_cast<const unsigned char*>(data);
-            for (size_t i = 0; i < size; ++i)
-            {
-                hash ^= bytes[i];
-                hash *= 0x100000001b3ull;
-            }
-            return hash;
-        }
-    }
-
-    namespace
-    {
-        constexpr uint64_t s_HashSeed = 0xcbf29ce484222325ull;
-
-        // Empty if the file cannot be read, which no stored hash equals.
-        std::optional<uint64_t> HashFile(const std::filesystem::path& file)
-        {
-            std::ifstream stream(file, std::ios::binary | std::ios::ate);
-            if (!stream)
-                return std::nullopt;
-
-            std::vector<char> content(static_cast<size_t>(stream.tellg()));
-            stream.seekg(0);
-            stream.read(content.data(), static_cast<std::streamsize>(content.size()));
-            return HashBytes(s_HashSeed, content.data(), content.size());
-        }
-
-        // The stored form is a flat run of numbers and length-prefixed strings.
-        class Writer
-        {
-        public:
-            explicit Writer(std::ostream& stream) : m_Stream(stream) {}
-
-            template<typename Number>
-            void Write(Number value) { m_Stream.write(reinterpret_cast<const char*>(&value), sizeof(value)); }
-
-            void Write(std::string_view text)
-            {
-                Write(static_cast<uint32_t>(text.size()));
-                m_Stream.write(text.data(), static_cast<std::streamsize>(text.size()));
-            }
-
-        private:
-            std::ostream& m_Stream;
-        };
-
-        // Every read reports failure, so a truncated or damaged entry is treated as missing.
-        class Reader
-        {
-        public:
-            explicit Reader(std::istream& stream) : m_Stream(stream) {}
-
-            template<typename Number>
-            bool Read(Number& value) { return static_cast<bool>(m_Stream.read(reinterpret_cast<char*>(&value), sizeof(value))); }
-
-            bool Read(std::string& text)
-            {
-                uint32_t size = 0;
-                if (!Read(size) || size > MaxStringSize)
-                    return false;
-                text.resize(size);
-                return static_cast<bool>(m_Stream.read(text.data(), size));
-            }
-
-        private:
-            static constexpr uint32_t MaxStringSize = 4096;
-            std::istream& m_Stream;
-        };
     }
 
     std::optional<ShaderProgram> ShaderCache::LoadProgram(const std::filesystem::path& sourceFile) const
@@ -93,7 +22,7 @@ namespace Lynx
         if (!file)
             return std::nullopt;
 
-        Reader reader(file);
+        BinaryReader reader(file);
         uint32_t magicNumber = 0;
         uint32_t version = 0;
         if (!reader.Read(magicNumber) || !reader.Read(version) || magicNumber != s_ProgramMagicNumber || version != s_ProgramVersion)
@@ -156,7 +85,7 @@ namespace Lynx
 
         {
             std::ofstream file(temporaryPath, std::ios::binary | std::ios::trunc);
-            Writer writer(file);
+            BinaryWriter writer(file);
             writer.Write(s_ProgramMagicNumber);
             writer.Write(s_ProgramVersion);
 
@@ -203,7 +132,7 @@ namespace Lynx
     {
         // Named after the source file's location, so each shader has one entry that is replaced when it changes.
         const std::string location = sourceFile.lexically_normal().generic_string();
-        const uint64_t key = HashBytes(s_HashSeed, location.data(), location.size());
+        const uint64_t key = HashBytes(HashSeed, location.data(), location.size());
 
         char fileName[32];
         std::snprintf(fileName, sizeof(fileName), "%016llx.lxsp", static_cast<unsigned long long>(key));
