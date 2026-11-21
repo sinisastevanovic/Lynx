@@ -13,6 +13,11 @@ namespace Lynx
         m_Index = shared.AddTexture(view);
     }
 
+    TextureSlot::TextureSlot(SharedBindings& shared, uint32_t index)
+        : m_Shared(&shared), m_Index(index)
+    {
+    }
+
     TextureSlot::~TextureSlot()
     {
         Release();

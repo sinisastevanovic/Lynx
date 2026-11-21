@@ -4,6 +4,7 @@
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
 #include "Lynx/Renderer/SamplerCache.h"
+#include "Lynx/Renderer/TextureSlot.h"
 #include "Lynx/Renderer/Vulkan/GpuTexture.h"
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
 #include "Lynx/Renderer/Vulkan/Rendering.h"
@@ -86,8 +87,8 @@ namespace Lynx
         uint32_t MipCount = 0;
 
         // Where the texture table has each size on its own, and all of them together for the composite pass.
-        std::array<uint32_t, MaxMips> MipIndices{};
-        uint32_t ChainIndex = 0;
+        std::array<TextureSlot, MaxMips> MipSlots;
+        TextureSlot ChainSlot;
 
         // The layout every size is in. Kept here because NVRHI does not know this texture.
         std::array<vk::ImageLayout, MaxMips> MipLayouts{};
@@ -95,16 +96,6 @@ namespace Lynx
         vk::Extent2D MipExtent(uint32_t mip) const
         {
             return { std::max(1u, Chain.Desc().Width >> mip), std::max(1u, Chain.Desc().Height >> mip) };
-        }
-
-        void ReleaseChain()
-        {
-            if (!Chain)
-                return;
-
-            for (uint32_t mip = 0; mip < MipCount; ++mip)
-                Shared->ReleaseTexture(MipIndices[mip]);
-            Shared->ReleaseTexture(ChainIndex);
         }
 
         // The renderer waits for the GPU before it destroys its passes, so nothing here is still in use.
@@ -171,8 +162,6 @@ namespace Lynx
         if (m_Vulkan->Chain && m_Vulkan->Chain.Desc().Width == width && m_Vulkan->Chain.Desc().Height == height)
             return;
 
-        m_Vulkan->ReleaseChain();
-
         // As many sizes as there are until the picture is one pixel, but no more than MaxMips.
         m_Vulkan->MipCount = std::min(MaxMips, static_cast<uint32_t>(std::bit_width(std::max(width, height))));
 
@@ -187,8 +176,8 @@ namespace Lynx
         m_Vulkan->Chain = GpuTexture(*m_Vulkan->Context, desc);
 
         for (uint32_t mip = 0; mip < m_Vulkan->MipCount; ++mip)
-            m_Vulkan->MipIndices[mip] = m_Vulkan->Shared->AddTexture(m_Vulkan->Chain.MipView(mip));
-        m_Vulkan->ChainIndex = m_Vulkan->Shared->AddTexture(m_Vulkan->Chain.View());
+            m_Vulkan->MipSlots[mip] = TextureSlot(*m_Vulkan->Shared, m_Vulkan->Shared->AddTexture(m_Vulkan->Chain.MipView(mip)));
+        m_Vulkan->ChainSlot = TextureSlot(*m_Vulkan->Shared, m_Vulkan->Shared->AddTexture(m_Vulkan->Chain.View()));
         m_Vulkan->MipLayouts.fill(vk::ImageLayout::eUndefined);
     }
 
@@ -265,11 +254,11 @@ namespace Lynx
 
         // Down: every size is made from the one above it.
         for (uint32_t mip = 1; mip < vulkan.MipCount; ++mip)
-            step(mip, vulkan.MipIndices[mip - 1], vulkan.MipExtent(mip - 1), BloomMode::Downsample, vulkan.ReplacePipeline, vk::AttachmentLoadOp::eDontCare);
+            step(mip, vulkan.MipSlots[mip - 1].Index(), vulkan.MipExtent(mip - 1), BloomMode::Downsample, vulkan.ReplacePipeline, vk::AttachmentLoadOp::eDontCare);
 
         // Up: every size is added to the one above it, so the largest ends up with the glow of all of them.
         for (uint32_t mip = vulkan.MipCount - 1; mip > 0; --mip)
-            step(mip - 1, vulkan.MipIndices[mip], vulkan.MipExtent(mip), BloomMode::Upsample, vulkan.AddPipeline, vk::AttachmentLoadOp::eLoad);
+            step(mip - 1, vulkan.MipSlots[mip].Index(), vulkan.MipExtent(mip), BloomMode::Upsample, vulkan.AddPipeline, vk::AttachmentLoadOp::eLoad);
 
         // The result is left ready for the composite pass to read.
         if (previousTarget)
@@ -283,6 +272,6 @@ namespace Lynx
             commands.pipelineBarrier2(dependency);
         }
 
-        renderData.BloomTextureIndex = vulkan.ChainIndex;
+        renderData.BloomTextureIndex = vulkan.ChainSlot.Index();
     }
 }

@@ -124,7 +124,7 @@ namespace Lynx
         std::unique_ptr<SharedBindings> Shared;
 
         // Where the texture table has the scene's HDR picture and the black default texture.
-        std::optional<uint32_t> SceneColorIndex;
+        TextureSlot SceneColorSlot;
         uint32_t BlackTextureIndex = 0;
         uint32_t WhiteTextureIndex = 0;
 
@@ -216,6 +216,7 @@ namespace Lynx
         m_PendingScreenshots.clear();
         m_Graph.reset();
         m_MaterialTextures.reset();
+        m_Frame->SceneColorSlot = TextureSlot();
         m_Frame->Shared.reset();
         m_MipMapGenPass.reset();
         m_RenderContext = RenderContext();
@@ -556,9 +557,7 @@ namespace Lynx
         target.Color = createTarget(m_Frame->SceneColor, RenderFormats::SceneColor, colorUsage, colorDesc);
 
         // Post-processing reads the scene through the texture table. The picture before this one leaves it.
-        if (m_Frame->SceneColorIndex)
-            m_Frame->Shared->ReleaseTexture(*m_Frame->SceneColorIndex);
-        m_Frame->SceneColorIndex = m_Frame->Shared->AddTexture(m_Frame->SceneColor.View());
+        m_Frame->SceneColorSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SceneColor.View()));
 
         auto depthDesc = nvrhi::TextureDesc()
             .setWidth(width)
@@ -900,7 +899,7 @@ namespace Lynx
         // The editor shows the finished picture inside its viewport panel. A game shows it in the window.
         m_CurrentFrameData.OutputFramebuffer = m_ShouldCreateIDTarget ? m_SceneTarget->LDRFramebuffer.Get() : m_Swapchain->Framebuffer();
         m_CurrentFrameData.SceneColorInput = m_SceneTarget->Color;
-        m_CurrentFrameData.SceneColorIndex = *m_Frame->SceneColorIndex;
+        m_CurrentFrameData.SceneColorIndex = m_Frame->SceneColorSlot.Index();
         m_CurrentFrameData.BloomTextureIndex = m_Frame->BlackTextureIndex;
         m_CurrentFrameData.Bloom = m_BloomSettings;
         m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled;
