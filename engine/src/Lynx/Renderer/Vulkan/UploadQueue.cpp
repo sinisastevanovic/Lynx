@@ -98,6 +98,17 @@ namespace Lynx
         block.HasPendingData = true;
     }
 
+    void UploadQueue::MoveContents(GpuBuffer source, vk::Buffer destination)
+    {
+        for (Copy& copy : m_Copies)
+        {
+            if (copy.Destination == source.Handle())
+                copy.Destination = destination;
+        }
+
+        m_Moves.push_back({ std::move(source), destination });
+    }
+
     void UploadQueue::Record(vk::CommandBuffer commands, const TextureCopy& copy) const
     {
         const auto levels = [](uint32_t first, uint32_t count) { return vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, first, count, 0, 1); };
@@ -156,6 +167,24 @@ namespace Lynx
         for (const TextureCopy& copy : m_TextureCopies)
             Record(commands, copy);
         m_TextureCopies.clear();
+
+        if (!m_Moves.empty())
+        {
+            // A move reads what earlier copies of this frame may have written, and the uploads below
+            // write into what a move has just written. The barriers keep the three in that order.
+            const vk::MemoryBarrier barrier(vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eTransferRead | vk::AccessFlagBits::eTransferWrite);
+            const auto wait = [&] { commands.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer, {}, barrier, nullptr, nullptr); };
+
+            wait();
+            for (const Move& move : m_Moves)
+            {
+                commands.copyBuffer(move.Source.Handle(), move.Destination, vk::BufferCopy(0, 0, move.Source.Size()));
+                wait();
+            }
+
+            // The sources are given up here and destroyed a few frames later, after the copies have run.
+            m_Moves.clear();
+        }
 
         if (!m_Copies.empty())
         {

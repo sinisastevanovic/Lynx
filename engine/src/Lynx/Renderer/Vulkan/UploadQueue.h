@@ -31,7 +31,12 @@ namespace Lynx
         // The texture has to have been created for copying from and into it.
         void UploadTexture(const GpuTexture& texture, std::span<const std::byte> pixels);
 
-        bool HasPending() const { return !m_Copies.empty() || !m_TextureCopies.empty(); }
+        // Copies everything a buffer holds to the start of another one, which takes its place: uploads
+        // that are still pending for the old buffer go to the new one. The copy is recorded by the next Flush,
+        // ahead of the uploads, and the old buffer is given up after it.
+        void MoveContents(GpuBuffer source, vk::Buffer destination);
+
+        bool HasPending() const { return !m_Copies.empty() || !m_TextureCopies.empty() || !m_Moves.empty(); }
 
         // Records every pending copy. Commands recorded after it may read the destinations.
         // Must not be called inside a render pass.
@@ -68,6 +73,12 @@ namespace Lynx
             uint32_t MipLevels = 1;
         };
 
+        struct Move
+        {
+            GpuBuffer Source;
+            vk::Buffer Destination;
+        };
+
         StagingBlock& BlockWithRoomFor(uint64_t size);
         void Record(vk::CommandBuffer commands, const TextureCopy& copy) const;
         bool IsFree(const StagingBlock& block) const;
@@ -77,6 +88,7 @@ namespace Lynx
         std::vector<StagingBlock> m_Blocks;
         std::vector<Copy> m_Copies;
         std::vector<TextureCopy> m_TextureCopies;
+        std::vector<Move> m_Moves;
         uint64_t m_Frame = 0;
     };
 }
