@@ -82,7 +82,8 @@ build\bin\Debug\LynxSandboxGame.exe
   blocks cost 7 to 10 % of GPU time in the mesh passes when measured.
 - **Y axis.** The engine's matrices have +Y up, as GLM makes them. Vulkan has +Y down. Shaders get matrices that
   are turned around for that (`RenderData::ClipViewProjection`), and nothing else in a shader turns Y around.
-- **NVRHI is gone.** The engine no longer uses it. Its sources are still fetched for the Vulkan headers in them.
+- **Vulkan.** The headers come from vcpkg (`vulkan-headers`). The engine does not link the Vulkan library: it
+  loads the functions at run time through GLFW. NVRHI and shaderc are no longer part of the project.
 - **ImGui.** Drawn by its official Vulkan backend, wrapped in `ImGui/ImGuiVulkan`. To show a texture, pass
   `Renderer::GetImGuiTexture(texture->GetTableIndex())` to `ImGui::Image`, cast to `ImTextureID`.
 - **Picking.** `Renderer::RequestEntityIdAt` asks, `TakeEntityId` hands out the answer three frames later.

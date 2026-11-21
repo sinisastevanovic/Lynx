@@ -27,12 +27,6 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 include(FetchContent)
 
 FetchContent_Declare(
-    nvrhi
-    GIT_REPOSITORY https://github.com/NVIDIA-RTX/NVRHI.git
-    GIT_TAG 06d4fdc82e2d911e510210c3b9ec0c68830ccda4
-)
-
-FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
     GIT_TAG v1.92.5-docking
@@ -43,13 +37,6 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/Chlumsky/msdf-atlas-gen.git
     GIT_TAG v1.3
 )
-
-# NVRHI is not built or linked any more. Its sources are still fetched, only for the Vulkan headers
-# that come with them, until the headers come from a package of their own.
-FetchContent_GetProperties(nvrhi)
-if(NOT nvrhi_POPULATED)
-    FetchContent_Populate(nvrhi)
-endif()
 
 FetchContent_MakeAvailable(imgui)
 

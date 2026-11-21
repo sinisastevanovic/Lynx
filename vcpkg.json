@@ -16,6 +16,7 @@
         "freetype",
         "libpng",
         "shader-slang",
-        "vulkan-memory-allocator"
+        "vulkan-memory-allocator",
+        "vulkan-headers"
     ]
 }
