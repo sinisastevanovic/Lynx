@@ -20,15 +20,10 @@ namespace Lynx
     };
 
     // Draws a number of instances of a submesh from the geometry pool, which has to be bound.
-    inline void DrawSubmesh(vk::CommandBuffer commands, const Submesh& submesh, uint32_t instanceCount)
+    // firstInstance is where they start in the frame's instance buffer. The shader finds them by it,
+    // and their materials through them, so a draw needs no push constants of its own.
+    inline void DrawSubmesh(vk::CommandBuffer commands, const Submesh& submesh, uint32_t firstInstance, uint32_t instanceCount)
     {
-        commands.drawIndexed(submesh.IndexCount, instanceCount, submesh.Geometry.FirstIndex(), submesh.Geometry.VertexOffset(), 0);
-    }
-
-    // The address of an instance in the frame's instance buffer. A draw passes the address of its first
-    // instance to the shader, which counts from there.
-    inline uint64_t MeshInstanceAddress(const RenderData& renderData, uint32_t instance)
-    {
-        return renderData.MeshInstanceAddress + instance * sizeof(GPUInstanceData);
+        commands.drawIndexed(submesh.IndexCount, instanceCount, submesh.Geometry.FirstIndex(), submesh.Geometry.VertexOffset(), firstInstance);
     }
 }

@@ -5,7 +5,7 @@ import StandardShading;
 [vk::push_constant] ConstantBuffer<StandardConstants> constants;
 
 [shader("vertex")]
-StandardVaryings vertexMain(StandardVertex input, uint instanceIndex : SV_InstanceID)
+StandardVaryings vertexMain(StandardVertex input, uint instanceIndex : SV_VulkanInstanceID)
 {
     return standardVertex(constants, input, instanceIndex);
 }

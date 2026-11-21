@@ -30,11 +30,15 @@ namespace Lynx
     inline RenderFlags operator|(RenderFlags a, RenderFlags b) { return (RenderFlags)((uint8_t)a | (uint8_t)b); }
     inline bool operator&(RenderFlags a, RenderFlags b) { return ((uint8_t)a & (uint8_t)b) != 0; }
 
+    // One drawn copy of a submesh. Has to match MeshInstance in Mesh.slang.
     struct GPUInstanceData
     {
         glm::mat4 Model;
         int EntityID;
-        float Padding[3];
+
+        // The place of the instance's material in the material table.
+        uint32_t Material;
+        float Padding[2];
     };
 
     struct BatchKey
@@ -61,22 +65,11 @@ namespace Lynx
         }
     };
 
-    // Where the texture and sampler tables have the textures of a material.
-    struct MaterialTextureIndices
-    {
-        uint32_t Albedo = 0;
-        uint32_t Normal = 0;
-        uint32_t MetallicRoughness = 0;
-        uint32_t Emissive = 0;
-        uint32_t Sampler = 0;
-    };
-
     struct BatchDrawCall
     {
         BatchKey Key;
         uint32_t FirstInstance;
         uint32_t InstanceCount;
-        MaterialTextureIndices Textures;
     };
 
     struct SceneData
@@ -96,7 +89,6 @@ namespace Lynx
         float DistanceToCamera;
         int InstanceOffset = -1;
         RenderFlags Flags = RenderFlags::All;
-        MaterialTextureIndices Textures;
     };
 
     struct ParticleInstanceData
@@ -144,6 +136,9 @@ namespace Lynx
 
         // The address shaders read the frame's mesh instances from, one GPUInstanceData each.
         uint64_t MeshInstanceAddress = 0;
+
+        // The address shaders read the material table from, see MaterialTable.
+        uint64_t MaterialAddress = 0;
 
         // The address shaders read the frame's particles from, one ParticleInstanceData each.
         uint64_t ParticleInstanceAddress = 0;

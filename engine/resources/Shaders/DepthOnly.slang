@@ -2,20 +2,14 @@
 // the forward pass shades every pixel exactly once.
 
 import Mesh;
-import Textures;
+import Material;
 
+// The same for every draw of the pass.
 struct DepthConstants
 {
-    // Pixels whose alpha is below this are left out. Negative for a material without cut-outs.
-    float alphaCutoff;
-
-    // Indices into the texture and sampler tables, used only with cut-outs.
-    uint albedoTexture;
-    uint albedoSampler;
-    uint padding;
-
-    // The first instance of this draw, in the buffer with the instances of the whole frame.
+    // The instances of the whole frame, and the material table, which is read for cut-outs only.
     MeshInstance* instances;
+    StandardMaterial* materials;
 };
 [vk::push_constant] ConstantBuffer<DepthConstants> constants;
 
@@ -29,24 +23,24 @@ struct VertexOutput
 {
     float4 position : SV_Position;
     float2 uv : TEXCOORD0;
+    nointerpolation uint material : MATERIAL;
 };
 
 [shader("vertex")]
-VertexOutput vertexMain(VertexInput input, uint instanceIndex : SV_InstanceID)
+VertexOutput vertexMain(VertexInput input, uint instanceIndex : SV_VulkanInstanceID)
 {
+    MeshInstance instance = constants.instances[instanceIndex];
+
     VertexOutput output;
-    output.position = meshPosition(constants.instances[instanceIndex], input.position).clip;
+    output.position = meshPosition(instance, input.position).clip;
     output.uv = input.uv;
+    output.material = instance.material;
     return output;
 }
 
 [shader("fragment")]
 void fragmentMain(VertexOutput input)
 {
-    if (constants.alphaCutoff >= 0.0)
-    {
-        float alpha = textures[constants.albedoTexture].Sample(samplers[constants.albedoSampler], input.uv).a;
-        if (alpha < constants.alphaCutoff)
-            discard;
-    }
+    if (isCutOut(constants.materials, input.material, input.uv))
+        discard;
 }

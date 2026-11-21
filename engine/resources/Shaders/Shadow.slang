@@ -2,26 +2,17 @@
 // to find out which surfaces the sun reaches.
 
 import Mesh;
-import Textures;
+import Material;
 
+// The same for every draw of the pass.
 struct ShadowConstants
 {
     // From the world to the sun's view of it.
     float4x4 lightViewProjection;
 
-    // Pixels whose alpha is below this are left out. Negative for a material without cut-outs.
-    float alphaCutoff;
-
-    // Indices into the texture and sampler tables, used only with cut-outs.
-    uint albedoTexture;
-    uint albedoSampler;
-    uint padding;
-
-    // The first instance of this draw, in the buffer with the instances of the whole frame.
+    // The instances of the whole frame, and the material table, which is read for cut-outs only.
     MeshInstance* instances;
-
-    // The matrix makes the size a multiple of 16 bytes.
-    uint64_t padding2;
+    StandardMaterial* materials;
 };
 [vk::push_constant] ConstantBuffer<ShadowConstants> constants;
 
@@ -35,26 +26,24 @@ struct VertexOutput
 {
     float4 position : SV_Position;
     float2 uv : TEXCOORD0;
+    nointerpolation uint material : MATERIAL;
 };
 
 [shader("vertex")]
-VertexOutput vertexMain(VertexInput input, uint instanceIndex : SV_InstanceID)
+VertexOutput vertexMain(VertexInput input, uint instanceIndex : SV_VulkanInstanceID)
 {
     MeshInstance instance = constants.instances[instanceIndex];
 
     VertexOutput output;
     output.position = mul(mul(constants.lightViewProjection, instance.model), float4(input.position, 1.0));
     output.uv = input.uv;
+    output.material = instance.material;
     return output;
 }
 
 [shader("fragment")]
 void fragmentMain(VertexOutput input)
 {
-    if (constants.alphaCutoff >= 0.0)
-    {
-        float alpha = textures[constants.albedoTexture].Sample(samplers[constants.albedoSampler], input.uv).a;
-        if (alpha < constants.alphaCutoff)
-            discard;
-    }
+    if (isCutOut(constants.materials, input.material, input.uv))
+        discard;
 }

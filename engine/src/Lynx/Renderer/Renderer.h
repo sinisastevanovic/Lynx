@@ -22,7 +22,7 @@ namespace Lynx
 {
     class AssetManager;
     class GpuTexture;
-    class MaterialTextures;
+    class MaterialTable;
     class FrameProfiler;
     class GraphicsContext;
     class RenderGraph;
@@ -219,7 +219,7 @@ namespace Lynx
 
         // For the textures of the materials that are drawn.
         AssetManager& m_Assets;
-        std::unique_ptr<MaterialTextures> m_MaterialTextures;
+        std::unique_ptr<MaterialTable> m_Materials;
         std::chrono::steady_clock::time_point m_SubmitStart;
 
         std::vector<uint64_t> m_ScreenshotRequests;

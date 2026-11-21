@@ -1,7 +1,6 @@
 #include "ShadowPass.h"
 
 #include "MeshDraw.h"
-#include "Lynx/Asset/Material.h"
 #include "Lynx/Asset/Shader.h"
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
@@ -19,12 +18,8 @@ namespace Lynx
         struct ShadowPushData
         {
             glm::mat4 LightViewProjection;
-            float AlphaCutoff;
-            uint32_t AlbedoTexture;
-            uint32_t AlbedoSampler;
-            uint32_t Padding;
             uint64_t Instances;
-            uint64_t Padding2;
+            uint64_t Materials;
         };
     }
 
@@ -156,21 +151,16 @@ namespace Lynx
 
         ShadowPushData push{};
         push.LightViewProjection = renderData.ClipLightViewProjection;
+        push.Instances = renderData.MeshInstanceAddress;
+        push.Materials = renderData.MaterialAddress;
+        m_Vulkan->Shared->Push(commands, push);
 
         for (const BatchDrawCall& batch : renderData.OpaqueDrawCalls)
         {
             if (batch.InstanceCount == 0 || !(batch.Key.RenderFlags & RenderFlags::ShadowPass))
                 continue;
 
-            const Submesh& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
-
-            push.AlphaCutoff = submesh.Material->Mode == AlphaMode::Mask ? submesh.Material->AlphaCutoff : -1.0f;
-            push.AlbedoTexture = batch.Textures.Albedo;
-            push.AlbedoSampler = batch.Textures.Sampler;
-            push.Instances = MeshInstanceAddress(renderData, batch.FirstInstance);
-            m_Vulkan->Shared->Push(commands, push);
-
-            DrawSubmesh(commands, submesh, batch.InstanceCount);
+            DrawSubmesh(commands, batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex], batch.FirstInstance, batch.InstanceCount);
         }
     }
 }

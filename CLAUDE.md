@@ -63,7 +63,7 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Assets.** Reading a file may happen on any thread. Creating GPU resources happens on the main thread only.
 - **Shutdown order matters.** Scenes go before the script engine, assets before the renderer. See `Engine::Shutdown`.
 - **Shaders.** Shaders are written in Slang (`.slang`) and compiled once into `temp\ShaderCache`. Mark entry points
-  with `[shader("vertex")]`. Shared code lives in modules (`Scene`, `Textures`, `Mesh`, `StandardShading`) that a
+  with `[shader("vertex")]`. Shared code lives in modules (`Scene`, `Textures`, `Mesh`, `Material`, `StandardShading`) that a
   shader imports. There is no GLSL any more.
 - **Passes.** Every pass of a frame is a `VulkanPass` in the render graph (`Renderer/Graph`). A pass declares what it
   reads and draws into, and records draws. The graph does layouts, begins rendering and binds the shared set.
@@ -76,6 +76,10 @@ build\bin\Debug\LynxSandboxGame.exe
   for a texture's place in the texture table.
 - **Layouts.** A `GpuTexture` remembers the layout it is in. `Transition` changes it. The render graph does that
   for everything a pass declares.
+- **Materials.** All drawn materials are in one buffer on the GPU (`Renderer/MaterialTable`). An instance carries the
+  index of its material and the shader reads the material from the table. A mesh pass sets its push constants once,
+  and a draw passes only where its instances start (`firstInstance`, read in shaders as `SV_VulkanInstanceID`).
+  Textures picked through the table need `NonUniformResourceIndex`.
 - **Geometry.** The vertices and indices of all meshes are in one pair of buffers (`Vulkan/GeometryPool`). A submesh
   is a range in them (`MeshGeometry`). A pass binds the pool once and draws ranges. The buffers grow when they fill up.
 - **Uploads.** Data for buffers and pixels for textures go through the `UploadQueue`, which copies them to the GPU

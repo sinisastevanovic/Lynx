@@ -26,7 +26,7 @@
 #include "Lynx/Asset/AssetManager.h"
 
 #include <bit>
-#include "MaterialTextures.h"
+#include "MaterialTable.h"
 #include "Passes/BloomPass.h"
 #include "Passes/GridPass.h"
 #include "RenderFormats.h"
@@ -235,7 +235,7 @@ namespace Lynx
         m_Frame->Uploads.reset();
         m_Frame->PendingScreenshots.clear();
         m_Graph.reset();
-        m_MaterialTextures.reset();
+        m_Materials.reset();
         m_Frame->SceneColorSlot = TextureSlot();
         m_Frame->SceneOutputSlot = TextureSlot();
         m_Frame->Shared.reset();
@@ -285,7 +285,7 @@ namespace Lynx
         defaults.MetallicRoughness = m_Frame->MetallicRoughnessTextureIndex;
         defaults.Emissive = m_Frame->WhiteTextureIndex;
         defaults.Sampler = SamplerIndex(SamplerSettings());
-        m_MaterialTextures = std::make_unique<MaterialTextures>(m_Assets, defaults);
+        m_Materials = std::make_unique<MaterialTable>(*m_Context, *m_Frame->Uploads, m_Assets, defaults);
 
         // The frame, start to finish. The scene passes draw the HDR picture, bloom reads it and composite
         // turns both into the output. What is not part of the scene is drawn on top of the output, so that
@@ -531,6 +531,11 @@ namespace Lynx
             uint32_t startOffset = (uint32_t)allInstanceData.size();
             allInstanceData.insert(allInstanceData.end(), instances.begin(), instances.end());
 
+            // A batch is the instances of one submesh, which all have its material.
+            const uint32_t material = m_Materials->IndexOf(key.Mesh->GetSubmeshes()[key.SubmeshIndex].Material);
+            for (size_t instance = startOffset; instance < allInstanceData.size(); ++instance)
+                allInstanceData[instance].Material = material;
+
             m_CurrentFrameData.OpaqueDrawCalls.push_back({ key, startOffset, (uint32_t)instances.size() });
         }
 
@@ -544,9 +549,6 @@ namespace Lynx
             return std::tie(meshA, a.Key.SubmeshIndex, a.Key.RenderFlags) < std::tie(meshB, b.Key.SubmeshIndex, b.Key.RenderFlags);
         });
 
-        for (BatchDrawCall& call : m_CurrentFrameData.OpaqueDrawCalls)
-            call.Textures = m_MaterialTextures->Get(call.Key.Mesh->GetSubmeshes()[call.Key.SubmeshIndex].Material);
-
         std::ranges::sort(m_CurrentFrameData.TransparentQueue,
           [](const RenderCommand& a, const RenderCommand& b) {
               return a.DistanceToCamera > b.DistanceToCamera;
@@ -554,14 +556,16 @@ namespace Lynx
 
         for (auto& cmd : m_CurrentFrameData.TransparentQueue)
         {
-            cmd.Textures = m_MaterialTextures->Get(cmd.Mesh->GetSubmeshes()[cmd.SubmeshIndex].Material);
             cmd.InstanceOffset = (int)allInstanceData.size();
-            allInstanceData.push_back({ cmd.InstanceData.Model, cmd.InstanceData.EntityID });
+            allInstanceData.push_back({ cmd.InstanceData.Model, cmd.InstanceData.EntityID, m_Materials->IndexOf(cmd.Mesh->GetSubmeshes()[cmd.SubmeshIndex].Material) });
         }
 
         m_Frame->MeshInstances.Upload<GPUInstanceData>(*m_Context, *m_Frame->Uploads, allInstanceData, "InstanceBuffer");
         m_CurrentFrameData.MeshInstanceAddress = m_Frame->MeshInstances.Buffer.Address();
         m_CurrentFrameData.Geometry = m_Frame->Geometry.get();
+
+        // Asked for after the last material of the frame is in: the table moves when it grows.
+        m_CurrentFrameData.MaterialAddress = m_Materials->Address();
         m_Profiler.SetCounter("Instances", static_cast<double>(allInstanceData.size()));
 
         std::vector<ParticleInstanceData> allParticleData;
@@ -911,6 +915,7 @@ namespace Lynx
         m_Context->Deletions().BeginFrame();
         m_Frame->Uploads->BeginFrame();
         m_Frame->Geometry->BeginFrame();
+        m_Materials->BeginFrame();
 
         // Resetting the pool is allowed now: the fence above says the GPU is done with this frame's last commands.
         m_Context->Device().resetCommandPool(m_Frame->CommandPools[m_CurrentFrame]);

@@ -6,31 +6,18 @@ module StandardShading;
 import Scene;
 import Textures;
 import Mesh;
+import Material;
 
+// The same for every draw of the pass. What differs between draws comes from the instance and its material.
 public struct StandardConstants
 {
-    public float4 albedoColor;
+    // The instances of the whole frame, and the material table.
+    public MeshInstance* instances;
+    public StandardMaterial* materials;
 
-    // The colour in rgb, the strength in a.
-    public float4 emissiveColorStrength;
-    public float metallic;
-    public float roughness;
-
-    // Pixels whose alpha is below this are left out. Negative for a material without cut-outs.
-    public float alphaCutoff;
-
-    // Indices into the texture and sampler tables. Albedo and emissive are the sRGB readings of their
-    // textures, so sampling them gives linear light.
-    public uint albedoTexture;
-    public uint normalTexture;
-    public uint metallicRoughnessTexture;
-    public uint emissiveTexture;
-    public uint materialSampler;
+    // Indices into the texture table and the table of comparing samplers.
     public uint shadowMap;
     public uint shadowSampler;
-
-    // The first instance of this draw, in the buffer with the instances of the whole frame.
-    public MeshInstance* instances;
 };
 
 public struct StandardVertex
@@ -54,6 +41,7 @@ public struct StandardVaryings
     // Where the pixel lies in the shadow map: xy in texture coordinates, z as the depth to compare.
     public float4 shadowCoordinate : SHADOWCOORDINATE;
     public nointerpolation int entityId : ENTITYID;
+    public nointerpolation uint material : MATERIAL;
 };
 
 // From the sun's clip space, where x and y run from -1 to 1, to texture coordinates from 0 to 1.
@@ -77,6 +65,7 @@ public StandardVaryings standardVertex(StandardConstants constants, StandardVert
     output.tangent = float4(normalize(meshDirection(instance, input.tangent.xyz)), input.tangent.w);
     output.shadowCoordinate = mul(mul(clipToTexture, scene.lightViewProjection), float4(output.worldPosition, 1.0));
     output.entityId = instance.entityId;
+    output.material = instance.material;
     return output;
 }
 
@@ -144,8 +133,7 @@ float3 fresnelSchlick(float cosTheta, float3 f0)
 
 public float4 standardFragment(StandardConstants constants, StandardVaryings input)
 {
-    Texture2D albedoMap = textures[constants.albedoTexture];
-    SamplerState materialSampler = samplers[constants.materialSampler];
+    StandardMaterial material = constants.materials[input.material];
 
     // The normal map tilts the surface's normal. It is stored relative to the surface, so it is
     // brought into the world with the surface's own three directions.
@@ -154,27 +142,27 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     tangent = normalize(tangent - dot(tangent, normal) * normal);
     float3 bitangent = cross(normal, tangent) * input.tangent.w;
 
-    float3 mapped = textures[constants.normalTexture].Sample(materialSampler, input.uv).rgb * 2.0 - 1.0;
+    float3 mapped = sampleMaterialTexture(material.normalTexture, material.materialSampler, input.uv).rgb * 2.0 - 1.0;
     normal = normalize(tangent * mapped.x + bitangent * mapped.y + normal * mapped.z);
 
     float3 toEye = normalize(scene.cameraPosition.xyz - input.worldPosition);
     float3 toLight = normalize(-scene.lightDirection.xyz);
     float3 halfway = normalize(toEye + toLight);
 
-    float4 albedoSample = albedoMap.Sample(materialSampler, input.uv);
-    if (constants.alphaCutoff >= 0.0)
+    float4 albedoSample = sampleMaterialTexture(material.albedoTexture, material.materialSampler, input.uv);
+    if (material.alphaCutoff >= 0.0)
     {
-        if (albedoSample.a < constants.alphaCutoff)
+        if (albedoSample.a < material.alphaCutoff)
             discard;
     }
-    float3 albedo = albedoSample.rgb * constants.albedoColor.rgb;
+    float3 albedo = albedoSample.rgb * material.albedoColor.rgb;
 
-    float4 metallicRoughness = textures[constants.metallicRoughnessTexture].Sample(materialSampler, input.uv);
-    float metallic = metallicRoughness.b * constants.metallic;
-    float roughness = metallicRoughness.g * constants.roughness;
+    float4 metallicRoughness = sampleMaterialTexture(material.metallicRoughnessTexture, material.materialSampler, input.uv);
+    float metallic = metallicRoughness.b * material.metallic;
+    float roughness = metallicRoughness.g * material.roughness;
 
-    float3 emissive = textures[constants.emissiveTexture].Sample(materialSampler, input.uv).rgb
-        * constants.emissiveColorStrength.rgb * constants.emissiveColorStrength.a;
+    float3 emissive = sampleMaterialTexture(material.emissiveTexture, material.materialSampler, input.uv).rgb
+        * material.emissiveColorStrength.rgb * material.emissiveColorStrength.a;
 
     // A metal reflects in its own colour, everything else reflects a little white.
     float3 f0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);

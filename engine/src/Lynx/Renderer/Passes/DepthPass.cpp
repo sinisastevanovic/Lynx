@@ -1,7 +1,6 @@
 #include "DepthPass.h"
 
 #include "MeshDraw.h"
-#include "Lynx/Asset/Material.h"
 #include "Lynx/Asset/Shader.h"
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
@@ -16,11 +15,8 @@ namespace Lynx
         // Has to match DepthConstants in DepthOnly.slang.
         struct DepthPushData
         {
-            float AlphaCutoff;
-            uint32_t AlbedoTexture;
-            uint32_t AlbedoSampler;
-            uint32_t Padding;
             uint64_t Instances;
+            uint64_t Materials;
         };
     }
 
@@ -101,21 +97,17 @@ namespace Lynx
         commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->Pipeline);
         renderData.Geometry->Bind(commands);
 
+        DepthPushData push{};
+        push.Instances = renderData.MeshInstanceAddress;
+        push.Materials = renderData.MaterialAddress;
+        m_Vulkan->Shared->Push(commands, push);
+
         for (const BatchDrawCall& batch : renderData.OpaqueDrawCalls)
         {
             if (!(batch.Key.RenderFlags & RenderFlags::MainPass))
                 continue;
 
-            const Submesh& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
-
-            DepthPushData push{};
-            push.AlphaCutoff = submesh.Material->Mode == AlphaMode::Mask ? submesh.Material->AlphaCutoff : -1.0f;
-            push.AlbedoTexture = batch.Textures.Albedo;
-            push.AlbedoSampler = batch.Textures.Sampler;
-            push.Instances = MeshInstanceAddress(renderData, batch.FirstInstance);
-            m_Vulkan->Shared->Push(commands, push);
-
-            DrawSubmesh(commands, submesh, batch.InstanceCount);
+            DrawSubmesh(commands, batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex], batch.FirstInstance, batch.InstanceCount);
         }
     }
 }

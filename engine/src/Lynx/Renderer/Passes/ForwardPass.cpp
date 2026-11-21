@@ -1,7 +1,6 @@
 #include "ForwardPass.h"
 
 #include "MeshDraw.h"
-#include "Lynx/Asset/Material.h"
 #include "Lynx/Asset/Shader.h"
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
@@ -16,37 +15,11 @@ namespace Lynx
         // Has to match StandardConstants in StandardShading.slang.
         struct StandardPushData
         {
-            glm::vec4 AlbedoColor;
-            glm::vec4 EmissiveColorStrength;
-            float Metallic;
-            float Roughness;
-            float AlphaCutoff;
-            uint32_t AlbedoTexture;
-            uint32_t NormalTexture;
-            uint32_t MetallicRoughnessTexture;
-            uint32_t EmissiveTexture;
-            uint32_t MaterialSampler;
+            uint64_t Instances;
+            uint64_t Materials;
             uint32_t ShadowMap;
             uint32_t ShadowSampler;
-            uint64_t Instances;
         };
-
-        // Everything of a draw that comes from its material. The shadow map and the instances are added by the caller.
-        StandardPushData MaterialConstants(const Material& material, const MaterialTextureIndices& textures)
-        {
-            StandardPushData push{};
-            push.AlbedoColor = material.AlbedoColor;
-            push.EmissiveColorStrength = glm::vec4(material.EmissiveColor, material.EmissiveStrength);
-            push.Metallic = material.Metallic;
-            push.Roughness = material.Roughness;
-            push.AlphaCutoff = material.Mode == AlphaMode::Mask ? material.AlphaCutoff : -1.0f;
-            push.AlbedoTexture = textures.Albedo;
-            push.NormalTexture = textures.Normal;
-            push.MetallicRoughnessTexture = textures.MetallicRoughness;
-            push.EmissiveTexture = textures.Emissive;
-            push.MaterialSampler = textures.Sampler;
-            return push;
-        }
     }
 
     struct ForwardPass::VulkanObjects
@@ -155,20 +128,22 @@ namespace Lynx
         // Binding another pipeline leaves the bound buffers as they are, so once is enough for both pipelines.
         commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->OpaquePipeline);
         renderData.Geometry->Bind(commands);
+
+        // Push constants stay set across pipelines too, because all pipelines share one layout.
+        StandardPushData push{};
+        push.Instances = renderData.MeshInstanceAddress;
+        push.Materials = renderData.MaterialAddress;
+        push.ShadowMap = renderData.ShadowMapIndex;
+        push.ShadowSampler = renderData.ShadowSamplerIndex;
+        m_Vulkan->Shared->Push(commands, push);
+
         for (const BatchDrawCall& batch : renderData.OpaqueDrawCalls)
         {
             if (batch.InstanceCount == 0 || !(batch.Key.RenderFlags & RenderFlags::MainPass))
                 continue;
 
             const Submesh& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
-
-            StandardPushData push = MaterialConstants(*submesh.Material, batch.Textures);
-            push.ShadowMap = renderData.ShadowMapIndex;
-            push.ShadowSampler = renderData.ShadowSamplerIndex;
-            push.Instances = MeshInstanceAddress(renderData, batch.FirstInstance);
-            m_Vulkan->Shared->Push(commands, push);
-
-            DrawSubmesh(commands, submesh, batch.InstanceCount);
+            DrawSubmesh(commands, submesh, batch.FirstInstance, batch.InstanceCount);
 
             renderData.DrawCalls++;
             renderData.IndexCount += submesh.IndexCount * batch.InstanceCount;
@@ -184,14 +159,7 @@ namespace Lynx
                 continue;
 
             const Submesh& submesh = command.Mesh->GetSubmeshes()[command.SubmeshIndex];
-
-            StandardPushData push = MaterialConstants(*submesh.Material, command.Textures);
-            push.ShadowMap = renderData.ShadowMapIndex;
-            push.ShadowSampler = renderData.ShadowSamplerIndex;
-            push.Instances = MeshInstanceAddress(renderData, static_cast<uint32_t>(command.InstanceOffset));
-            m_Vulkan->Shared->Push(commands, push);
-
-            DrawSubmesh(commands, submesh, 1);
+            DrawSubmesh(commands, submesh, static_cast<uint32_t>(command.InstanceOffset), 1);
 
             renderData.DrawCalls++;
             renderData.IndexCount += submesh.IndexCount;

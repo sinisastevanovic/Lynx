@@ -10,10 +10,15 @@ public struct MeshInstance
 
     // Written to the picking buffer in the editor. -1 for none.
     public int entityId;
+
+    // The place of the instance's material in the material table, see Material.slang.
+    public uint material;
     int padding0;
     int padding1;
-    int padding2;
 };
+
+// The semantic to give a vertex shader's instance index: SV_VulkanInstanceID counts from the first
+// instance of the draw call, as the instance buffer does. SV_InstanceID would start at zero in every draw.
 
 // Where a vertex is in the world and on the screen.
 public struct MeshPosition
