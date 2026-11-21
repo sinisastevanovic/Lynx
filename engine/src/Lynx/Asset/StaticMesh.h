@@ -24,6 +24,9 @@ namespace Lynx
     {
         // Where the renderer has the vertices and indices.
         MeshGeometry Geometry;
+
+        // A sphere around the submesh, in the mesh's own space: its centre in xyz, its radius in w.
+        glm::vec4 BoundingSphere{ 0.0f };
         uint32_t IndexCount;
         std::shared_ptr<Material> Material;
         std::string Name;
@@ -38,6 +41,7 @@ namespace Lynx
 
         // The vertices as the GPU stores them, made where the file is read so that it happens off the main thread.
         std::vector<PackedVertex> PackedVertices;
+        glm::vec4 BoundingSphere{ 0.0f };
 
         // TODO: why not store a material here? 
         struct MatDef

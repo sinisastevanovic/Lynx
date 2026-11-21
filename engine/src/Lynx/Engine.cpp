@@ -45,6 +45,7 @@ namespace Lynx
         m_Window->SetEventCallback([this](Event& event){ this->OnEvent(event); });
 
         m_ShaderCache = std::make_unique<ShaderCache>(m_ContentPaths->TempDirectory() / "ShaderCache");
+        m_MeshCache = std::make_unique<MeshCache>(m_ContentPaths->TempDirectory() / "MeshCache");
         m_ShaderCompiler = std::make_unique<ShaderCompiler>(*m_ShaderCache, m_ContentPaths->EngineResource("Shaders"));
 
         m_AssetRegistry = std::make_unique<AssetRegistry>(*m_ContentPaths);

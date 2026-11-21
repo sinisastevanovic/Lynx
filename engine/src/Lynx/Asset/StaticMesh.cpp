@@ -1,5 +1,6 @@
 #include "StaticMesh.h"
 #include "GLTFHelpers.h"
+#include "MeshCache.h"
 #include "MeshCooking.h"
 #define TINYGLTF_NO_STB_IMAGE_WRITE
 #define TINYGLTF_NO_INCLUDE_STB_IMAGE_WRITE
@@ -32,8 +33,11 @@ namespace Lynx
         for (const Vertex& vertex : vertices)
             m_Bounds.Expand(vertex.Position);
 
+        const std::vector<PackedVertex> packed = PackVertices(vertices);
+
         Submesh sub;
-        sub.Geometry = Engine::Get().GetRenderer().CreateMeshGeometry(PackVertices(vertices), indices);
+        sub.Geometry = Engine::Get().GetRenderer().CreateMeshGeometry(packed, indices);
+        sub.BoundingSphere = ComputeBoundingSphere(packed);
         sub.IndexCount = (uint32_t)indices.size();
         sub.Material = submeshMaterial;
         sub.Name = "RuntimeCreated";
@@ -58,6 +62,15 @@ namespace Lynx
     {
         m_Submeshes.clear();
         m_Bounds = AABB();
+
+        // A mesh that was cooked before, from files that have not changed since, needs none of what follows.
+        const MeshCache& cache = Engine::Get().GetMeshCache();
+        if (std::optional<CookedMesh> cooked = cache.Load(m_FilePath))
+        {
+            m_Bounds = cooked->Bounds;
+            m_SourceData = std::move(cooked->Submeshes);
+            return !m_SourceData.empty();
+        }
 
         tinygltf::Model model;
         tinygltf::TinyGLTF loader;
@@ -87,8 +100,21 @@ namespace Lynx
             OptimizeDrawOrder(submesh.Vertices, submesh.Indices);
 
             submesh.PackedVertices = PackVertices(submesh.Vertices);
+            submesh.BoundingSphere = ComputeBoundingSphere(submesh.PackedVertices);
             submesh.Vertices = {};
         }
+
+        // The mesh was made from the model file and the files that hold its vertex data.
+        // Its textures are assets of their own and not part of it.
+        std::vector<std::filesystem::path> dependencies = { m_FilePath };
+        const std::filesystem::path directory = std::filesystem::path(m_FilePath).parent_path();
+        for (const tinygltf::Buffer& buffer : model.buffers)
+        {
+            const bool isFile = !buffer.uri.empty() && !buffer.uri.starts_with("data:");
+            if (isFile)
+                dependencies.push_back(directory / buffer.uri);
+        }
+        cache.Store(m_FilePath, dependencies, CookedMesh{ m_Bounds, m_SourceData });
 
         return !m_SourceData.empty();
     }
@@ -131,6 +157,7 @@ namespace Lynx
 
             Submesh sub;
             sub.Geometry = Engine::Get().GetRenderer().CreateMeshGeometry(source.PackedVertices, source.Indices);
+            sub.BoundingSphere = source.BoundingSphere;
             sub.IndexCount = (uint32_t)source.Indices.size();
             sub.Material = material;
             sub.Name = source.Name;

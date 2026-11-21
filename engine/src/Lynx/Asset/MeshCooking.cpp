@@ -54,4 +54,13 @@ namespace Lynx
 
         return packed;
     }
+
+    glm::vec4 ComputeBoundingSphere(std::span<const PackedVertex> vertices)
+    {
+        if (vertices.empty())
+            return glm::vec4(0.0f);
+
+        const meshopt_Bounds bounds = meshopt_computeSphereBounds(&vertices.front().Position.x, vertices.size(), sizeof(PackedVertex), nullptr, 0);
+        return glm::vec4(bounds.center[0], bounds.center[1], bounds.center[2], bounds.radius);
+    }
 }

@@ -82,6 +82,10 @@ build\bin\Debug\LynxSandboxGame.exe
   Textures picked through the table need `NonUniformResourceIndex`.
 - **Geometry.** The vertices and indices of all meshes are in one pair of buffers (`Vulkan/GeometryPool`). A submesh
   is a range in them (`MeshGeometry`). A pass binds the pool once and draws ranges. The buffers grow when they fill up.
+- **Cooked meshes.** A model file is cooked once (`Asset/MeshCooking`): triangles and vertices are put into the order
+  the GPU draws fastest, with meshoptimizer, and vertices are packed from 64 into 28 bytes (`Renderer/MeshVertex.h`).
+  The result is kept in `temp\MeshCache` and used until the model file or its `.bin` changes. A change to cooking or
+  to `PackedVertex` needs the version in `MeshCache.cpp` bumped. Texture coordinates stay exact on purpose.
 - **Mesh draws.** Meshes that are not see-through are drawn from a buffer of draw commands, one per submesh with all
   its instances (`RenderData::MeshDraws`). A pass draws a whole range of them with one call (`DrawMeshes`). The CPU
   still culls and writes the commands. Depth and shadow use a pipeline without a fragment shader for opaque

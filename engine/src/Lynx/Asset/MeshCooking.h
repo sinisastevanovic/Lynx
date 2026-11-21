@@ -20,4 +20,7 @@ namespace Lynx
 
     // The vertices of a submesh in the form the GPU stores them, see PackedVertex.
     std::vector<PackedVertex> PackVertices(std::span<const Vertex> vertices);
+
+    // A sphere around all the vertices: its centre in xyz, its radius in w. Culling tests against it.
+    glm::vec4 ComputeBoundingSphere(std::span<const PackedVertex> vertices);
 }
