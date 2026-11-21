@@ -20,6 +20,9 @@ namespace Lynx
         // Used for staging: data is written there and then copied into a buffer the GPU reads fast.
         bool CpuWritable = false;
 
+        // Memory the CPU can read back from, for results the GPU hands to the CPU, such as a picked pixel.
+        bool CpuReadable = false;
+
         // Shown in RenderDoc and in validation messages.
         const char* Name = "";
     };
@@ -43,10 +46,10 @@ namespace Lynx
         vk::Buffer Handle() const { return m_Buffer; }
         uint64_t Size() const { return m_Size; }
 
-        // The address shaders reach the buffer by, without it being bound. Zero for a CpuWritable buffer.
+        // The address shaders reach the buffer by, without it being bound. Zero for a buffer the CPU can reach.
         vk::DeviceAddress Address() const { return m_Address; }
 
-        // Where the CPU can write. Null unless the buffer was created CpuWritable.
+        // Where the CPU can write or read. Null unless the buffer was created CpuWritable or CpuReadable.
         void* Data() const { return m_Data; }
 
     private:

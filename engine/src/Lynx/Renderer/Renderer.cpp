@@ -105,7 +105,7 @@ namespace Lynx
         }
 
         // A screenshot is read this many frames after it was copied, when the GPU has certainly finished the copy.
-        constexpr uint64_t ScreenshotReadDelay = 3;
+        constexpr uint64_t ReadbackDelay = 3;
 
         double MillisecondsSince(std::chrono::steady_clock::time_point start)
         {
@@ -125,6 +125,13 @@ namespace Lynx
 
         // Where the texture table has the scene's HDR picture and the black default texture.
         TextureSlot SceneColorSlot;
+
+        // Picking: the pixel that was asked for, the buffer its entity ID is copied into, the frame the copy
+        // was recorded in, and an answer that needed no copy.
+        std::optional<glm::uvec2> PickRequest;
+        GpuBuffer PickReadback;
+        std::optional<uint64_t> PickCopiedInFrame;
+        std::optional<int> PickedEntityId;
         uint32_t BlackTextureIndex = 0;
         uint32_t WhiteTextureIndex = 0;
 
@@ -212,6 +219,7 @@ namespace Lynx
         ReleaseSwapchainImages();
         m_Frame->MeshInstances = {};
         m_Frame->ParticleInstances = {};
+        m_Frame->PickReadback = {};
         m_Frame->Uploads.reset();
         m_PendingScreenshots.clear();
         m_Graph.reset();
@@ -222,7 +230,6 @@ namespace Lynx
         m_RenderContext = RenderContext();
         m_CurrentFrameData = RenderData();
         m_OpaqueBatches.clear();
-        m_StageBuffer = nullptr;
 
         SamplerCache::Shutdown();
         m_WhiteTex = nullptr;
@@ -345,67 +352,62 @@ namespace Lynx
         return result;
     }
 
-    int Renderer::ReadIdFromBuffer(uint32_t x, uint32_t y)
+    void Renderer::RequestEntityIdAt(uint32_t x, uint32_t y)
     {
-        if (!m_SceneTarget || !m_SceneTarget->IdBuffer)
-            return -1;
+        m_Frame->PickRequest = glm::uvec2(x, y);
+        m_Frame->PickCopiedInFrame.reset();
+    }
 
-        if (!m_StageBuffer)
+    void Renderer::CopyRequestedEntityId()
+    {
+        if (!m_Frame->PickRequest || !m_SceneTarget || !m_SceneTarget->IdBuffer)
+            return;
+
+        const glm::uvec2 pixel = *m_Frame->PickRequest;
+        m_Frame->PickRequest.reset();
+
+        // The scene picture may have been resized since the request was made.
+        if (pixel.x >= m_SceneTarget->Width || pixel.y >= m_SceneTarget->Height)
         {
-            nvrhi::TextureDesc desc = nvrhi::TextureDesc()
-            .setWidth(1)
-            .setHeight(1)
-            .setFormat(nvrhi::Format::R32_SINT)
-            .setDimension(nvrhi::TextureDimension::Texture2D)
-            .setKeepInitialState(true)
-            .setDebugName("ID_Stage");
-            m_StageBuffer = m_NvrhiDevice->createStagingTexture(desc, nvrhi::CpuAccessMode::Read);
+            m_Frame->PickedEntityId = -1;
+            return;
         }
 
-        m_CommandList->open();
-
-        // Define the source region (the pixel under mouse)
-        nvrhi::TextureSlice srcSlice;
-        srcSlice.x = x;
-        srcSlice.y = y;
-        srcSlice.z = 0;
-        srcSlice.width = 1;
-        srcSlice.height = 1;
-        srcSlice.depth = 1;
-        srcSlice.mipLevel = 0;
-        srcSlice.arraySlice = 0;
-
-        // Define dest region (0,0 in staging buffer)
-        nvrhi::TextureSlice dstSlice;
-        dstSlice.x = 0;
-        dstSlice.y = 0;
-        dstSlice.z = 0;
-        dstSlice.width = 1;
-        dstSlice.height = 1;
-        dstSlice.depth = 1;
-        dstSlice.mipLevel = 0;
-        dstSlice.arraySlice = 0;
-
-        m_CommandList->copyTexture(m_StageBuffer, dstSlice, m_SceneTarget->IdBuffer, srcSlice);
-        m_CommandList->close();
-        m_NvrhiDevice->executeCommandList(m_CommandList);
-
-        // 3. Sync (Wait for copy to finish)
-        // TODO: In a real engine, you might want to delay reading by 1-2 frames to avoid stalling.
-        // But for an editor tool, a stall is acceptable.
-        m_NvrhiDevice->waitForIdle();
-
-        size_t rowPitch;
-        void* data = m_NvrhiDevice->mapStagingTexture(m_StageBuffer, dstSlice, nvrhi::CpuAccessMode::Read, &rowPitch);
-        
-        int entityID = -1;
-        if (data)
+        if (!m_Frame->PickReadback)
         {
-            entityID = *(int*)data;
-            m_NvrhiDevice->unmapStagingTexture(m_StageBuffer);
+            GpuBufferDesc desc;
+            desc.Size = sizeof(int32_t);
+            desc.Usage = vk::BufferUsageFlagBits::eTransferDst;
+            desc.CpuReadable = true;
+            desc.Name = "PickedEntityId";
+            m_Frame->PickReadback = GpuBuffer(*m_Context, desc);
         }
 
-        return entityID;
+        // NVRHI keeps track of the picture's layout, so it is asked to make the picture readable for a copy.
+        m_CommandList->setTextureState(m_SceneTarget->IdBuffer, nvrhi::AllSubresources, nvrhi::ResourceStates::CopySource);
+        m_CommandList->commitBarriers();
+        m_CommandList->clearState();
+
+        vk::BufferImageCopy region;
+        region.imageSubresource = vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1);
+        region.imageOffset = vk::Offset3D(static_cast<int32_t>(pixel.x), static_cast<int32_t>(pixel.y), 0);
+        region.imageExtent = vk::Extent3D(1, 1, 1);
+        NativeCommandBuffer(m_CommandList).copyImageToBuffer(m_Frame->SceneEntityIds.Image(), vk::ImageLayout::eTransferSrcOptimal, m_Frame->PickReadback.Handle(), region);
+
+        m_Frame->PickCopiedInFrame = m_Profiler.CurrentFrame();
+    }
+
+    std::optional<int> Renderer::TakeEntityId()
+    {
+        if (m_Frame->PickedEntityId)
+            return std::exchange(m_Frame->PickedEntityId, std::nullopt);
+
+        // The copy is part of a frame the GPU finishes a little later. After this many frames it is done for certain.
+        if (!m_Frame->PickCopiedInFrame || m_Profiler.CurrentFrame() < *m_Frame->PickCopiedInFrame + ReadbackDelay)
+            return std::nullopt;
+
+        m_Frame->PickCopiedInFrame.reset();
+        return *static_cast<const int32_t*>(m_Frame->PickReadback.Data());
     }
 
     void Renderer::ResetStats()
@@ -905,6 +907,7 @@ namespace Lynx
         m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled;
 
         m_Graph->Execute(m_RenderContext, m_CurrentFrameData);
+        CopyRequestedEntityId();
 
         m_Stats.DrawCalls = m_CurrentFrameData.DrawCalls;
         m_Stats.IndexCount = m_CurrentFrameData.IndexCount;
@@ -1024,7 +1027,7 @@ namespace Lynx
 
         for (auto pending = m_PendingScreenshots.begin(); pending != m_PendingScreenshots.end();)
         {
-            if (!waitForAll && currentFrame < pending->Frame + ScreenshotReadDelay)
+            if (!waitForAll && currentFrame < pending->Frame + ReadbackDelay)
             {
                 ++pending;
                 continue;

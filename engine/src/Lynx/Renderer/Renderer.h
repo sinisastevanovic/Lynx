@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 
 #include <chrono>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -96,7 +97,12 @@ namespace Lynx
 
         nvrhi::TextureHandle CreateTexture(const TextureSpecification& specification, unsigned char* data);
 
-        int ReadIdFromBuffer(uint32_t x, uint32_t y);
+        // Asks which entity the scene picture shows at a pixel. The answer arrives a few frames later,
+        // so that no frame has to wait for the GPU. A new request replaces one that is still under way.
+        void RequestEntityIdAt(uint32_t x, uint32_t y);
+
+        // The answer to the latest request, handed out once. Empty until it has arrived. -1 means no entity.
+        std::optional<int> TakeEntityId();
 
         void SetShowGrid(bool show) { m_ShowGrid = show; }
         bool GetShowGrid() const { return m_ShowGrid; }
@@ -153,6 +159,7 @@ namespace Lynx
         void CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height);
         void PrepareDrawCalls();
         void CopyFrameForScreenshots(nvrhi::ITexture* frame);
+        void CopyRequestedEntityId();
         void ReportMemoryUse();
 
     private:
@@ -166,7 +173,6 @@ namespace Lynx
         // The context's device. Kept as a member because every part of this class uses it.
         nvrhi::DeviceHandle m_NvrhiDevice;
         nvrhi::CommandListHandle m_CommandList;
-        nvrhi::StagingTextureHandle m_StageBuffer;
 
         nvrhi::BufferHandle m_GlobalCB;
 

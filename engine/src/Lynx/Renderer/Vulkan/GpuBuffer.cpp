@@ -17,7 +17,12 @@ namespace Lynx
         VmaAllocationCreateInfo allocationInfo{};
         allocationInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
-        if (desc.CpuWritable)
+        if (desc.CpuReadable)
+        {
+            // Memory for writing only is of a kind that is very slow to read from, so reading asks for another kind.
+            allocationInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        }
+        else if (desc.CpuWritable)
         {
             allocationInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         }
@@ -39,7 +44,7 @@ namespace Lynx
 
         m_Buffer = buffer;
         m_Data = allocated.pMappedData;
-        if (!desc.CpuWritable)
+        if (!desc.CpuWritable && !desc.CpuReadable)
             m_Address = context.Device().getBufferAddress(vk::BufferDeviceAddressInfo(m_Buffer));
         vmaSetAllocationName(context.Allocator(), m_Allocation, desc.Name);
     }

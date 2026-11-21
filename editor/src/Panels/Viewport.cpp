@@ -237,21 +237,14 @@ namespace Lynx
 
                 if (mouseX >= 0 && mouseY >= 0 && mouseX < (int)viewportSize2.x && mouseY < (int)viewportSize2.y)
                 {
-                    int selectedID = renderer.ReadIdFromBuffer(mouseX, mouseY);
-                    if (OnSelectionChangedCallback)
-                    {
-                        if (selectedID >= 0)
-                        {
-                            OnSelectionChangedCallback((entt::entity)selectedID);
-                        }
-                        else
-                        {
-                            OnSelectionChangedCallback(entt::null);
-                        }
-                    }
+                    renderer.RequestEntityIdAt(mouseX, mouseY);
                 }
             }
         }
+
+        // The answer to a click arrives a few frames after it.
+        if (const std::optional<int> pickedId = renderer.TakeEntityId(); pickedId && OnSelectionChangedCallback)
+            OnSelectionChangedCallback(*pickedId >= 0 ? static_cast<entt::entity>(*pickedId) : entt::null);
 
         if (Engine::Get().GetSceneState() != SceneState::Play && ImGui::BeginDragDropTarget())
         {
