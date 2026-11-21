@@ -26,7 +26,11 @@ namespace Lynx
             submeshMaterial->AlbedoTexture = defaultTex->GetHandle();
 
         Engine::Get().GetAssetManager().AddRuntimeAsset(submeshMaterial);
-        
+
+        // The renderer culls with the bounds.
+        for (const Vertex& vertex : vertices)
+            m_Bounds.Expand(vertex.Position);
+
         auto [vb, ib] = Engine::Get().GetRenderer().CreateMeshBuffers(vertices, indices);
         Submesh sub;
         sub.VertexBuffer = vb;
