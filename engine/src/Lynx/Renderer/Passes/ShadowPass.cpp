@@ -152,6 +152,7 @@ namespace Lynx
             return;
 
         commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->Pipeline);
+        renderData.Geometry->Bind(commands);
 
         ShadowPushData push{};
         push.LightViewProjection = renderData.ClipLightViewProjection;
@@ -162,7 +163,6 @@ namespace Lynx
                 continue;
 
             const Submesh& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
-            BindSubmesh(commands, submesh);
 
             push.AlphaCutoff = submesh.Material->Mode == AlphaMode::Mask ? submesh.Material->AlphaCutoff : -1.0f;
             push.AlbedoTexture = batch.Textures.Albedo;
@@ -170,7 +170,7 @@ namespace Lynx
             push.Instances = MeshInstanceAddress(renderData, batch.FirstInstance);
             m_Vulkan->Shared->Push(commands, push);
 
-            commands.drawIndexed(submesh.IndexCount, batch.InstanceCount, 0, 0, 0);
+            DrawSubmesh(commands, submesh, batch.InstanceCount);
         }
     }
 }

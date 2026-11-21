@@ -12,6 +12,7 @@ struct VkCommandBuffer_T;
 
 namespace Lynx
 {
+    class GeometryPool;
     class GpuTexture;
     class GraphicsContext;
     class Shader;
@@ -137,6 +138,9 @@ namespace Lynx
         std::vector<BatchDrawCall> OpaqueDrawCalls;
 
         std::vector<ParticleBatch> ParticleQueue;
+
+        // Holds the vertices and indices of every mesh. A pass that draws meshes binds it once.
+        const GeometryPool* Geometry = nullptr;
 
         // The address shaders read the frame's mesh instances from, one GPUInstanceData each.
         uint64_t MeshInstanceAddress = 0;

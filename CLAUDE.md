@@ -76,6 +76,8 @@ build\bin\Debug\LynxSandboxGame.exe
   for a texture's place in the texture table.
 - **Layouts.** A `GpuTexture` remembers the layout it is in. `Transition` changes it. The render graph does that
   for everything a pass declares.
+- **Geometry.** The vertices and indices of all meshes are in one pair of buffers (`Vulkan/GeometryPool`). A submesh
+  is a range in them (`MeshGeometry`). A pass binds the pool once and draws ranges. The buffers grow when they fill up.
 - **Uploads.** Data for buffers and pixels for textures go through the `UploadQueue`, which copies them to the GPU
   with the next frame. Nothing is submitted on its own.
 - **Memory.** Textures come from a pool of their own (`GraphicsContext::TexturePool`), apart from buffers. Sharing

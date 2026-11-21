@@ -152,14 +152,15 @@ namespace Lynx
 
     void ForwardPass::Execute(vk::CommandBuffer commands, RenderData& renderData)
     {
+        // Binding another pipeline leaves the bound buffers as they are, so once is enough for both pipelines.
         commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->OpaquePipeline);
+        renderData.Geometry->Bind(commands);
         for (const BatchDrawCall& batch : renderData.OpaqueDrawCalls)
         {
             if (batch.InstanceCount == 0 || !(batch.Key.RenderFlags & RenderFlags::MainPass))
                 continue;
 
             const Submesh& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
-            BindSubmesh(commands, submesh);
 
             StandardPushData push = MaterialConstants(*submesh.Material, batch.Textures);
             push.ShadowMap = renderData.ShadowMapIndex;
@@ -167,7 +168,7 @@ namespace Lynx
             push.Instances = MeshInstanceAddress(renderData, batch.FirstInstance);
             m_Vulkan->Shared->Push(commands, push);
 
-            commands.drawIndexed(submesh.IndexCount, batch.InstanceCount, 0, 0, 0);
+            DrawSubmesh(commands, submesh, batch.InstanceCount);
 
             renderData.DrawCalls++;
             renderData.IndexCount += submesh.IndexCount * batch.InstanceCount;
@@ -183,7 +184,6 @@ namespace Lynx
                 continue;
 
             const Submesh& submesh = command.Mesh->GetSubmeshes()[command.SubmeshIndex];
-            BindSubmesh(commands, submesh);
 
             StandardPushData push = MaterialConstants(*submesh.Material, command.Textures);
             push.ShadowMap = renderData.ShadowMapIndex;
@@ -191,7 +191,7 @@ namespace Lynx
             push.Instances = MeshInstanceAddress(renderData, static_cast<uint32_t>(command.InstanceOffset));
             m_Vulkan->Shared->Push(commands, push);
 
-            commands.drawIndexed(submesh.IndexCount, 1, 0, 0, 0);
+            DrawSubmesh(commands, submesh, 1);
 
             renderData.DrawCalls++;
             renderData.IndexCount += submesh.IndexCount;

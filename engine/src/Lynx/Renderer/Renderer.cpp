@@ -14,6 +14,7 @@
 #include "GraphicsContext.h"
 #include "SamplerCache.h"
 #include "Swapchain.h"
+#include "Vulkan/GeometryPool.h"
 #include "Vulkan/GpuBuffer.h"
 #include "Vulkan/GpuTexture.h"
 #include "Vulkan/Rendering.h"
@@ -111,6 +112,7 @@ namespace Lynx
         vk::CommandBuffer Commands;
         std::unique_ptr<GpuTimers> Timers;
         std::unique_ptr<UploadQueue> Uploads;
+        std::unique_ptr<GeometryPool> Geometry;
         std::unique_ptr<SharedBindings> Shared;
 
         // Where the texture table has the scene's HDR picture and the black default texture.
@@ -206,6 +208,7 @@ namespace Lynx
         }
         m_Frame->Timers = std::make_unique<GpuTimers>(m_Context->PhysicalDevice(), m_Context->Device(), m_Context->GraphicsQueueFamily());
         m_Frame->Uploads = std::make_unique<UploadQueue>(*m_Context);
+        m_Frame->Geometry = std::make_unique<GeometryPool>(*m_Context, *m_Frame->Uploads, static_cast<uint32_t>(sizeof(Vertex)));
         m_Graph = std::make_unique<RenderGraph>(m_Profiler, *m_Frame->Timers);
 
         GpuBufferDesc sceneConstantsDesc;
@@ -239,6 +242,9 @@ namespace Lynx
         m_RenderContext = RenderContext();
         m_CurrentFrameData = RenderData();
         m_OpaqueBatches.clear();
+
+        // After the frame data: its list of see-through draws holds meshes, whose geometry lives in the pool.
+        m_Frame->Geometry.reset();
 
         SamplerCache::Shutdown();
         m_Frame->BlackTexture = {};
@@ -555,6 +561,7 @@ namespace Lynx
 
         m_Frame->MeshInstances.Upload<GPUInstanceData>(*m_Context, *m_Frame->Uploads, allInstanceData, "InstanceBuffer");
         m_CurrentFrameData.MeshInstanceAddress = m_Frame->MeshInstances.Buffer.Address();
+        m_CurrentFrameData.Geometry = m_Frame->Geometry.get();
         m_Profiler.SetCounter("Instances", static_cast<double>(allInstanceData.size()));
 
         std::vector<ParticleInstanceData> allParticleData;
@@ -772,7 +779,7 @@ namespace Lynx
         for (int i = 0; i < mesh->GetSubmeshes().size(); ++i)
         {
             const auto& submesh = mesh->GetSubmeshes()[i];
-            if (!submesh.Material)
+            if (!submesh.Material || !submesh.Geometry)
                 continue;
 
             GPUInstanceData instance = { transform, entityID };
@@ -903,6 +910,7 @@ namespace Lynx
 
         m_Context->Deletions().BeginFrame();
         m_Frame->Uploads->BeginFrame();
+        m_Frame->Geometry->BeginFrame();
 
         // Resetting the pool is allowed now: the fence above says the GPU is done with this frame's last commands.
         m_Context->Device().resetCommandPool(m_Frame->CommandPools[m_CurrentFrame]);
@@ -1100,25 +1108,9 @@ namespace Lynx
             m_Profiler.SetCounter("VideoMemoryMB", static_cast<double>(*usedBytes) / (1024.0 * 1024.0));
     }
 
-    std::pair<MeshBuffer, MeshBuffer> Renderer::CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices)
+    MeshGeometry Renderer::CreateMeshGeometry(std::span<const Vertex> vertices, std::span<const uint32_t> indices)
     {
-        // The data is copied into staging memory here and reaches the buffers with the next frame,
-        // before anything can draw with them.
-        const auto create = [this](std::span<const std::byte> bytes, vk::BufferUsageFlagBits usage, const char* name)
-        {
-            GpuBufferDesc desc;
-            desc.Size = bytes.size();
-            desc.Usage = usage | vk::BufferUsageFlagBits::eTransferDst;
-            desc.Name = name;
-            auto buffer = std::make_shared<GpuBuffer>(*m_Context, desc);
-            m_Frame->Uploads->Upload(buffer->Handle(), 0, bytes);
-            return MeshBuffer(std::move(buffer));
-        };
-
-        return {
-            create(std::as_bytes(std::span<const Vertex>(vertices)), vk::BufferUsageFlagBits::eVertexBuffer, "MeshVertices"),
-            create(std::as_bytes(std::span<const uint32_t>(indices)), vk::BufferUsageFlagBits::eIndexBuffer, "MeshIndices"),
-        };
+        return m_Frame->Geometry->Add(std::as_bytes(vertices), indices);
     }
 
     void Renderer::OnResize(uint32_t width, uint32_t height)

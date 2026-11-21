@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -80,7 +81,8 @@ namespace Lynx
         void ShutdownImGui();
         std::pair<uint32_t, uint32_t> GetViewportSize() const;
 
-        std::pair<MeshBuffer, MeshBuffer> CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices);
+        // Puts the vertices and indices of a submesh into the geometry pool. They can be drawn from the next frame on.
+        MeshGeometry CreateMeshGeometry(std::span<const Vertex> vertices, std::span<const uint32_t> indices);
 
 
         // Makes a texture on the GPU from pixels, with all its smaller sizes if the specification asks for them.

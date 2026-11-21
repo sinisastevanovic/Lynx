@@ -2,7 +2,7 @@
 
 #include "Lynx/Asset/StaticMesh.h"
 #include "Lynx/Renderer/RenderPass.h"
-#include "Lynx/Renderer/Vulkan/GpuBuffer.h"
+#include "Lynx/Renderer/Vulkan/GeometryPool.h"
 
 #include <vulkan/vulkan.hpp>
 
@@ -19,11 +19,10 @@ namespace Lynx
         static constexpr vk::Format ColorFormat = vk::Format::eR32G32B32A32Sfloat;
     };
 
-    // Binds the vertices and indices of a submesh.
-    inline void BindSubmesh(vk::CommandBuffer commands, const Submesh& submesh)
+    // Draws a number of instances of a submesh from the geometry pool, which has to be bound.
+    inline void DrawSubmesh(vk::CommandBuffer commands, const Submesh& submesh, uint32_t instanceCount)
     {
-        commands.bindVertexBuffers(0, submesh.VertexBuffer.Get().Handle(), vk::DeviceSize(0));
-        commands.bindIndexBuffer(submesh.IndexBuffer.Get().Handle(), 0, vk::IndexType::eUint32);
+        commands.drawIndexed(submesh.IndexCount, instanceCount, submesh.Geometry.FirstIndex(), submesh.Geometry.VertexOffset(), 0);
     }
 
     // The address of an instance in the frame's instance buffer. A draw passes the address of its first

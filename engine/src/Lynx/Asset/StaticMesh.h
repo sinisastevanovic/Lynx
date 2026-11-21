@@ -6,7 +6,7 @@
 #include "MeshSpecification.h"
 #include "Material.h"
 #include "Lynx/Renderer/Frustum.h"
-#include "Lynx/Renderer/MeshBuffer.h"
+#include "Lynx/Renderer/MeshGeometry.h"
 
 namespace Lynx
 {
@@ -21,8 +21,8 @@ namespace Lynx
 
     struct Submesh
     {
-        MeshBuffer VertexBuffer;
-        MeshBuffer IndexBuffer;
+        // Where the renderer has the vertices and indices.
+        MeshGeometry Geometry;
         uint32_t IndexCount;
         std::shared_ptr<Material> Material;
         std::string Name;

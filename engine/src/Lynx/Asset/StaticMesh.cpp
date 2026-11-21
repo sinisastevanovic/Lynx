@@ -31,10 +31,8 @@ namespace Lynx
         for (const Vertex& vertex : vertices)
             m_Bounds.Expand(vertex.Position);
 
-        auto [vb, ib] = Engine::Get().GetRenderer().CreateMeshBuffers(vertices, indices);
         Submesh sub;
-        sub.VertexBuffer = vb;
-        sub.IndexBuffer = ib;
+        sub.Geometry = Engine::Get().GetRenderer().CreateMeshGeometry(vertices, indices);
         sub.IndexCount = (uint32_t)indices.size();
         sub.Material = submeshMaterial;
         sub.Name = "RuntimeCreated";
@@ -95,8 +93,6 @@ namespace Lynx
 
         for (const auto& source : m_SourceData)
         {
-            auto [vb, ib] = Engine::Get().GetRenderer().CreateMeshBuffers(source.Vertices, source.Indices);
-
             auto material = std::make_shared<Material>();
             material->AlbedoColor = source.MaterialData.AlbedoColor;
             material->Metallic = source.MaterialData.Metallic;
@@ -125,8 +121,7 @@ namespace Lynx
             Engine::Get().GetAssetManager().AddRuntimeAsset(material);
 
             Submesh sub;
-            sub.VertexBuffer = vb;
-            sub.IndexBuffer = ib;
+            sub.Geometry = Engine::Get().GetRenderer().CreateMeshGeometry(source.Vertices, source.Indices);
             sub.IndexCount = (uint32_t)source.Indices.size();
             sub.Material = material;
             sub.Name = source.Name;
