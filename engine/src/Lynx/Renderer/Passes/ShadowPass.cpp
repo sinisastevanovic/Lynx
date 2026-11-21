@@ -5,6 +5,7 @@
 #include "Lynx/Asset/Shader.h"
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
+#include "Lynx/Renderer/Vulkan/GpuTexture.h"
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
 #include "Lynx/Renderer/Vulkan/SharedBindings.h"
 
@@ -34,6 +35,8 @@ namespace Lynx
         vk::Device Device;
         vk::Pipeline Pipeline;
 
+        GpuTexture ShadowMap;
+
         // Compares instead of reading, and treats everything outside the map as lit.
         vk::Sampler ShadowSampler;
 
@@ -62,14 +65,13 @@ namespace Lynx
         m_Vulkan->Shared = ctx.Shared;
         m_Vulkan->Device = ctx.Graphics->Device();
 
-        const auto shadowDesc = nvrhi::TextureDesc()
-            .setWidth(m_Resolution).setHeight(m_Resolution)
-            .setFormat(nvrhi::Format::D32)
-            .setIsRenderTarget(true)
-            .setDebugName("ShadowMap")
-            .setInitialState(nvrhi::ResourceStates::DepthWrite)
-            .setKeepInitialState(true);
-        m_ShadowMap = ctx.Device->createTexture(shadowDesc);
+        GpuTextureDesc shadowDesc;
+        shadowDesc.Width = m_Resolution;
+        shadowDesc.Height = m_Resolution;
+        shadowDesc.Format = RenderFormats::ShadowMap;
+        shadowDesc.Usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
+        shadowDesc.Name = "ShadowMap";
+        m_Vulkan->ShadowMap = GpuTexture(*ctx.Graphics, shadowDesc);
 
         vk::SamplerCreateInfo samplerInfo;
         samplerInfo.magFilter = vk::Filter::eLinear;
@@ -85,7 +87,7 @@ namespace Lynx
         samplerInfo.maxLod = std::numeric_limits<float>::max();
         m_Vulkan->ShadowSampler = m_Vulkan->Device.createSampler(samplerInfo);
 
-        m_ShadowMapIndex = ctx.Shared->AddTexture(vk::ImageView(static_cast<VkImageView>(m_ShadowMap->getNativeView(nvrhi::ObjectTypes::VK_ImageView).pointer)));
+        m_ShadowMapIndex = ctx.Shared->AddTexture(m_Vulkan->ShadowMap.View());
         m_ShadowSamplerIndex = ctx.Shared->ComparisonSamplerIndex(m_Vulkan->ShadowSampler);
 
         m_PipelineState.SetShader("Shaders/Shadow.slang");
@@ -134,14 +136,14 @@ namespace Lynx
 
         // The map is cleared even if nothing casts a shadow or the shader is broken:
         // the forward pass reads it either way, and an empty map means no shadows.
-        resources.DepthTarget = m_ShadowMap;
+        resources.DepthTarget = &m_Vulkan->ShadowMap;
         resources.ClearsDepth = true;
         return true;
     }
 
     void ShadowPass::Execute(vk::CommandBuffer commands, RenderData& renderData)
     {
-        renderData.ShadowMap = m_ShadowMap;
+        renderData.ShadowMap = &m_Vulkan->ShadowMap;
         renderData.ShadowMapIndex = m_ShadowMapIndex;
         renderData.ShadowSamplerIndex = m_ShadowSamplerIndex;
 

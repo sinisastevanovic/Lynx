@@ -5,6 +5,7 @@
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
 #include "Lynx/Renderer/Vulkan/GpuBuffer.h"
+#include "Lynx/Renderer/Vulkan/GpuTexture.h"
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
 #include "Lynx/Renderer/Vulkan/SharedBindings.h"
 #include "Lynx/Renderer/Vulkan/UploadQueue.h"
@@ -140,7 +141,7 @@ namespace Lynx
         Upload(*m_Vulkan->Context, *m_Vulkan->Uploads, m_Vulkan->VertexBuffer, std::as_bytes(m_Batcher.GetVertices()), vk::BufferUsageFlagBits::eVertexBuffer, "UIVertices");
         Upload(*m_Vulkan->Context, *m_Vulkan->Uploads, m_Vulkan->IndexBuffer, std::as_bytes(m_Batcher.GetIndices()), vk::BufferUsageFlagBits::eIndexBuffer, "UIIndices");
 
-        resources.ColorTarget = renderData.OutputFramebuffer->getDesc().colorAttachments[0].texture;
+        resources.ColorTarget = renderData.Output;
         return true;
     }
 
@@ -149,10 +150,10 @@ namespace Lynx
         commands.bindVertexBuffers(0, m_Vulkan->VertexBuffer.Handle(), vk::DeviceSize(0));
         commands.bindIndexBuffer(m_Vulkan->IndexBuffer.Handle(), 0, vk::IndexType::eUint32);
 
-        const nvrhi::FramebufferInfoEx& output = renderData.OutputFramebuffer->getFramebufferInfo();
+        const GpuTextureDesc& output = renderData.Output->Desc();
 
         UIPushData push{};
-        push.ScreenSize = { static_cast<float>(output.width), static_cast<float>(output.height) };
+        push.ScreenSize = { static_cast<float>(output.Width), static_cast<float>(output.Height) };
 
         vk::Pipeline boundPipeline;
 

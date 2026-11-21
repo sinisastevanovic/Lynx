@@ -4,6 +4,7 @@
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
 #include "Lynx/Renderer/SamplerCache.h"
+#include "Lynx/Renderer/Vulkan/GpuTexture.h"
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
 #include "Lynx/Renderer/Vulkan/SharedBindings.h"
 
@@ -87,8 +88,8 @@ namespace Lynx
             return false;
 
         // The bloom needs no mention: the pass that made it left it ready for reading.
-        resources.Sample(renderData.SceneColorInput);
-        resources.ColorTarget = renderData.OutputFramebuffer->getDesc().colorAttachments[0].texture;
+        resources.Sample(renderData.SceneColor);
+        resources.ColorTarget = renderData.Output;
 
         // The triangle covers every pixel.
         resources.OverwritesTarget = true;

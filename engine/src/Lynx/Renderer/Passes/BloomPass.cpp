@@ -90,7 +90,7 @@ namespace Lynx
         std::array<TextureSlot, MaxMips> MipSlots;
         TextureSlot ChainSlot;
 
-        // The layout every size is in. Kept here because NVRHI does not know this texture.
+        // The layout every size is in. The texture itself only keeps track of one layout for all sizes.
         std::array<vk::ImageLayout, MaxMips> MipLayouts{};
 
         vk::Extent2D MipExtent(uint32_t mip) const
@@ -187,11 +187,11 @@ namespace Lynx
         if (!renderData.Bloom.Enabled || !m_Vulkan->ReplacePipeline || !m_Vulkan->AddPipeline)
             return false;
 
-        const nvrhi::TextureDesc& sceneDesc = renderData.SceneColorInput->getDesc();
-        EnsureChain(std::max(1u, sceneDesc.width / 2), std::max(1u, sceneDesc.height / 2));
+        const GpuTextureDesc& sceneDesc = renderData.SceneColor->Desc();
+        EnsureChain(std::max(1u, sceneDesc.Width / 2), std::max(1u, sceneDesc.Height / 2));
 
         // The scene is the only picture of another owner. The chain is this pass's own, and so are its layouts.
-        resources.Sample(renderData.SceneColorInput);
+        resources.Sample(renderData.SceneColor);
         resources.OwnTargets = true;
         return true;
     }
@@ -248,8 +248,8 @@ namespace Lynx
         };
 
         // The bright parts of the scene go into the largest size. Every pixel is drawn, so what it held does not matter.
-        const nvrhi::TextureDesc& sceneDesc = renderData.SceneColorInput->getDesc();
-        step(0, renderData.SceneColorIndex, { sceneDesc.width, sceneDesc.height }, BloomMode::Prefilter, vulkan.ReplacePipeline, vk::AttachmentLoadOp::eDontCare);
+        const GpuTextureDesc& sceneDesc = renderData.SceneColor->Desc();
+        step(0, renderData.SceneColorIndex, { sceneDesc.Width, sceneDesc.Height }, BloomMode::Prefilter, vulkan.ReplacePipeline, vk::AttachmentLoadOp::eDontCare);
 
         // Down: every size is made from the one above it.
         for (uint32_t mip = 1; mip < vulkan.MipCount; ++mip)

@@ -1,6 +1,7 @@
 #pragma once
 
-#include <nvrhi/nvrhi.h>
+#include "Vulkan/GpuTexture.h"
+
 #include <vulkan/vulkan.hpp>
 
 #include <vector>
@@ -37,7 +38,7 @@ namespace Lynx
 
         const SwapchainSettings& Settings() const { return m_Settings; }
 
-        // Both wait for the GPU and replace the swapchain, so every framebuffer handed out before is gone.
+        // Both wait for the GPU and replace the swapchain, so every image handed out before is gone.
         void ApplySettings(const SwapchainSettings& settings);
         void Resize(uint32_t width, uint32_t height);
 
@@ -49,8 +50,8 @@ namespace Lynx
         // in which case the frame has to be skipped.
         bool AcquireImage(vk::Semaphore imageAvailable);
 
-        // The framebuffer of the acquired image.
-        nvrhi::IFramebuffer* Framebuffer() const { return m_Framebuffers[m_ImageIndex]; }
+        // The acquired image. It has to be in the layout for presenting when Present is called.
+        GpuTexture& Image() { return m_Images[m_ImageIndex]; }
 
         // The frame's last submission has to signal this. Present waits for it.
         vk::Semaphore RenderFinished() const { return m_RenderFinished[m_ImageIndex]; }
@@ -68,7 +69,7 @@ namespace Lynx
 
         vk::SwapchainKHR m_Swapchain;
         vk::Extent2D m_Extent;
-        std::vector<nvrhi::FramebufferHandle> m_Framebuffers;
+        std::vector<GpuTexture> m_Images;
         std::vector<vk::Semaphore> m_RenderFinished;
         uint32_t m_ImageIndex = 0;
 

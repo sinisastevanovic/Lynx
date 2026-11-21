@@ -87,7 +87,7 @@ namespace Lynx
             return 4;
         }
     }
-    
+
     namespace
     {
         vk::CommandBuffer NativeCommandBuffer(nvrhi::ICommandList* commandList)
@@ -168,7 +168,18 @@ namespace Lynx
         InstanceStorage MeshInstances;
         InstanceStorage ParticleInstances;
 
-        // The pictures a scene is drawn into. The handles in RenderTarget are NVRHI's view of these.
+        // A copy of a finished frame that is waiting to be read back.
+        struct PendingScreenshot
+        {
+            uint64_t Tag = 0;
+            uint64_t Frame = 0;
+            uint32_t Width = 0;
+            uint32_t Height = 0;
+            GpuBuffer Pixels;
+        };
+        std::vector<PendingScreenshot> PendingScreenshots;
+
+        // The pictures a scene is drawn into.
         GpuTexture SceneColor;
         GpuTexture SceneDepth;
         GpuTexture SceneOutput;
@@ -225,7 +236,7 @@ namespace Lynx
         m_Frame->PickReadback = {};
         m_Frame->SceneConstants = {};
         m_Frame->Uploads.reset();
-        m_PendingScreenshots.clear();
+        m_Frame->PendingScreenshots.clear();
         m_Graph.reset();
         m_MaterialTextures.reset();
         m_Frame->SceneColorSlot = TextureSlot();
@@ -241,7 +252,10 @@ namespace Lynx
         m_Frame->NormalTexture = {};
         m_Frame->MetallicRoughnessTexture = {};
         m_CommandList = nullptr;
-        m_SceneTarget.reset();
+        m_Frame->SceneColor = {};
+        m_Frame->SceneDepth = {};
+        m_Frame->SceneOutput = {};
+        m_Frame->SceneEntityIds = {};
         m_ImGui.reset();
         m_NvrhiDevice = nullptr;
 
@@ -262,8 +276,6 @@ namespace Lynx
         m_RenderContext.Graphics = m_Context.get();
         m_RenderContext.Uploads = m_Frame->Uploads.get();
         m_RenderContext.Shared = m_Frame->Shared.get();
-        m_RenderContext.Device = m_NvrhiDevice;
-        m_RenderContext.CommandList = m_CommandList;
         m_RenderContext.WritesEntityIds = m_ShouldCreateIDTarget;
 
         SamplerCache::Init(m_Context->Device(), m_MaxAnisotropy);
@@ -348,14 +360,14 @@ namespace Lynx
 
     void Renderer::CopyRequestedEntityId()
     {
-        if (!m_Frame->PickRequest || !m_SceneTarget || !m_SceneTarget->IdBuffer)
+        if (!m_Frame->PickRequest || !m_Frame->SceneEntityIds)
             return;
 
         const glm::uvec2 pixel = *m_Frame->PickRequest;
         m_Frame->PickRequest.reset();
 
         // The scene picture may have been resized since the request was made.
-        if (pixel.x >= m_SceneTarget->Width || pixel.y >= m_SceneTarget->Height)
+        if (pixel.x >= m_Frame->SceneEntityIds.Desc().Width || pixel.y >= m_Frame->SceneEntityIds.Desc().Height)
         {
             m_Frame->PickedEntityId = -1;
             return;
@@ -371,16 +383,14 @@ namespace Lynx
             m_Frame->PickReadback = GpuBuffer(*m_Context, desc);
         }
 
-        // NVRHI keeps track of the picture's layout, so it is asked to make the picture readable for a copy.
-        m_CommandList->setTextureState(m_SceneTarget->IdBuffer, nvrhi::AllSubresources, nvrhi::ResourceStates::CopySource);
-        m_CommandList->commitBarriers();
-        m_CommandList->clearState();
+        const vk::CommandBuffer commands = NativeCommandBuffer(m_CommandList);
+        m_Frame->SceneEntityIds.Transition(commands, vk::ImageLayout::eTransferSrcOptimal);
 
         vk::BufferImageCopy region;
         region.imageSubresource = vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1);
         region.imageOffset = vk::Offset3D(static_cast<int32_t>(pixel.x), static_cast<int32_t>(pixel.y), 0);
         region.imageExtent = vk::Extent3D(1, 1, 1);
-        NativeCommandBuffer(m_CommandList).copyImageToBuffer(m_Frame->SceneEntityIds.Image(), vk::ImageLayout::eTransferSrcOptimal, m_Frame->PickReadback.Handle(), region);
+        commands.copyImageToBuffer(m_Frame->SceneEntityIds.Image(), vk::ImageLayout::eTransferSrcOptimal, m_Frame->PickReadback.Handle(), region);
 
         m_Frame->PickCopiedInFrame = m_Profiler.CurrentFrame();
     }
@@ -437,9 +447,8 @@ namespace Lynx
 
     void Renderer::ReleaseSwapchainImages()
     {
-        // These may refer to an image of the window. A swapchain cannot be replaced or destroyed while one is held.
-        m_CurrentFrameData.TargetFramebuffer = nullptr;
-        m_CurrentFrameData.OutputFramebuffer = nullptr;
+        // These may point at an image of the window, which is gone once the swapchain is replaced.
+        m_CurrentFrameData.Output = nullptr;
         m_SceneOutput = nullptr;
     }
 
@@ -468,25 +477,21 @@ namespace Lynx
         m_Frame->MetallicRoughnessTextureIndex = create(m_Frame->MetallicRoughnessTexture, { 255, 128, 128, 255 }, "DefaultMetallicRoughness");
     }
 
-    void Renderer::CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height)
+    void Renderer::CreateSceneTargets(uint32_t width, uint32_t height)
     {
-        target.Width = width;
-        target.Height = height;
+        m_SceneSize = { width, height };
 
-        // The renderer owns the picture. NVRHI gets a handle to the same picture, which its passes draw with
-        // and through which it keeps track of the picture's layout. The first use moves it out of its undefined
-        // starting layout, as NVRHI does for a handle whose state it has not seen yet.
-        const auto createTarget = [this, width, height](GpuTexture& texture, vk::Format format, vk::ImageUsageFlags usage, const nvrhi::TextureDesc& desc)
+        const auto create = [this, width, height](GpuTexture& texture, vk::Format format, vk::ImageUsageFlags usage, const char* name)
         {
-            GpuTextureDesc textureDesc;
-            textureDesc.Width = width;
-            textureDesc.Height = height;
-            textureDesc.Format = format;
-            textureDesc.Usage = usage;
-            textureDesc.Name = desc.debugName.c_str();
+            GpuTextureDesc desc;
+            desc.Width = width;
+            desc.Height = height;
+            desc.Format = format;
+            desc.Usage = usage;
+            desc.Name = name;
 
-            texture = GpuTexture(*m_Context, textureDesc);
-            return m_NvrhiDevice->createHandleForNativeTexture(nvrhi::ObjectTypes::VK_Image, nvrhi::Object(static_cast<VkImage>(texture.Image())), desc);
+            // The picture before this one is released once the frames that use it are done.
+            texture = GpuTexture(*m_Context, desc);
         };
 
         // Drawn into, read by shaders, copied from for screenshots and picking, and cleared by a copy command.
@@ -495,64 +500,15 @@ namespace Lynx
         const vk::ImageUsageFlags depthUsage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled
             | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst;
 
-        auto colorDesc = nvrhi::TextureDesc()
-            .setWidth(width)
-            .setHeight(height)
-            .setFormat(nvrhi::Format::RGBA16_FLOAT)
-            .setIsRenderTarget(true)
-            .setDebugName("SceneHDR")
-            .setInitialState(nvrhi::ResourceStates::ShaderResource)
-            .setKeepInitialState(true);
-        target.Color = createTarget(m_Frame->SceneColor, RenderFormats::SceneColor, colorUsage, colorDesc);
+        create(m_Frame->SceneColor, RenderFormats::SceneColor, colorUsage, "SceneColor");
+        create(m_Frame->SceneDepth, RenderFormats::SceneDepth, depthUsage, "SceneDepth");
+        create(m_Frame->SceneOutput, RenderFormats::Output, colorUsage, "SceneOutput");
+        if (m_ShouldCreateIDTarget)
+            create(m_Frame->SceneEntityIds, RenderFormats::EntityIds, colorUsage, "SceneEntityIds");
 
-        // Post-processing reads the scene through the texture table. The picture before this one leaves it.
+        // Post-processing reads the scene through the texture table, and the editor shows the output through ImGui.
         m_Frame->SceneColorSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SceneColor.View()));
-
-        auto depthDesc = nvrhi::TextureDesc()
-            .setWidth(width)
-            .setHeight(height)
-            .setFormat(nvrhi::Format::D32)
-            .setIsRenderTarget(true)
-            .setDebugName("SceneDepth")
-            .setInitialState(nvrhi::ResourceStates::DepthWrite)
-            .setKeepInitialState(true);
-        target.Depth = createTarget(m_Frame->SceneDepth, RenderFormats::SceneDepth, depthUsage, depthDesc);
-
-        auto outputDesc = nvrhi::TextureDesc()
-            .setWidth(width)
-            .setHeight(height)
-            .setFormat(nvrhi::Format::BGRA8_UNORM)
-            .setIsRenderTarget(true)
-            .setDebugName("SceneLDR")
-            .setInitialState(nvrhi::ResourceStates::ShaderResource)
-            .setKeepInitialState(true);
-        target.Output = createTarget(m_Frame->SceneOutput, RenderFormats::Output, colorUsage, outputDesc);
         m_Frame->SceneOutputSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SceneOutput.View()));
-
-        if (m_ShouldCreateIDTarget)
-        {
-            auto idDesc = nvrhi::TextureDesc()
-                .setWidth(width)
-                .setHeight(height)
-                .setFormat(nvrhi::Format::R32_SINT)
-                .setIsRenderTarget(true)
-                .setDebugName("OffscreenId")
-                .setInitialState(nvrhi::ResourceStates::RenderTarget)
-                .setKeepInitialState(true)
-                .setClearValue(nvrhi::Color(-1.0f, 0.0f, 0.0f, 0.0f));
-            target.IdBuffer = createTarget(m_Frame->SceneEntityIds, RenderFormats::EntityIds, colorUsage, idDesc);
-        }
-
-        auto hdrFBDesc = nvrhi::FramebufferDesc()
-            .addColorAttachment(target.Color)
-            .setDepthAttachment(target.Depth);
-        if (m_ShouldCreateIDTarget)
-            hdrFBDesc.addColorAttachment(target.IdBuffer);
-        target.HDRFramebuffer = m_NvrhiDevice->createFramebuffer(hdrFBDesc);
-
-        auto ldrFBDesc = nvrhi::FramebufferDesc()
-            .addColorAttachment(target.Output);
-        target.LDRFramebuffer = m_NvrhiDevice->createFramebuffer(ldrFBDesc);
     }
 
     void Renderer::PrepareDrawCalls()
@@ -587,7 +543,7 @@ namespace Lynx
 
         std::ranges::sort(m_CurrentFrameData.TransparentQueue,
           [](const RenderCommand& a, const RenderCommand& b) {
-              return a.DistanceToCamera > b.DistanceToCamera; 
+              return a.DistanceToCamera > b.DistanceToCamera;
           });
 
         for (auto& cmd : m_CurrentFrameData.TransparentQueue)
@@ -635,7 +591,6 @@ namespace Lynx
         m_CurrentFrameData.ParticleInstanceAddress = m_Frame->ParticleInstances.Buffer.Address();
 
         // The copies go straight into the command buffer, so NVRHI must not have a render pass open.
-        m_CommandList->clearState();
         m_Frame->Uploads->Flush(NativeCommandBuffer(m_CommandList));
     }
 
@@ -649,12 +604,12 @@ namespace Lynx
         m_CurrentFrameData.OpaqueDrawCalls.clear();
         m_CurrentFrameData.TransparentQueue.clear();
         m_CurrentFrameData.ParticleQueue.clear();
-        
+
         glm::vec3 center = cameraPosition;
 
         glm::vec3 lightDirNorm = glm::normalize(lightDir);
         glm::vec3 lightPos = center - lightDirNorm * 100.0f; // Move back enough to not clip near objects
-        
+
         glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
         if (glm::abs(glm::dot(lightDirNorm, up)) > 0.99f)
             up = glm::vec3(0.0f, 0.0f, 1.0f);
@@ -666,20 +621,20 @@ namespace Lynx
         float zFar = 1000.0f;
 
         glm::mat4 lightProj = glm::ortho(-orthoSize, orthoSize, -orthoSize, orthoSize, zNear, zFar);
-        
+
         // Flip Y for Vulkan (Y is down in clip space)
         // Handled in Shader Bias Matrix now
-        // lightProj[1][1] *= -1.0f; 
+        // lightProj[1][1] *= -1.0f;
 
         glm::mat4 lightViewProj = lightProj * lightView;
 
         // Shadow Map Stabilization
         // We need to snap the projection to the nearest texel in Light Space to avoid shimmering
         float shadowMapRes = (float)m_ShadowMapResolution;
-        
+
         // Project a reference point (Origin) to Shadow Map NDC Space
         glm::vec4 shadowOrigin = lightViewProj * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        shadowOrigin /= shadowOrigin.w; 
+        shadowOrigin /= shadowOrigin.w;
 
         // NDC is [-1, 1] for XY. Resolution is [0, Res].
         float texelSizeNDC = 2.0f / shadowMapRes;
@@ -705,18 +660,16 @@ namespace Lynx
         m_CurrentFrameData.LightIntensity = lightIntensity;
         m_CurrentFrameData.LightViewProj = lightViewProj;
         m_CurrentFrameData.ShowGrid = editMode && m_ShowGrid;
-        if (!m_SceneTarget)
+        if (!m_SceneSize)
         {
             auto [w, h] = GetViewportSize();
-            m_SceneTarget = std::make_unique<RenderTarget>();
-            CreateRenderTarget(*m_SceneTarget, w, h);
+            CreateSceneTargets(w, h);
         }
 
-        m_CurrentFrameData.TargetFramebuffer = m_SceneTarget->HDRFramebuffer;
-        m_CurrentFrameData.SceneColorInput = m_SceneTarget->Color;
-        if (m_SceneTarget->IdBuffer)
-            m_CommandList->clearTextureUInt(m_SceneTarget->IdBuffer, nvrhi::AllSubresources, (uint32_t)-1);
-        
+        m_CurrentFrameData.SceneColor = &m_Frame->SceneColor;
+        m_CurrentFrameData.SceneDepth = &m_Frame->SceneDepth;
+        m_CurrentFrameData.SceneEntityIds = m_Frame->SceneEntityIds ? &m_Frame->SceneEntityIds : nullptr;
+
         SceneData sceneData;
         sceneData.ViewProjectionMatrix = m_CurrentFrameData.ViewProjection;
         sceneData.LightViewProjection = lightViewProj;
@@ -725,9 +678,12 @@ namespace Lynx
         sceneData.LightColor = glm::vec4(lightColor, 1.0f);
         m_Frame->Uploads->Upload(m_Frame->SceneConstants.Handle(), 0, std::as_bytes(std::span<const SceneData>(&sceneData, 1)));
 
-        // 3. Clear Screen
-        nvrhi::utils::ClearColorAttachment(m_CommandList, m_CurrentFrameData.TargetFramebuffer, 0, nvrhi::Color(0.05f, 0.05f, 0.05f, 1.0f));
-        nvrhi::utils::ClearDepthStencilAttachment(m_CommandList, m_CurrentFrameData.TargetFramebuffer, 1.0f, 0);
+        // The scene starts as a dark grey with everything farthest away, and with no entity anywhere.
+        const vk::CommandBuffer commands = NativeCommandBuffer(m_CommandList);
+        m_Frame->SceneColor.ClearColor(commands, vk::ClearColorValue(0.05f, 0.05f, 0.05f, 1.0f));
+        m_Frame->SceneDepth.ClearDepth(commands, 1.0f);
+        if (m_Frame->SceneEntityIds)
+            m_Frame->SceneEntityIds.ClearColor(commands, vk::ClearColorValue(std::array<int32_t, 4>{ -1, 0, 0, 0 }));
 
         m_SubmitStart = std::chrono::steady_clock::now();
     }
@@ -846,8 +802,7 @@ namespace Lynx
         }
 
         // The editor shows the finished picture inside its viewport panel. A game shows it in the window.
-        m_CurrentFrameData.OutputFramebuffer = m_ShouldCreateIDTarget ? m_SceneTarget->LDRFramebuffer.Get() : m_Swapchain->Framebuffer();
-        m_CurrentFrameData.SceneColorInput = m_SceneTarget->Color;
+        m_CurrentFrameData.Output = m_ShouldCreateIDTarget ? &m_Frame->SceneOutput : &m_Swapchain->Image();
         m_CurrentFrameData.SceneColorIndex = m_Frame->SceneColorSlot.Index();
         m_CurrentFrameData.BloomTextureIndex = m_Frame->BlackTextureIndex;
         m_CurrentFrameData.Bloom = m_BloomSettings;
@@ -861,7 +816,7 @@ namespace Lynx
         m_Profiler.SetCounter("DrawCalls", m_Stats.DrawCalls);
         m_Profiler.SetCounter("Triangles", m_Stats.IndexCount / 3);
 
-        m_SceneOutput = m_CurrentFrameData.OutputFramebuffer->getDesc().colorAttachments[0].texture;
+        m_SceneOutput = m_CurrentFrameData.Output;
     }
 
     bool Renderer::BeginFrame()
@@ -888,6 +843,7 @@ namespace Lynx
         m_Frame->Uploads->BeginFrame();
 
         m_CommandList->open();
+        m_RenderContext.Commands = NativeCommandBuffer(m_CommandList);
         m_Frame->Timers->BeginFrame(m_Profiler);
         m_Frame->Timers->Begin(NativeCommandBuffer(m_CommandList), "Frame");
         return true;
@@ -895,23 +851,27 @@ namespace Lynx
 
     void Renderer::EndFrame()
     {
-        nvrhi::IFramebuffer* windowFramebuffer = m_Swapchain->Framebuffer();
+        const vk::CommandBuffer commands = NativeCommandBuffer(m_CommandList);
+        GpuTexture& window = m_Swapchain->Image();
 
         if (m_SceneOutput)
         {
             if (!m_ScreenshotRequests.empty())
-                CopyFrameForScreenshots(m_SceneOutput);
+                CopyFrameForScreenshots(*m_SceneOutput);
         }
         else
         {
             // No scene was drawn, for example because it has no camera. Nothing else writes the whole window,
             // and what a swapchain image holds before it is written is undefined.
-            nvrhi::utils::ClearColorAttachment(m_CommandList, windowFramebuffer, 0, nvrhi::Color(0.0f, 0.0f, 0.0f, 1.0f));
+            window.ClearColor(commands, vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f));
         }
 
-        DrawImGui(windowFramebuffer);
+        DrawImGui(window);
 
-        m_Frame->Timers->End(NativeCommandBuffer(m_CommandList), "Frame");
+        // From here the picture belongs to the window system until it is acquired again.
+        window.Transition(commands, vk::ImageLayout::ePresentSrcKHR);
+
+        m_Frame->Timers->End(commands, "Frame");
 
         // Submitting and presenting.
         ProfileScope presentScope(m_Profiler, "Present");
@@ -937,29 +897,24 @@ namespace Lynx
         ReportMemoryUse();
     }
 
-    void Renderer::DrawImGui(nvrhi::IFramebuffer* windowFramebuffer)
+    void Renderer::DrawImGui(GpuTexture& window)
     {
         ProfileScope scope(m_Profiler, "ImGuiDraw");
-        m_Frame->Timers->Begin(NativeCommandBuffer(m_CommandList), "ImGui");
-
-        // NVRHI keeps track of the layouts: the window's picture is drawn into, and the editor shows
-        // the finished scene picture in a panel, so that one has to be readable.
-        nvrhi::ITexture* window = windowFramebuffer->getDesc().colorAttachments[0].texture;
-        m_CommandList->setTextureState(window, nvrhi::AllSubresources, nvrhi::ResourceStates::RenderTarget);
-        if (m_SceneTarget && m_SceneTarget->Output != window)
-            m_CommandList->setTextureState(m_SceneTarget->Output, nvrhi::AllSubresources, nvrhi::ResourceStates::ShaderResource);
-        m_CommandList->commitBarriers();
-        m_CommandList->clearState();
-
         const vk::CommandBuffer commands = NativeCommandBuffer(m_CommandList);
+        m_Frame->Timers->Begin(commands, "ImGui");
+
+        // The editor shows the finished scene picture in a panel, so that one has to be readable.
+        window.Transition(commands, vk::ImageLayout::eColorAttachmentOptimal);
+        if (m_ShouldCreateIDTarget && m_Frame->SceneOutput)
+            m_Frame->SceneOutput.Transition(commands, vk::ImageLayout::eShaderReadOnlyOptimal);
 
         // A frame without a scene has no pass that would bring pending uploads to the GPU,
         // and ImGui may be about to show a texture that was just loaded.
         m_Frame->Uploads->Flush(commands);
 
         RenderingTargets targets;
-        targets.Color = vk::ImageView(static_cast<VkImageView>(window->getNativeView(nvrhi::ObjectTypes::VK_ImageView).pointer));
-        targets.Extent = vk::Extent2D(window->getDesc().width, window->getDesc().height);
+        targets.Color = window.View();
+        targets.Extent = vk::Extent2D(window.Desc().Width, window.Desc().Height);
         BeginRendering(commands, targets);
         m_ImGui->Render(commands);
         commands.endRendering();
@@ -993,25 +948,33 @@ namespace Lynx
         m_ScreenshotRequests.push_back(tag);
     }
 
-    void Renderer::CopyFrameForScreenshots(nvrhi::ITexture* frame)
+    void Renderer::CopyFrameForScreenshots(GpuTexture& frame)
     {
-        const nvrhi::TextureDesc& frameDesc = frame->getDesc();
+        const vk::CommandBuffer commands = NativeCommandBuffer(m_CommandList);
+        const uint32_t width = frame.Desc().Width;
+        const uint32_t height = frame.Desc().Height;
+
+        frame.Transition(commands, vk::ImageLayout::eTransferSrcOptimal);
 
         for (uint64_t tag : m_ScreenshotRequests)
         {
-            nvrhi::TextureDesc stagingDesc;
-            stagingDesc.width = frameDesc.width;
-            stagingDesc.height = frameDesc.height;
-            stagingDesc.format = frameDesc.format;
-            stagingDesc.debugName = "Screenshot";
+            GpuBufferDesc desc;
+            desc.Size = static_cast<uint64_t>(width) * height * 4;
+            desc.Usage = vk::BufferUsageFlagBits::eTransferDst;
+            desc.CpuReadable = true;
+            desc.Name = "Screenshot";
 
-            PendingScreenshot pending;
+            FrameResources::PendingScreenshot& pending = m_Frame->PendingScreenshots.emplace_back();
             pending.Tag = tag;
             pending.Frame = m_Profiler.CurrentFrame();
-            pending.Staging = m_NvrhiDevice->createStagingTexture(stagingDesc, nvrhi::CpuAccessMode::Read);
+            pending.Width = width;
+            pending.Height = height;
+            pending.Pixels = GpuBuffer(*m_Context, desc);
 
-            m_CommandList->copyTexture(pending.Staging, nvrhi::TextureSlice(), frame, nvrhi::TextureSlice());
-            m_PendingScreenshots.push_back(std::move(pending));
+            vk::BufferImageCopy region;
+            region.imageSubresource = vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, 0, 0, 1);
+            region.imageExtent = vk::Extent3D(width, height, 1);
+            commands.copyImageToBuffer(frame.Image(), vk::ImageLayout::eTransferSrcOptimal, pending.Pixels.Handle(), region);
         }
 
         m_ScreenshotRequests.clear();
@@ -1019,13 +982,14 @@ namespace Lynx
 
     std::vector<Screenshot> Renderer::TakeScreenshots(bool waitForAll)
     {
-        if (waitForAll && !m_PendingScreenshots.empty())
-            m_NvrhiDevice->waitForIdle();
+        auto& pendingScreenshots = m_Frame->PendingScreenshots;
+        if (waitForAll && !pendingScreenshots.empty())
+            m_Context->WaitIdle();
 
         std::vector<Screenshot> finished;
         const uint64_t currentFrame = m_Profiler.CurrentFrame();
 
-        for (auto pending = m_PendingScreenshots.begin(); pending != m_PendingScreenshots.end();)
+        for (auto pending = pendingScreenshots.begin(); pending != pendingScreenshots.end();)
         {
             if (!waitForAll && currentFrame < pending->Frame + ReadbackDelay)
             {
@@ -1033,41 +997,24 @@ namespace Lynx
                 continue;
             }
 
-            const nvrhi::TextureDesc& desc = pending->Staging->getDesc();
+            Screenshot screenshot;
+            screenshot.Tag = pending->Tag;
+            screenshot.Width = pending->Width;
+            screenshot.Height = pending->Height;
+            screenshot.Rgba.resize(static_cast<size_t>(pending->Width) * pending->Height * 4);
 
-            size_t rowPitch = 0;
-            const auto* source = static_cast<const uint8_t*>(m_NvrhiDevice->mapStagingTexture(pending->Staging, nvrhi::TextureSlice(), nvrhi::CpuAccessMode::Read, &rowPitch));
-            if (source)
+            // The frame is BGRA. Its alpha channel does not describe coverage, so the picture is made opaque.
+            const auto* source = static_cast<const uint8_t*>(pending->Pixels.Data());
+            for (size_t pixel = 0; pixel < screenshot.Rgba.size(); pixel += 4)
             {
-                Screenshot screenshot;
-                screenshot.Tag = pending->Tag;
-                screenshot.Width = desc.width;
-                screenshot.Height = desc.height;
-                screenshot.Rgba.resize(static_cast<size_t>(desc.width) * desc.height * 4);
-
-                // The frame is BGRA. Its alpha channel does not describe coverage, so the picture is made opaque.
-                for (uint32_t y = 0; y < desc.height; ++y)
-                {
-                    const uint8_t* sourceRow = source + y * rowPitch;
-                    uint8_t* targetRow = screenshot.Rgba.data() + static_cast<size_t>(y) * desc.width * 4;
-                    for (uint32_t x = 0; x < desc.width; ++x)
-                    {
-                        targetRow[x * 4 + 0] = sourceRow[x * 4 + 2];
-                        targetRow[x * 4 + 1] = sourceRow[x * 4 + 1];
-                        targetRow[x * 4 + 2] = sourceRow[x * 4 + 0];
-                        targetRow[x * 4 + 3] = 255;
-                    }
-                }
-
-                m_NvrhiDevice->unmapStagingTexture(pending->Staging);
-                finished.push_back(std::move(screenshot));
-            }
-            else
-            {
-                LX_CORE_ERROR("Could not read back screenshot {0}.", pending->Tag);
+                screenshot.Rgba[pixel + 0] = source[pixel + 2];
+                screenshot.Rgba[pixel + 1] = source[pixel + 1];
+                screenshot.Rgba[pixel + 2] = source[pixel + 0];
+                screenshot.Rgba[pixel + 3] = 255;
             }
 
-            pending = m_PendingScreenshots.erase(pending);
+            finished.push_back(std::move(screenshot));
+            pending = pendingScreenshots.erase(pending);
         }
 
         return finished;
@@ -1125,24 +1072,15 @@ namespace Lynx
         if (width == 0 || height == 0)
             return;
 
-        if (!m_SceneTarget)
-        {
-            m_SceneTarget = std::make_unique<RenderTarget>();
-            CreateRenderTarget(*m_SceneTarget, width, height);
-        }
-        else if (m_SceneTarget->Width != width || m_SceneTarget->Height != height)
-        {
-            // No waiting for the GPU: the old pictures are released once the frames that use them are done.
-            m_SceneTarget.reset();
-            m_SceneTarget = std::make_unique<RenderTarget>();
-            CreateRenderTarget(*m_SceneTarget, width, height);
-        }
+        // No waiting for the GPU: the old pictures are released once the frames that use them are done.
+        if (!m_SceneSize || m_SceneSize->first != width || m_SceneSize->second != height)
+            CreateSceneTargets(width, height);
     }
 
     std::pair<uint32_t, uint32_t> Renderer::GetViewportSize() const
     {
-        if (m_SceneTarget)
-            return { m_SceneTarget->Width, m_SceneTarget->Height };
+        if (m_SceneSize)
+            return *m_SceneSize;
 
         return { m_Swapchain->Width(), m_Swapchain->Height() };
     }

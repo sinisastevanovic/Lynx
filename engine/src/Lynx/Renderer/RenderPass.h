@@ -1,5 +1,4 @@
 #pragma once
-#include <nvrhi/nvrhi.h>
 #include <glm/glm.hpp>
 
 #include <filesystem>
@@ -9,8 +8,11 @@
 #include "Lynx/Asset/StaticMesh.h"
 #include "Lynx/Asset/TextureSpecification.h"
 
+struct VkCommandBuffer_T;
+
 namespace Lynx
 {
+    class GpuTexture;
     class GraphicsContext;
     class Shader;
     class SharedBindings;
@@ -157,17 +159,17 @@ namespace Lynx
 
         glm::mat4 LightViewProj; // TODO: Can't we use the normal ViewProjection for this?
         // The shadow map, and where the texture table and the table of comparing samplers have it and its sampler.
-        nvrhi::TextureHandle ShadowMap;
+        GpuTexture* ShadowMap = nullptr;
         uint32_t ShadowMapIndex = 0;
         uint32_t ShadowSamplerIndex = 0;
 
-        // Where the scene passes draw: the HDR picture, with depth and, in the editor, entity IDs.
-        nvrhi::FramebufferHandle TargetFramebuffer;
+        // Where the scene passes draw: the HDR picture, its depth and, in the editor, the entity ID of every pixel.
+        GpuTexture* SceneColor = nullptr;
+        GpuTexture* SceneDepth = nullptr;
+        GpuTexture* SceneEntityIds = nullptr;
 
         // Where the finished picture goes: the window, or the editor's viewport picture.
-        nvrhi::FramebufferHandle OutputFramebuffer;
-
-        nvrhi::TextureHandle SceneColorInput;
+        GpuTexture* Output = nullptr;
 
         // Where the texture table has the scene's HDR picture, and the bloom to add to it.
         // The bloom is a black picture unless the bloom pass has run in this frame.
@@ -188,9 +190,9 @@ namespace Lynx
         UploadQueue* Uploads = nullptr;
         SharedBindings* Shared = nullptr;
 
-        // NVRHI still records the frame's command buffer and makes the textures that assets and a few passes hold.
-        nvrhi::DeviceHandle Device;
-        nvrhi::CommandListHandle CommandList;
+        // The command buffer of the frame that is being recorded, as Vulkan's plain handle:
+        // this header is included by the editor and stays free of Vulkan's own.
+        VkCommandBuffer_T* Commands = nullptr;
 
         // True in the editor, where the scene has a second target that holds entity IDs for picking.
         bool WritesEntityIds = false;

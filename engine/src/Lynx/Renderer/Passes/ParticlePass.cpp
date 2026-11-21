@@ -4,6 +4,7 @@
 #include "Lynx/Asset/Shader.h"
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
+#include "Lynx/Renderer/Vulkan/GpuTexture.h"
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
 #include "Lynx/Renderer/Vulkan/SharedBindings.h"
 
@@ -103,9 +104,8 @@ namespace Lynx
             return false;
 
         // The particles go into the scene's picture. The entity ID picture next to it is left alone.
-        const nvrhi::FramebufferDesc& sceneTargets = renderData.TargetFramebuffer->getDesc();
-        resources.ColorTarget = sceneTargets.colorAttachments[0].texture;
-        resources.DepthTarget = sceneTargets.depthAttachment.texture;
+        resources.ColorTarget = renderData.SceneColor;
+        resources.DepthTarget = renderData.SceneDepth;
         return true;
     }
 

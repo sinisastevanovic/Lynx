@@ -2,25 +2,13 @@
 
 #include "Lynx/Profiling/FrameProfiler.h"
 #include "Lynx/Renderer/GpuTimers.h"
+#include "Lynx/Renderer/Vulkan/GpuTexture.h"
 #include "Lynx/Renderer/Vulkan/Rendering.h"
 #include "Lynx/Renderer/Vulkan/SharedBindings.h"
 #include "Lynx/Renderer/Vulkan/UploadQueue.h"
 
 namespace Lynx
 {
-    namespace
-    {
-        vk::CommandBuffer NativeCommandBuffer(nvrhi::ICommandList* commandList)
-        {
-            return vk::CommandBuffer(static_cast<VkCommandBuffer>(commandList->getNativeObject(nvrhi::ObjectTypes::VK_CommandBuffer).pointer));
-        }
-
-        vk::ImageView NativeView(nvrhi::ITexture* texture)
-        {
-            return vk::ImageView(static_cast<VkImageView>(texture->getNativeView(nvrhi::ObjectTypes::VK_ImageView).pointer));
-        }
-    }
-
     RenderGraph::RenderGraph(FrameProfiler& profiler, GpuTimers& timers)
         : m_Profiler(profiler), m_Timers(timers)
     {
@@ -52,11 +40,11 @@ namespace Lynx
 
             // The CPU time to record the pass and the GPU time to run it, under the pass's name.
             ProfileScope cpuScope(m_Profiler, entry.Name);
-            m_Timers.Begin(NativeCommandBuffer(ctx.CommandList), entry.Name);
+            m_Timers.Begin(vk::CommandBuffer(ctx.Commands), entry.Name);
 
             ExecutePass(*entry.Pass, ctx, renderData);
 
-            m_Timers.End(NativeCommandBuffer(ctx.CommandList), entry.Name);
+            m_Timers.End(vk::CommandBuffer(ctx.Commands), entry.Name);
         }
     }
 
@@ -67,7 +55,7 @@ namespace Lynx
             return;
 
         // The picture whose size the pass draws at.
-        nvrhi::ITexture* mainTarget = resources.ColorTarget ? resources.ColorTarget : resources.DepthTarget;
+        const GpuTexture* mainTarget = resources.ColorTarget ? resources.ColorTarget : resources.DepthTarget;
         if (!mainTarget && !resources.OwnTargets)
             return;
 
@@ -75,38 +63,28 @@ namespace Lynx
         // while a window is being resized, and the pass is left out of that frame.
         if (resources.ColorTarget && resources.DepthTarget)
         {
-            const nvrhi::TextureDesc& color = resources.ColorTarget->getDesc();
-            const nvrhi::TextureDesc& depth = resources.DepthTarget->getDesc();
-            if (color.width != depth.width || color.height != depth.height)
+            const GpuTextureDesc& color = resources.ColorTarget->Desc();
+            const GpuTextureDesc& depth = resources.DepthTarget->Desc();
+            if (color.Width != depth.Width || color.Height != depth.Height)
                 return;
         }
 
-        // NVRHI still records the command buffer, clears the scene's targets and draws the editor's own UI.
-        // Handing the command buffer over to a pass takes three steps, which live here so that no pass has to know them.
-        // 1. NVRHI tracks which layout every texture is in. It is asked to put the textures into the layouts
-        //    the pass needs, and they are left in those layouts, so its bookkeeping stays right.
+        // Every picture the pass uses is brought into the layout for its use.
+        const vk::CommandBuffer commands(ctx.Commands);
         for (uint32_t index = 0; index < resources.SampledCount; ++index)
-            ctx.CommandList->setTextureState(resources.Sampled[index], nvrhi::AllSubresources, nvrhi::ResourceStates::ShaderResource);
+            resources.Sampled[index]->Transition(commands, vk::ImageLayout::eShaderReadOnlyOptimal);
         if (resources.ColorTarget)
-            ctx.CommandList->setTextureState(resources.ColorTarget, nvrhi::AllSubresources, nvrhi::ResourceStates::RenderTarget);
+            resources.ColorTarget->Transition(commands, vk::ImageLayout::eColorAttachmentOptimal);
         if (resources.IdTarget)
-            ctx.CommandList->setTextureState(resources.IdTarget, nvrhi::AllSubresources, nvrhi::ResourceStates::RenderTarget);
+            resources.IdTarget->Transition(commands, vk::ImageLayout::eColorAttachmentOptimal);
         if (resources.DepthTarget)
-            ctx.CommandList->setTextureState(resources.DepthTarget, nvrhi::AllSubresources, nvrhi::ResourceStates::DepthWrite);
-        ctx.CommandList->commitBarriers();
-
-        // 2. NVRHI keeps a render pass open between draws and remembers what is bound. Clearing its state
-        //    ends that render pass and makes the next NVRHI pass bind everything again.
-        ctx.CommandList->clearState();
-
-        // 3. From here on the commands go straight into the command buffer NVRHI is recording.
-        const vk::CommandBuffer commands = NativeCommandBuffer(ctx.CommandList);
+            resources.DepthTarget->Transition(commands, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
         // Data the pass queued while declaring, such as this frame's vertices. Copies cannot be recorded
         // once rendering has begun, so this is the last moment for them.
         ctx.Uploads->Flush(commands);
 
-        // Clearing NVRHI's state leaves nothing bound.
+        // One set for every pass. It is bound again per pass because a pass may bind other things in between.
         ctx.Shared->Bind(commands);
 
         if (resources.OwnTargets)
@@ -115,16 +93,16 @@ namespace Lynx
             return;
         }
 
-        const nvrhi::TextureDesc& targetDesc = mainTarget->getDesc();
+        const GpuTextureDesc& targetDesc = mainTarget->Desc();
 
         RenderingTargets targets;
         if (resources.ColorTarget)
-            targets.Color = NativeView(resources.ColorTarget);
+            targets.Color = resources.ColorTarget->View();
         if (resources.IdTarget)
-            targets.Ids = NativeView(resources.IdTarget);
+            targets.Ids = resources.IdTarget->View();
         if (resources.DepthTarget)
-            targets.Depth = NativeView(resources.DepthTarget);
-        targets.Extent = vk::Extent2D(targetDesc.width, targetDesc.height);
+            targets.Depth = resources.DepthTarget->View();
+        targets.Extent = vk::Extent2D(targetDesc.Width, targetDesc.Height);
         targets.ColorLoad = resources.OverwritesTarget ? vk::AttachmentLoadOp::eDontCare : vk::AttachmentLoadOp::eLoad;
         targets.DepthLoad = resources.ClearsDepth ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad;
         BeginRendering(commands, targets);

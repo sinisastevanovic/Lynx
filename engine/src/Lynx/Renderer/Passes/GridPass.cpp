@@ -3,6 +3,7 @@
 #include "Lynx/Asset/Shader.h"
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
+#include "Lynx/Renderer/Vulkan/GpuTexture.h"
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
 #include "Lynx/Renderer/Vulkan/SharedBindings.h"
 
@@ -82,8 +83,8 @@ namespace Lynx
         if (!renderData.ShowGrid || !m_Vulkan->Pipeline)
             return false;
 
-        resources.ColorTarget = renderData.OutputFramebuffer->getDesc().colorAttachments[0].texture;
-        resources.DepthTarget = renderData.TargetFramebuffer->getDesc().depthAttachment.texture;
+        resources.ColorTarget = renderData.Output;
+        resources.DepthTarget = renderData.SceneDepth;
         return true;
     }
 

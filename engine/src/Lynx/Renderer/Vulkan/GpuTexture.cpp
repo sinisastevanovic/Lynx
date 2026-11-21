@@ -26,6 +26,36 @@ namespace Lynx
                     return vk::ImageAspectFlagBits::eColor;
             }
         }
+
+        // What the GPU does with a picture in a layout: at which point of its work, and reading or writing.
+        // A change of layout waits for the old use to finish and holds back the new one until the change is done.
+        struct LayoutUse
+        {
+            vk::PipelineStageFlags2 Stages;
+            vk::AccessFlags2 Access;
+        };
+
+        LayoutUse UseOf(vk::ImageLayout layout)
+        {
+            switch (layout)
+            {
+                case vk::ImageLayout::eColorAttachmentOptimal:
+                    return { vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eColorAttachmentRead | vk::AccessFlagBits2::eColorAttachmentWrite };
+                case vk::ImageLayout::eDepthStencilAttachmentOptimal:
+                    return { vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+                             vk::AccessFlagBits2::eDepthStencilAttachmentRead | vk::AccessFlagBits2::eDepthStencilAttachmentWrite };
+                case vk::ImageLayout::eShaderReadOnlyOptimal:
+                    return { vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader,
+                             vk::AccessFlagBits2::eShaderSampledRead };
+                case vk::ImageLayout::eTransferSrcOptimal:
+                    return { vk::PipelineStageFlagBits2::eAllTransfer, vk::AccessFlagBits2::eTransferRead };
+                case vk::ImageLayout::eTransferDstOptimal:
+                    return { vk::PipelineStageFlagBits2::eAllTransfer, vk::AccessFlagBits2::eTransferWrite };
+                default:
+                    // Never used yet, or handed to the window system: nothing on the GPU to wait for.
+                    return { vk::PipelineStageFlagBits2::eNone, vk::AccessFlagBits2::eNone };
+            }
+        }
     }
 
     GpuTexture::GpuTexture(GraphicsContext& context, const GpuTextureDesc& desc)
@@ -58,18 +88,32 @@ namespace Lynx
 
         m_Image = image;
         vmaSetAllocationName(context.Allocator(), m_Allocation, desc.Name);
+        CreateViews(context);
+    }
 
+    GpuTexture GpuTexture::Wrap(GraphicsContext& context, vk::Image image, const GpuTextureDesc& desc)
+    {
+        GpuTexture texture;
+        texture.m_Context = &context;
+        texture.m_Image = image;
+        texture.m_Desc = desc;
+        texture.CreateViews(context);
+        return texture;
+    }
+
+    void GpuTexture::CreateViews(GraphicsContext& context)
+    {
         vk::ImageViewCreateInfo viewInfo;
         viewInfo.image = m_Image;
         viewInfo.viewType = vk::ImageViewType::e2D;
-        viewInfo.format = desc.Format;
-        viewInfo.subresourceRange = vk::ImageSubresourceRange(AspectOf(desc.Format), 0, desc.MipLevels, 0, 1);
+        viewInfo.format = m_Desc.Format;
+        viewInfo.subresourceRange = vk::ImageSubresourceRange(AspectOf(m_Desc.Format), 0, m_Desc.MipLevels, 0, 1);
         m_View = context.Device().createImageView(viewInfo);
 
-        if (desc.ViewPerMip)
+        if (m_Desc.ViewPerMip)
         {
-            m_MipViews.reserve(desc.MipLevels);
-            for (uint32_t mip = 0; mip < desc.MipLevels; ++mip)
+            m_MipViews.reserve(m_Desc.MipLevels);
+            for (uint32_t mip = 0; mip < m_Desc.MipLevels; ++mip)
             {
                 viewInfo.subresourceRange.baseMipLevel = mip;
                 viewInfo.subresourceRange.levelCount = 1;
@@ -89,7 +133,8 @@ namespace Lynx
           m_View(std::exchange(other.m_View, nullptr)),
           m_MipViews(std::move(other.m_MipViews)),
           m_Allocation(std::exchange(other.m_Allocation, nullptr)),
-          m_Desc(std::exchange(other.m_Desc, {}))
+          m_Desc(std::exchange(other.m_Desc, {})),
+          m_Layout(std::exchange(other.m_Layout, vk::ImageLayout::eUndefined))
     {
     }
 
@@ -104,8 +149,49 @@ namespace Lynx
             m_MipViews = std::move(other.m_MipViews);
             m_Allocation = std::exchange(other.m_Allocation, nullptr);
             m_Desc = std::exchange(other.m_Desc, {});
+            m_Layout = std::exchange(other.m_Layout, vk::ImageLayout::eUndefined);
         }
         return *this;
+    }
+
+    void GpuTexture::Transition(vk::CommandBuffer commands, vk::ImageLayout layout)
+    {
+        if (m_Layout == layout)
+            return;
+
+        const LayoutUse before = UseOf(m_Layout);
+        const LayoutUse after = UseOf(layout);
+
+        vk::ImageMemoryBarrier2 barrier;
+        barrier.srcStageMask = before.Stages;
+        barrier.srcAccessMask = before.Access;
+        barrier.dstStageMask = after.Stages;
+        barrier.dstAccessMask = after.Access;
+        barrier.oldLayout = m_Layout;
+        barrier.newLayout = layout;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = m_Image;
+        barrier.subresourceRange = vk::ImageSubresourceRange(AspectOf(m_Desc.Format), 0, m_Desc.MipLevels, 0, 1);
+
+        vk::DependencyInfo dependency;
+        dependency.imageMemoryBarrierCount = 1;
+        dependency.pImageMemoryBarriers = &barrier;
+        commands.pipelineBarrier2(dependency);
+
+        m_Layout = layout;
+    }
+
+    void GpuTexture::ClearColor(vk::CommandBuffer commands, const vk::ClearColorValue& color)
+    {
+        Transition(commands, vk::ImageLayout::eTransferDstOptimal);
+        commands.clearColorImage(m_Image, vk::ImageLayout::eTransferDstOptimal, color, vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, m_Desc.MipLevels, 0, 1));
+    }
+
+    void GpuTexture::ClearDepth(vk::CommandBuffer commands, float depth)
+    {
+        Transition(commands, vk::ImageLayout::eTransferDstOptimal);
+        commands.clearDepthStencilImage(m_Image, vk::ImageLayout::eTransferDstOptimal, vk::ClearDepthStencilValue(depth, 0), vk::ImageSubresourceRange(AspectOf(m_Desc.Format), 0, m_Desc.MipLevels, 0, 1));
     }
 
     void GpuTexture::Release()
@@ -119,7 +205,10 @@ namespace Lynx
             device.destroyImageView(view);
             for (const vk::ImageView mipView : mipViews)
                 device.destroyImageView(mipView);
-            vmaDestroyImage(allocator, image, allocation);
+
+            // A wrapped picture has no memory of its own and is destroyed by its owner.
+            if (allocation)
+                vmaDestroyImage(allocator, image, allocation);
         });
 
         m_Image = nullptr;
@@ -127,5 +216,6 @@ namespace Lynx
         m_MipViews.clear();
         m_Allocation = nullptr;
         m_Desc = {};
+        m_Layout = vk::ImageLayout::eUndefined;
     }
 }

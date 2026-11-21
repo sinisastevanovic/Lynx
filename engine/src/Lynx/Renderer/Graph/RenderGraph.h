@@ -22,14 +22,14 @@ namespace Lynx
         static constexpr uint32_t MaxSampled = 8;
 
         // Textures the pass reads in its shaders.
-        std::array<nvrhi::ITexture*, MaxSampled> Sampled{};
+        std::array<GpuTexture*, MaxSampled> Sampled{};
         uint32_t SampledCount = 0;
 
         // The texture the pass draws into. Null for a pass that draws depth only.
-        nvrhi::ITexture* ColorTarget = nullptr;
+        GpuTexture* ColorTarget = nullptr;
 
         // The picture of entity IDs the pass writes next to the colour. Null for none.
-        nvrhi::ITexture* IdTarget = nullptr;
+        GpuTexture* IdTarget = nullptr;
 
         // Set instead of a colour target by a pass that draws into pictures of its own, in several steps.
         // Such a pass begins and ends rendering itself (see Vulkan/Rendering.h) and looks after the layouts
@@ -37,7 +37,7 @@ namespace Lynx
         bool OwnTargets = false;
 
         // The depth buffer the pass tests against, and writes if its pipeline says so. Null for none.
-        nvrhi::ITexture* DepthTarget = nullptr;
+        GpuTexture* DepthTarget = nullptr;
 
         // The pass writes every pixel of the target, so what the target held before need not be kept.
         bool OverwritesTarget = false;
@@ -45,7 +45,7 @@ namespace Lynx
         // The depth buffer starts out empty, with everything farthest away, instead of keeping what it held.
         bool ClearsDepth = false;
 
-        void Sample(nvrhi::ITexture* texture) { Sampled[SampledCount++] = texture; }
+        void Sample(GpuTexture* texture) { Sampled[SampledCount++] = texture; }
     };
 
     // A pass of the frame. It never changes the layout of a texture, never begins

@@ -34,24 +34,6 @@ namespace Lynx
     class LX_API Renderer
     {
     public:
-        struct RenderTarget
-        {
-            // HDR Scene Color (RGBA16_FLOAT)
-            nvrhi::TextureHandle Color;
-            // Depth Buffer (D32)
-            nvrhi::TextureHandle Depth;
-            // LDR Final Color (BGRA8_UNORM)
-            nvrhi::TextureHandle Output;
-            // Framebuffer for ForwardPass (Color + Depth)
-            nvrhi::FramebufferHandle HDRFramebuffer;
-            // Framebuffer for CompositePass (Output)
-            nvrhi::FramebufferHandle LDRFramebuffer;
-            // ID buffer for picking
-            nvrhi::TextureHandle IdBuffer;
-            uint32_t Width = 0;
-            uint32_t Height = 0;
-        };
-
         struct RenderStats
         {
             uint32_t DrawCalls = 0;
@@ -166,11 +148,11 @@ namespace Lynx
         void CreateDefaultTextures();
         void ApplySwapchainSettings(const SwapchainSettings& settings);
         void ReleaseSwapchainImages();
-        void CreateRenderTarget(RenderTarget& target, uint32_t width, uint32_t height);
+        void CreateSceneTargets(uint32_t width, uint32_t height);
         void PrepareDrawCalls();
-        void CopyFrameForScreenshots(nvrhi::ITexture* frame);
+        void CopyFrameForScreenshots(GpuTexture& frame);
         void CopyRequestedEntityId();
-        void DrawImGui(nvrhi::IFramebuffer* windowFramebuffer);
+        void DrawImGui(GpuTexture& window);
         void ReportMemoryUse();
 
     private:
@@ -189,10 +171,11 @@ namespace Lynx
         uint32_t m_CurrentFrame = 0;
 
         // The picture the scene of this frame ended up in. Null if no scene was drawn in this frame.
-        nvrhi::TextureHandle m_SceneOutput;
+        GpuTexture* m_SceneOutput = nullptr;
         static const int MAX_FRAMES_IN_FLIGHT = 2;
 
-        std::unique_ptr<RenderTarget> m_SceneTarget;
+        // The size of the pictures the scene is drawn into. Empty until they exist.
+        std::optional<std::pair<uint32_t, uint32_t>> m_SceneSize;
         std::unique_ptr<ImGuiVulkan> m_ImGui;
         bool m_ShouldCreateIDTarget = false;
         
@@ -226,14 +209,7 @@ namespace Lynx
         std::unique_ptr<MaterialTextures> m_MaterialTextures;
         std::chrono::steady_clock::time_point m_SubmitStart;
 
-        struct PendingScreenshot
-        {
-            uint64_t Tag = 0;
-            uint64_t Frame = 0;
-            nvrhi::StagingTextureHandle Staging;
-        };
         std::vector<uint64_t> m_ScreenshotRequests;
-        std::vector<PendingScreenshot> m_PendingScreenshots;
     };
 }
 

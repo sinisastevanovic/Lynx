@@ -5,6 +5,7 @@
 #include "Lynx/Asset/Shader.h"
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
+#include "Lynx/Renderer/Vulkan/GpuTexture.h"
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
 #include "Lynx/Renderer/Vulkan/SharedBindings.h"
 
@@ -142,11 +143,10 @@ namespace Lynx
         if (renderData.OpaqueDrawCalls.empty() && renderData.TransparentQueue.empty())
             return false;
 
-        const nvrhi::FramebufferDesc& sceneTargets = renderData.TargetFramebuffer->getDesc();
-        resources.ColorTarget = sceneTargets.colorAttachments[0].texture;
+        resources.ColorTarget = renderData.SceneColor;
         if (m_WritesEntityIds)
-            resources.IdTarget = sceneTargets.colorAttachments[1].texture;
-        resources.DepthTarget = sceneTargets.depthAttachment.texture;
+            resources.IdTarget = renderData.SceneEntityIds;
+        resources.DepthTarget = renderData.SceneDepth;
         resources.Sample(renderData.ShadowMap);
         return true;
     }

@@ -4,6 +4,7 @@
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
 #include "Lynx/Renderer/Vulkan/GpuBuffer.h"
+#include "Lynx/Renderer/Vulkan/GpuTexture.h"
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
 #include "Lynx/Renderer/Vulkan/SharedBindings.h"
 #include "Lynx/Renderer/Vulkan/UploadQueue.h"
@@ -103,8 +104,8 @@ namespace Lynx
         }
         m_Vulkan->Uploads->Upload(m_Vulkan->VertexBuffer.Handle(), 0, bytes);
 
-        resources.ColorTarget = renderData.OutputFramebuffer->getDesc().colorAttachments[0].texture;
-        resources.DepthTarget = renderData.TargetFramebuffer->getDesc().depthAttachment.texture;
+        resources.ColorTarget = renderData.Output;
+        resources.DepthTarget = renderData.SceneDepth;
         return true;
     }
 

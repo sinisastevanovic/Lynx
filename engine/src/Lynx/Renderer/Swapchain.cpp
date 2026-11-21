@@ -155,17 +155,13 @@ namespace Lynx
 
         for (vk::Image image : images)
         {
-            nvrhi::TextureDesc textureDesc;
-            textureDesc.width = m_Extent.width;
-            textureDesc.height = m_Extent.height;
-            textureDesc.format = nvrhi::Format::BGRA8_UNORM;
-            textureDesc.isRenderTarget = true;
-            textureDesc.initialState = nvrhi::ResourceStates::Present;
-            textureDesc.keepInitialState = true;
-            textureDesc.debugName = "SwapchainImage";
-
-            nvrhi::TextureHandle texture = m_Context.Nvrhi()->createHandleForNativeTexture(nvrhi::ObjectTypes::VK_Image, static_cast<VkImage>(image), textureDesc);
-            m_Framebuffers.push_back(m_Context.Nvrhi()->createFramebuffer(nvrhi::FramebufferDesc().addColorAttachment(texture)));
+            GpuTextureDesc desc;
+            desc.Width = m_Extent.width;
+            desc.Height = m_Extent.height;
+            desc.Format = ImageFormat;
+            desc.Usage = swapchainInfo.imageUsage;
+            desc.Name = "SwapchainImage";
+            m_Images.push_back(GpuTexture::Wrap(m_Context, image, desc));
             m_RenderFinished.push_back(m_Context.Device().createSemaphore(vk::SemaphoreCreateInfo()));
         }
 
@@ -175,9 +171,9 @@ namespace Lynx
 
     void Swapchain::Destroy()
     {
-        m_Framebuffers.clear();
-        // NVRHI keeps released objects until its next collection, and these refer to the images about to go.
-        m_Context.Nvrhi()->runGarbageCollection();
+        // The views of the images have to go before the images do. The GPU is idle, so they can go at once.
+        m_Images.clear();
+        m_Context.Deletions().Flush();
 
         for (vk::Semaphore semaphore : m_RenderFinished)
             m_Context.Device().destroySemaphore(semaphore);
