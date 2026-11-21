@@ -42,9 +42,18 @@ namespace Lynx
             return false;
         }
 
-        int width, height, channels;
-        m_PixelData = stbi_load(m_FilePath.c_str(), &width, &height, &channels, 0);
+        // A file with one channel stays as it is. Every other one is read as four: GPUs have no texture
+        // format with three channels, and most pictures, every JPEG among them, are stored with three.
+        // The header says how many the file has, so the pixels are decoded once, in the form they are used in.
+        int width, height, channelsInFile;
+        if (!stbi_info(m_FilePath.c_str(), &width, &height, &channelsInFile))
+        {
+            LX_CORE_ERROR("Failed to load texture: {0}", m_FilePath);
+            return false;
+        }
 
+        const int channels = channelsInFile == 1 ? 1 : 4;
+        m_PixelData = stbi_load(m_FilePath.c_str(), &width, &height, &channelsInFile, channels);
         if (!m_PixelData)
         {
             LX_CORE_ERROR("Failed to load texture: {0}", m_FilePath);
@@ -54,22 +63,7 @@ namespace Lynx
         m_Specification.Width = width;
         m_Specification.Height = height;
         m_Specification.DebugName = m_FilePath;
-
-        if (channels == 4)
-        {
-            m_Specification.Format = TextureFormat::RGBA8;
-        }
-        else if (channels == 1)
-        {
-            m_Specification.Format = TextureFormat::R8;
-        }
-        else
-        {
-            LX_CORE_WARN("Unsupported number of channels '{0}'. Forcing 4 channels...", channels);
-            stbi_image_free(m_PixelData);
-            m_PixelData = stbi_load(m_FilePath.c_str(), &width, &height, &channels, 4);
-            m_Specification.Format = TextureFormat::RGBA8;
-        }
+        m_Specification.Format = channels == 1 ? TextureFormat::R8 : TextureFormat::RGBA8;
 
         return true;
     }
