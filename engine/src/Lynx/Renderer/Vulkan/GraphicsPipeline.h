@@ -31,6 +31,10 @@ namespace Lynx
         const ShaderProgram* Program = nullptr;
         vk::PipelineLayout Layout;
 
+        // False leaves the program's fragment stage out. For drawing depth only where nothing is decided
+        // per pixel: the GPU then runs no code at all for a pixel.
+        bool UseFragmentStage = true;
+
         // The attributes of one vertex buffer, in the order of the shader's inputs. Empty for a pass
         // whose vertex shader makes its vertices from the vertex index alone.
         std::vector<VertexAttribute> VertexAttributes;
@@ -64,6 +68,6 @@ namespace Lynx
         vk::CompareOp DepthCompare = vk::CompareOp::eGreater;
     };
 
-    // Returns a null handle, after logging why, if the program lacks a vertex or a fragment stage.
+    // Returns a null handle, after logging why, if the program lacks a stage the pipeline uses.
     vk::Pipeline CreateGraphicsPipeline(vk::Device device, const GraphicsPipelineDesc& desc);
 }

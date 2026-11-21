@@ -29,8 +29,8 @@ namespace Lynx
     vk::Pipeline CreateGraphicsPipeline(vk::Device device, const GraphicsPipelineDesc& desc)
     {
         const ShaderStageCode* vertexCode = desc.Program->FindStage(ShaderStage::Vertex);
-        const ShaderStageCode* fragmentCode = desc.Program->FindStage(ShaderStage::Fragment);
-        if (!vertexCode || !fragmentCode)
+        const ShaderStageCode* fragmentCode = desc.UseFragmentStage ? desc.Program->FindStage(ShaderStage::Fragment) : nullptr;
+        if (!vertexCode || (desc.UseFragmentStage && !fragmentCode))
         {
             LX_CORE_ERROR("A graphics pipeline needs a shader with a vertex and a fragment stage.");
             return nullptr;
@@ -38,11 +38,12 @@ namespace Lynx
 
         // A pipeline keeps nothing of the modules it was made from, so they only live until it exists.
         const vk::ShaderModule vertexModule = CreateShaderModule(device, *vertexCode);
-        const vk::ShaderModule fragmentModule = CreateShaderModule(device, *fragmentCode);
+        const vk::ShaderModule fragmentModule = fragmentCode ? CreateShaderModule(device, *fragmentCode) : vk::ShaderModule();
         const vk::PipelineShaderStageCreateInfo stages[] = {
             { {}, vk::ShaderStageFlagBits::eVertex, vertexModule, "main" },
             { {}, vk::ShaderStageFlagBits::eFragment, fragmentModule, "main" },
         };
+        const uint32_t stageCount = fragmentCode ? 2 : 1;
 
         const vk::VertexInputBindingDescription vertexBinding(0, desc.VertexStride, vk::VertexInputRate::eVertex);
         std::vector<vk::VertexInputAttributeDescription> attributes;
@@ -101,7 +102,8 @@ namespace Lynx
 
         vk::GraphicsPipelineCreateInfo pipelineInfo;
         pipelineInfo.pNext = &rendering;
-        pipelineInfo.setStages(stages);
+        pipelineInfo.stageCount = stageCount;
+        pipelineInfo.pStages = stages;
         pipelineInfo.pVertexInputState = &vertexInput;
         pipelineInfo.pInputAssemblyState = &inputAssembly;
         pipelineInfo.pViewportState = &viewport;
