@@ -1,0 +1,97 @@
+{
+    "Name": "blocks",
+    "Scene": "Scenes/Blocks.lxscene",
+    "Frames": 600,
+    "ScreenshotFrames": [
+        0,
+        200,
+        330,
+        450,
+        599
+    ],
+    "Parameters": {
+        "BlocksPerSide": 40,
+        "PropsPerBlock": 60,
+        "Materials": 64
+    },
+    "CameraPath": [
+        {
+            "Frame": 0,
+            "Position": [
+                0.0,
+                2.0,
+                -440.0
+            ],
+            "Target": [
+                0.0,
+                2.0,
+                0.0
+            ]
+        },
+        {
+            "Frame": 200,
+            "Position": [
+                0.0,
+                2.0,
+                -150.0
+            ],
+            "Target": [
+                0.0,
+                2.0,
+                200.0
+            ]
+        },
+        {
+            "Frame": 330,
+            "Position": [
+                0.0,
+                8.0,
+                -10.0
+            ],
+            "Target": [
+                0.0,
+                10.0,
+                200.0
+            ]
+        },
+        {
+            "Frame": 450,
+            "Position": [
+                0.0,
+                75.0,
+                60.0
+            ],
+            "Target": [
+                100.0,
+                0.0,
+                200.0
+            ]
+        },
+        {
+            "Frame": 530,
+            "Position": [
+                0.0,
+                110.0,
+                150.0
+            ],
+            "Target": [
+                150.0,
+                0.0,
+                250.0
+            ]
+        },
+        {
+            "Frame": 599,
+            "Position": [
+                80.0,
+                120.0,
+                220.0
+            ],
+            "Target": [
+                200.0,
+                0.0,
+                300.0
+            ]
+        }
+    ]
+}
