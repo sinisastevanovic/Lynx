@@ -47,7 +47,7 @@ build\bin\Debug\LynxSandboxGame.exe
 ```
 
 - vcpkg provides the libraries. Its version is pinned by `builtin-baseline` in `vcpkg.json`. `VCPKG_ROOT` must be set.
-- The log is written to `<project>\temp\engine.log`. The shader cache and editor layout are in the same folder.
+- The log is written to `<project>\temp\engine.log`. The shader cache, the mesh cache and editor layout are in the same folder.
 - Only Debug and Release exist. Release has not been tested recently.
 
 ## How things work
