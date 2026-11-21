@@ -21,12 +21,6 @@ namespace Lynx
             uint32_t LinearSampler;
         };
 
-        // NVRHI hands out the Vulkan object behind one of its own as an untyped pointer.
-        template<typename Handle>
-        Handle Native(nvrhi::Object object)
-        {
-            return Handle(static_cast<typename Handle::NativeType>(object.pointer));
-        }
     }
 
     struct CompositePass::VulkanObjects
@@ -54,8 +48,7 @@ namespace Lynx
         m_Vulkan->Shared = ctx.Shared;
         m_Vulkan->Device = ctx.Graphics->Device();
 
-        const nvrhi::SamplerHandle linearSampler = SamplerCache::Get()->GetSampler(SamplerSettings());
-        m_LinearSampler = ctx.Shared->SamplerIndex(Native<vk::Sampler>(linearSampler->getNativeObject(nvrhi::ObjectTypes::VK_Sampler)));
+        m_LinearSampler = ctx.Shared->SamplerIndex(SamplerCache::Get()->GetSampler(SamplerSettings()));
 
         m_PipelineState.SetShader("Shaders/Composite.slang");
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });

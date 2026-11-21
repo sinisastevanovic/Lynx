@@ -120,8 +120,7 @@ namespace Lynx
         m_Vulkan->Device = ctx.Graphics->Device();
 
         // Clamped, so that the samples around a pixel at the edge do not reach the opposite edge.
-        const nvrhi::SamplerHandle sampler = SamplerCache::Get()->GetSampler(SamplerSettings{ TextureWrap::Clamp, TextureFilter::Bilinear });
-        m_LinearSampler = ctx.Shared->SamplerIndex(vk::Sampler(static_cast<VkSampler>(sampler->getNativeObject(nvrhi::ObjectTypes::VK_Sampler).pointer)));
+        m_LinearSampler = ctx.Shared->SamplerIndex(SamplerCache::Get()->GetSampler(SamplerSettings{ TextureWrap::Clamp, TextureFilter::Bilinear }));
 
         m_PipelineState.SetShader("Shaders/Bloom.slang");
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipelines(*shader); });

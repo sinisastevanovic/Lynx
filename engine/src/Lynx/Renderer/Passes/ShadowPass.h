@@ -23,9 +23,8 @@ namespace Lynx
 
         uint32_t m_Resolution;
 
-        // Still made through NVRHI, which keeps track of the map's layout between this pass and the forward pass.
+        // Still made through NVRHI, which keeps track of its layout between this pass and the forward pass.
         nvrhi::TextureHandle m_ShadowMap;
-        nvrhi::SamplerHandle m_ShadowSampler;
 
         // Where the texture table and the table of comparing samplers have them.
         uint32_t m_ShadowMapIndex = 0;

@@ -8,6 +8,8 @@
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
 #include "Lynx/Renderer/Vulkan/SharedBindings.h"
 
+#include <limits>
+
 namespace Lynx
 {
     namespace
@@ -32,11 +34,17 @@ namespace Lynx
         vk::Device Device;
         vk::Pipeline Pipeline;
 
+        // Compares instead of reading, and treats everything outside the map as lit.
+        vk::Sampler ShadowSampler;
+
         // The renderer waits for the GPU before it destroys its passes, so nothing here is still in use.
         ~VulkanObjects()
         {
-            if (Device)
-                Device.destroyPipeline(Pipeline);
+            if (!Device)
+                return;
+
+            Device.destroyPipeline(Pipeline);
+            Device.destroySampler(ShadowSampler);
         }
     };
 
@@ -63,15 +71,22 @@ namespace Lynx
             .setKeepInitialState(true);
         m_ShadowMap = ctx.Device->createTexture(shadowDesc);
 
-        // Compares instead of reading, and treats everything outside the map as lit.
-        const auto samplerDesc = nvrhi::SamplerDesc()
-            .setAllAddressModes(nvrhi::SamplerAddressMode::Border)
-            .setBorderColor(nvrhi::Color(1.0f))
-            .setReductionType(nvrhi::SamplerReductionType::Comparison);
-        m_ShadowSampler = ctx.Device->createSampler(samplerDesc);
+        vk::SamplerCreateInfo samplerInfo;
+        samplerInfo.magFilter = vk::Filter::eLinear;
+        samplerInfo.minFilter = vk::Filter::eLinear;
+        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToBorder;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToBorder;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToBorder;
+        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+        samplerInfo.compareEnable = VK_TRUE;
+        samplerInfo.compareOp = vk::CompareOp::eLess;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.maxLod = std::numeric_limits<float>::max();
+        m_Vulkan->ShadowSampler = m_Vulkan->Device.createSampler(samplerInfo);
 
         m_ShadowMapIndex = ctx.Shared->AddTexture(vk::ImageView(static_cast<VkImageView>(m_ShadowMap->getNativeView(nvrhi::ObjectTypes::VK_ImageView).pointer)));
-        m_ShadowSamplerIndex = ctx.Shared->ComparisonSamplerIndex(vk::Sampler(static_cast<VkSampler>(m_ShadowSampler->getNativeObject(nvrhi::ObjectTypes::VK_Sampler).pointer)));
+        m_ShadowSamplerIndex = ctx.Shared->ComparisonSamplerIndex(m_Vulkan->ShadowSampler);
 
         m_PipelineState.SetShader("Shaders/Shadow.slang");
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });

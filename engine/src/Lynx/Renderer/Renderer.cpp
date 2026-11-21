@@ -268,7 +268,7 @@ namespace Lynx
         m_RenderContext.CommandList = m_CommandList;
         m_RenderContext.WritesEntityIds = m_ShouldCreateIDTarget;
 
-        SamplerCache::Init(m_NvrhiDevice, m_MaxAnisotropy);
+        SamplerCache::Init(m_Context->Device(), m_MaxAnisotropy);
 
         // What a material draws with where it has no texture of its own.
         const auto addDefault = [this](const nvrhi::TextureHandle& texture)
@@ -298,9 +298,7 @@ namespace Lynx
         m_Graph->Add("UI", std::make_unique<UIPass>(), [this]() { return m_ShowUI; });
         m_Graph->Init(m_RenderContext);
 
-        const nvrhi::SamplerHandle imguiSampler = SamplerCache::Get()->GetSampler(SamplerSettings());
-        m_ImGui = std::make_unique<ImGuiVulkan>(*m_Context, *m_Frame->Shared, RenderFormats::Output,
-            vk::Sampler(static_cast<VkSampler>(imguiSampler->getNativeObject(nvrhi::ObjectTypes::VK_Sampler).pointer)));
+        m_ImGui = std::make_unique<ImGuiVulkan>(*m_Context, *m_Frame->Shared, RenderFormats::Output, SamplerCache::Get()->GetSampler(SamplerSettings()));
 
         m_MipMapGenPass = std::make_unique<MipMapBlitPass>();
         m_MipMapGenPass->Init(m_NvrhiDevice);
@@ -882,8 +880,7 @@ namespace Lynx
 
     uint32_t Renderer::SamplerIndex(const SamplerSettings& settings)
     {
-        const nvrhi::SamplerHandle sampler = SamplerCache::Get()->GetSampler(settings);
-        return m_Frame->Shared->SamplerIndex(vk::Sampler(static_cast<VkSampler>(sampler->getNativeObject(nvrhi::ObjectTypes::VK_Sampler).pointer)));
+        return m_Frame->Shared->SamplerIndex(SamplerCache::Get()->GetSampler(settings));
     }
 
     void Renderer::SubmitParticles(Material* material, const std::vector<ParticleInstanceData>& particles)

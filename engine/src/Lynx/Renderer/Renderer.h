@@ -202,7 +202,6 @@ namespace Lynx
         std::unique_ptr<ImGuiVulkan> m_ImGui;
         bool m_ShouldCreateIDTarget = false;
         
-        std::unordered_map<SamplerSettings, nvrhi::SamplerHandle> m_SamplerCache;
 
         std::unordered_map<BatchKey, std::vector<GPUInstanceData>, BatchKeyHasher> m_OpaqueBatches;
         std::unordered_map<Material*, std::vector<ParticleInstanceData>> m_ParticleBatches;

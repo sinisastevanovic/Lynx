@@ -1,27 +1,40 @@
 #include "SamplerCache.h"
 
+#include <limits>
+
 namespace Lynx
 {
     std::unique_ptr<SamplerCache> SamplerCache::s_Instance = nullptr;
-    
-    static nvrhi::SamplerAddressMode WrapModeToNvrhi(TextureWrap wrap)
+
+    namespace
     {
-        switch (wrap)
+        vk::SamplerAddressMode ToVulkan(TextureWrap wrap)
         {
-            case TextureWrap::Repeat: return nvrhi::SamplerAddressMode::Repeat;
-            case TextureWrap::Clamp: return nvrhi::SamplerAddressMode::Clamp;
-            case TextureWrap::Mirror: return nvrhi::SamplerAddressMode::Mirror;
+            switch (wrap)
+            {
+                case TextureWrap::Repeat: return vk::SamplerAddressMode::eRepeat;
+                case TextureWrap::Clamp:  return vk::SamplerAddressMode::eClampToEdge;
+                case TextureWrap::Mirror: return vk::SamplerAddressMode::eMirroredRepeat;
+            }
+            return vk::SamplerAddressMode::eRepeat;
         }
-        return nvrhi::SamplerAddressMode::Repeat;
     }
 
-    SamplerCache::SamplerCache(nvrhi::DeviceHandle device, float maxAnisotropy)
-        : m_Device(device), m_MaxAnisotropy(maxAnisotropy) {}
-
-    
-    void SamplerCache::Init(nvrhi::DeviceHandle device, float maxAnisotropy)
+    SamplerCache::SamplerCache(vk::Device device, float maxAnisotropy)
+        : m_Device(device), m_MaxAnisotropy(maxAnisotropy)
     {
-        s_Instance = std::unique_ptr<SamplerCache>(new SamplerCache(device, maxAnisotropy));
+    }
+
+    SamplerCache::~SamplerCache()
+    {
+        // The renderer waits for the GPU before it shuts the cache down, so no sampler is still in use.
+        for (const auto& [settings, sampler] : m_Samplers)
+            m_Device.destroySampler(sampler);
+    }
+
+    void SamplerCache::Init(vk::Device device, float maxAnisotropy)
+    {
+        s_Instance = std::make_unique<SamplerCache>(device, maxAnisotropy);
     }
 
     void SamplerCache::Shutdown()
@@ -34,33 +47,38 @@ namespace Lynx
         return s_Instance.get();
     }
 
-    nvrhi::SamplerHandle SamplerCache::GetSampler(const SamplerSettings& settings)
+    vk::Sampler SamplerCache::GetSampler(const SamplerSettings& settings)
     {
-        auto it = m_SamplerCache.find(settings);
-        if (it != m_SamplerCache.end())
-            return it->second;
+        if (const auto found = m_Samplers.find(settings); found != m_Samplers.end())
+            return found->second;
 
-        // Create a new Sampler
-        auto desc = nvrhi::SamplerDesc();
+        const bool isLinear = settings.FilterMode != TextureFilter::Nearest;
+        const bool isTrilinear = settings.FilterMode == TextureFilter::Trilinear;
 
-        nvrhi::SamplerAddressMode addressMode = WrapModeToNvrhi(settings.WrapMode);
-        desc.setAddressU(addressMode).setAddressV(addressMode).setAddressW(addressMode);
+        vk::SamplerCreateInfo info;
+        info.magFilter = isLinear ? vk::Filter::eLinear : vk::Filter::eNearest;
+        info.minFilter = info.magFilter;
 
-        if (settings.FilterMode == TextureFilter::Nearest)
-            desc.setMinFilter(false).setMagFilter(false).setMipFilter(false);
-        else if (settings.FilterMode == TextureFilter::Bilinear)
-            desc.setMinFilter(true).setMagFilter(true).setMipFilter(false);
-        else if (settings.FilterMode == TextureFilter::Trilinear)
+        // Only trilinear filtering blends between mip levels. The others take the nearest one.
+        info.mipmapMode = isTrilinear ? vk::SamplerMipmapMode::eLinear : vk::SamplerMipmapMode::eNearest;
+        info.addressModeU = ToVulkan(settings.WrapMode);
+        info.addressModeV = info.addressModeU;
+        info.addressModeW = info.addressModeU;
+        info.maxLod = std::numeric_limits<float>::max();
+
+        // Sharpens textures seen at a flat angle. Only meaningful together with mip levels.
+        if (isTrilinear && settings.UseAnisotropy && m_MaxAnisotropy > 1.0f)
         {
-            desc.setMinFilter(true).setMagFilter(true).setMipFilter(true);
-            if (settings.UseAnisotropy)
-                desc.setMaxAnisotropy(m_MaxAnisotropy);
-            else
-                desc.setMaxAnisotropy(1.0f);
+            info.anisotropyEnable = VK_TRUE;
+            info.maxAnisotropy = m_MaxAnisotropy;
+        }
+        else
+        {
+            info.maxAnisotropy = 1.0f;
         }
 
-        nvrhi::SamplerHandle handle = m_Device->createSampler(desc);
-        m_SamplerCache[settings] = handle;
-        return handle;
+        const vk::Sampler sampler = m_Device.createSampler(info);
+        m_Samplers.emplace(settings, sampler);
+        return sampler;
     }
 }
