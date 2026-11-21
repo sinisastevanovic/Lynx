@@ -27,6 +27,11 @@ namespace Lynx
         // picture painted for the screen. Ignored for a format that has no sRGB form.
         bool SrgbView = false;
 
+        // For a texture with one channel: shaders read its value as red, green and blue alike, with an
+        // alpha of 1. That is what a greyscale picture means, whichever channel a shader looks at.
+        // Without it, green and blue read as 0.
+        bool ReadAsGrey = false;
+
         // Shown in RenderDoc and in validation messages.
         const char* Name = "";
     };

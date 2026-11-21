@@ -125,6 +125,8 @@ namespace Lynx
         viewInfo.viewType = vk::ImageViewType::e2D;
         viewInfo.format = m_Desc.Format;
         viewInfo.subresourceRange = vk::ImageSubresourceRange(AspectOf(m_Desc.Format), 0, m_Desc.MipLevels, 0, 1);
+        if (m_Desc.ReadAsGrey)
+            viewInfo.components = vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eOne);
         m_View = context.Device().createImageView(viewInfo);
 
         if (m_Desc.SrgbView && SrgbFormOf(m_Desc.Format) != vk::Format::eUndefined)
@@ -136,6 +138,8 @@ namespace Lynx
 
         if (m_Desc.ViewPerMip)
         {
+            // These are drawn into, which a view that rearranges channels does not allow.
+            viewInfo.components = vk::ComponentMapping();
             m_MipViews.reserve(m_Desc.MipLevels);
             for (uint32_t mip = 0; mip < m_Desc.MipLevels; ++mip)
             {

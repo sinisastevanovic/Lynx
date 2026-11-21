@@ -332,6 +332,9 @@ namespace Lynx
         // So every texture offers both readings, and the user picks one.
         desc.SrgbView = true;
 
+        // A greyscale file, such as a roughness map saved on its own, is stored with one channel.
+        desc.ReadAsGrey = specification.Format == TextureFormat::R8;
+
         // Smaller sizes are made by copying from the size above, so the texture is both read from and written to.
         desc.Usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc;
         desc.Name = specification.DebugName.c_str();
