@@ -199,6 +199,20 @@ namespace Lynx
 
         RenderStats m_Stats;
 
+        // What culling let through in this frame. An instance is one submesh of one mesh in the scene,
+        // which is what the GPU culls and draws one by one from step 2.8 of Renderer V2 on.
+        // The camera's view and the sun's are counted apart, and a triangle counts once per view,
+        // however many passes draw it.
+        struct MeshCounts
+        {
+            uint64_t InstancesTested = 0;
+            uint64_t InstancesDrawn = 0;
+            uint64_t TrianglesDrawn = 0;
+            uint64_t ShadowInstancesDrawn = 0;
+            uint64_t ShadowTrianglesDrawn = 0;
+        };
+        MeshCounts m_MeshCounts;
+
         FrameProfiler& m_Profiler;
 
         // For the textures of the materials that are drawn.

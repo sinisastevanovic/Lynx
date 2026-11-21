@@ -412,6 +412,7 @@ namespace Lynx
         m_CurrentFrameData.DrawCalls = 0;
         m_CurrentFrameData.IndexCount = 0;
         memset(&m_Stats, 0, sizeof(RenderStats));
+        m_MeshCounts = {};
     }
 
     void Renderer::SetVSync(bool enabled)
@@ -735,6 +736,7 @@ namespace Lynx
         for (const ExtractedMesh& mesh : scene.Meshes)
         {
             const AABB worldBounds = TransformAABB(mesh.Mesh->GetBounds(), mesh.Transform);
+            m_MeshCounts.InstancesTested += mesh.Mesh->GetSubmeshes().size();
 
             // TODO: Check if this is worth it. Using these flags splits the batches up, so more draw calls, but less geometry drawn...
             RenderFlags flags = RenderFlags::None;
@@ -776,7 +778,21 @@ namespace Lynx
             GPUInstanceData instance = { transform, entityID };
             BatchKey key = { mesh.get(), (uint32_t)i, submesh.Material.get(), Flags };
 
-            if (submesh.Material->Mode == AlphaMode::Translucent)
+            // See-through surfaces cast no shadow: the shadow pass draws the opaque batches only.
+            const bool isTranslucent = submesh.Material->Mode == AlphaMode::Translucent;
+            const uint32_t triangles = submesh.IndexCount / 3;
+            if (Flags & RenderFlags::MainPass)
+            {
+                m_MeshCounts.InstancesDrawn++;
+                m_MeshCounts.TrianglesDrawn += triangles;
+            }
+            if ((Flags & RenderFlags::ShadowPass) && !isTranslucent)
+            {
+                m_MeshCounts.ShadowInstancesDrawn++;
+                m_MeshCounts.ShadowTrianglesDrawn += triangles;
+            }
+
+            if (isTranslucent)
             {
                 RenderCommand cmd;
                 cmd.Mesh = mesh;
@@ -856,6 +872,11 @@ namespace Lynx
         m_Stats.IndexCount = m_CurrentFrameData.IndexCount;
         m_Profiler.SetCounter("DrawCalls", m_Stats.DrawCalls);
         m_Profiler.SetCounter("Triangles", m_Stats.IndexCount / 3);
+        m_Profiler.SetCounter("InstancesTested", static_cast<double>(m_MeshCounts.InstancesTested));
+        m_Profiler.SetCounter("InstancesDrawn", static_cast<double>(m_MeshCounts.InstancesDrawn));
+        m_Profiler.SetCounter("TrianglesDrawn", static_cast<double>(m_MeshCounts.TrianglesDrawn));
+        m_Profiler.SetCounter("ShadowInstancesDrawn", static_cast<double>(m_MeshCounts.ShadowInstancesDrawn));
+        m_Profiler.SetCounter("ShadowTrianglesDrawn", static_cast<double>(m_MeshCounts.ShadowTrianglesDrawn));
 
         m_SceneOutput = m_CurrentFrameData.Output;
     }
