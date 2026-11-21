@@ -175,29 +175,36 @@ void CreateInstanceGrid(Scene& scene, AssetManager& assetManager, uint32_t count
     LX_INFO("Created a grid of {0} instances.", count);
 }
 
-Crowd::Crowd(Scene& scene, const ShapeLibrary& shapes, uint32_t count)
+Crowd::Crowd(Scene& scene, const ShapeLibrary& shapes, uint32_t count, uint32_t replacedPerFrame)
+    : m_Shapes(shapes), m_Side(static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<float>(count))))), m_ReplacedPerFrame(replacedPerFrame), m_NextPropNumber(count)
 {
-    const float spacing = 2.5f;
-    const uint32_t side = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<float>(count))));
-    const float origin = -0.5f * spacing * static_cast<float>(side - 1);
-
     for (uint32_t index = 0; index < count; ++index)
     {
-        const Prop prop = ChooseProp(shapes, index);
-
-        // Each one stands a little off its place in the rows, resting on the ground.
-        const glm::vec3 position(
-            origin + spacing * static_cast<float>(index % side) + Random(index, 3, -0.6f, 0.6f),
-            GroundHeight + 0.5f * prop.Size,
-            origin + spacing * static_cast<float>(index / side) + Random(index, 4, -0.6f, 0.6f));
-
-        const Entity entity = CreateMeshEntity(scene, "Instance", prop.Mesh, position, TurnedAroundUp(Random(index, 5)), glm::vec3(prop.Size));
+        glm::vec3 position;
+        const Entity entity = Place(scene, index, index, position);
 
         if (index % 5 == 0)
             m_Movers.push_back({ entity, position, Random(index, 6, 0.5f, 1.5f), Random(index, 7, 0.5f, 2.0f), Random(index, 8, 0.0f, glm::two_pi<float>()) });
+        else
+            m_Standing.push_back({ entity, index });
     }
 
-    LX_INFO("Created a crowd of {0} instances, {1} of them moving.", count, m_Movers.size());
+    LX_INFO("Created a crowd of {0} instances, {1} of them moving, {2} replaced per frame.", count, m_Movers.size(), m_ReplacedPerFrame);
+}
+
+Entity Crowd::Place(Scene& scene, uint32_t cell, uint32_t propNumber, glm::vec3& position) const
+{
+    const float spacing = 2.5f;
+    const float origin = -0.5f * spacing * static_cast<float>(m_Side - 1);
+    const Prop prop = ChooseProp(m_Shapes, propNumber);
+
+    // Each one stands a little off its place in the rows, resting on the ground.
+    position = glm::vec3(
+        origin + spacing * static_cast<float>(cell % m_Side) + Random(propNumber, 3, -0.6f, 0.6f),
+        GroundHeight + 0.5f * prop.Size,
+        origin + spacing * static_cast<float>(cell / m_Side) + Random(propNumber, 4, -0.6f, 0.6f));
+
+    return CreateMeshEntity(scene, "Instance", prop.Mesh, position, TurnedAroundUp(Random(propNumber, 5)), glm::vec3(prop.Size));
 }
 
 void Crowd::Update(Scene& scene, float deltaTime)
@@ -211,6 +218,20 @@ void Crowd::Update(Scene& scene, float deltaTime)
         const float angle = mover.Phase + mover.Speed * m_Time;
         const glm::vec3 offset(std::cos(angle) * mover.Radius, 0.5f + 0.5f * std::sin(2.0f * angle), std::sin(angle) * mover.Radius);
         registry.get<TransformComponent>(mover.Handle).Translation = mover.Home + offset;
+    }
+
+    // Time stands still while a benchmark warms up. Nothing is replaced then, so that the frames that
+    // are measured replace the same props in every run.
+    if (deltaTime <= 0.0f || m_Standing.empty())
+        return;
+
+    for (uint32_t count = 0; count < m_ReplacedPerFrame; ++count)
+    {
+        Standing& standing = m_Standing[Hash(m_NextPropNumber * 16u + 9u) % m_Standing.size()];
+        scene.DestroyEntity(standing.Handle);
+
+        glm::vec3 position;
+        standing.Handle = Place(scene, standing.Cell, m_NextPropNumber++, position);
     }
 }
 

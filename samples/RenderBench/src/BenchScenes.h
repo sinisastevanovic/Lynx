@@ -31,14 +31,19 @@ private:
 void CreateInstanceGrid(Scene& scene, AssetManager& assetManager, uint32_t count);
 
 // A field of shapes in many materials. One in five moves in a circle and bobs up and down.
+// On request, some of those that stand still are replaced in every frame: removed, with a new one put
+// in their place. That is what a game does when it spawns and destroys things while it runs.
 class Crowd
 {
 public:
-    Crowd(Scene& scene, const ShapeLibrary& shapes, uint32_t count);
+    Crowd(Scene& scene, const ShapeLibrary& shapes, uint32_t count, uint32_t replacedPerFrame);
 
     void Update(Scene& scene, float deltaTime);
 
 private:
+    // Puts the prop with the given number at a place in the field. The number decides what it looks like.
+    Entity Place(Scene& scene, uint32_t cell, uint32_t propNumber, glm::vec3& position) const;
+
     struct Mover
     {
         entt::entity Handle;
@@ -48,7 +53,18 @@ private:
         float Phase;
     };
 
+    struct Standing
+    {
+        entt::entity Handle;
+        uint32_t Cell;
+    };
+
+    ShapeLibrary m_Shapes;
+    uint32_t m_Side = 0;
     std::vector<Mover> m_Movers;
+    std::vector<Standing> m_Standing;
+    uint32_t m_ReplacedPerFrame = 0;
+    uint32_t m_NextPropNumber = 0;
     float m_Time = 0.0f;
 };
 

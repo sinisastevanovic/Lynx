@@ -40,7 +40,7 @@ public:
         // The scenes hold the meshes they use, so the library is only needed while they are built.
         const ShapeLibrary shapes(assetManager, std::max(count("Materials"), 1u));
         if (crowd > 0)
-            m_Crowd.emplace(scene, shapes, crowd);
+            m_Crowd.emplace(scene, shapes, crowd, count("ReplacedPerFrame"));
         if (blocksPerSide > 0)
             CreateBlocks(scene, shapes, blocksPerSide, count("PropsPerBlock"));
     }
