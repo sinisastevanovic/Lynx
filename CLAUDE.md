@@ -132,8 +132,12 @@ build\bin\Debug\LynxSandboxGame.exe
   and pictures under the label. Run it before and after a change, then `tools/bench-compare.ps1 -Before <a> -After <b>`.
   Pictures are identical between runs of the same code, so any difference comes from the change. The timings compared
   are "clean": each benchmark runs five times and every frame counts with its fastest run, which removes the GPU time
-  the Windows compositor takes at every display refresh. Clean GPU times repeat within about 1.3 % and the clean frame
-  time within 2 %. Measure the "before" label right before the "after" one, the machine drifts over an hour.
+  the Windows compositor takes at every display refresh. Clean GPU times repeat within about 1.3 %.
+  "Frame" is the slower of two times, and "Bound by" says which: what the CPU needs for a frame without waiting for
+  the GPU, and what the GPU needs. Only that limit says how fast a scene runs. Where the GPU is the limit, less CPU
+  work shows in the "CPU" column and not in the frame. Results made before 21 November 2026 hold a frame time that
+  reads too low for scenes bound by the GPU. Measure the "before" label right before the "after" one, the machine
+  drifts over an hour.
 - The editor window: `tools/capture-window.ps1` saves a picture of it. Compare one from before with one from after.
 - F3, or `--profiler` on the command line, shows frame, CPU and GPU times on screen in the editor and in a game.
 - Serialization: re-save every scene and prefab with the old and the new code and compare the JSON.

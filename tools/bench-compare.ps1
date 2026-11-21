@@ -4,8 +4,9 @@
 #
 # The timings compared are the "clean" ones, see tools/bench.ps1. A timing that changed by less than
 # the threshold is treated as unchanged. Rows that changed more are marked "faster" or "SLOWER".
-# Measured on an RTX 5080 with five runs: clean GPU times repeat within 1.3 % and the clean frame time
-# within 2.0 %. CPU times of single passes vary by up to 8 % and get four times the threshold.
+# "Frame" is the slower of the CPU's and the GPU's time for a frame, which is what limits the frame rate.
+# Measured on an RTX 5080 with five runs: clean GPU times repeat within 1.3 % and the frame within 2.0 %.
+# CPU times of single passes and the CPU's side of a frame vary by up to 8 % and get four times the threshold.
 # The 99th percentile is raw and varies by up to 50 % on its own, so it gets no verdict.
 # Between sessions the same build drifts, so the script warns when the two results are far apart in time.
 # Rows whose time is too small to measure reliably are left out unless -All is given.
@@ -214,7 +215,16 @@ foreach ($benchName in $Bench) {
     }
 
     if ($useClean) {
-        $rows += Compare-Row "Frame" $beforeResult.Clean.FrameMs $afterResult.Clean.FrameMs $Threshold
+        # The frame is as long as the slower of CPU and GPU needs, see tools/bench.ps1. Results made before
+        # that was introduced hold a frame time that reads too low where the GPU is the limit.
+        if ($null -ne $beforeResult.Clean.BoundBy -and $null -ne $afterResult.Clean.BoundBy) {
+            "    Bound by the $($beforeResult.Clean.BoundBy) before, by the $($afterResult.Clean.BoundBy) after."
+            $rows += Compare-Row "Frame" $beforeResult.Clean.FrameMs $afterResult.Clean.FrameMs $Threshold
+            $rows += Compare-Row "Frame, CPU side" $beforeResult.Clean.CpuFrameMs $afterResult.Clean.CpuFrameMs $cpuThreshold
+        }
+        else {
+            "    One of the results was made before the frame time was defined as the slower of CPU and GPU: no Frame row."
+        }
         $rows += Compare-Row "Frame P99 (raw)" $beforeResult.FrameMs.P99 $afterResult.FrameMs.P99 $noVerdict
         $rows += Compare-Group "GPU" $beforeResult.Clean.GpuMs $afterResult.Clean.GpuMs $Threshold $smallestGpuMs
         $rows += Compare-Group "CPU" $beforeResult.Clean.CpuMs $afterResult.Clean.CpuMs $cpuThreshold $smallestCpuMs

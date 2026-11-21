@@ -5,6 +5,13 @@
 #   tools/bench.ps1 [-Label <name>] [-Bench <name>,...] [-Runs <count>] [-Configuration Release|Debug]
 #       [-BuildDirectory <folder>] [-NoBuild] [-Set <name>=<number>,...]
 #
+# What a frame costs is reported as two numbers and the larger of them:
+#   CPU: the time from one frame to the next without the time spent waiting for the GPU.
+#   GPU: the time the GPU needs for the frame's commands.
+#   Frame: the larger of the two, which is what limits the frame rate. "Bound by" says which one it is.
+# The time from one frame to the next is not used as it is. When the GPU is the slower of the two, the CPU
+# runs ahead and then waits, so frames come alternately short and long, and their time says little.
+#
 # Each benchmark is run several times, and the runs are combined frame by frame. A benchmark renders
 # the same frames in every run, so frame N costs the same each time, and whatever else the machine
 # does can only add to it: on a 240 Hz desktop the compositor takes about 0.4 ms of GPU time at every
@@ -82,6 +89,21 @@ function Get-CleanMedian($tables, $column, $frameCount) {
     return $values[[int][math]::Floor(($frameCount - 1) / 2)]
 }
 
+# The same for the time of a frame without the time the CPU spent waiting for the GPU in it.
+function Get-CleanCpuMedian($tables, $frameCount) {
+    $values = New-Object double[] $frameCount
+    for ($frame = 0; $frame -lt $frameCount; $frame++) {
+        $smallest = [double]::MaxValue
+        foreach ($table in $tables) {
+            $value = [double]$table[$frame].FrameMs - [double]$table[$frame]."Cpu.WaitForGpu"
+            if ($value -lt $smallest) { $smallest = $value }
+        }
+        $values[$frame] = $smallest
+    }
+    [array]::Sort($values)
+    return $values[[int][math]::Floor(($frameCount - 1) / 2)]
+}
+
 $labelDirectory = Join-Path $projectRoot "temp\bench\$Label"
 $failed = $false
 $summary = @()
@@ -142,17 +164,23 @@ foreach ($benchName in $Bench) {
     # Combine the runs frame by frame, see the top of this file.
     $tables = @($runResults | ForEach-Object { , @(Import-Csv (Join-Path $_.Directory "frames.csv")) })
     $frameCount = [int](($tables | ForEach-Object { $_.Count } | Measure-Object -Minimum).Minimum)
-    $clean = [ordered]@{ FrameMs = 0.0; GpuMs = [ordered]@{}; CpuMs = [ordered]@{} }
+    $clean = [ordered]@{ FrameMs = 0.0; CpuFrameMs = 0.0; GpuFrameMs = 0.0; BoundBy = ""; GpuMs = [ordered]@{}; CpuMs = [ordered]@{} }
     foreach ($column in $tables[0][0].PSObject.Properties.Name) {
         if ($column -eq "Frame") { continue }
         $inEveryRun = @($tables | Where-Object { $null -eq $_[0].$column }).Count -eq 0
         if (-not $inEveryRun) { continue }
 
         $median = Get-CleanMedian $tables $column $frameCount
-        if ($column -eq "FrameMs") { $clean.FrameMs = $median }
+        if ($column -eq "FrameMs") { continue }
         elseif ($column.StartsWith("Gpu.")) { $clean.GpuMs[$column.Substring(4)] = $median }
         elseif ($column.StartsWith("Cpu.")) { $clean.CpuMs[$column.Substring(4)] = $median }
     }
+
+    # The frame is as long as the slower of the two sides needs, see the top of this file.
+    $clean.CpuFrameMs = Get-CleanCpuMedian $tables $frameCount
+    $clean.GpuFrameMs = [double]$clean.GpuMs["Frame"]
+    $clean.FrameMs = [math]::Max($clean.CpuFrameMs, $clean.GpuFrameMs)
+    $clean.BoundBy = if ($clean.CpuFrameMs -ge $clean.GpuFrameMs) { "CPU" } else { "GPU" }
 
     $result = $chosen.Result
     $result | Add-Member -NotePropertyName Clean -NotePropertyValue $clean
@@ -173,8 +201,10 @@ foreach ($benchName in $Bench) {
 
     $summary += [pscustomobject]@{
         Benchmark = $benchName
-        "Clean frame ms" = "{0:N3}" -f $clean.FrameMs
-        "Clean GPU ms" = "{0:N3}" -f $clean.GpuMs["Frame"]
+        "Frame ms" = "{0:N3}" -f $clean.FrameMs
+        "Bound by" = $clean.BoundBy
+        "CPU ms" = "{0:N3}" -f $clean.CpuFrameMs
+        "GPU ms" = "{0:N3}" -f $clean.GpuFrameMs
         "Raw frame ms" = "{0:N3}" -f $result.FrameMs.Median
         "Raw P99 ms" = "{0:N3}" -f $result.FrameMs.P99
         "Raw run spread" = "{0:N1} %" -f $spread
