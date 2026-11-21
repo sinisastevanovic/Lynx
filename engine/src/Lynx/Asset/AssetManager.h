@@ -82,6 +82,10 @@ namespace Lynx
         std::string GetAssetName(AssetHandle handle) const;
         void AddRuntimeAsset(std::shared_ptr<Asset> asset);
 
+        // The same with a handle of the caller's choice. Assets made in code get a random handle otherwise,
+        // and the renderer draws in the order of handles: a fixed one makes every run draw in the same order.
+        void AddRuntimeAsset(std::shared_ptr<Asset> asset, AssetHandle handle);
+
         // The default assets are loaded on first use. Loading one needs the renderer to be initialized,
         // and the renderer needs this class for its shaders, so they cannot be loaded when this class is created.
         std::shared_ptr<Texture> GetDefaultTexture();

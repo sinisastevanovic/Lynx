@@ -320,6 +320,15 @@ namespace Lynx
         }
     }
 
+    void AssetManager::AddRuntimeAsset(std::shared_ptr<Asset> asset, AssetHandle handle)
+    {
+        if (!asset)
+            return;
+
+        asset->SetHandle(handle);
+        AddRuntimeAsset(std::move(asset));
+    }
+
     std::shared_ptr<Texture> AssetManager::GetDefaultTexture()
     {
         auto asset = GetAsset(m_ContentPaths.EngineResource("T_DefaultChecker.png"), AssetLoadMode::Blocking);
