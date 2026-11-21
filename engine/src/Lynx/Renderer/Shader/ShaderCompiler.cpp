@@ -204,12 +204,20 @@ namespace Lynx
         sessionDesc.defaultMatrixLayoutMode = SLANG_MATRIX_LAYOUT_COLUMN_MAJOR;
 
         // Compiling happens once per change and is cached, so it may take its time to make the shader fast.
-        slang::CompilerOptionEntry options[1];
+        slang::CompilerOptionEntry options[2];
         options[0].name = slang::CompilerOptionName::Optimization;
         options[0].value.kind = slang::CompilerOptionValueKind::Int;
         options[0].value.intValue0 = SLANG_OPTIMIZATION_LEVEL_HIGH;
+
+        // Warning 41012 says that a shader uses more than the profile names. The profile only picks the
+        // SPIR-V version here, and a shader that reads the texture table with an index that differs from
+        // pixel to pixel (NonUniformResourceIndex) raises it every time. What a shader really needs
+        // beyond the device's features is caught by the validation layer.
+        options[1].name = slang::CompilerOptionName::DisableWarning;
+        options[1].value.kind = slang::CompilerOptionValueKind::String;
+        options[1].value.stringValue0 = "41012";
         sessionDesc.compilerOptionEntries = options;
-        sessionDesc.compilerOptionEntryCount = 1;
+        sessionDesc.compilerOptionEntryCount = 2;
 
         // A session per program: a session remembers the modules it has loaded, and a changed file has to be read again.
         Slang::ComPtr<slang::ISession> session;
