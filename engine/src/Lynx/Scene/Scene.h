@@ -4,6 +4,8 @@
 #include <entt/entt.hpp>
 #include <glm/fwd.hpp>
 
+#include <span>
+
 #include "Entity.h"
 #include "Lynx/Asset/Asset.h"
 #include "Lynx/Event/Event.h"
@@ -75,6 +77,13 @@ namespace Lynx
         
         entt::registry& Reg() { return m_Registry; }
         const entt::registry& Reg() const { return m_Registry; }
+
+        // --- Change tracking ---
+        // The entities whose place in the world has changed since the list was last cleared. An entity can be
+        // in it more than once. Whoever keeps something in step with the scene, as the renderer does with what
+        // it has on the GPU, reads the list and clears it, and so only looks at what moved.
+        std::span<const entt::entity> GetMovedEntities() const { return m_MovedEntities; }
+        void ClearMovedEntities() { m_MovedEntities.clear(); }
         
         // --- Events (scene-local) ---
         template <typename Event, auto Callback, typename Instance>
@@ -151,6 +160,7 @@ namespace Lynx
 
     private:
         void UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform);
+        void SetWorldMatrix(entt::entity entity, TransformComponent& transform, const glm::mat4& worldMatrix);
         void ProcessDestroyQueue();
         
     private:
@@ -171,6 +181,7 @@ namespace Lynx
         std::vector<PendingDestroy> m_DestroyQueue;
         
         std::unordered_map<UUID, entt::entity> m_EntityMap;
+        std::vector<entt::entity> m_MovedEntities;
 
         friend class SceneHierarchyPanel; // For editor later
         friend class SceneSerializer;

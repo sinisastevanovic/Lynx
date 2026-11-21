@@ -704,7 +704,7 @@ namespace Lynx
         auto& childTransform = m_Registry.get<TransformComponent>(child);
         SetTransformFromMatrix(childTransform, childTransform.WorldMatrix);
         DetachEntity(child);
-        childTransform.WorldMatrix = childTransform.GetTransform();
+        SetWorldMatrix(child, childTransform, childTransform.GetTransform());
     }
 
     std::shared_ptr<class UIElement> Scene::FindUIElementByID(UUID id)
@@ -732,7 +732,7 @@ namespace Lynx
             if (rel.Parent == entt::null)
             {
                 auto& transform = view.get<TransformComponent>(entity);
-                transform.WorldMatrix = transform.GetTransform();
+                SetWorldMatrix(entity, transform, transform.GetTransform());
 
                 if (rel.FirstChild != entt::null)
                 {
@@ -753,6 +753,18 @@ namespace Lynx
         m_Registry.on_construct<LuaScriptComponent>().connect<&OnLuaScriptComponentConstructed>();
     }
 
+    void Scene::SetWorldMatrix(entt::entity entity, TransformComponent& transform, const glm::mat4& worldMatrix)
+    {
+        // Every world matrix is computed anew in every frame, and most come out as they were.
+        // Comparing here is what tells the few that moved from the many that did not.
+        // As bytes: that is one comparison of 64 bytes where comparing the numbers is sixteen.
+        if (std::memcmp(&transform.WorldMatrix, &worldMatrix, sizeof(glm::mat4)) == 0)
+            return;
+
+        transform.WorldMatrix = worldMatrix;
+        m_MovedEntities.push_back(entity);
+    }
+
     void Scene::UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform)
     {
         // Updates the entity and the siblings after it. Siblings are walked in a loop and only children
@@ -760,7 +772,7 @@ namespace Lynx
         for (entt::entity current = entity; current != entt::null; current = m_Registry.get<RelationshipComponent>(current).NextSibling)
         {
             auto& transform = m_Registry.get<TransformComponent>(current);
-            transform.WorldMatrix = parentTransform * transform.GetTransform();
+            SetWorldMatrix(current, transform, parentTransform * transform.GetTransform());
 
             const entt::entity firstChild = m_Registry.get<RelationshipComponent>(current).FirstChild;
             if (firstChild != entt::null)
