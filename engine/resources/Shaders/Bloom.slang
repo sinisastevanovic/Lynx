@@ -45,6 +45,30 @@ float3 sampleSource(float2 uv)
     return textures[constants.sourceTexture].Sample(samplers[constants.linearSampler], uv).rgb;
 }
 
+// The four pixels of the source that fall into one pixel of the target, averaged so that a very bright one
+// counts for less (the Karis average). A plain average lets a single glinting pixel light up a whole
+// blob of bloom, which flickers as the camera moves.
+float3 sampleSourceSteady(float2 uv)
+{
+    float2 offset = constants.texelSize * 0.5;
+    float3 samples[4] = {
+        sampleSource(uv + float2(-offset.x, -offset.y)),
+        sampleSource(uv + float2(offset.x, -offset.y)),
+        sampleSource(uv + float2(-offset.x, offset.y)),
+        sampleSource(uv + float2(offset.x, offset.y))
+    };
+
+    float3 sum = float3(0.0, 0.0, 0.0);
+    float weightSum = 0.0;
+    for (int index = 0; index < 4; ++index)
+    {
+        float weight = 1.0 / (1.0 + dot(samples[index], float3(0.2126, 0.7152, 0.0722)));
+        sum += samples[index] * weight;
+        weightSum += weight;
+    }
+    return sum / weightSum;
+}
+
 // 13 samples in a pattern that keeps a single bright pixel from flickering as it moves (Jimenez, 2014).
 float3 downsample(float2 uv)
 {
@@ -111,7 +135,7 @@ float3 prefilter(float3 color)
 float4 fragmentMain(VertexOutput input) : SV_Target
 {
     if (constants.mode == modePrefilter)
-        return float4(prefilter(sampleSource(input.uv)), 1.0);
+        return float4(prefilter(sampleSourceSteady(input.uv)), 1.0);
 
     if (constants.mode == modeDownsample)
         return float4(downsample(input.uv), 1.0);
