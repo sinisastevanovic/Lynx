@@ -68,15 +68,12 @@ public StandardVaryings standardVertex(StandardConstants constants, StandardVert
     MeshInstance instance = constants.instances[instanceIndex];
     MeshPosition position = meshPosition(instance, input.position);
 
-    // Right as long as an object is scaled by the same amount in every direction.
-    float3x3 normalMatrix = (float3x3)instance.model;
-
     StandardVaryings output;
     output.position = position.clip;
     output.uv = input.uv;
     output.worldPosition = position.world.xyz;
-    output.normal = normalize(mul(normalMatrix, input.normal));
-    output.tangent = float4(normalize(mul(normalMatrix, input.tangent.xyz)), input.tangent.w);
+    output.normal = normalize(meshNormal(instance, input.normal));
+    output.tangent = float4(normalize(meshDirection(instance, input.tangent.xyz)), input.tangent.w);
     output.shadowCoordinate = mul(mul(clipToTexture, scene.lightViewProjection), float4(output.worldPosition, 1.0));
     output.entityId = instance.entityId;
     return output;

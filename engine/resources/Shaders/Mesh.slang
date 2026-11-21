@@ -31,3 +31,26 @@ public MeshPosition meshPosition(MeshInstance instance, float3 position)
     result.clip = mul(scene.viewProjection, result.world);
     return result;
 }
+
+// A direction along the surface, such as a tangent, turned and scaled with the instance. Not normalised.
+public float3 meshDirection(MeshInstance instance, float3 direction)
+{
+    return mul((float3x3)instance.model, direction);
+}
+
+// A normal of the mesh in the world. Not normalised.
+//
+// A normal cannot be transformed like a direction along the surface: on an object that is stretched
+// along one axis, it would lean the wrong way. What keeps it at a right angle to the surface is the
+// matrix of cross products of the model's axes, which costs three cross products instead of a full inverse.
+public float3 meshNormal(MeshInstance instance, float3 normal)
+{
+    float3 axisX = meshDirection(instance, float3(1.0, 0.0, 0.0));
+    float3 axisY = meshDirection(instance, float3(0.0, 1.0, 0.0));
+    float3 axisZ = meshDirection(instance, float3(0.0, 0.0, 1.0));
+
+    float3 transformed = cross(axisY, axisZ) * normal.x + cross(axisZ, axisX) * normal.y + cross(axisX, axisY) * normal.z;
+
+    // A mirrored instance turns the cross products around.
+    return dot(axisX, cross(axisY, axisZ)) < 0.0 ? -transformed : transformed;
+}
