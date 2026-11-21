@@ -19,6 +19,16 @@ namespace Lynx
         static constexpr vk::Format ColorFormat = vk::Format::eR32G32B32A32Sfloat;
     };
 
+    // Draws a run of the frame's draw commands with one call. The geometry pool has to be bound.
+    inline void DrawMeshes(vk::CommandBuffer commands, const MeshDrawCommands& draws, DrawRange range)
+    {
+        if (range.Count == 0)
+            return;
+
+        const uint32_t commandSize = sizeof(vk::DrawIndexedIndirectCommand);
+        commands.drawIndexedIndirect(draws.Buffer->Handle(), vk::DeviceSize(range.First) * commandSize, range.Count, commandSize);
+    }
+
     // Draws a number of instances of a submesh from the geometry pool, which has to be bound.
     // firstInstance is where they start in the frame's instance buffer. The shader finds them by it,
     // and their materials through them, so a draw needs no push constants of its own.

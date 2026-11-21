@@ -82,6 +82,10 @@ build\bin\Debug\LynxSandboxGame.exe
   Textures picked through the table need `NonUniformResourceIndex`.
 - **Geometry.** The vertices and indices of all meshes are in one pair of buffers (`Vulkan/GeometryPool`). A submesh
   is a range in them (`MeshGeometry`). A pass binds the pool once and draws ranges. The buffers grow when they fill up.
+- **Mesh draws.** Meshes that are not see-through are drawn from a buffer of draw commands, one per submesh with all
+  its instances (`RenderData::MeshDraws`). A pass draws a whole range of them with one call (`DrawMeshes`). The CPU
+  still culls and writes the commands. Depth and shadow use a pipeline without a fragment shader for opaque
+  materials and a second one for cut-outs. See-through meshes are sorted and drawn one by one.
 - **Uploads.** Data for buffers and pixels for textures go through the `UploadQueue`, which copies them to the GPU
   with the next frame. Nothing is submitted on its own.
 - **Memory.** Textures come from a pool of their own (`GraphicsContext::TexturePool`), apart from buffers. Sharing

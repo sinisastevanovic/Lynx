@@ -28,7 +28,10 @@ namespace Lynx
         GraphicsContext* Context = nullptr;
         SharedBindings* Shared = nullptr;
         vk::Device Device;
-        vk::Pipeline Pipeline;
+
+        // Opaque materials need no fragment shader. Materials with cut-outs read their texture in one.
+        vk::Pipeline OpaquePipeline;
+        vk::Pipeline CutOutPipeline;
 
         GpuTexture ShadowMap;
 
@@ -41,7 +44,8 @@ namespace Lynx
             if (!Device)
                 return;
 
-            Device.destroyPipeline(Pipeline);
+            Device.destroyPipeline(OpaquePipeline);
+            Device.destroyPipeline(CutOutPipeline);
             Device.destroySampler(ShadowSampler);
         }
     };
@@ -117,13 +121,25 @@ namespace Lynx
         // Without the bias, a lit surface would shadow itself in stripes, because the map is coarser than the screen.
         desc.DepthBias = 1.0f;
         desc.DepthBiasSlope = 2.0f;
-        const vk::Pipeline pipeline = CreateGraphicsPipeline(m_Vulkan->Device, desc);
-        if (!pipeline)
-            return;
+        const vk::Pipeline cutOutPipeline = CreateGraphicsPipeline(m_Vulkan->Device, desc);
 
-        // A reloaded shader replaces a pipeline that frames still on the GPU may be using.
-        m_Vulkan->Context->Deletions().Retire([device = m_Vulkan->Device, old = m_Vulkan->Pipeline]() { device.destroyPipeline(old); });
-        m_Vulkan->Pipeline = pipeline;
+        desc.UseFragmentStage = false;
+        const vk::Pipeline opaquePipeline = CreateGraphicsPipeline(m_Vulkan->Device, desc);
+        if (!cutOutPipeline || !opaquePipeline)
+        {
+            m_Vulkan->Device.destroyPipeline(cutOutPipeline);
+            m_Vulkan->Device.destroyPipeline(opaquePipeline);
+            return;
+        }
+
+        // A reloaded shader replaces pipelines that frames still on the GPU may be using.
+        m_Vulkan->Context->Deletions().Retire([device = m_Vulkan->Device, oldOpaque = m_Vulkan->OpaquePipeline, oldCutOut = m_Vulkan->CutOutPipeline]()
+        {
+            device.destroyPipeline(oldOpaque);
+            device.destroyPipeline(oldCutOut);
+        });
+        m_Vulkan->OpaquePipeline = opaquePipeline;
+        m_Vulkan->CutOutPipeline = cutOutPipeline;
     }
 
     bool ShadowPass::Declare(const RenderContext&, const RenderData&, PassResources& resources)
@@ -143,10 +159,11 @@ namespace Lynx
         renderData.ShadowMapIndex = m_ShadowMapIndex;
         renderData.ShadowSamplerIndex = m_ShadowSamplerIndex;
 
-        if (!m_Vulkan->Pipeline)
+        const MeshDrawCommands& draws = renderData.MeshDraws;
+        if (!m_Vulkan->OpaquePipeline || draws.ShadowOpaque.Count + draws.ShadowCutOut.Count == 0)
             return;
 
-        commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->Pipeline);
+        // The pool and the push constants stay set when the pipeline changes.
         renderData.Geometry->Bind(commands);
 
         ShadowPushData push{};
@@ -155,12 +172,13 @@ namespace Lynx
         push.Materials = renderData.MaterialAddress;
         m_Vulkan->Shared->Push(commands, push);
 
-        for (const BatchDrawCall& batch : renderData.OpaqueDrawCalls)
-        {
-            if (batch.InstanceCount == 0 || !(batch.Key.RenderFlags & RenderFlags::ShadowPass))
-                continue;
+        commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->OpaquePipeline);
+        DrawMeshes(commands, draws, draws.ShadowOpaque);
 
-            DrawSubmesh(commands, batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex], batch.FirstInstance, batch.InstanceCount);
+        if (draws.ShadowCutOut.Count > 0)
+        {
+            commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->CutOutPipeline);
+            DrawMeshes(commands, draws, draws.ShadowCutOut);
         }
     }
 }

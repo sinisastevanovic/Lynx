@@ -136,14 +136,15 @@ namespace Lynx
         GpuTexture NormalTexture;
         GpuTexture MetallicRoughnessTexture;
 
-        // Rewritten every frame with one entry per drawn instance. Shaders read it through its address.
-        struct InstanceStorage
+        // A buffer that is rewritten every frame with a list whose length changes: the instances that are
+        // drawn, which shaders read through the buffer's address, or the draw commands.
+        struct FrameList
         {
             GpuBuffer Buffer;
 
-            // Makes sure the buffer can hold the instances, then queues them for upload.
-            template<typename Instance>
-            void Upload(GraphicsContext& context, UploadQueue& uploads, std::span<const Instance> instances, const char* name)
+            // Makes sure the buffer can hold the entries, then queues them for upload.
+            template<typename Entry>
+            void Upload(GraphicsContext& context, UploadQueue& uploads, std::span<const Entry> instances, vk::BufferUsageFlagBits usage, const char* name)
             {
                 const uint64_t requiredSize = instances.size_bytes();
                 if (requiredSize == 0)
@@ -154,7 +155,7 @@ namespace Lynx
                     // Half as much again as needed, so a scene that grows a little each frame does not reallocate each frame.
                     GpuBufferDesc desc;
                     desc.Size = requiredSize + requiredSize / 2;
-                    desc.Usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+                    desc.Usage = usage | vk::BufferUsageFlagBits::eTransferDst;
                     desc.Name = name;
                     Buffer = GpuBuffer(context, desc);
                 }
@@ -165,8 +166,9 @@ namespace Lynx
         // The camera and the sun of the scene being drawn, which every shader can read. Rewritten for every scene.
         GpuBuffer SceneConstants;
 
-        InstanceStorage MeshInstances;
-        InstanceStorage ParticleInstances;
+        FrameList MeshInstances;
+        FrameList MeshDrawCommands;
+        FrameList ParticleInstances;
 
         // A copy of a finished frame that is waiting to be read back.
         struct PendingScreenshot
@@ -229,6 +231,7 @@ namespace Lynx
         // Everything made from the device goes before the device does.
         ReleaseSwapchainImages();
         m_Frame->MeshInstances = {};
+        m_Frame->MeshDrawCommands = {};
         m_Frame->ParticleInstances = {};
         m_Frame->PickReadback = {};
         m_Frame->SceneConstants = {};
@@ -519,8 +522,16 @@ namespace Lynx
 
     void Renderer::PrepareDrawCalls()
     {
+        // The instances of one submesh that are seen from the same views.
+        struct Batch
+        {
+            BatchKey Key;
+            uint32_t FirstInstance;
+            uint32_t InstanceCount;
+        };
+
         std::vector<GPUInstanceData> allInstanceData;
-        m_CurrentFrameData.OpaqueDrawCalls.clear();
+        std::vector<Batch> batches;
 
         // Flatten all batches into single array
         for (auto& [key, instances] : m_OpaqueBatches)
@@ -536,18 +547,52 @@ namespace Lynx
             for (size_t instance = startOffset; instance < allInstanceData.size(); ++instance)
                 allInstanceData[instance].Material = material;
 
-            m_CurrentFrameData.OpaqueDrawCalls.push_back({ key, startOffset, (uint32_t)instances.size() });
+            batches.push_back({ key, startOffset, (uint32_t)instances.size() });
         }
 
         // The batches come out of a map keyed on pointers, in an order that changes from run to run.
         // Where two surfaces lie in the same plane, the one drawn last wins, so the order has to be fixed
         // for a frame to look the same every time.
-        std::ranges::sort(m_CurrentFrameData.OpaqueDrawCalls, [](const BatchDrawCall& a, const BatchDrawCall& b)
+        std::ranges::sort(batches, [](const Batch& a, const Batch& b)
         {
             const uint64_t meshA = a.Key.Mesh->GetHandle();
             const uint64_t meshB = b.Key.Mesh->GetHandle();
             return std::tie(meshA, a.Key.SubmeshIndex, a.Key.RenderFlags) < std::tie(meshB, b.Key.SubmeshIndex, b.Key.RenderFlags);
         });
+
+        // One draw command per batch and view that sees it. Culling still happens on the CPU: only what
+        // passed it gets a command. The GPU takes that over in step 2.8 of Renderer V2.
+        std::vector<vk::DrawIndexedIndirectCommand> drawCommands;
+        const auto addCommands = [&](RenderFlags view, bool withCutOuts)
+        {
+            DrawRange range;
+            range.First = static_cast<uint32_t>(drawCommands.size());
+
+            for (const Batch& batch : batches)
+            {
+                const Submesh& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
+                const bool hasCutOuts = submesh.Material->Mode == AlphaMode::Mask;
+                if (!(batch.Key.RenderFlags & view) || hasCutOuts != withCutOuts)
+                    continue;
+
+                drawCommands.emplace_back(submesh.IndexCount, batch.InstanceCount, submesh.Geometry.FirstIndex(), submesh.Geometry.VertexOffset(), batch.FirstInstance);
+                if (view == RenderFlags::MainPass)
+                    m_CurrentFrameData.IndexCount += submesh.IndexCount * batch.InstanceCount;
+            }
+
+            range.Count = static_cast<uint32_t>(drawCommands.size()) - range.First;
+            return range;
+        };
+
+        MeshDrawCommands& draws = m_CurrentFrameData.MeshDraws;
+        draws.CameraOpaque = addCommands(RenderFlags::MainPass, false);
+        draws.CameraCutOut = addCommands(RenderFlags::MainPass, true);
+        draws.ShadowOpaque = addCommands(RenderFlags::ShadowPass, false);
+        draws.ShadowCutOut = addCommands(RenderFlags::ShadowPass, true);
+
+        m_Frame->MeshDrawCommands.Upload<vk::DrawIndexedIndirectCommand>(*m_Context, *m_Frame->Uploads, drawCommands, vk::BufferUsageFlagBits::eIndirectBuffer, "MeshDrawCommands");
+        draws.Buffer = &m_Frame->MeshDrawCommands.Buffer;
+        m_Profiler.SetCounter("DrawCommands", static_cast<double>(drawCommands.size()));
 
         std::ranges::sort(m_CurrentFrameData.TransparentQueue,
           [](const RenderCommand& a, const RenderCommand& b) {
@@ -560,7 +605,7 @@ namespace Lynx
             allInstanceData.push_back({ cmd.InstanceData.Model, cmd.InstanceData.EntityID, m_Materials->IndexOf(cmd.Mesh->GetSubmeshes()[cmd.SubmeshIndex].Material) });
         }
 
-        m_Frame->MeshInstances.Upload<GPUInstanceData>(*m_Context, *m_Frame->Uploads, allInstanceData, "InstanceBuffer");
+        m_Frame->MeshInstances.Upload<GPUInstanceData>(*m_Context, *m_Frame->Uploads, allInstanceData, vk::BufferUsageFlagBits::eStorageBuffer, "InstanceBuffer");
         m_CurrentFrameData.MeshInstanceAddress = m_Frame->MeshInstances.Buffer.Address();
         m_CurrentFrameData.Geometry = m_Frame->Geometry.get();
 
@@ -598,7 +643,7 @@ namespace Lynx
             allParticleData.insert(allParticleData.end(), particles.begin(), particles.end());
         }
 
-        m_Frame->ParticleInstances.Upload<ParticleInstanceData>(*m_Context, *m_Frame->Uploads, allParticleData, "ParticleInstanceBuffer");
+        m_Frame->ParticleInstances.Upload<ParticleInstanceData>(*m_Context, *m_Frame->Uploads, allParticleData, vk::BufferUsageFlagBits::eStorageBuffer, "ParticleInstanceBuffer");
         m_CurrentFrameData.ParticleInstanceAddress = m_Frame->ParticleInstances.Buffer.Address();
 
         // Brings this frame's instances and the scene constants to the GPU before the first pass.
@@ -612,7 +657,7 @@ namespace Lynx
 
         m_OpaqueBatches.clear();
         m_ParticleBatches.clear();
-        m_CurrentFrameData.OpaqueDrawCalls.clear();
+        m_CurrentFrameData.MeshDraws = {};
         m_CurrentFrameData.TransparentQueue.clear();
         m_CurrentFrameData.ParticleQueue.clear();
 

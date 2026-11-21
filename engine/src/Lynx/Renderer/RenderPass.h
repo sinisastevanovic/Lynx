@@ -13,6 +13,7 @@ struct VkCommandBuffer_T;
 namespace Lynx
 {
     class GeometryPool;
+    class GpuBuffer;
     class GpuTexture;
     class GraphicsContext;
     class Shader;
@@ -65,11 +66,26 @@ namespace Lynx
         }
     };
 
-    struct BatchDrawCall
+    // A run of draw commands in the buffer of a frame's draw commands.
+    struct DrawRange
     {
-        BatchKey Key;
-        uint32_t FirstInstance;
-        uint32_t InstanceCount;
+        uint32_t First = 0;
+        uint32_t Count = 0;
+    };
+
+    // The draw commands for the frame's meshes that are not see-through: one command per submesh and all
+    // its instances, in a buffer on the GPU. A pass draws a whole range of them with one call.
+    struct MeshDrawCommands
+    {
+        const GpuBuffer* Buffer = nullptr;
+
+        // What the camera sees and what the sun sees, each split by whether the material has cut-outs:
+        // only a material with cut-outs needs its texture where nothing but depth is drawn.
+        // The cut-outs of a view follow its opaque commands directly, so the two can be drawn as one range.
+        DrawRange CameraOpaque;
+        DrawRange CameraCutOut;
+        DrawRange ShadowOpaque;
+        DrawRange ShadowCutOut;
     };
 
     struct SceneData
@@ -127,7 +143,7 @@ namespace Lynx
     struct RenderData
     {
         std::vector<RenderCommand> TransparentQueue;
-        std::vector<BatchDrawCall> OpaqueDrawCalls;
+        MeshDrawCommands MeshDraws;
 
         std::vector<ParticleBatch> ParticleQueue;
 

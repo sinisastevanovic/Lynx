@@ -112,7 +112,8 @@ namespace Lynx
 
         if (!m_Vulkan->OpaquePipeline || !m_Vulkan->TransparentPipeline)
             return false;
-        if (renderData.OpaqueDrawCalls.empty() && renderData.TransparentQueue.empty())
+        const MeshDrawCommands& draws = renderData.MeshDraws;
+        if (draws.CameraOpaque.Count + draws.CameraCutOut.Count == 0 && renderData.TransparentQueue.empty())
             return false;
 
         resources.ColorTarget = renderData.SceneColor;
@@ -137,16 +138,14 @@ namespace Lynx
         push.ShadowSampler = renderData.ShadowSamplerIndex;
         m_Vulkan->Shared->Push(commands, push);
 
-        for (const BatchDrawCall& batch : renderData.OpaqueDrawCalls)
+        // Opaque materials and those with cut-outs are shaded by the same pipeline, and their commands
+        // lie next to each other, so one call draws everything the camera sees that is not see-through.
+        const MeshDrawCommands& draws = renderData.MeshDraws;
+        const DrawRange everything{ draws.CameraOpaque.First, draws.CameraOpaque.Count + draws.CameraCutOut.Count };
+        if (everything.Count > 0)
         {
-            if (batch.InstanceCount == 0 || !(batch.Key.RenderFlags & RenderFlags::MainPass))
-                continue;
-
-            const Submesh& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
-            DrawSubmesh(commands, submesh, batch.FirstInstance, batch.InstanceCount);
-
+            DrawMeshes(commands, draws, everything);
             renderData.DrawCalls++;
-            renderData.IndexCount += submesh.IndexCount * batch.InstanceCount;
         }
 
         if (renderData.TransparentQueue.empty())
