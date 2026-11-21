@@ -142,6 +142,7 @@ namespace Lynx
             targets.Depth = NativeView(resources.DepthTarget);
         targets.Extent = vk::Extent2D(targetDesc.width, targetDesc.height);
         targets.ColorLoad = resources.OverwritesTarget ? vk::AttachmentLoadOp::eDontCare : vk::AttachmentLoadOp::eLoad;
+        targets.DepthLoad = resources.ClearsDepth ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad;
         BeginRendering(commands, targets);
 
         pass.Execute(commands, renderData);

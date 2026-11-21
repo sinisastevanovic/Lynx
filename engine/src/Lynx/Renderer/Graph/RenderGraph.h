@@ -42,6 +42,9 @@ namespace Lynx
         // The pass writes every pixel of the target, so what the target held before need not be kept.
         bool OverwritesTarget = false;
 
+        // The depth buffer starts out empty, with everything farthest away, instead of keeping what it held.
+        bool ClearsDepth = false;
+
         void Sample(nvrhi::ITexture* texture) { Sampled[SampledCount++] = texture; }
     };
 
