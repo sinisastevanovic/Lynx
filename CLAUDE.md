@@ -9,7 +9,7 @@ structure is heading, and "Toward the target design" the order of the steps.
 
 Renderer work follows its own plan, Renderer V2: https://claude.ai/artifact/SShPW5mVGsxRJYgqVdASKj
 It is the main line of work. Read its "Decisions" and "Status" sections before touching the renderer, and tick off
-the steps under "Stage 1 in detail" as they land. The non-renderer steps of the review are paused meanwhile.
+the steps under "Stage 2 in detail" as they land. Stage 1 is complete. The non-renderer steps of the review are paused meanwhile.
 
 ## Repositories
 
