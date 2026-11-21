@@ -617,6 +617,9 @@ namespace Lynx
         auto& childRel = m_Registry.get<RelationshipComponent>(child);
         childRel.Parent = parent;
 
+        // Under another parent the same position means another place in the world.
+        m_Registry.get<TransformComponent>(child).NeedsWorldMatrix = true;
+
         auto& parentRel = m_Registry.get<RelationshipComponent>(parent);
         if (parentRel.FirstChild == entt::null)
         {
@@ -660,7 +663,7 @@ namespace Lynx
         SetTransformFromMatrix(childTransform, newLocal);
 
         AttachEntity(child, parent);
-        UpdateEntityTransform(child, parentWorld);
+        UpdateEntityTransform(child, parentWorld, false);
     }
 
     void Scene::DetachEntity(entt::entity child)
@@ -691,6 +694,7 @@ namespace Lynx
         childRel.Parent = entt::null;
         childRel.NextSibling = entt::null;
         childRel.PrevSibling = entt::null;
+        m_Registry.get<TransformComponent>(child).NeedsWorldMatrix = true;
 
         parentRel.ChildrenCount--;
     }
@@ -732,12 +736,11 @@ namespace Lynx
             if (rel.Parent == entt::null)
             {
                 auto& transform = view.get<TransformComponent>(entity);
-                SetWorldMatrix(entity, transform, transform.GetTransform());
+                const bool moved = UpdateWorldMatrix(entity, transform, nullptr, false);
 
+                // Children are looked at even if their parent stood still: one of them may have moved.
                 if (rel.FirstChild != entt::null)
-                {
-                    UpdateEntityTransform(rel.FirstChild, transform.WorldMatrix);
-                }
+                    UpdateEntityTransform(rel.FirstChild, transform.WorldMatrix, moved);
             }
         }
     }
@@ -765,18 +768,40 @@ namespace Lynx
         m_MovedEntities.push_back(entity);
     }
 
-    void Scene::UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform)
+    bool Scene::UpdateWorldMatrix(entt::entity entity, TransformComponent& transform, const glm::mat4* parentWorld, bool parentMoved)
+    {
+        // Most entities stand still in most frames. For those, three comparisons replace building a matrix.
+        // Position, rotation and scale are plain members that anything may write to, so comparing them with
+        // what the matrix was last built from is what notices a change.
+        const bool changed = transform.NeedsWorldMatrix
+            || transform.Translation != transform.ComputedTranslation
+            || transform.Rotation != transform.ComputedRotation
+            || transform.Scale != transform.ComputedScale;
+        if (!changed && !parentMoved)
+            return false;
+
+        transform.ComputedTranslation = transform.Translation;
+        transform.ComputedRotation = transform.Rotation;
+        transform.ComputedScale = transform.Scale;
+        transform.NeedsWorldMatrix = false;
+
+        const glm::mat4 local = transform.GetTransform();
+        SetWorldMatrix(entity, transform, parentWorld ? *parentWorld * local : local);
+        return true;
+    }
+
+    void Scene::UpdateEntityTransform(entt::entity entity, const glm::mat4& parentWorld, bool parentMoved)
     {
         // Updates the entity and the siblings after it. Siblings are walked in a loop and only children
         // recurse, so the stack depth is the depth of the hierarchy and not the number of siblings.
         for (entt::entity current = entity; current != entt::null; current = m_Registry.get<RelationshipComponent>(current).NextSibling)
         {
             auto& transform = m_Registry.get<TransformComponent>(current);
-            SetWorldMatrix(current, transform, parentTransform * transform.GetTransform());
+            const bool moved = UpdateWorldMatrix(current, transform, &parentWorld, parentMoved);
 
             const entt::entity firstChild = m_Registry.get<RelationshipComponent>(current).FirstChild;
             if (firstChild != entt::null)
-                UpdateEntityTransform(firstChild, transform.WorldMatrix);
+                UpdateEntityTransform(firstChild, transform.WorldMatrix, moved);
         }
     }
 }

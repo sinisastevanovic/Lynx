@@ -159,7 +159,8 @@ namespace Lynx
         void UpdateGlobalTransforms();
 
     private:
-        void UpdateEntityTransform(entt::entity entity, const glm::mat4& parentTransform);
+        void UpdateEntityTransform(entt::entity entity, const glm::mat4& parentWorld, bool parentMoved);
+        bool UpdateWorldMatrix(entt::entity entity, TransformComponent& transform, const glm::mat4* parentWorld, bool parentMoved);
         void SetWorldMatrix(entt::entity entity, TransformComponent& transform, const glm::mat4& worldMatrix);
         void ProcessDestroyQueue();
         

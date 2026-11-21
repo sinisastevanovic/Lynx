@@ -30,15 +30,34 @@ namespace Lynx
         TagComponent(const std::string& tag) : Tag(tag) {}
     };
 
+    // The matrix that scales, then rotates, then moves. It is what multiplying a translation, a rotation
+    // and a scale matrix gives, written out: the three axes of the rotation, each stretched by its scale,
+    // and the position. That is a fraction of the arithmetic of the two matrix products.
+    inline glm::mat4 ComposeTransform(const glm::vec3& translation, const glm::quat& rotation, const glm::vec3& scale)
+    {
+        const glm::mat3 axes = glm::mat3_cast(rotation);
+        return glm::mat4(
+            glm::vec4(axes[0] * scale.x, 0.0f),
+            glm::vec4(axes[1] * scale.y, 0.0f),
+            glm::vec4(axes[2] * scale.z, 0.0f),
+            glm::vec4(translation, 1.0f));
+    }
+
     struct TransformComponent
     {
         glm::vec3 Translation = { 0.0f, 0.0f, 0.0f };
         glm::quat Rotation = { 1.0f, 0.0f, 0.0f, 0.0f };
         glm::vec3 Scale = { 1.0f, 1.0f, 1.0f };
         
-        bool IsDirty = true;
-
         glm::mat4 WorldMatrix = glm::mat4(1.0f);
+
+        // What the scene needs to compute the world matrix only when it has to: the values it was last
+        // computed from, and a mark for when it has to be computed whatever they are, as for a new entity
+        // or one that got another parent. Written by the scene, not saved.
+        glm::vec3 ComputedTranslation{ 0.0f };
+        glm::quat ComputedRotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+        glm::vec3 ComputedScale{ 1.0f };
+        bool NeedsWorldMatrix = true;
         
         // For physics interpolation
         glm::vec3 PreviousTranslation{0.0f};
@@ -77,11 +96,7 @@ namespace Lynx
 
         glm::mat4 GetTransform() const
         {
-            glm::mat4 rotation = glm::toMat4(Rotation);
-
-            return glm::translate(glm::mat4(1.0f), Translation)
-                * rotation
-                * glm::scale(glm::mat4(1.0f), Scale);
+            return ComposeTransform(Translation, Rotation, Scale);
         }
         
         glm::vec3 GetForward() const
@@ -147,11 +162,7 @@ namespace Lynx
         
         glm::mat4 GetPhysicsInterpolatedTransform(float alpha) const
         {
-            glm::mat4 rotation = glm::toMat4(GetPhysicsInterpolatedRotation(alpha));
-
-            return glm::translate(glm::mat4(1.0f), GetPhysicsInterpolatedTranslation(alpha))
-                * rotation
-                * glm::scale(glm::mat4(1.0f), Scale);
+            return ComposeTransform(GetPhysicsInterpolatedTranslation(alpha), GetPhysicsInterpolatedRotation(alpha), Scale);
         }
     };
     
