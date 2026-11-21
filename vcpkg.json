@@ -17,6 +17,7 @@
         "libpng",
         "shader-slang",
         "vulkan-memory-allocator",
-        "vulkan-headers"
+        "vulkan-headers",
+        "meshoptimizer"
     ]
 }

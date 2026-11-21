@@ -73,6 +73,7 @@ find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 # Only the headers: the engine loads the Vulkan library itself at run time, through GLFW.
 find_package(VulkanHeaders CONFIG REQUIRED)
 find_package(slang CONFIG REQUIRED)
+find_package(meshoptimizer CONFIG REQUIRED)
 
 target_link_libraries(engine PUBLIC
 
@@ -97,6 +98,9 @@ target_link_libraries(engine PUBLIC
 # The Slang shader compiler. Only the engine uses it, and it needs its own files next to the engine at run time:
 # the compiler, the SPIR-V optimizer it loads on demand, and its standard modules.
 target_link_libraries(engine PRIVATE slang::slang Vulkan::Headers)
+
+# Reorders and packs mesh data when a mesh is cooked. Only the engine uses it.
+target_link_libraries(engine PRIVATE meshoptimizer::meshoptimizer)
 
 set(LYNX_SLANG_RUNTIME_DIR "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<$<CONFIG:Debug>:debug/>bin")
 file(GLOB LYNX_SLANG_STANDARD_MODULES RELATIVE "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"

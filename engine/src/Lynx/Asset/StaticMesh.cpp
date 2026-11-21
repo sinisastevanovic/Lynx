@@ -1,5 +1,6 @@
 #include "StaticMesh.h"
 #include "GLTFHelpers.h"
+#include "MeshCooking.h"
 #define TINYGLTF_NO_STB_IMAGE_WRITE
 #define TINYGLTF_NO_INCLUDE_STB_IMAGE_WRITE
 #define TINYGLTF_IMPLEMENTATION
@@ -80,6 +81,9 @@ namespace Lynx
         {
             TraverseNodes(model, model.nodes[nodeIndex], glm::mat4(1.0f), m_SourceData, m_FilePath, m_Bounds);
         }
+
+        for (SubmeshSourceData& submesh : m_SourceData)
+            OptimizeDrawOrder(submesh.Vertices, submesh.Indices);
 
         return !m_SourceData.empty();
     }
