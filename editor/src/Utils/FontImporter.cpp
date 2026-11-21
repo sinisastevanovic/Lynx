@@ -101,7 +101,6 @@ namespace Lynx
         std::shared_ptr<TextureSpecification> specification = std::make_shared<TextureSpecification>();
         specification->GenerateMips = false;
         specification->Format = TextureFormat::RGBA8; // TODO: Add RGB8!
-        specification->IsSRGB = false;
         specification->SamplerSettings = { TextureWrap::Clamp, TextureFilter::Bilinear };
         AssetHandle textureAtlasHandle = Engine::Get().GetAssetRegistry().ImportAssetFromTemp(tempPath, texturePath, specification);
 

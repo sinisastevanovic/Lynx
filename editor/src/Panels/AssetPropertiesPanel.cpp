@@ -48,7 +48,6 @@ namespace Lynx
         
         ImGui::Text("Format: %s", formatStrings[currFormat].c_str());
         if (LXUI::DrawCheckBox("Generate Mips", m_EditingSpec.GenerateMips)) m_IsDirty = true;
-        if (LXUI::DrawCheckBox("Is sRGB", m_EditingSpec.IsSRGB)) m_IsDirty = true;
 
         std::vector<std::string> filterOptions = { "Bilinear", "Nearest", "Trilinear" };
         int currentFilter = (int)m_EditingSpec.SamplerSettings.FilterMode;

@@ -51,7 +51,6 @@ namespace Lynx
         TextureFormat Format = TextureFormat::RGBA8;
         SamplerSettings SamplerSettings;
         bool GenerateMips = true;
-        bool IsSRGB = false;
         std::string DebugName = "Texture";
 
         TextureSpecification() = default;
@@ -64,7 +63,6 @@ namespace Lynx
             json["TextureFormat"] = Format;
             json["WrapMode"] = SamplerSettings.WrapMode;
             json["FilterMode"] = SamplerSettings.FilterMode;
-            json["IsSRGB"] = IsSRGB;
             json["GenerateMips"] = GenerateMips;
             json["UseAnisotropy"] = SamplerSettings.UseAnisotropy;
         }
@@ -74,7 +72,6 @@ namespace Lynx
             Format = (TextureFormat)json["TextureFormat"];
             SamplerSettings.WrapMode = (TextureWrap)json["WrapMode"];
             SamplerSettings.FilterMode = (TextureFilter)json["FilterMode"];
-            IsSRGB = json.value("IsSRGB", false);
             GenerateMips = json.value("GenerateMips", true);
             SamplerSettings.UseAnisotropy = json.value("UseAnisotropy", true);
         }
@@ -83,8 +80,7 @@ namespace Lynx
         {
             return Format == other.Format &&
                     SamplerSettings == other.SamplerSettings &&
-                    GenerateMips == other.GenerateMips &&
-                    IsSRGB == other.IsSRGB;
+                    GenerateMips == other.GenerateMips;
         }
         bool operator!=(const TextureSpecification& other) const { return !(*this == other); }
     };

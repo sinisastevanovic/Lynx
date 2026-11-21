@@ -88,7 +88,7 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Texture colours.** Every RGBA8 texture is in the texture table twice. `Texture::GetColorTableIndex` reads it as
   sRGB and gives a shader linear light: use it for colours that are lit (albedo, emissive, particles).
   `GetTableIndex` gives the stored numbers: for normal maps, roughness, and pictures shown unlit (UI, ImGui).
-  Shaders never convert with `pow`. `TextureSpecification::IsSRGB` has no effect.
+  Shaders never convert with `pow`.
 - **Vulkan.** The headers come from vcpkg (`vulkan-headers`). The engine does not link the Vulkan library: it
   loads the functions at run time through GLFW. NVRHI and shaderc are no longer part of the project.
 - **ImGui.** Drawn by its official Vulkan backend, wrapped in `ImGui/ImGuiVulkan`. To show a texture, pass
