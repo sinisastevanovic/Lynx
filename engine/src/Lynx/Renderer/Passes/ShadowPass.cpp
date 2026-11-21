@@ -117,6 +117,8 @@ namespace Lynx
         desc.DepthFormat = RenderFormats::ShadowMap;
         desc.DepthTest = true;
         desc.DepthWrite = true;
+        // The shadow map keeps the usual depth, 0 at the near plane, unlike the scene.
+        desc.DepthCompare = vk::CompareOp::eLess;
         // Without the bias, a lit surface would shadow itself in stripes, because the map is coarser than the screen.
         desc.DepthBias = 1.0f;
         desc.DepthBiasSlope = 2.0f;

@@ -13,7 +13,7 @@ struct VertexOutput
 {
     float4 position : SV_Position;
 
-    // Where the pixel's view ray crosses the near and the far plane, in world space.
+    // Two points on the pixel's view ray, in world space: on the near plane, and further out.
     float3 nearPoint : NEAR_POINT;
     float3 farPoint : FAR_POINT;
 };
@@ -43,8 +43,9 @@ VertexOutput vertexMain(uint vertexIndex : SV_VertexID)
 
     VertexOutput output;
     output.position = float4(corner, 0.0, 1.0);
-    output.nearPoint = toWorld(corner, 0.0);
-    output.farPoint = toWorld(corner, 1.0);
+    // Depth runs from 1 at the near plane towards 0 at infinity, which is no point to compute with.
+    output.nearPoint = toWorld(corner, 1.0);
+    output.farPoint = toWorld(corner, 0.5);
     return output;
 }
 

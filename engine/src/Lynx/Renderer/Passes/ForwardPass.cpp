@@ -119,7 +119,7 @@ namespace Lynx
         const vk::Pipeline opaquePipeline = CreateGraphicsPipeline(m_Vulkan->Device, desc);
 
         // See-through surfaces are not in the depth buffer. They are hidden by opaque ones, and cover what is behind them by their alpha.
-        desc.DepthCompare = vk::CompareOp::eLess;
+        desc.DepthCompare = vk::CompareOp::eGreater;
         desc.Blend = BlendMode::Alpha;
         const vk::Pipeline transparentPipeline = CreateGraphicsPipeline(m_Vulkan->Device, desc);
 

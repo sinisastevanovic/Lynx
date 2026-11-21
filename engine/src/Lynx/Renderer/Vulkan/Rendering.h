@@ -22,7 +22,7 @@ namespace Lynx
         // or anything (eDontCare), which is the cheapest and right when every pixel is drawn anyway.
         vk::AttachmentLoadOp ColorLoad = vk::AttachmentLoadOp::eLoad;
 
-        // The same for the depth buffer. Cleared means farthest away.
+        // The same for the depth buffer. Cleared means depth 1, which is farthest away in the usual depth range.
         vk::AttachmentLoadOp DepthLoad = vk::AttachmentLoadOp::eLoad;
     };
 

@@ -59,7 +59,9 @@ namespace Lynx
         vk::Format DepthFormat = vk::Format::eUndefined;
         bool DepthTest = false;
         bool DepthWrite = false;
-        vk::CompareOp DepthCompare = vk::CompareOp::eLess;
+
+        // The scene's depth is 1 at the near plane and smaller with distance, so "in front" means greater.
+        vk::CompareOp DepthCompare = vk::CompareOp::eGreater;
     };
 
     // Returns a null handle, after logging why, if the program lacks a vertex or a fragment stage.

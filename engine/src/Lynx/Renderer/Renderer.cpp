@@ -670,7 +670,32 @@ namespace Lynx
                 matrix[column][1] = -matrix[column][1];
             return matrix;
         };
-        m_CurrentFrameData.ClipViewProjection = toVulkanClip(m_CurrentFrameData.ViewProjection);
+
+        // The camera's depth is stored the other way round: 1 at the near plane and smaller with distance.
+        // Depth is a 32-bit float, which is finest near 0, and a perspective squeezes almost everything far away
+        // into a tiny range of depth. Putting the far end at 0 lets the two cancel out, so that surfaces
+        // kilometres away still get distinct depths. A perspective then needs no far plane at all on the GPU.
+        // The CPU keeps the camera's own projection, far plane included, and culls with it.
+        const auto toReversedDepth = [](glm::mat4 cameraProjection)
+        {
+            const bool isPerspective = cameraProjection[2][3] != 0.0f;
+            if (isPerspective)
+            {
+                const float nearPlane = cameraProjection[3][2] / cameraProjection[2][2];
+                cameraProjection[2][2] = 0.0f;
+                cameraProjection[3][2] = nearPlane;
+            }
+            else
+            {
+                // The new depth is one minus the old one.
+                for (int column = 0; column < 4; ++column)
+                    cameraProjection[column][2] = cameraProjection[column][3] - cameraProjection[column][2];
+            }
+            return cameraProjection;
+        };
+        m_CurrentFrameData.ClipViewProjection = toVulkanClip(toReversedDepth(projection) * view);
+
+        // The shadow map keeps the usual depth: its view has no perspective, so there is nothing to gain.
         m_CurrentFrameData.ClipLightViewProjection = toVulkanClip(lightViewProj);
 
         SceneData sceneData;
@@ -681,10 +706,10 @@ namespace Lynx
         sceneData.LightColor = glm::vec4(lightColor, 1.0f);
         m_Frame->Uploads->Upload(m_Frame->SceneConstants.Handle(), 0, std::as_bytes(std::span<const SceneData>(&sceneData, 1)));
 
-        // The scene starts as a dark grey with everything farthest away, and with no entity anywhere.
+        // The scene starts as a dark grey with everything farthest away, which is depth 0, and with no entity anywhere.
         const vk::CommandBuffer commands = m_Frame->Commands;
         m_Frame->SceneColor.ClearColor(commands, vk::ClearColorValue(0.05f, 0.05f, 0.05f, 1.0f));
-        m_Frame->SceneDepth.ClearDepth(commands, 1.0f);
+        m_Frame->SceneDepth.ClearDepth(commands, 0.0f);
         if (m_Frame->SceneEntityIds)
             m_Frame->SceneEntityIds.ClearColor(commands, vk::ClearColorValue(std::array<int32_t, 4>{ -1, 0, 0, 0 }));
 
