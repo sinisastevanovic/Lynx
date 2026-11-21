@@ -72,12 +72,12 @@ namespace Lynx
         desc.Program = program.get();
         desc.Layout = m_Vulkan->Shared->PipelineLayout();
         desc.VertexAttributes = {
-            { MeshVertexLayout::PositionFormat, offsetof(Vertex, Position) },
-            { MeshVertexLayout::NormalFormat, offsetof(Vertex, Normal) },
-            { MeshVertexLayout::TangentFormat, offsetof(Vertex, Tangent) },
-            { MeshVertexLayout::TexCoordFormat, offsetof(Vertex, TexCoord) },
+            { MeshVertexLayout::PositionFormat, offsetof(PackedVertex, Position) },
+            { MeshVertexLayout::NormalFormat, offsetof(PackedVertex, Normal) },
+            { MeshVertexLayout::TangentFormat, offsetof(PackedVertex, Tangent) },
+            { MeshVertexLayout::TexCoordFormat, offsetof(PackedVertex, TexCoord) },
         };
-        desc.VertexStride = sizeof(Vertex);
+        desc.VertexStride = sizeof(PackedVertex);
         desc.CullMode = vk::CullModeFlagBits::eBack;
         desc.ColorFormat = RenderFormats::SceneColor;
         if (m_WritesEntityIds)

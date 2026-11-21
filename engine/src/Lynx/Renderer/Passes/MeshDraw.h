@@ -9,14 +9,14 @@
 // What the passes that draw meshes share on the C++ side.
 namespace Lynx
 {
-    // The attributes of a mesh vertex, in the order the mesh shaders declare them.
+    // How the members of PackedVertex are stored. The GPU unpacks them by these, so a shader declares
+    // plain float inputs: three for a normal, four for a tangent, two for a texture coordinate.
     struct MeshVertexLayout
     {
         static constexpr vk::Format PositionFormat = vk::Format::eR32G32B32Sfloat;
-        static constexpr vk::Format NormalFormat = vk::Format::eR32G32B32Sfloat;
-        static constexpr vk::Format TangentFormat = vk::Format::eR32G32B32A32Sfloat;
+        static constexpr vk::Format NormalFormat = vk::Format::eA2B10G10R10SnormPack32;
+        static constexpr vk::Format TangentFormat = vk::Format::eA2B10G10R10SnormPack32;
         static constexpr vk::Format TexCoordFormat = vk::Format::eR32G32Sfloat;
-        static constexpr vk::Format ColorFormat = vk::Format::eR32G32B32A32Sfloat;
     };
 
     // Draws a run of the frame's draw commands with one call. The geometry pool has to be bound.

@@ -33,7 +33,7 @@ namespace Lynx
             m_Bounds.Expand(vertex.Position);
 
         Submesh sub;
-        sub.Geometry = Engine::Get().GetRenderer().CreateMeshGeometry(vertices, indices);
+        sub.Geometry = Engine::Get().GetRenderer().CreateMeshGeometry(PackVertices(vertices), indices);
         sub.IndexCount = (uint32_t)indices.size();
         sub.Material = submeshMaterial;
         sub.Name = "RuntimeCreated";
@@ -83,7 +83,12 @@ namespace Lynx
         }
 
         for (SubmeshSourceData& submesh : m_SourceData)
+        {
             OptimizeDrawOrder(submesh.Vertices, submesh.Indices);
+
+            submesh.PackedVertices = PackVertices(submesh.Vertices);
+            submesh.Vertices = {};
+        }
 
         return !m_SourceData.empty();
     }
@@ -125,7 +130,7 @@ namespace Lynx
             Engine::Get().GetAssetManager().AddRuntimeAsset(material);
 
             Submesh sub;
-            sub.Geometry = Engine::Get().GetRenderer().CreateMeshGeometry(source.Vertices, source.Indices);
+            sub.Geometry = Engine::Get().GetRenderer().CreateMeshGeometry(source.PackedVertices, source.Indices);
             sub.IndexCount = (uint32_t)source.Indices.size();
             sub.Material = material;
             sub.Name = source.Name;

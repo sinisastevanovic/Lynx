@@ -210,7 +210,7 @@ namespace Lynx
         }
         m_Frame->Timers = std::make_unique<GpuTimers>(m_Context->PhysicalDevice(), m_Context->Device(), m_Context->GraphicsQueueFamily());
         m_Frame->Uploads = std::make_unique<UploadQueue>(*m_Context);
-        m_Frame->Geometry = std::make_unique<GeometryPool>(*m_Context, *m_Frame->Uploads, static_cast<uint32_t>(sizeof(Vertex)));
+        m_Frame->Geometry = std::make_unique<GeometryPool>(*m_Context, *m_Frame->Uploads, static_cast<uint32_t>(sizeof(PackedVertex)));
         m_Graph = std::make_unique<RenderGraph>(m_Profiler, *m_Frame->Timers);
 
         GpuBufferDesc sceneConstantsDesc;
@@ -1159,9 +1159,12 @@ namespace Lynx
     {
         if (const std::optional<uint64_t> usedBytes = m_Context->VideoMemoryInUse())
             m_Profiler.SetCounter("VideoMemoryMB", static_cast<double>(*usedBytes) / (1024.0 * 1024.0));
+
+        // What the vertices and indices of all loaded meshes take up.
+        m_Profiler.SetCounter("GeometryMB", static_cast<double>(m_Frame->Geometry->UsedBytes()) / (1024.0 * 1024.0));
     }
 
-    MeshGeometry Renderer::CreateMeshGeometry(std::span<const Vertex> vertices, std::span<const uint32_t> indices)
+    MeshGeometry Renderer::CreateMeshGeometry(std::span<const PackedVertex> vertices, std::span<const uint32_t> indices)
     {
         return m_Frame->Geometry->Add(std::as_bytes(vertices), indices);
     }

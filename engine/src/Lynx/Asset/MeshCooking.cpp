@@ -27,4 +27,31 @@ namespace Lynx
         uniqueVertices.resize(usedVertexCount);
         vertices = std::move(uniqueVertices);
     }
+
+    namespace
+    {
+        // Three numbers from -1 to 1 in 10 bits each, and one that is -1, 0 or 1 in the 2 bits above them.
+        uint32_t PackDirection(const glm::vec3& direction, int top)
+        {
+            const auto tenBits = [](float value) { return static_cast<uint32_t>(meshopt_quantizeSnorm(value, 10)) & 0x3FFu; };
+            return tenBits(direction.x) | (tenBits(direction.y) << 10) | (tenBits(direction.z) << 20) | ((static_cast<uint32_t>(top) & 0x3u) << 30);
+        }
+    }
+
+    std::vector<PackedVertex> PackVertices(std::span<const Vertex> vertices)
+    {
+        std::vector<PackedVertex> packed;
+        packed.reserve(vertices.size());
+
+        for (const Vertex& vertex : vertices)
+        {
+            PackedVertex& out = packed.emplace_back();
+            out.Position = vertex.Position;
+            out.Normal = PackDirection(vertex.Normal, 0);
+            out.Tangent = PackDirection(glm::vec3(vertex.Tangent), vertex.Tangent.w < 0.0f ? -1 : 1);
+            out.TexCoord = vertex.TexCoord;
+        }
+
+        return packed;
+    }
 }

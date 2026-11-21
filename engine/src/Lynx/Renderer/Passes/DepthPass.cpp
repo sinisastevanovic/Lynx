@@ -70,10 +70,10 @@ namespace Lynx
         desc.Program = program.get();
         desc.Layout = m_Vulkan->Shared->PipelineLayout();
         desc.VertexAttributes = {
-            { MeshVertexLayout::PositionFormat, offsetof(Vertex, Position) },
-            { MeshVertexLayout::TexCoordFormat, offsetof(Vertex, TexCoord) },
+            { MeshVertexLayout::PositionFormat, offsetof(PackedVertex, Position) },
+            { MeshVertexLayout::TexCoordFormat, offsetof(PackedVertex, TexCoord) },
         };
-        desc.VertexStride = sizeof(Vertex);
+        desc.VertexStride = sizeof(PackedVertex);
         desc.CullMode = vk::CullModeFlagBits::eBack;
         desc.DepthFormat = RenderFormats::SceneDepth;
         desc.DepthTest = true;

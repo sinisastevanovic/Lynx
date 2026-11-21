@@ -2,6 +2,7 @@
 
 #include "StaticMesh.h"
 
+#include <span>
 #include <vector>
 
 // Turns the triangles of a mesh, as a file stores them, into the form the GPU draws fastest.
@@ -16,4 +17,7 @@ namespace Lynx
     //   mesh first, so fewer pixels are shaded that end up hidden.
     // - Vertices are stored in the order the triangles use them, so drawing reads memory front to back.
     void OptimizeDrawOrder(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
+
+    // The vertices of a submesh in the form the GPU stores them, see PackedVertex.
+    std::vector<PackedVertex> PackVertices(std::span<const Vertex> vertices);
 }

@@ -7,6 +7,7 @@
 #include "Material.h"
 #include "Lynx/Renderer/Frustum.h"
 #include "Lynx/Renderer/MeshGeometry.h"
+#include "Lynx/Renderer/MeshVertex.h"
 
 namespace Lynx
 {
@@ -30,9 +31,13 @@ namespace Lynx
 
     struct SubmeshSourceData
     {
+        // What the file holds. Emptied once the vertices are packed.
         std::vector<Vertex> Vertices;
         std::vector<uint32_t> Indices;
         std::string Name;
+
+        // The vertices as the GPU stores them, made where the file is read so that it happens off the main thread.
+        std::vector<PackedVertex> PackedVertices;
 
         // TODO: why not store a material here? 
         struct MatDef
