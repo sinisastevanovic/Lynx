@@ -1114,7 +1114,7 @@ namespace Lynx
             m_Profiler.SetCounter("VideoMemoryMB", static_cast<double>(*usedBytes) / (1024.0 * 1024.0));
     }
 
-    std::pair<nvrhi::BufferHandle, nvrhi::BufferHandle> Renderer::CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices)
+    std::pair<MeshBuffer, MeshBuffer> Renderer::CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices)
     {
         auto vbDesc = nvrhi::BufferDesc()
            .setByteSize(vertices.size() * sizeof(Vertex))
@@ -1139,7 +1139,7 @@ namespace Lynx
         commandList->close();
         m_NvrhiDevice->executeCommandList(commandList);
 
-        return { vb, ib };
+        return { MeshBuffer(m_Context->Deletions(), vb), MeshBuffer(m_Context->Deletions(), ib) };
     }
 
     void Renderer::OnResize(uint32_t width, uint32_t height)

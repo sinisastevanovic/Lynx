@@ -1,290 +1,201 @@
 #include "ForwardPass.h"
 
-#include "Lynx/Engine.h"
+#include "MeshDraw.h"
+#include "Lynx/Asset/Material.h"
 #include "Lynx/Asset/Shader.h"
-#include "Lynx/Renderer/SamplerCache.h"
+#include "Lynx/Renderer/GraphicsContext.h"
+#include "Lynx/Renderer/RenderFormats.h"
+#include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
+#include "Lynx/Renderer/Vulkan/SharedBindings.h"
 
 namespace Lynx
 {
+    namespace
+    {
+        // Has to match StandardConstants in StandardShading.slang.
+        struct StandardPushData
+        {
+            glm::vec4 AlbedoColor;
+            glm::vec4 EmissiveColorStrength;
+            float Metallic;
+            float Roughness;
+            float AlphaCutoff;
+            uint32_t AlbedoTexture;
+            uint32_t NormalTexture;
+            uint32_t MetallicRoughnessTexture;
+            uint32_t EmissiveTexture;
+            uint32_t MaterialSampler;
+            uint32_t ShadowMap;
+            uint32_t ShadowSampler;
+            uint64_t Instances;
+        };
+
+        // Everything of a draw that comes from its material. The shadow map and the instances are added by the caller.
+        StandardPushData MaterialConstants(const Material& material, const MaterialTextureIndices& textures)
+        {
+            StandardPushData push{};
+            push.AlbedoColor = material.AlbedoColor;
+            push.EmissiveColorStrength = glm::vec4(material.EmissiveColor, material.EmissiveStrength);
+            push.Metallic = material.Metallic;
+            push.Roughness = material.Roughness;
+            push.AlphaCutoff = material.Mode == AlphaMode::Mask ? material.AlphaCutoff : -1.0f;
+            push.AlbedoTexture = textures.Albedo;
+            push.NormalTexture = textures.Normal;
+            push.MetallicRoughnessTexture = textures.MetallicRoughness;
+            push.EmissiveTexture = textures.Emissive;
+            push.MaterialSampler = textures.Sampler;
+            return push;
+        }
+    }
+
+    struct ForwardPass::VulkanObjects
+    {
+        GraphicsContext* Context = nullptr;
+        SharedBindings* Shared = nullptr;
+        vk::Device Device;
+
+        vk::Pipeline OpaquePipeline;
+        vk::Pipeline TransparentPipeline;
+
+        // The renderer waits for the GPU before it destroys its passes, so nothing here is still in use.
+        ~VulkanObjects()
+        {
+            if (!Device)
+                return;
+
+            Device.destroyPipeline(OpaquePipeline);
+            Device.destroyPipeline(TransparentPipeline);
+        }
+    };
+
+    ForwardPass::ForwardPass() = default;
+    ForwardPass::~ForwardPass() = default;
+
     void ForwardPass::Init(RenderContext& ctx)
     {
-        // Global Layout (Set 0)
-        auto globalLayoutDesc = nvrhi::BindingLayoutDesc()
-            .setVisibility(nvrhi::ShaderType::All)
-            .addItem(nvrhi::BindingLayoutItem::ConstantBuffer(0))
-            .addItem(nvrhi::BindingLayoutItem::PushConstants(1, sizeof(PushData)))
-            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(1)) // Shadow Map
-            .addItem(nvrhi::BindingLayoutItem::Sampler(2))
-            .addItem(nvrhi::BindingLayoutItem::StructuredBuffer_SRV(10))
-            .setBindingOffsets({0, 0, 0, 0})
-            .setRegisterSpaceAndDescriptorSet(0);
-        m_GlobalBindingLayout = ctx.Device->createBindingLayout(globalLayoutDesc);
+        m_Vulkan = std::make_unique<VulkanObjects>();
+        m_Vulkan->Context = ctx.Graphics;
+        m_Vulkan->Shared = ctx.Shared;
+        m_Vulkan->Device = ctx.Graphics->Device();
 
-        // Material Layout (Set 1)
-        auto matLayoutDesc = nvrhi::BindingLayoutDesc()
-            .setVisibility(nvrhi::ShaderType::All)
-            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(0)) // Albedo
-            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(1)) // Normal
-            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(2)) // MR
-            .addItem(nvrhi::BindingLayoutItem::Texture_SRV(3)) // Emissive
-            .addItem(nvrhi::BindingLayoutItem::Sampler(4))
-            .setBindingOffsets({0, 0, 0, 0})
-            .setRegisterSpaceAndDescriptorSet(1);
-        m_MaterialBindingLayout = ctx.Device->createBindingLayout(matLayoutDesc);
-
-        const bool hasEntityIdTarget = ctx.PresentationFramebufferInfo.colorFormats.size() > 1;
-        m_PipelineState.SetShader(hasEntityIdTarget ? "Shaders/StandardEditor.glsl" : "Shaders/Standard.glsl");
-        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
-        {
-            this->CreatePipelines(ctx, shader);
-        });
+        m_WritesEntityIds = ctx.PresentationFramebufferInfo.colorFormats.size() > 1;
+        m_PipelineState.SetShader(m_WritesEntityIds ? "Shaders/StandardEditor.slang" : "Shaders/Standard.slang");
+        m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipelines(*shader); });
     }
 
-    void ForwardPass::CreatePipelines(RenderContext& ctx, std::shared_ptr<Shader> shader)
+    void ForwardPass::CreatePipelines(const Shader& shader)
     {
-        auto pipeDesc = nvrhi::GraphicsPipelineDesc()
-            .addBindingLayout(m_GlobalBindingLayout)
-            .addBindingLayout(m_MaterialBindingLayout)
-            .setVertexShader(shader->GetVertexShader())
-            .setFragmentShader(shader->GetPixelShader())
-            .setPrimType(nvrhi::PrimitiveType::TriangleList);
-        pipeDesc.renderState.rasterState.frontCounterClockwise = true;
-        pipeDesc.renderState.rasterState.cullMode = nvrhi::RasterCullMode::Back;
+        const std::shared_ptr<const ShaderProgram> program = shader.GetProgram();
+        if (!program)
+            return;
 
-        nvrhi::VertexAttributeDesc attributes[] = {
-            nvrhi::VertexAttributeDesc()
-                .setName("POSITION")
-                .setFormat(nvrhi::Format::RGB32_FLOAT)
-                .setBufferIndex(0)
-                .setOffset(offsetof(Vertex, Position))
-                .setElementStride(sizeof(Vertex)),
-            nvrhi::VertexAttributeDesc()
-                .setName("NORMAL")
-                .setFormat(nvrhi::Format::RGB32_FLOAT)
-                .setBufferIndex(0)
-                .setOffset(offsetof(Vertex, Normal))
-                .setElementStride(sizeof(Vertex)),
-            nvrhi::VertexAttributeDesc()
-                .setName("TANGENT")
-                .setFormat(nvrhi::Format::RGBA32_FLOAT)
-                .setBufferIndex(0)
-                .setOffset(offsetof(Vertex, Tangent))
-                .setElementStride(sizeof(Vertex)),
-            nvrhi::VertexAttributeDesc()
-                .setName("TEXCOORD")
-                .setFormat(nvrhi::Format::RG32_FLOAT)
-                .setBufferIndex(0)
-                .setOffset(offsetof(Vertex, TexCoord))
-                .setElementStride(sizeof(Vertex)),
-            nvrhi::VertexAttributeDesc()
-                .setName("COLOR")
-                .setFormat(nvrhi::Format::RGBA32_FLOAT)
-                .setBufferIndex(0)
-                .setOffset(offsetof(Vertex, Color))
-                .setElementStride(sizeof(Vertex))
+        // The pass and its shader are written together. If they stop agreeing, the pipelines that work are kept.
+        const char* shaderName = m_WritesEntityIds ? "StandardEditor.slang" : "Standard.slang";
+        if (!m_Vulkan->Shared->Supports(*program, shaderName, sizeof(StandardPushData)))
+            return;
+
+        GraphicsPipelineDesc desc;
+        desc.Program = program.get();
+        desc.Layout = m_Vulkan->Shared->PipelineLayout();
+        desc.VertexAttributes = {
+            { MeshVertexLayout::PositionFormat, offsetof(Vertex, Position) },
+            { MeshVertexLayout::NormalFormat, offsetof(Vertex, Normal) },
+            { MeshVertexLayout::TangentFormat, offsetof(Vertex, Tangent) },
+            { MeshVertexLayout::TexCoordFormat, offsetof(Vertex, TexCoord) },
         };
-        pipeDesc.inputLayout = ctx.Device->createInputLayout(attributes, 5, shader->GetVertexShader());
+        desc.VertexStride = sizeof(Vertex);
+        desc.CullMode = vk::CullModeFlagBits::eBack;
+        desc.FrontFace = vk::FrontFace::eCounterClockwise;
+        desc.ColorFormat = RenderFormats::SceneColor;
+        if (m_WritesEntityIds)
+            desc.IdFormat = RenderFormats::EntityIds;
+        desc.DepthFormat = RenderFormats::SceneDepth;
+        desc.DepthTest = true;
+        desc.DepthWrite = false;
 
-        // Opaque
-        pipeDesc.renderState.depthStencilState.depthTestEnable = true;
-        pipeDesc.renderState.depthStencilState.depthWriteEnable = false;
-        pipeDesc.renderState.depthStencilState.depthFunc = nvrhi::ComparisonFunc::Equal;
-        pipeDesc.renderState.blendState.targets[0].setBlendEnable(false);
+        // The depth pass has already written the depth of the nearest opaque surface at every pixel.
+        // Drawing only where the depth is equal to it shades exactly that surface and nothing behind it.
+        desc.DepthCompare = vk::CompareOp::eEqual;
+        const vk::Pipeline opaquePipeline = CreateGraphicsPipeline(m_Vulkan->Device, desc);
 
-        if (ctx.PresentationFramebufferInfo.colorFormats.size() > 1)
-            pipeDesc.renderState.blendState.targets[1].setBlendEnable(false).setColorWriteMask(nvrhi::ColorMask::All);
+        // See-through surfaces are not in the depth buffer. They are hidden by opaque ones, and cover what is behind them by their alpha.
+        desc.DepthCompare = vk::CompareOp::eLess;
+        desc.Blend = BlendMode::Alpha;
+        const vk::Pipeline transparentPipeline = CreateGraphicsPipeline(m_Vulkan->Device, desc);
 
-        m_PipelineOpaque = ctx.Device->createGraphicsPipeline(pipeDesc, ctx.PresentationFramebufferInfo);
-
-        // Transparent
-        pipeDesc.renderState.depthStencilState.depthWriteEnable = false;
-        pipeDesc.renderState.depthStencilState.depthFunc = nvrhi::ComparisonFunc::Less;
-        pipeDesc.renderState.blendState.targets[0]
-            .setBlendEnable(true)
-            .setSrcBlend(nvrhi::BlendFactor::SrcAlpha)
-            .setDestBlend(nvrhi::BlendFactor::InvSrcAlpha)
-            .setSrcBlendAlpha(nvrhi::BlendFactor::One)
-            .setDestBlendAlpha(nvrhi::BlendFactor::InvSrcAlpha);
-
-        m_PipelineTransparent = ctx.Device->createGraphicsPipeline(pipeDesc, ctx.PresentationFramebufferInfo);
-    }
-
-    void ForwardPass::Execute(RenderContext& ctx, RenderData& renderData)
-    {
-        m_PipelineState.Update([this, &ctx](std::shared_ptr<Shader> shader)
+        // A reloaded shader replaces pipelines that frames still on the GPU may be using.
+        m_Vulkan->Context->Deletions().Retire([device = m_Vulkan->Device, oldOpaque = m_Vulkan->OpaquePipeline, oldTransparent = m_Vulkan->TransparentPipeline]()
         {
-            this->CreatePipelines(ctx, shader);
+            device.destroyPipeline(oldOpaque);
+            device.destroyPipeline(oldTransparent);
         });
-        
-        CreateGlobalBindingSet(ctx, renderData);
-        
-        DrawBatches(ctx, renderData, renderData.OpaqueDrawCalls, m_PipelineOpaque);
-        DrawQueue(ctx, renderData, renderData.TransparentQueue, m_PipelineTransparent);
+        m_Vulkan->OpaquePipeline = opaquePipeline;
+        m_Vulkan->TransparentPipeline = transparentPipeline;
     }
 
-    nvrhi::BindingSetHandle ForwardPass::GetMaterialBindingSet(RenderContext& ctx, Material* material)
+    bool ForwardPass::Declare(const RenderContext&, const RenderData& renderData, PassResources& resources)
     {
-        uint32_t version = material ? material->GetVersion() : 0;
+        m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipelines(*shader); });
 
-        return m_MaterialBindingSetCache.Get(material, version, [&]() -> nvrhi::BindingSetHandle
+        if (!m_Vulkan->OpaquePipeline || !m_Vulkan->TransparentPipeline)
+            return false;
+        if (renderData.OpaqueDrawCalls.empty() && renderData.TransparentQueue.empty())
+            return false;
+
+        const nvrhi::FramebufferDesc& sceneTargets = renderData.TargetFramebuffer->getDesc();
+        resources.ColorTarget = sceneTargets.colorAttachments[0].texture;
+        if (m_WritesEntityIds)
+            resources.IdTarget = sceneTargets.colorAttachments[1].texture;
+        resources.DepthTarget = sceneTargets.depthAttachment.texture;
+        resources.Sample(renderData.ShadowMap);
+        return true;
+    }
+
+    void ForwardPass::Execute(vk::CommandBuffer commands, RenderData& renderData)
+    {
+        commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->OpaquePipeline);
+        for (const BatchDrawCall& batch : renderData.OpaqueDrawCalls)
         {
-            nvrhi::TextureHandle albedo = ctx.WhiteTexture;
-            nvrhi::TextureHandle normal = ctx.NormalTexture;
-            nvrhi::TextureHandle mr = ctx.MetallicRoughnessTexture;
-            nvrhi::TextureHandle emissive = ctx.WhiteTexture;
-            SamplerSettings samplerSettings;
-
-            if (material)
-            {
-                auto& assetManager = Engine::Get().GetAssetManager();
-                if (material->AlbedoTexture)
-                {
-                    if (auto tex = assetManager.GetAsset<Texture>(material->AlbedoTexture))
-                    {
-                        if (auto handle = tex->GetTextureHandle())
-                        {
-                            albedo = handle;
-                            samplerSettings = tex->GetSamplerSettings();
-                        }
-                    }
-                }
-                if (material->NormalMap)
-                {
-                    if (auto tex = assetManager.GetAsset<Texture>(material->NormalMap))
-                    {
-                        if (auto handle = tex->GetTextureHandle())
-                            normal = handle;
-                    }
-                }
-                if (material->MetallicRoughnessTexture)
-                {
-                    if (auto tex = assetManager.GetAsset<Texture>(material->MetallicRoughnessTexture))
-                    {
-                        if (auto handle = tex->GetTextureHandle())
-                            mr = handle;
-                    }
-                }
-                if (material->EmissiveTexture)
-                {
-                    if (auto tex = assetManager.GetAsset<Texture>(material->EmissiveTexture))
-                    {
-                        if (auto handle = tex->GetTextureHandle())
-                            emissive = handle;
-                    }
-                }
-            }
-
-            auto desc = nvrhi::BindingSetDesc()
-                .addItem(nvrhi::BindingSetItem::Texture_SRV(0, albedo))
-                .addItem(nvrhi::BindingSetItem::Texture_SRV(1, normal))
-                .addItem(nvrhi::BindingSetItem::Texture_SRV(2, mr))
-                .addItem(nvrhi::BindingSetItem::Texture_SRV(3, emissive))
-                .addItem(nvrhi::BindingSetItem::Sampler(4, SamplerCache::Get()->GetSampler(samplerSettings)));
-
-            return ctx.Device->createBindingSet(desc, m_MaterialBindingLayout);
-        });
-    }
-
-    void ForwardPass::CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData)
-    {
-        if (m_GlobalBindingSet && m_CachedInstanceBuffer == renderData.InstanceBuffer)
-            return;
-
-        m_CachedInstanceBuffer = renderData.InstanceBuffer;
-        auto desc = nvrhi::BindingSetDesc()
-            .addItem(nvrhi::BindingSetItem::ConstantBuffer(0, ctx.GlobalConstantBuffer))
-            .addItem(nvrhi::BindingSetItem::PushConstants(1, sizeof(PushData)))
-            .addItem(nvrhi::BindingSetItem::Texture_SRV(1, renderData.ShadowMap)) // Shadow Map
-            .addItem(nvrhi::BindingSetItem::Sampler(2, renderData.ShadowSampler))
-            .addItem(nvrhi::BindingSetItem::StructuredBuffer_SRV(10, renderData.InstanceBuffer));
-
-        m_GlobalBindingSet = ctx.Device->createBindingSet(desc, m_GlobalBindingLayout);
-    }
-
-    void ForwardPass::DrawQueue(RenderContext& ctx, RenderData& renderData, std::vector<RenderCommand>& queue, nvrhi::GraphicsPipelineHandle pipeline)
-    {
-        if (queue.empty())
-            return;
-
-        for (const auto& cmd : queue)
-        {
-            if (!(cmd.Flags & RenderFlags::MainPass))
+            if (batch.InstanceCount == 0 || !(batch.Key.RenderFlags & RenderFlags::MainPass))
                 continue;
-            
-            const auto& submesh = cmd.Mesh->GetSubmeshes()[cmd.SubmeshIndex];
-            auto state = nvrhi::GraphicsState()
-                .setPipeline(pipeline)
-                .setFramebuffer(renderData.TargetFramebuffer)
-                .addVertexBuffer(nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0))
-                .setIndexBuffer(nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT));
 
-            const auto& fbInfo = renderData.TargetFramebuffer->getFramebufferInfo();
-            state.viewport.addViewport(nvrhi::Viewport(fbInfo.width, fbInfo.height));
-            state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
-            state.addBindingSet(m_GlobalBindingSet);
-            state.addBindingSet(GetMaterialBindingSet(ctx, submesh.Material.get()));
+            const Submesh& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
+            BindSubmesh(commands, submesh);
 
-            ctx.CommandList->setGraphicsState(state);
+            StandardPushData push = MaterialConstants(*submesh.Material, batch.Textures);
+            push.ShadowMap = renderData.ShadowMapIndex;
+            push.ShadowSampler = renderData.ShadowSamplerIndex;
+            push.Instances = MeshInstanceAddress(renderData, batch.FirstInstance);
+            m_Vulkan->Shared->Push(commands, push);
 
-            PushData push;
-            push.AlphaCutoff = submesh.Material->Mode == AlphaMode::Mask ? submesh.Material->AlphaCutoff : -1.0f;
-            push.AlbedoColor = submesh.Material->AlbedoColor;
-            push.EmissiveColorStrength = glm::vec4(submesh.Material->EmissiveColor, submesh.Material->EmissiveStrength);
-            push.MetallicStrength = submesh.Material->Metallic;
-            push.RoughnessStrength = submesh.Material->Roughness;
-            ctx.CommandList->setPushConstants(&push, sizeof(PushData));
-            ctx.CommandList->drawIndexed(nvrhi::DrawArguments()
-                .setVertexCount(submesh.IndexCount)
-                .setInstanceCount(1)
-                .setStartInstanceLocation(cmd.InstanceOffset));
+            commands.drawIndexed(submesh.IndexCount, batch.InstanceCount, 0, 0, 0);
+
+            renderData.DrawCalls++;
+            renderData.IndexCount += submesh.IndexCount * batch.InstanceCount;
+        }
+
+        if (renderData.TransparentQueue.empty())
+            return;
+
+        commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->TransparentPipeline);
+        for (const RenderCommand& command : renderData.TransparentQueue)
+        {
+            if (!(command.Flags & RenderFlags::MainPass))
+                continue;
+
+            const Submesh& submesh = command.Mesh->GetSubmeshes()[command.SubmeshIndex];
+            BindSubmesh(commands, submesh);
+
+            StandardPushData push = MaterialConstants(*submesh.Material, command.Textures);
+            push.ShadowMap = renderData.ShadowMapIndex;
+            push.ShadowSampler = renderData.ShadowSamplerIndex;
+            push.Instances = MeshInstanceAddress(renderData, static_cast<uint32_t>(command.InstanceOffset));
+            m_Vulkan->Shared->Push(commands, push);
+
+            commands.drawIndexed(submesh.IndexCount, 1, 0, 0, 0);
 
             renderData.DrawCalls++;
             renderData.IndexCount += submesh.IndexCount;
         }
     }
-
-    void ForwardPass::DrawBatches(RenderContext& ctx, RenderData& renderData, std::vector<BatchDrawCall>& batches, nvrhi::GraphicsPipelineHandle pipeline)
-    {
-        for (const auto& batch : batches)
-        {
-            if (batch.InstanceCount <= 0)
-                continue;
-
-            if (!(batch.Key.RenderFlags & RenderFlags::MainPass))
-                continue;
-
-            const auto& submesh = batch.Key.Mesh->GetSubmeshes()[batch.Key.SubmeshIndex];
-            auto state = nvrhi::GraphicsState()
-                .setPipeline(pipeline)
-                .setFramebuffer(renderData.TargetFramebuffer)
-                .addVertexBuffer(nvrhi::VertexBufferBinding(submesh.VertexBuffer, 0, 0))
-                .setIndexBuffer(nvrhi::IndexBufferBinding(submesh.IndexBuffer, nvrhi::Format::R32_UINT));
-
-            const auto& fbInfo = renderData.TargetFramebuffer->getFramebufferInfo();
-            state.viewport.addViewport(nvrhi::Viewport(fbInfo.width, fbInfo.height));
-            state.viewport.addScissorRect(nvrhi::Rect(0, fbInfo.width, 0, fbInfo.height));
-            state.addBindingSet(m_GlobalBindingSet);
-            state.addBindingSet(GetMaterialBindingSet(ctx, submesh.Material.get()));
-
-            ctx.CommandList->setGraphicsState(state);
-
-            PushData push;
-            push.AlphaCutoff = submesh.Material->Mode == AlphaMode::Mask ? submesh.Material->AlphaCutoff : -1.0f;
-            push.AlbedoColor = submesh.Material->AlbedoColor;
-            push.EmissiveColorStrength = glm::vec4(submesh.Material->EmissiveColor, submesh.Material->EmissiveStrength);
-            push.MetallicStrength = submesh.Material->Metallic;
-            push.RoughnessStrength = submesh.Material->Roughness;
-            ctx.CommandList->setPushConstants(&push, sizeof(PushData));
-
-            ctx.CommandList->drawIndexed(nvrhi::DrawArguments()
-                .setVertexCount(submesh.IndexCount)
-                .setInstanceCount(batch.InstanceCount)
-                .setStartInstanceLocation(batch.FirstInstance));
-            
-            renderData.DrawCalls++;
-            renderData.IndexCount += submesh.IndexCount * batch.InstanceCount;
-        }
-    }
-
-    
 }

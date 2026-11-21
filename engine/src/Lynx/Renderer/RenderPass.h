@@ -167,8 +167,10 @@ namespace Lynx
         float LightIntensity;
 
         glm::mat4 LightViewProj; // TODO: Can't we use the normal ViewProjection for this?
+        // The shadow map, and where the texture table and the table of comparing samplers have it and its sampler.
         nvrhi::TextureHandle ShadowMap;
-        nvrhi::SamplerHandle ShadowSampler;
+        uint32_t ShadowMapIndex = 0;
+        uint32_t ShadowSamplerIndex = 0;
 
         // Where the scene passes draw: the HDR picture, with depth and, in the editor, entity IDs.
         nvrhi::FramebufferHandle TargetFramebuffer;

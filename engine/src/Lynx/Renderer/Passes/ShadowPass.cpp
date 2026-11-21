@@ -70,6 +70,9 @@ namespace Lynx
             .setReductionType(nvrhi::SamplerReductionType::Comparison);
         m_ShadowSampler = ctx.Device->createSampler(samplerDesc);
 
+        m_ShadowMapIndex = ctx.Shared->AddTexture(vk::ImageView(static_cast<VkImageView>(m_ShadowMap->getNativeView(nvrhi::ObjectTypes::VK_ImageView).pointer)));
+        m_ShadowSamplerIndex = ctx.Shared->ComparisonSamplerIndex(vk::Sampler(static_cast<VkSampler>(m_ShadowSampler->getNativeObject(nvrhi::ObjectTypes::VK_Sampler).pointer)));
+
         m_PipelineState.SetShader("Shaders/Shadow.slang");
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
     }
@@ -124,7 +127,8 @@ namespace Lynx
     void ShadowPass::Execute(vk::CommandBuffer commands, RenderData& renderData)
     {
         renderData.ShadowMap = m_ShadowMap;
-        renderData.ShadowSampler = m_ShadowSampler;
+        renderData.ShadowMapIndex = m_ShadowMapIndex;
+        renderData.ShadowSamplerIndex = m_ShadowSamplerIndex;
 
         if (!m_Vulkan->Pipeline)
             return;

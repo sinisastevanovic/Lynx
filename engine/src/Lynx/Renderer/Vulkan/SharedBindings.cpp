@@ -17,6 +17,7 @@ namespace Lynx
             vk::DescriptorSetLayoutBinding(SceneBinding, vk::DescriptorType::eUniformBuffer, 1, PushConstantStages),
             vk::DescriptorSetLayoutBinding(TextureBinding, vk::DescriptorType::eSampledImage, MaxTextures, PushConstantStages),
             vk::DescriptorSetLayoutBinding(SamplerBinding, vk::DescriptorType::eSampler, MaxSamplers, PushConstantStages),
+            vk::DescriptorSetLayoutBinding(ComparisonSamplerBinding, vk::DescriptorType::eSampler, MaxComparisonSamplers, PushConstantStages),
         };
 
         // The tables are mostly empty, and entries are written while frames that use the set are being
@@ -24,7 +25,7 @@ namespace Lynx
         const vk::DescriptorBindingFlags tableFlags = vk::DescriptorBindingFlagBits::ePartiallyBound
             | vk::DescriptorBindingFlagBits::eUpdateAfterBind
             | vk::DescriptorBindingFlagBits::eUpdateUnusedWhilePending;
-        const std::array<vk::DescriptorBindingFlags, 3> bindingFlags = { vk::DescriptorBindingFlags(), tableFlags, tableFlags };
+        const std::array<vk::DescriptorBindingFlags, 4> bindingFlags = { vk::DescriptorBindingFlags(), tableFlags, tableFlags, tableFlags };
 
         const vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo(bindingFlags);
         vk::DescriptorSetLayoutCreateInfo layoutInfo(vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool, bindings);
@@ -37,7 +38,7 @@ namespace Lynx
         const std::array poolSizes = {
             vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, 1),
             vk::DescriptorPoolSize(vk::DescriptorType::eSampledImage, MaxTextures),
-            vk::DescriptorPoolSize(vk::DescriptorType::eSampler, MaxSamplers),
+            vk::DescriptorPoolSize(vk::DescriptorType::eSampler, MaxSamplers + MaxComparisonSamplers),
         };
         m_Pool = m_Device.createDescriptorPool(vk::DescriptorPoolCreateInfo(vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind, 1, poolSizes));
         m_Set = m_Device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo(m_Pool, m_SetLayout)).front();
@@ -88,22 +89,32 @@ namespace Lynx
 
     uint32_t SharedBindings::SamplerIndex(vk::Sampler sampler)
     {
-        // There are a handful of samplers, so looking through them is faster than a map.
-        const auto found = std::ranges::find(m_Samplers, sampler);
-        if (found != m_Samplers.end())
-            return static_cast<uint32_t>(found - m_Samplers.begin());
+        return IndexOfSampler(m_Samplers, sampler, SamplerBinding, MaxSamplers);
+    }
 
-        if (m_Samplers.size() == MaxSamplers)
+    uint32_t SharedBindings::ComparisonSamplerIndex(vk::Sampler sampler)
+    {
+        return IndexOfSampler(m_ComparisonSamplers, sampler, ComparisonSamplerBinding, MaxComparisonSamplers);
+    }
+
+    uint32_t SharedBindings::IndexOfSampler(std::vector<vk::Sampler>& table, vk::Sampler sampler, uint32_t binding, uint32_t capacity)
+    {
+        // There are a handful of samplers, so looking through them is faster than a map.
+        const auto found = std::ranges::find(table, sampler);
+        if (found != table.end())
+            return static_cast<uint32_t>(found - table.begin());
+
+        if (table.size() == capacity)
         {
-            LX_CORE_ERROR("The sampler table is full ({0} samplers).", MaxSamplers);
+            LX_CORE_ERROR("A sampler table is full ({0} samplers).", capacity);
             return 0;
         }
 
-        const auto index = static_cast<uint32_t>(m_Samplers.size());
-        m_Samplers.push_back(sampler);
+        const auto index = static_cast<uint32_t>(table.size());
+        table.push_back(sampler);
 
         const vk::DescriptorImageInfo samplerInfo(sampler);
-        m_Device.updateDescriptorSets(vk::WriteDescriptorSet(m_Set, SamplerBinding, index, vk::DescriptorType::eSampler, samplerInfo), nullptr);
+        m_Device.updateDescriptorSets(vk::WriteDescriptorSet(m_Set, binding, index, vk::DescriptorType::eSampler, samplerInfo), nullptr);
         return index;
     }
 
@@ -128,7 +139,8 @@ namespace Lynx
             const bool known = binding.Set == 0
                 && ((binding.Binding == SceneBinding && binding.Kind == ShaderBindingKind::UniformBuffer)
                     || (binding.Binding == TextureBinding && binding.Kind == ShaderBindingKind::SampledTexture)
-                    || (binding.Binding == SamplerBinding && binding.Kind == ShaderBindingKind::Sampler));
+                    || (binding.Binding == SamplerBinding && binding.Kind == ShaderBindingKind::Sampler)
+                    || (binding.Binding == ComparisonSamplerBinding && binding.Kind == ShaderBindingKind::Sampler));
             if (!known)
             {
                 LX_CORE_ERROR("Shader {0}: parameter '{1}' is not one of the shared bindings. Import Scene or Textures, and pass everything else as push constants.", shaderName, binding.Name);

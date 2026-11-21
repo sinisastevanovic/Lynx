@@ -89,7 +89,7 @@ namespace Lynx
         nvrhi::TextureHandle GetViewportTexture() const;
         std::pair<uint32_t, uint32_t> GetViewportSize() const;
 
-        std::pair<nvrhi::BufferHandle, nvrhi::BufferHandle> CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices);
+        std::pair<MeshBuffer, MeshBuffer> CreateMeshBuffers(std::vector<Vertex> vertices, std::vector<uint32_t> indices);
 
 
         nvrhi::DeviceHandle GetDeviceHandle() const { return m_NvrhiDevice; }

@@ -11,6 +11,9 @@ namespace Lynx::RenderFormats
     constexpr vk::Format SceneDepth = vk::Format::eD32Sfloat;
     constexpr vk::Format ShadowMap = vk::Format::eD32Sfloat;
 
+    // Next to the colour of the scene in the editor: for every pixel, the ID of the entity it shows.
+    constexpr vk::Format EntityIds = vk::Format::eR32Sint;
+
     // The finished picture: the window's images and the editor's viewport.
     constexpr vk::Format Output = vk::Format::eB8G8R8A8Unorm;
 }

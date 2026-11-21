@@ -27,9 +27,11 @@ namespace Lynx
         static constexpr uint32_t SceneBinding = 0;
         static constexpr uint32_t TextureBinding = 1;
         static constexpr uint32_t SamplerBinding = 2;
+        static constexpr uint32_t ComparisonSamplerBinding = 3;
 
         static constexpr uint32_t MaxTextures = 16384;
         static constexpr uint32_t MaxSamplers = 64;
+        static constexpr uint32_t MaxComparisonSamplers = 8;
 
         // Every pipeline is made with room for this many bytes of push constants, the amount every GPU has.
         // Because all pipelines agree on it, the set stays bound when a pass switches to another pipeline.
@@ -53,6 +55,9 @@ namespace Lynx
 
         // The index of a sampler, which is added to the table on first use. Samplers are never removed.
         uint32_t SamplerIndex(vk::Sampler sampler);
+
+        // The same for a sampler that compares, which shaders reach through a table of its own.
+        uint32_t ComparisonSamplerIndex(vk::Sampler sampler);
 
         // True if the set provides everything the program expects, and the program's push constants are
         // exactly as large as the data the pass sends. Logs what does not fit otherwise.
@@ -86,5 +91,8 @@ namespace Lynx
 
         // The position of a sampler is its index.
         std::vector<vk::Sampler> m_Samplers;
+        std::vector<vk::Sampler> m_ComparisonSamplers;
+
+        uint32_t IndexOfSampler(std::vector<vk::Sampler>& table, vk::Sampler sampler, uint32_t binding, uint32_t capacity);
     };
 }

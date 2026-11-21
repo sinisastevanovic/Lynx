@@ -1,38 +1,31 @@
 #pragma once
-#include "Lynx/Renderer/BindingSetCache.h"
-#include "Lynx/Renderer/RenderPass.h"
+#include "Lynx/Renderer/Graph/RenderGraph.h"
 
 namespace Lynx
 {
-    class ForwardPass : public RenderPass
+    // Draws the scene's meshes with their materials, lit by the sun. Opaque meshes come first and are drawn
+    // only where the depth pass found them to be visible. See-through meshes follow, farthest first.
+    // In the editor, every pixel also gets the ID of its entity.
+    class ForwardPass : public VulkanPass
     {
     public:
-        virtual ~ForwardPass() = default;
-        
+        ForwardPass();
+        ~ForwardPass() override;
+
         void Init(RenderContext& ctx) override;
-        void Execute(RenderContext& ctx, RenderData& renderData) override;
+        bool Declare(const RenderContext& ctx, const RenderData& renderData, PassResources& resources) override;
+        void Execute(vk::CommandBuffer commands, RenderData& renderData) override;
 
     private:
-        void CreatePipelines(RenderContext& ctx, std::shared_ptr<Shader> shader);
-        nvrhi::BindingSetHandle GetMaterialBindingSet(RenderContext& ctx, Material* material);
-        void CreateGlobalBindingSet(RenderContext& ctx, RenderData& renderData);
-        
-        void DrawQueue(RenderContext& ctx, RenderData& renderData, std::vector<RenderCommand>& queue, nvrhi::GraphicsPipelineHandle pipeline);
-        void DrawBatches(RenderContext& ctx, RenderData& renderData, std::vector<BatchDrawCall>& batches, nvrhi::GraphicsPipelineHandle pipeline);
+        void CreatePipelines(const Shader& shader);
 
     private:
-        nvrhi::BindingLayoutHandle m_GlobalBindingLayout;
-        nvrhi::BindingLayoutHandle m_MaterialBindingLayout;
+        struct VulkanObjects;
+        std::unique_ptr<VulkanObjects> m_Vulkan;
 
-        nvrhi::BindingSetHandle m_GlobalBindingSet;
-
-        BindingSetCache<Material*> m_MaterialBindingSetCache;
-        
-        nvrhi::GraphicsPipelineHandle m_PipelineOpaque;
-        nvrhi::GraphicsPipelineHandle m_PipelineTransparent;
-        nvrhi::BufferHandle m_CachedInstanceBuffer;
+        // True in the editor, where the scene has a second target for entity IDs.
+        bool m_WritesEntityIds = false;
 
         PipelineState m_PipelineState;
     };
 }
-

@@ -8,3 +8,7 @@ module Textures;
 // The binding numbers have to match SharedBindings.h.
 [vk::binding(1, 0)] public Texture2D textures[];
 [vk::binding(2, 0)] public SamplerState samplers[];
+
+// Samplers that compare what they read with a value instead of returning it, as shadow maps need.
+// Used with SampleCmp. They have a table of their own because the shading language tells the two kinds apart.
+[vk::binding(3, 0)] public SamplerComparisonState comparisonSamplers[];

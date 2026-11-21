@@ -1,0 +1,17 @@
+// Meshes with a standard material, as a game draws them. The shading itself is in StandardShading.slang.
+
+import StandardShading;
+
+[vk::push_constant] ConstantBuffer<StandardConstants> constants;
+
+[shader("vertex")]
+StandardVaryings vertexMain(StandardVertex input, uint instanceIndex : SV_InstanceID)
+{
+    return standardVertex(constants, input, instanceIndex);
+}
+
+[shader("fragment")]
+float4 fragmentMain(StandardVaryings input) : SV_Target
+{
+    return standardFragment(constants, input);
+}

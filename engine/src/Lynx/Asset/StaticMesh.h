@@ -7,6 +7,7 @@
 #include "MeshSpecification.h"
 #include "Material.h"
 #include "Lynx/Renderer/Frustum.h"
+#include "Lynx/Renderer/MeshBuffer.h"
 
 namespace Lynx
 {
@@ -21,8 +22,8 @@ namespace Lynx
 
     struct Submesh
     {
-        nvrhi::BufferHandle VertexBuffer;
-        nvrhi::BufferHandle IndexBuffer;
+        MeshBuffer VertexBuffer;
+        MeshBuffer IndexBuffer;
         uint32_t IndexCount;
         std::shared_ptr<Material> Material;
         std::string Name;
