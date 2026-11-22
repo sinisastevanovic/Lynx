@@ -56,7 +56,7 @@ namespace Lynx
 
         // The picture whose size the pass draws at.
         const GpuTexture* mainTarget = resources.ColorTarget ? resources.ColorTarget : resources.DepthTarget;
-        if (!mainTarget && !resources.OwnTargets)
+        if (!mainTarget && !resources.OwnTargets && !resources.Computes)
             return;
 
         // Targets that are drawn into together have to be the same size. They can differ for a frame
@@ -83,6 +83,20 @@ namespace Lynx
         // Data the pass queued while declaring, such as this frame's vertices. Copies cannot be recorded
         // once rendering has begun, so this is the last moment for them.
         ctx.Uploads->Flush(commands);
+
+        if (resources.Computes)
+        {
+            ctx.Shared->Bind(commands, vk::PipelineBindPoint::eCompute);
+            pass.Execute(commands, renderData);
+
+            // What a compute shader wrote has to be finished before anything after it reads it: a later
+            // compute pass, a shader that draws, or a draw call that takes its commands from a buffer.
+            const vk::MemoryBarrier written(vk::AccessFlagBits::eShaderWrite, vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eIndirectCommandRead);
+            commands.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
+                vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eDrawIndirect | vk::PipelineStageFlagBits::eVertexShader | vk::PipelineStageFlagBits::eFragmentShader,
+                {}, written, nullptr, nullptr);
+            return;
+        }
 
         // One set for every pass. It is bound again per pass because a pass may bind other things in between.
         ctx.Shared->Bind(commands);

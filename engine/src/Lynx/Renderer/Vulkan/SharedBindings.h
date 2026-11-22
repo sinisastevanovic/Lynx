@@ -36,7 +36,11 @@ namespace Lynx
         // Every pipeline is made with room for this many bytes of push constants, the amount every GPU has.
         // Because all pipelines agree on it, the set stays bound when a pass switches to another pipeline.
         static constexpr uint32_t MaxPushConstantSize = 128;
-        static constexpr vk::ShaderStageFlags PushConstantStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+
+        // The shader stages that can reach the set and the push constants: those that draw, and compute.
+        // It is one list for everything, because Vulkan wants push constants set for exactly the stages
+        // the layout names, whichever of them the pipeline at hand has.
+        static constexpr vk::ShaderStageFlags ShaderStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
 
         SharedBindings(GraphicsContext& context, vk::Buffer sceneConstants);
         ~SharedBindings();
@@ -69,14 +73,16 @@ namespace Lynx
 
         vk::PipelineLayout PipelineLayout() const { return m_PipelineLayout; }
 
-        void Bind(vk::CommandBuffer commands) const;
+        // Binds the set for drawing or for compute. The two are bound apart: binding for one leaves the
+        // other as it was.
+        void Bind(vk::CommandBuffer commands, vk::PipelineBindPoint bindPoint = vk::PipelineBindPoint::eGraphics) const;
 
         // Sets the push constants of the draws that follow.
         template<typename Constants>
         void Push(vk::CommandBuffer commands, const Constants& constants) const
         {
             static_assert(sizeof(Constants) <= MaxPushConstantSize);
-            commands.pushConstants(m_PipelineLayout, PushConstantStages, 0, sizeof(Constants), &constants);
+            commands.pushConstants(m_PipelineLayout, ShaderStages, 0, sizeof(Constants), &constants);
         }
 
     private:

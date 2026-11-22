@@ -67,6 +67,9 @@ build\bin\Debug\LynxSandboxGame.exe
   shader imports. There is no GLSL any more.
 - **Passes.** Every pass of a frame is a `VulkanPass` in the render graph (`Renderer/Graph`). A pass declares what it
   reads and draws into, and records draws. The graph does layouts, begins rendering and binds the shared set.
+- **Compute.** A pass that sets `PassResources::Computes` draws nothing and dispatches compute shaders
+  (`Vulkan/ComputePipeline`). It reaches its buffers through their addresses in push constants, like every shader.
+  The graph binds the shared set for compute and, after the pass, makes later passes wait for what it wrote.
 - **Shared bindings.** Passes bind nothing themselves. One descriptor set (`Vulkan/SharedBindings`) holds the scene
   constants and tables of all textures and samplers. A shader gets texture indices, buffer addresses and everything
   else through push constants (128 bytes at most). Slang pads push constants to a multiple of their largest member:

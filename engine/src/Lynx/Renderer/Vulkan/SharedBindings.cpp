@@ -14,10 +14,10 @@ namespace Lynx
         : m_Context(context), m_Device(context.Device()), m_FreeTextures(std::make_shared<std::vector<uint32_t>>())
     {
         const std::array bindings = {
-            vk::DescriptorSetLayoutBinding(SceneBinding, vk::DescriptorType::eUniformBuffer, 1, PushConstantStages),
-            vk::DescriptorSetLayoutBinding(TextureBinding, vk::DescriptorType::eSampledImage, MaxTextures, PushConstantStages),
-            vk::DescriptorSetLayoutBinding(SamplerBinding, vk::DescriptorType::eSampler, MaxSamplers, PushConstantStages),
-            vk::DescriptorSetLayoutBinding(ComparisonSamplerBinding, vk::DescriptorType::eSampler, MaxComparisonSamplers, PushConstantStages),
+            vk::DescriptorSetLayoutBinding(SceneBinding, vk::DescriptorType::eUniformBuffer, 1, ShaderStages),
+            vk::DescriptorSetLayoutBinding(TextureBinding, vk::DescriptorType::eSampledImage, MaxTextures, ShaderStages),
+            vk::DescriptorSetLayoutBinding(SamplerBinding, vk::DescriptorType::eSampler, MaxSamplers, ShaderStages),
+            vk::DescriptorSetLayoutBinding(ComparisonSamplerBinding, vk::DescriptorType::eSampler, MaxComparisonSamplers, ShaderStages),
         };
 
         // The tables are mostly empty, and entries are written while frames that use the set are being
@@ -32,7 +32,7 @@ namespace Lynx
         layoutInfo.pNext = &flagsInfo;
         m_SetLayout = m_Device.createDescriptorSetLayout(layoutInfo);
 
-        const vk::PushConstantRange pushConstants(PushConstantStages, 0, MaxPushConstantSize);
+        const vk::PushConstantRange pushConstants(ShaderStages, 0, MaxPushConstantSize);
         m_PipelineLayout = m_Device.createPipelineLayout(vk::PipelineLayoutCreateInfo({}, m_SetLayout, pushConstants));
 
         const std::array poolSizes = {
@@ -157,8 +157,8 @@ namespace Lynx
         return true;
     }
 
-    void SharedBindings::Bind(vk::CommandBuffer commands) const
+    void SharedBindings::Bind(vk::CommandBuffer commands, vk::PipelineBindPoint bindPoint) const
     {
-        commands.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_PipelineLayout, 0, m_Set, nullptr);
+        commands.bindDescriptorSets(bindPoint, m_PipelineLayout, 0, m_Set, nullptr);
     }
 }

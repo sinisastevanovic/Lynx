@@ -36,6 +36,10 @@ namespace Lynx
         // of its own pictures. Everything else is still done for it.
         bool OwnTargets = false;
 
+        // Set by a pass that draws nothing and runs compute shaders instead, on buffers it reaches through
+        // their addresses. Nothing is rendered into. What the pass writes can be read by every pass after it.
+        bool Computes = false;
+
         // The depth buffer the pass tests against, and writes if its pipeline says so. Null for none.
         GpuTexture* DepthTarget = nullptr;
 
@@ -63,6 +67,8 @@ namespace Lynx
 
         // Called with rendering into the declared targets already begun, viewport and scissor set to cover them,
         // and the shared bindings bound. A pass with targets of its own is called before rendering has begun.
+        // A pass that computes is called with the shared bindings bound for compute: it binds its pipeline,
+        // sets its push constants and dispatches.
         // What the pass queued for upload in Declare has arrived by then.
         virtual void Execute(vk::CommandBuffer commands, RenderData& renderData) = 0;
     };
