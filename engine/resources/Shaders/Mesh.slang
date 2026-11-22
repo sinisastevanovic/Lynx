@@ -22,9 +22,11 @@ public struct MeshInstance
 
     // Written to the picking buffer in the editor. -1 for none.
     public int entityId;
+
+    // The instances of one submesh form a batch, which shares draw commands. See Cull.slang.
+    public uint batch;
     int padding0;
     int padding1;
-    int padding2;
 };
 
 // The instance a vertex belongs to. A frame draws the instances in a list of places in the instance

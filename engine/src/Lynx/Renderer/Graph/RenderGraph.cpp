@@ -90,10 +90,13 @@ namespace Lynx
             pass.Execute(commands, renderData);
 
             // What a compute shader wrote has to be finished before anything after it reads it: a later
-            // compute pass, a shader that draws, or a draw call that takes its commands from a buffer.
-            const vk::MemoryBarrier written(vk::AccessFlagBits::eShaderWrite, vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eIndirectCommandRead);
+            // compute pass, a shader that draws, a draw call that takes its commands from a buffer,
+            // or a copy to where the CPU can read.
+            const vk::MemoryBarrier written(vk::AccessFlagBits::eShaderWrite,
+                vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eIndirectCommandRead | vk::AccessFlagBits::eTransferRead);
             commands.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
-                vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eDrawIndirect | vk::PipelineStageFlagBits::eVertexShader | vk::PipelineStageFlagBits::eFragmentShader,
+                vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eDrawIndirect | vk::PipelineStageFlagBits::eVertexShader
+                    | vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eTransfer,
                 {}, written, nullptr, nullptr);
             return;
         }

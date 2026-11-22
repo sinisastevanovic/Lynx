@@ -191,8 +191,9 @@ namespace Lynx
             for (const Copy& copy : m_Copies)
                 commands.copyBuffer(copy.Staging, copy.Destination, copy.Region);
 
-            // Whatever is drawn or computed next may read what was just written.
-            const vk::MemoryBarrier barrier(vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eMemoryRead);
+            // Whatever is drawn or computed next may read what was just written, and a compute shader
+            // may write over it, as culling does with the draw commands.
+            const vk::MemoryBarrier barrier(vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite);
             commands.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eAllGraphics | vk::PipelineStageFlagBits::eComputeShader, {}, barrier, nullptr, nullptr);
         }
 

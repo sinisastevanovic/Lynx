@@ -96,9 +96,14 @@ build\bin\Debug\LynxSandboxGame.exe
   never saved. A frame draws a list of places in the instance buffer, which culling writes.
 - **Mesh draws.** Meshes that are not see-through are drawn from a buffer of draw commands, one per submesh with all
   its instances that are seen (`RenderData::MeshDraws`). A pass draws a whole range of them with one call
-  (`DrawMeshes`). The CPU still culls, with a sphere per instance, and writes the commands. Depth and shadow use a
-  pipeline without a fragment shader for opaque materials and a second one for cut-outs. See-through meshes are
-  sorted and drawn one by one.
+  (`DrawMeshes`). Depth and shadow use a pipeline without a fragment shader for opaque materials and a second one
+  for cut-outs. See-through meshes are culled and sorted on the CPU and drawn one by one.
+- **Culling.** The GPU decides what is drawn (`Passes/CullPass`, `Cull.slang`). The CPU lays out one draw command
+  per batch (the instances of one submesh) and view, drawing nothing, each with a run of the list of drawn
+  instances long enough for the whole batch. The compute shader tests the sphere of every instance against the
+  camera and the sun, counts those seen into the command and writes their places into its run. A command may end
+  up drawing nothing, and the order of instances within a batch differs from frame to frame. The CPU learns what
+  was drawn four frames later, from a copy of the commands, and only for the counters.
 - **Uploads.** Data for buffers and pixels for textures go through the `UploadQueue`, which copies them to the GPU
   with the next frame. Nothing is submitted on its own.
 - **Memory.** Textures come from a pool of their own (`GraphicsContext::TexturePool`), apart from buffers. Sharing

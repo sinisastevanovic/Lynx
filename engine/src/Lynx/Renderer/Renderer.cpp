@@ -34,6 +34,7 @@
 #include "Passes/ShadowPass.h"
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
+#include "Passes/CullPass.h"
 #include "Passes/DepthPass.h"
 #include "Passes/ParticlePass.h"
 
@@ -283,9 +284,11 @@ namespace Lynx
         m_Materials = std::make_unique<MaterialTable>(*m_Context, *m_Frame->Uploads, m_Assets, defaults);
         m_GpuScene = std::make_unique<GpuScene>(*m_Context, *m_Frame->Uploads, *m_Materials);
 
-        // The frame, start to finish. The scene passes draw the HDR picture, bloom reads it and composite
+        // The frame, start to finish. Culling decides what the scene passes draw, so it comes first.
+        // The scene passes draw the HDR picture, bloom reads it and composite
         // turns both into the output. What is not part of the scene is drawn on top of the output, so that
         // post-processing does not touch it: the grid and debug lines, still hidden by the scene's depth, then the UI.
+        m_Graph->Add("CullMeshes", std::make_unique<CullPass>());
         m_Graph->Add("Shadow", std::make_unique<ShadowPass>(m_ShadowMapResolution));
         m_Graph->Add("Depth", std::make_unique<DepthPass>());
         m_Graph->Add("Forward", std::make_unique<ForwardPass>());
@@ -518,7 +521,8 @@ namespace Lynx
     void Renderer::PrepareDrawCalls()
     {
         {
-            // Deciding what the camera and the sun see, and bringing what changed in the scene to the GPU.
+            // Laying out the draw commands that culling on the GPU fills in, culling the see-through
+            // meshes, and bringing what changed in the scene to the GPU.
             ProfileScope cullScope(m_Profiler, "Cull");
 
             Frustum cameraFrustum;
@@ -528,6 +532,7 @@ namespace Lynx
 
             const GpuScene::Frame meshes = m_GpuScene->Prepare(cameraFrustum, sunFrustum, m_CurrentFrameData.CameraPosition);
             m_CurrentFrameData.MeshDraws = meshes.Draws;
+            m_CurrentFrameData.Culling = meshes.Culling;
             m_CurrentFrameData.TransparentDraws = meshes.TransparentDraws;
             m_CurrentFrameData.MeshInstanceAddress = meshes.InstanceAddress;
             m_CurrentFrameData.VisibleInstanceAddress = meshes.VisibleAddress;
@@ -535,6 +540,7 @@ namespace Lynx
 
             // An instance is one submesh of one mesh in the scene. The camera's view and the sun's are
             // counted apart, and a triangle counts once per view, however many passes draw it.
+            // What was drawn is decided on the GPU, so those numbers are of a frame a few frames back.
             m_Profiler.SetCounter("InstancesTested", static_cast<double>(meshes.InstancesTested));
             m_Profiler.SetCounter("InstancesDrawn", static_cast<double>(meshes.InstancesDrawn));
             m_Profiler.SetCounter("TrianglesDrawn", static_cast<double>(meshes.TrianglesDrawn));
@@ -768,6 +774,7 @@ namespace Lynx
         m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled;
 
         m_Graph->Execute(m_RenderContext, m_CurrentFrameData);
+        m_GpuScene->CopyCommandsForCounters(m_Frame->Commands);
         CopyRequestedEntityId();
 
         m_Stats.DrawCalls = m_CurrentFrameData.DrawCalls;

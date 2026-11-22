@@ -30,6 +30,7 @@ namespace Lynx
 
     // The draw commands for the frame's meshes that are not see-through: one command per submesh and all
     // its instances, in a buffer on the GPU. A pass draws a whole range of them with one call.
+    // Culling on the GPU decides how many instances each command draws, which may be none.
     struct MeshDrawCommands
     {
         const GpuBuffer* Buffer = nullptr;
@@ -41,6 +42,22 @@ namespace Lynx
         DrawRange CameraCutOut;
         DrawRange ShadowOpaque;
         DrawRange ShadowCutOut;
+    };
+
+    // What culling on the GPU works with besides the instances, see GpuScene and CullPass.
+    struct MeshCulling
+    {
+        // The frame's draw commands, into which culling counts the instances that are seen.
+        uint64_t CommandAddress = 0;
+
+        // Per batch of instances, the commands it is drawn with in the camera's view and in the sun's.
+        uint64_t BatchAddress = 0;
+
+        // The planes of the camera's view, then of the sun's.
+        uint64_t ViewAddress = 0;
+
+        // How many places the instance buffer has. Zero if there is nothing to cull.
+        uint32_t PlaceCount = 0;
     };
 
     struct SceneData
@@ -100,6 +117,7 @@ namespace Lynx
         // In the order they are drawn, the farthest first. Valid only while the frame is drawn.
         std::span<const TransparentDraw> TransparentDraws;
         MeshDrawCommands MeshDraws;
+        MeshCulling Culling;
 
         std::vector<ParticleBatch> ParticleQueue;
 

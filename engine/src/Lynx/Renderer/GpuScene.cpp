@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cstring>
 #include <span>
 #include <tuple>
 
@@ -20,29 +21,57 @@ namespace Lynx
         // How many unchanged instances may lie between two changed ones that are written with one copy.
         constexpr uint32_t LargestGapInOneCopy = 64;
 
-        // Makes sure a buffer that is rewritten every frame can hold a list, then queues the list for upload.
-        template<typename Entry>
-        void UploadList(GraphicsContext& context, UploadQueue& uploads, GpuBuffer& buffer, std::span<const Entry> entries, vk::BufferUsageFlagBits usage, const char* name)
+        constexpr uint32_t NoCommand = ~0u;
+
+        // The planes of a view, pointing inwards. Has to match View in Cull.slang.
+        struct CullView
         {
-            if (entries.empty())
+            glm::vec4 Planes[6];
+        };
+
+        // The draw commands a batch's instances are counted into, one per view. NoCommand for a view the
+        // batch is not drawn in. Has to match BatchCommands in Cull.slang.
+        struct BatchCommands
+        {
+            uint32_t Camera = NoCommand;
+            uint32_t Sun = NoCommand;
+        };
+
+        CullView ToCullView(const Frustum& frustum)
+        {
+            CullView view;
+            std::ranges::copy(frustum.Planes, view.Planes);
+            return view;
+        }
+
+        // Makes sure a buffer that is rewritten every frame has a size. What it held is not kept.
+        void EnsureSize(GraphicsContext& context, GpuBuffer& buffer, uint64_t size, vk::BufferUsageFlags usage, const char* name)
+        {
+            if (buffer.Size() >= size)
                 return;
 
-            if (buffer.Size() < entries.size_bytes())
-            {
-                // Half as much again as needed, so a list that grows a little each frame does not reallocate each frame.
-                GpuBufferDesc desc;
-                desc.Size = entries.size_bytes() + entries.size_bytes() / 2;
-                desc.Usage = usage | vk::BufferUsageFlagBits::eTransferDst;
-                desc.Name = name;
-                buffer = GpuBuffer(context, desc);
-            }
-
-            uploads.Upload(buffer.Handle(), 0, std::as_bytes(entries));
+            // Half as much again as needed, so a list that grows a little each frame does not reallocate each frame.
+            GpuBufferDesc desc;
+            desc.Size = size + size / 2;
+            desc.Usage = usage;
+            desc.Name = name;
+            buffer = GpuBuffer(context, desc);
         }
 
         bool CanBeDrawn(const Submesh& submesh)
         {
             return submesh.Material && submesh.Geometry;
+        }
+
+        // The sphere around an instance in the world: the centre in xyz, the radius in w. The radius grows
+        // by the largest of the three scales, which keeps the sphere around the mesh however unevenly
+        // the instance is scaled. Cull.slang computes the same.
+        glm::vec4 WorldSphere(const GpuInstance& instance)
+        {
+            const glm::mat4& model = instance.Model;
+            const float scale = std::sqrt(std::max({ glm::dot(model[0], model[0]), glm::dot(model[1], model[1]), glm::dot(model[2], model[2]) }));
+            const glm::vec3 centre = glm::vec3(model * glm::vec4(glm::vec3(instance.BoundingSphere), 1.0f));
+            return glm::vec4(centre, instance.BoundingSphere.w * scale);
         }
     }
 
@@ -57,7 +86,7 @@ namespace Lynx
     void GpuScene::Clear()
     {
         m_Instances.clear();
-        m_CullData.clear();
+        m_IndexInBatch.clear();
         m_Changed.clear();
         m_FreeRuns.clear();
         m_Batches.clear();
@@ -86,6 +115,11 @@ namespace Lynx
             if (!CanBeDrawn(submesh))
                 continue;
 
+            const uint32_t batchIndex = BatchFor(mesh, submeshIndex);
+            Batch& batch = m_Batches[batchIndex];
+            m_IndexInBatch[place] = static_cast<uint32_t>(batch.Places.size());
+            batch.Places.push_back(place);
+
             GpuInstance& instance = m_Instances[place];
             instance = {};
             instance.Model = transform;
@@ -95,11 +129,7 @@ namespace Lynx
             instance.VertexOffset = submesh.Geometry.VertexOffset();
             instance.Material = m_Materials.IndexOf(submesh.Material);
             instance.EntityId = entityId;
-
-            const uint32_t batch = BatchFor(mesh, submeshIndex);
-            m_Batches[batch].InstanceCount++;
-            m_CullData[place].Batch = batch;
-            UpdateSphere(place);
+            instance.Batch = batchIndex;
 
             m_Changed.push_back(place);
             ++place;
@@ -116,18 +146,27 @@ namespace Lynx
 
         for (uint32_t place = range.First; place < range.First + range.Count; ++place)
         {
-            Batch& batch = m_Batches[m_CullData[place].Batch];
-            if (--batch.InstanceCount == 0)
+            const uint32_t batchIndex = m_Instances[place].Batch;
+            Batch& batch = m_Batches[batchIndex];
+
+            // The last place of the batch's list moves to where this one stood.
+            const uint32_t movedPlace = batch.Places.back();
+            batch.Places[m_IndexInBatch[place]] = movedPlace;
+            m_IndexInBatch[movedPlace] = m_IndexInBatch[place];
+            batch.Places.pop_back();
+
+            if (batch.Places.empty())
             {
                 // Lets go of the mesh. The batch's place in the list is used again by the next new batch.
                 m_BatchIndices.erase(BatchKey{ batch.Mesh.get(), batch.SubmeshIndex });
-                m_FreeBatches.push_back(m_CullData[place].Batch);
+                m_FreeBatches.push_back(batchIndex);
                 batch = Batch();
                 m_DrawOrderIsStale = true;
             }
 
-            // Nothing is written to the GPU: a place without a batch is in no list of drawn instances.
-            m_CullData[place].Batch = NoBatch;
+            // Culling on the GPU goes over every place, so it has to be told that this one is empty.
+            m_Instances[place].Batch = NoBatch;
+            m_Changed.push_back(place);
         }
 
         m_FreeRuns[range.Count].push_back(range.First);
@@ -139,7 +178,6 @@ namespace Lynx
         for (uint32_t place = range.First; place < range.First + range.Count; ++place)
         {
             m_Instances[place].Model = transform;
-            UpdateSphere(place);
             m_Changed.push_back(place);
         }
     }
@@ -157,7 +195,7 @@ namespace Lynx
 
         const uint32_t first = static_cast<uint32_t>(m_Instances.size());
         m_Instances.resize(m_Instances.size() + count);
-        m_CullData.resize(m_Instances.size());
+        m_IndexInBatch.resize(m_Instances.size());
         return first;
     }
 
@@ -183,18 +221,6 @@ namespace Lynx
         batch.SubmeshIndex = submeshIndex;
         m_DrawOrderIsStale = true;
         return found->second;
-    }
-
-    void GpuScene::UpdateSphere(uint32_t place)
-    {
-        const GpuInstance& instance = m_Instances[place];
-        const glm::mat4& model = instance.Model;
-
-        // The sphere grows by the largest of the three scales, which keeps it around the mesh however
-        // unevenly the instance is scaled.
-        const float scale = std::sqrt(std::max({ glm::dot(model[0], model[0]), glm::dot(model[1], model[1]), glm::dot(model[2], model[2]) }));
-        const glm::vec3 centre = glm::vec3(model * glm::vec4(glm::vec3(instance.BoundingSphere), 1.0f));
-        m_CullData[place].Sphere = glm::vec4(centre, instance.BoundingSphere.w * scale);
     }
 
     void GpuScene::UploadChanges()
@@ -238,14 +264,18 @@ namespace Lynx
 
     GpuScene::Frame GpuScene::Prepare(const Frustum& camera, const Frustum& sun, const glm::vec3& cameraPosition)
     {
+        ++m_Frame;
+
+        // The oldest copy is read before this frame takes its place.
+        CommandCopy& copy = m_CommandCopies[m_Frame % CommandCopyCount];
+
         Frame frame;
         frame.InstancesTested = m_InstanceCount;
+        ReadCounters(copy, frame);
 
         // A material is looked at once per frame: this is where a change to it is noticed and written to its table.
         for (Batch& batch : m_Batches)
         {
-            batch.SeenByCamera.clear();
-            batch.SeenBySun.clear();
             if (!batch.Mesh)
                 continue;
 
@@ -253,23 +283,6 @@ namespace Lynx
             m_Materials.IndexOf(material);
             batch.HasCutOuts = material->Mode == AlphaMode::Mask;
             batch.IsTranslucent = material->Mode == AlphaMode::Translucent;
-        }
-
-        // Every instance is tested against both views. An instance is drawn in the passes whose view sees it.
-        for (uint32_t place = 0; place < m_CullData.size(); ++place)
-        {
-            const CullData& instance = m_CullData[place];
-            if (instance.Batch == NoBatch)
-                continue;
-
-            Batch& batch = m_Batches[instance.Batch];
-            const glm::vec3 centre(instance.Sphere);
-            if (camera.IsOnFrustum(centre, instance.Sphere.w))
-                batch.SeenByCamera.push_back(place);
-
-            // See-through surfaces cast no shadow.
-            if (!batch.IsTranslucent && sun.IsOnFrustum(centre, instance.Sphere.w))
-                batch.SeenBySun.push_back(place);
         }
 
         if (m_DrawOrderIsStale)
@@ -292,10 +305,12 @@ namespace Lynx
             m_DrawOrderIsStale = false;
         }
 
-        // One draw command per batch and view that sees any of it. The command names a run in the list of
-        // drawn instances, and the list names their places in the instance buffer.
-        m_Visible.clear();
+        // One draw command per batch and view, drawing nothing yet. Each gets a run in the list of drawn
+        // instances that is long enough for the whole batch. Culling on the GPU counts the instances a
+        // view sees into the command and writes their places into its run.
         std::vector<vk::DrawIndexedIndirectCommand> commands;
+        std::vector<BatchCommands> batchCommands(m_Batches.size());
+        uint32_t visibleCount = 0;
         const auto addCommands = [&](bool forCamera, bool withCutOuts)
         {
             DrawRange range;
@@ -303,19 +318,16 @@ namespace Lynx
 
             for (const uint32_t index : m_DrawOrder)
             {
+                // See-through surfaces cast no shadow, and the camera's are drawn one by one.
                 const Batch& batch = m_Batches[index];
-                const std::vector<uint32_t>& seen = forCamera ? batch.SeenByCamera : batch.SeenBySun;
-                if (seen.empty() || batch.IsTranslucent || batch.HasCutOuts != withCutOuts)
+                if (batch.IsTranslucent || batch.HasCutOuts != withCutOuts)
                     continue;
 
-                const Submesh& submesh = batch.Mesh->GetSubmeshes()[batch.SubmeshIndex];
-                commands.emplace_back(submesh.IndexCount, static_cast<uint32_t>(seen.size()), submesh.Geometry.FirstIndex(), submesh.Geometry.VertexOffset(), static_cast<uint32_t>(m_Visible.size()));
-                m_Visible.insert(m_Visible.end(), seen.begin(), seen.end());
+                (forCamera ? batchCommands[index].Camera : batchCommands[index].Sun) = static_cast<uint32_t>(commands.size());
 
-                uint64_t& instances = forCamera ? frame.InstancesDrawn : frame.ShadowInstancesDrawn;
-                uint64_t& triangles = forCamera ? frame.TrianglesDrawn : frame.ShadowTrianglesDrawn;
-                instances += seen.size();
-                triangles += uint64_t(submesh.IndexCount / 3) * seen.size();
+                const Submesh& submesh = batch.Mesh->GetSubmeshes()[batch.SubmeshIndex];
+                commands.emplace_back(submesh.IndexCount, 0u, submesh.Geometry.FirstIndex(), submesh.Geometry.VertexOffset(), visibleCount);
+                visibleCount += static_cast<uint32_t>(batch.Places.size());
             }
 
             range.Count = static_cast<uint32_t>(commands.size()) - range.First;
@@ -326,8 +338,45 @@ namespace Lynx
         frame.Draws.CameraCutOut = addCommands(true, true);
         frame.Draws.ShadowOpaque = addCommands(false, false);
         frame.Draws.ShadowCutOut = addCommands(false, true);
-        frame.DrawCommands = commands.size();
 
+        copy.CommandCount = static_cast<uint32_t>(commands.size());
+        copy.CameraCommandCount = frame.Draws.CameraOpaque.Count + frame.Draws.CameraCutOut.Count;
+
+        CullSeeThrough(camera, cameraPosition, visibleCount, copy);
+        frame.TransparentDraws = m_TransparentDraws;
+
+        UploadChanges();
+
+        if (!commands.empty())
+        {
+            // Read by draw calls, written by the upload and by culling, and copied from for the counters.
+            const vk::BufferUsageFlags commandUsage = vk::BufferUsageFlagBits::eIndirectBuffer | vk::BufferUsageFlagBits::eStorageBuffer
+                | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc;
+            const std::span<const vk::DrawIndexedIndirectCommand> commandList(commands);
+            EnsureSize(m_Context, m_CommandBuffer, commandList.size_bytes(), commandUsage, "MeshDrawCommands");
+            m_Uploads.Upload(m_CommandBuffer.Handle(), 0, std::as_bytes(commandList));
+
+            const CullView views[2] = { ToCullView(camera), ToCullView(sun) };
+            const std::span<const BatchCommands> batchList(batchCommands);
+            EnsureSize(m_Context, m_CullInputBuffer, sizeof(views) + batchList.size_bytes(),
+                vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, "CullInput");
+            m_Uploads.Upload(m_CullInputBuffer.Handle(), 0, std::as_bytes(std::span(views)));
+            m_Uploads.Upload(m_CullInputBuffer.Handle(), sizeof(views), std::as_bytes(batchList));
+
+            frame.Culling.CommandAddress = m_CommandBuffer.Address();
+            frame.Culling.ViewAddress = m_CullInputBuffer.Address();
+            frame.Culling.BatchAddress = m_CullInputBuffer.Address() + sizeof(views);
+            frame.Culling.PlaceCount = static_cast<uint32_t>(m_Instances.size());
+        }
+
+        frame.Draws.Buffer = &m_CommandBuffer;
+        frame.InstanceAddress = m_InstanceBuffer.Address();
+        frame.VisibleAddress = m_VisibleBuffer.Address();
+        return frame;
+    }
+
+    void GpuScene::CullSeeThrough(const Frustum& camera, const glm::vec3& cameraPosition, uint32_t firstVisible, CommandCopy& counted)
+    {
         // See-through instances are drawn one by one, the farthest first, so that nearer ones cover them.
         struct Sorted
         {
@@ -335,36 +384,89 @@ namespace Lynx
             uint32_t Place;
         };
         std::vector<Sorted> sorted;
+        size_t seeThroughCount = 0;
         for (const uint32_t index : m_DrawOrder)
         {
             const Batch& batch = m_Batches[index];
             if (!batch.IsTranslucent)
                 continue;
 
-            for (const uint32_t place : batch.SeenByCamera)
-                sorted.push_back({ glm::distance(cameraPosition, glm::vec3(m_Instances[place].Model[3])), place });
+            seeThroughCount += batch.Places.size();
+            for (const uint32_t place : batch.Places)
+            {
+                const GpuInstance& instance = m_Instances[place];
+                const glm::vec4 sphere = WorldSphere(instance);
+                if (camera.IsOnFrustum(glm::vec3(sphere), sphere.w))
+                    sorted.push_back({ glm::distance(cameraPosition, glm::vec3(instance.Model[3])), place });
+            }
         }
-        std::ranges::stable_sort(sorted, [](const Sorted& a, const Sorted& b) { return a.Distance > b.Distance; });
 
+        // Instances at the same distance keep the order of their places, so that a frame looks the same in every run.
+        std::ranges::sort(sorted, [](const Sorted& a, const Sorted& b) { return std::tie(b.Distance, a.Place) < std::tie(a.Distance, b.Place); });
+
+        // Their places follow the runs of the draw commands in the list of drawn instances.
+        std::vector<uint32_t> places;
+        places.reserve(sorted.size());
         m_TransparentDraws.clear();
+        counted.SeeThroughInstances = sorted.size();
+        counted.SeeThroughTriangles = 0;
         for (const Sorted& entry : sorted)
         {
             const GpuInstance& instance = m_Instances[entry.Place];
-            m_TransparentDraws.push_back({ instance.IndexCount, instance.FirstIndex, instance.VertexOffset, static_cast<uint32_t>(m_Visible.size()) });
-            m_Visible.push_back(entry.Place);
-
-            frame.InstancesDrawn++;
-            frame.TrianglesDrawn += instance.IndexCount / 3;
+            m_TransparentDraws.push_back({ instance.IndexCount, instance.FirstIndex, instance.VertexOffset, firstVisible + static_cast<uint32_t>(places.size()) });
+            places.push_back(entry.Place);
+            counted.SeeThroughTriangles += instance.IndexCount / 3;
         }
-        frame.TransparentDraws = m_TransparentDraws;
 
-        UploadChanges();
-        UploadList<uint32_t>(m_Context, m_Uploads, m_VisibleBuffer, m_Visible, vk::BufferUsageFlagBits::eStorageBuffer, "VisibleInstances");
-        UploadList<vk::DrawIndexedIndirectCommand>(m_Context, m_Uploads, m_CommandBuffer, commands, vk::BufferUsageFlagBits::eIndirectBuffer, "MeshDrawCommands");
+        // Room for every see-through instance, seen or not, so that the buffer does not grow as the camera turns.
+        const uint64_t neededCount = firstVisible + seeThroughCount;
+        if (neededCount == 0)
+            return;
 
-        frame.Draws.Buffer = &m_CommandBuffer;
-        frame.InstanceAddress = m_InstanceBuffer.Address();
-        frame.VisibleAddress = m_VisibleBuffer.Address();
-        return frame;
+        EnsureSize(m_Context, m_VisibleBuffer, neededCount * sizeof(uint32_t), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, "VisibleInstances");
+        if (!places.empty())
+            m_Uploads.Upload(m_VisibleBuffer.Handle(), firstVisible * sizeof(uint32_t), std::as_bytes(std::span<const uint32_t>(places)));
+    }
+
+    void GpuScene::ReadCounters(const CommandCopy& copy, Frame& frame) const
+    {
+        frame.InstancesDrawn = copy.SeeThroughInstances;
+        frame.TrianglesDrawn = copy.SeeThroughTriangles;
+
+        const std::span<const vk::DrawIndexedIndirectCommand> commands(static_cast<const vk::DrawIndexedIndirectCommand*>(copy.Commands.Data()), copy.CommandCount);
+        if (copy.Commands.Size() < commands.size_bytes())
+            return;
+
+        for (uint32_t index = 0; index < commands.size(); ++index)
+        {
+            const vk::DrawIndexedIndirectCommand& command = commands[index];
+            if (command.instanceCount == 0)
+                continue;
+
+            const bool isCamera = index < copy.CameraCommandCount;
+            (isCamera ? frame.InstancesDrawn : frame.ShadowInstancesDrawn) += command.instanceCount;
+            (isCamera ? frame.TrianglesDrawn : frame.ShadowTrianglesDrawn) += uint64_t(command.indexCount / 3) * command.instanceCount;
+            frame.DrawCommands++;
+        }
+    }
+
+    void GpuScene::CopyCommandsForCounters(vk::CommandBuffer commands)
+    {
+        CommandCopy& copy = m_CommandCopies[m_Frame % CommandCopyCount];
+        if (copy.CommandCount == 0)
+            return;
+
+        const uint64_t size = copy.CommandCount * sizeof(vk::DrawIndexedIndirectCommand);
+        if (copy.Commands.Size() < size)
+        {
+            GpuBufferDesc desc;
+            desc.Size = size + size / 2;
+            desc.Usage = vk::BufferUsageFlagBits::eTransferDst;
+            desc.CpuReadable = true;
+            desc.Name = "MeshDrawCommandsForCounters";
+            copy.Commands = GpuBuffer(m_Context, desc);
+        }
+
+        commands.copyBuffer(m_CommandBuffer.Handle(), copy.Commands.Handle(), vk::BufferCopy(0, 0, size));
     }
 }
