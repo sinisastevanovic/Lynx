@@ -26,6 +26,7 @@ namespace Lynx
                 case FieldKind::UUID:
                 case FieldKind::Asset:
                 case FieldKind::UIElement: return std::get<UUID>(value);
+                case FieldKind::AssetList: return std::get<std::vector<UUID>>(value);
             }
 
             return nullptr;
@@ -49,6 +50,7 @@ namespace Lynx
                 case FieldKind::UUID:
                 case FieldKind::Asset:
                 case FieldKind::UIElement: return json.get<UUID>();
+                case FieldKind::AssetList: return json.get<std::vector<UUID>>();
             }
 
             return false;

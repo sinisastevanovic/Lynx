@@ -74,31 +74,39 @@ namespace Lynx
                 auto& meshComp = reg.get<MeshComponent>(entity);
 
                 LXUI::DrawAssetReference("Static Mesh", meshComp.Mesh, {AssetType::StaticMesh});
-                if (meshComp.Mesh.Get())
+
+                const std::shared_ptr<StaticMesh> mesh = meshComp.Mesh.Get();
+                if (!mesh)
+                    return;
+
+                const std::vector<Submesh>& submeshes = mesh->GetSubmeshes();
+                for (size_t index = 0; index < submeshes.size(); ++index)
                 {
-                    auto& submeshes = meshComp.Mesh->GetSubmeshes();
-                    int index = 0;
-                    for (auto& submesh : submeshes)
+                    ImGui::PushID(static_cast<int>(index));
+
+                    // A material asset here takes the place of the one the mesh came with, for this entity.
+                    AssetRef<Material> given = index < meshComp.Materials.size() ? meshComp.Materials[index] : AssetRef<Material>();
+                    if (LXUI::DrawAssetReference("Material " + std::to_string(index), given, {AssetType::Material}))
                     {
-                        if (submesh.Material)
-                        {
-                            // TODO: Change this to work with the new table layout
-                            // TODO: actually change static meshes to use proper materials, not import generated ones!
-                            std::string matId = "Material " + std::to_string(index);
-                            ImGui::PushID(matId.c_str());
-
-                            ImGui::TextUnformatted(matId.c_str());
-                            ImGui::ColorEdit4("Albedo Color", &submesh.Material->AlbedoColor.r);
-                            ImGui::DragFloat("Metallic", &submesh.Material->Metallic);
-                            ImGui::DragFloat("Roughness", &submesh.Material->Roughness);
-                            ImGui::ColorEdit3("Emissive Color", &submesh.Material->EmissiveColor.r);
-                            ImGui::DragFloat("Emissive Strength", &submesh.Material->EmissiveStrength);
-                            ImGui::Separator();
-
-                            ImGui::PopID();
-                        }
-                        index++;
+                        if (meshComp.Materials.size() <= index)
+                            meshComp.Materials.resize(index + 1);
+                        meshComp.Materials[index] = given;
                     }
+
+                    // Without one, the values of the mesh's own material can be tried out. They belong to
+                    // the mesh, so every entity with this mesh changes, and they are not saved.
+                    const std::shared_ptr<Material>& own = submeshes[index].Material;
+                    if (!given && own)
+                    {
+                        ImGui::ColorEdit4("Albedo Color", &own->AlbedoColor.r);
+                        ImGui::DragFloat("Metallic", &own->Metallic);
+                        ImGui::DragFloat("Roughness", &own->Roughness);
+                        ImGui::ColorEdit3("Emissive Color", &own->EmissiveColor.r);
+                        ImGui::DragFloat("Emissive Strength", &own->EmissiveStrength);
+                    }
+                    ImGui::Separator();
+
+                    ImGui::PopID();
                 }
             });
 

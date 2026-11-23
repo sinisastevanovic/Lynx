@@ -14,6 +14,7 @@ namespace Lynx
 {
     class EditorCamera;
     class FrameProfiler;
+    class Material;
     class Renderer;
     class Scene;
     class StaticMesh;
@@ -64,7 +65,10 @@ namespace Lynx
         // Reused every frame for its memory.
         ExtractedScene m_Extracted;
 
-        // Entities that may need instances: new mesh entities, and ones whose mesh was replaced.
+        // Reused for its memory: the materials an entity gives its mesh, while its instances are made.
+        std::vector<std::shared_ptr<Material>> m_GivenMaterials;
+
+        // Entities that may need instances: new mesh entities, and ones whose mesh or materials were replaced.
         // Looked at when the frame is drawn, by which time whoever made them has finished setting them up.
         std::vector<entt::entity> m_PendingEntities;
 

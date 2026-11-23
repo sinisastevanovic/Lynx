@@ -95,6 +95,19 @@ namespace Lynx
                     if (value.is<UUID>())
                         return value.as<UUID>();
                     return UUID(Expect<uint64_t>(field, value, "a UUID"));
+
+                case FieldKind::AssetList:
+                {
+                    // A table of handles, counted from 1 as Lua does.
+                    const sol::table entries = Expect<sol::table>(field, value, "a table of UUIDs");
+                    std::vector<UUID> handles;
+                    for (size_t index = 1; index <= entries.size(); ++index)
+                    {
+                        const sol::object entry = entries[index];
+                        handles.push_back(entry.is<UUID>() ? entry.as<UUID>() : UUID(Expect<uint64_t>(field, entry, "a table of UUIDs")));
+                    }
+                    return handles;
+                }
             }
 
             throw std::runtime_error("Field '" + field.Key + "' cannot be set from a script");

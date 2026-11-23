@@ -83,6 +83,10 @@ build\bin\Debug\LynxSandboxGame.exe
   index of its material and the shader reads the material from the table. A mesh pass sets its push constants once,
   and a draw passes only where its instances start (`firstInstance`, read in shaders as `SV_VulkanInstanceID`).
   Textures picked through the table need `NonUniformResourceIndex`.
+- **Material overrides.** A mesh comes with a material per submesh, made from its file. A mesh component can name
+  material assets (`.lxmat`) that take their place for that entity (`MeshComponent::Materials`, one per submesh, an
+  empty reference keeps the mesh's own). So many entities share one mesh and its geometry and still look different.
+  The list is saved through the field system as an `AssetList` field.
 - **Geometry.** The vertices and indices of all meshes are in one pair of buffers (`Vulkan/GeometryPool`). A submesh
   is a range in them (`MeshGeometry`). A pass binds the pool once and draws ranges. The buffers grow when they fill up.
 - **Cooked meshes.** A model file is cooked once (`Asset/MeshCooking`): triangles and vertices are put into the order
@@ -99,7 +103,7 @@ build\bin\Debug\LynxSandboxGame.exe
   (`DrawMeshes`). Depth and shadow use a pipeline without a fragment shader for opaque materials and a second one
   for cut-outs. See-through meshes are culled and sorted on the CPU and drawn one by one.
 - **Culling.** The GPU decides what is drawn (`Passes/CullPass`, `Cull.slang`). The CPU lays out one draw command
-  per batch (the instances of one submesh) and view, drawing nothing, each with a run of the list of drawn
+  per batch (the instances of one submesh in one material) and view, drawing nothing, each with a run of the list of drawn
   instances long enough for the whole batch. The compute shader tests the sphere of every instance against the
   camera and the sun, counts those seen into the command and writes their places into its run. A command may end
   up drawing nothing, and the order of instances within a batch differs from frame to frame. The CPU learns what

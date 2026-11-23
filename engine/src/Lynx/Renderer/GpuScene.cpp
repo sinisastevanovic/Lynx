@@ -75,9 +75,11 @@ namespace Lynx
             buffer = GpuBuffer(context, desc);
         }
 
-        bool CanBeDrawn(const Submesh& submesh)
+        // The material a submesh is drawn in: the one given for it, or else the mesh's own.
+        const std::shared_ptr<Material>& MaterialOf(const std::vector<Submesh>& submeshes, std::span<const std::shared_ptr<Material>> materials, size_t submeshIndex)
         {
-            return submesh.Material && submesh.Geometry;
+            const bool isGiven = submeshIndex < materials.size() && materials[submeshIndex];
+            return isGiven ? materials[submeshIndex] : submeshes[submeshIndex].Material;
         }
 
         // The sphere around an instance in the world: the centre in xyz, the radius in w. The radius grows
@@ -114,12 +116,17 @@ namespace Lynx
         m_InstanceCount = 0;
     }
 
-    GpuScene::Range GpuScene::Add(const std::shared_ptr<StaticMesh>& mesh, const glm::mat4& transform, int entityId)
+    GpuScene::Range GpuScene::Add(const std::shared_ptr<StaticMesh>& mesh, std::span<const std::shared_ptr<Material>> materials, const glm::mat4& transform, int entityId)
     {
         const std::vector<Submesh>& submeshes = mesh->GetSubmeshes();
+        const auto canBeDrawn = [&](uint32_t submeshIndex)
+        {
+            return submeshes[submeshIndex].Geometry && MaterialOf(submeshes, materials, submeshIndex);
+        };
 
         Range range;
-        range.Count = static_cast<uint32_t>(std::ranges::count_if(submeshes, CanBeDrawn));
+        for (uint32_t submeshIndex = 0; submeshIndex < submeshes.size(); ++submeshIndex)
+            range.Count += canBeDrawn(submeshIndex) ? 1 : 0;
         if (range.Count == 0)
             return range;
 
@@ -128,11 +135,12 @@ namespace Lynx
         uint32_t place = range.First;
         for (uint32_t submeshIndex = 0; submeshIndex < submeshes.size(); ++submeshIndex)
         {
-            const Submesh& submesh = submeshes[submeshIndex];
-            if (!CanBeDrawn(submesh))
+            if (!canBeDrawn(submeshIndex))
                 continue;
 
-            const uint32_t batchIndex = BatchFor(mesh, submeshIndex);
+            const Submesh& submesh = submeshes[submeshIndex];
+            const std::shared_ptr<Material>& material = MaterialOf(submeshes, materials, submeshIndex);
+            const uint32_t batchIndex = BatchFor(mesh, submeshIndex, material);
             Batch& batch = m_Batches[batchIndex];
             m_IndexInBatch[place] = static_cast<uint32_t>(batch.Places.size());
             batch.Places.push_back(place);
@@ -144,7 +152,7 @@ namespace Lynx
             instance.FirstIndex = submesh.Geometry.FirstIndex();
             instance.IndexCount = submesh.IndexCount;
             instance.VertexOffset = submesh.Geometry.VertexOffset();
-            instance.Material = m_Materials.IndexOf(submesh.Material);
+            instance.Material = m_Materials.IndexOf(material);
             instance.EntityId = entityId;
             instance.Batch = batchIndex;
 
@@ -174,8 +182,8 @@ namespace Lynx
 
             if (batch.Places.empty())
             {
-                // Lets go of the mesh. The batch's place in the list is used again by the next new batch.
-                m_BatchIndices.erase(BatchKey{ batch.Mesh.get(), batch.SubmeshIndex });
+                // Lets go of the mesh and the material. The batch's place in the list is used again by the next new batch.
+                m_BatchIndices.erase(BatchKey{ batch.Mesh.get(), batch.SubmeshIndex, batch.Material.get() });
                 m_FreeBatches.push_back(batchIndex);
                 batch = Batch();
                 m_DrawOrderIsStale = true;
@@ -216,9 +224,9 @@ namespace Lynx
         return first;
     }
 
-    uint32_t GpuScene::BatchFor(const std::shared_ptr<StaticMesh>& mesh, uint32_t submeshIndex)
+    uint32_t GpuScene::BatchFor(const std::shared_ptr<StaticMesh>& mesh, uint32_t submeshIndex, const std::shared_ptr<Material>& material)
     {
-        const auto [found, isNew] = m_BatchIndices.try_emplace(BatchKey{ mesh.get(), submeshIndex }, 0u);
+        const auto [found, isNew] = m_BatchIndices.try_emplace(BatchKey{ mesh.get(), submeshIndex, material.get() }, 0u);
         if (!isNew)
             return found->second;
 
@@ -236,6 +244,7 @@ namespace Lynx
         Batch& batch = m_Batches[found->second];
         batch.Mesh = mesh;
         batch.SubmeshIndex = submeshIndex;
+        batch.Material = material;
         m_DrawOrderIsStale = true;
         return found->second;
     }
@@ -304,10 +313,9 @@ namespace Lynx
             if (!batch.Mesh)
                 continue;
 
-            const std::shared_ptr<Material>& material = batch.Mesh->GetSubmeshes()[batch.SubmeshIndex].Material;
-            m_Materials.IndexOf(material);
-            batch.HasCutOuts = material->Mode == AlphaMode::Mask;
-            batch.IsTranslucent = material->Mode == AlphaMode::Translucent;
+            m_Materials.IndexOf(batch.Material);
+            batch.HasCutOuts = batch.Material->Mode == AlphaMode::Mask;
+            batch.IsTranslucent = batch.Material->Mode == AlphaMode::Translucent;
         }
 
         if (m_DrawOrderIsStale)
@@ -325,7 +333,9 @@ namespace Lynx
             {
                 const uint64_t meshA = m_Batches[a].Mesh->GetHandle();
                 const uint64_t meshB = m_Batches[b].Mesh->GetHandle();
-                return std::tie(meshA, m_Batches[a].SubmeshIndex) < std::tie(meshB, m_Batches[b].SubmeshIndex);
+                const uint64_t materialA = m_Batches[a].Material->GetHandle();
+                const uint64_t materialB = m_Batches[b].Material->GetHandle();
+                return std::tie(meshA, m_Batches[a].SubmeshIndex, materialA) < std::tie(meshB, m_Batches[b].SubmeshIndex, materialB);
             });
             m_DrawOrderIsStale = false;
         }

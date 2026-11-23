@@ -211,6 +211,11 @@ namespace Lynx
     {
         AssetRef<StaticMesh> Mesh;
 
+        // Materials that take the place of the mesh's own: one per submesh, in the mesh's order.
+        // An empty reference keeps the material the mesh came with, and so does a submesh past the end
+        // of the list. This is how many entities share one mesh and still look different.
+        std::vector<AssetRef<Material>> Materials;
+
         MeshComponent() = default;
         MeshComponent(const MeshComponent&) = default;
     };

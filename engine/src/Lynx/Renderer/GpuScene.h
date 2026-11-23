@@ -41,7 +41,7 @@ namespace Lynx
         // Written to the picking buffer in the editor. -1 for none.
         int32_t EntityId;
 
-        // The instances of one submesh form a batch. GpuScene::NoBatch for a place that holds no instance.
+        // The instances of one submesh in one material form a batch. GpuScene::NoBatch for a place that holds no instance.
         uint32_t Batch;
         uint32_t Padding[2];
     };
@@ -110,7 +110,9 @@ namespace Lynx
 
         // The mesh has to be loaded. A submesh without a material or without geometry gets no instance,
         // so the range can be shorter than the mesh's list of submeshes, or empty.
-        Range Add(const std::shared_ptr<StaticMesh>& mesh, const glm::mat4& transform, int entityId);
+        // A material in the list takes the place of the one the mesh has for the submesh of the same
+        // number. A null entry, and a submesh past the end of the list, keeps the mesh's own.
+        Range Add(const std::shared_ptr<StaticMesh>& mesh, std::span<const std::shared_ptr<Material>> materials, const glm::mat4& transform, int entityId);
         void Remove(Range range);
         void SetTransform(Range range, const glm::mat4& transform);
 
@@ -123,11 +125,13 @@ namespace Lynx
         void CopyCommandsForCounters(vk::CommandBuffer commands);
 
     private:
-        // The instances of one submesh: what one draw command per view covers.
+        // The instances of one submesh in one material: what one draw command per view covers.
+        // The material is part of it because its kind decides which pass draws the instances and how.
         struct Batch
         {
             std::shared_ptr<StaticMesh> Mesh;
             uint32_t SubmeshIndex = 0;
+            std::shared_ptr<Lynx::Material> Material;
 
             // The places of the batch's instances, in no particular order.
             std::vector<uint32_t> Places;
@@ -141,13 +145,19 @@ namespace Lynx
         {
             const StaticMesh* Mesh;
             uint32_t SubmeshIndex;
+            const Lynx::Material* Material;
 
             bool operator==(const BatchKey&) const = default;
         };
 
         struct BatchKeyHash
         {
-            size_t operator()(const BatchKey& key) const { return std::hash<const void*>()(key.Mesh) ^ (std::hash<uint32_t>()(key.SubmeshIndex) << 1); }
+            size_t operator()(const BatchKey& key) const
+            {
+                // Many batches differ in the material alone, so it has to reach every bit of the result.
+                const size_t meshAndSubmesh = std::hash<const void*>()(key.Mesh) ^ (std::hash<uint32_t>()(key.SubmeshIndex) << 1);
+                return meshAndSubmesh ^ (std::hash<const void*>()(key.Material) * 0x9E3779B97F4A7C15ull);
+            }
         };
 
         // The draw commands of one frame as the GPU left them, and what is needed to count from them.
@@ -169,7 +179,7 @@ namespace Lynx
         static constexpr size_t CommandCopyCount = DeletionQueue::FramesToKeep + 1;
 
         uint32_t TakePlaces(uint32_t count);
-        uint32_t BatchFor(const std::shared_ptr<StaticMesh>& mesh, uint32_t submeshIndex);
+        uint32_t BatchFor(const std::shared_ptr<StaticMesh>& mesh, uint32_t submeshIndex, const std::shared_ptr<Material>& material);
         void UploadChanges();
         void CullSeeThrough(const Frustum& camera, const glm::vec3& cameraPosition, uint32_t firstVisible, CommandCopy& counted);
         void ReadCounters(const CommandCopy& copy, Frame& frame) const;

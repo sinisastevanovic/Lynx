@@ -47,6 +47,7 @@ namespace Lynx
         registry.RegisterCoreComponent<MeshComponent>("Mesh", [](FieldList<MeshComponent>& fields)
         {
             fields.Add("Mesh", &MeshComponent::Mesh).Label("Static Mesh");
+            fields.Add("Materials", &MeshComponent::Materials);
         });
 
         registry.RegisterCoreComponent<DirectionalLightComponent>("DirectionalLight", [](FieldList<DirectionalLightComponent>& fields)

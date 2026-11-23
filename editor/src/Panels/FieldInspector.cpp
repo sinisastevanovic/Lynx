@@ -2,6 +2,8 @@
 
 #include <Lynx/ImGui/LXUI.h>
 
+#include <imgui.h>
+
 namespace Lynx
 {
     namespace
@@ -74,6 +76,30 @@ namespace Lynx
 
                 case FieldKind::UIElement:
                     return LXUI::DrawUIElementSelection(field.Label, std::get<UUID>(value), scene);
+
+                case FieldKind::AssetList:
+                {
+                    // One reference per entry, and two buttons that make the list longer or shorter at its end.
+                    std::vector<UUID>& handles = std::get<std::vector<UUID>>(value);
+                    bool changed = false;
+                    for (size_t index = 0; index < handles.size(); ++index)
+                        changed |= LXUI::DrawAssetReference(field.Label + " " + std::to_string(index), handles[index], { field.ReferencedAssetType });
+
+                    ImGui::PushID(field.Key.c_str());
+                    if (ImGui::SmallButton("Add"))
+                    {
+                        handles.emplace_back();
+                        changed = true;
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Remove last") && !handles.empty())
+                    {
+                        handles.pop_back();
+                        changed = true;
+                    }
+                    ImGui::PopID();
+                    return changed;
+                }
             }
 
             return false;

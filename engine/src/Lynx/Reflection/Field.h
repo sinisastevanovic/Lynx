@@ -45,12 +45,13 @@ namespace Lynx
         Enum,
         UUID,   // An identifier the engine assigns. Saved, but not edited by hand.
         Asset,
+        AssetList,  // Any number of assets of one type, in an order that matters, such as one material per part of a mesh.
         UIElement
     };
 
     // The value of any field, in the one representation the generic code works with:
     // integers and enums as int64_t, references to assets and UI elements as their UUID.
-    using FieldValue = std::variant<bool, int64_t, float, glm::vec2, glm::vec3, glm::vec4, glm::quat, std::string, UUID>;
+    using FieldValue = std::variant<bool, int64_t, float, glm::vec2, glm::vec3, glm::vec4, glm::quat, std::string, UUID, std::vector<UUID>>;
 
     struct FieldInfo
     {
@@ -145,6 +146,30 @@ namespace Lynx
                 else
                     return Asset::GetAssetType();
             }
+        };
+
+        template<typename Asset>
+        struct Adapter<std::vector<AssetRef<Asset>>>
+        {
+            static constexpr FieldKind Kind = FieldKind::AssetList;
+
+            static FieldValue ToValue(const std::vector<AssetRef<Asset>>& member)
+            {
+                std::vector<UUID> handles;
+                handles.reserve(member.size());
+                for (const AssetRef<Asset>& reference : member)
+                    handles.push_back(reference.Handle);
+                return handles;
+            }
+
+            static void FromValue(std::vector<AssetRef<Asset>>& member, const FieldValue& value)
+            {
+                member.clear();
+                for (const UUID handle : std::get<std::vector<UUID>>(value))
+                    member.emplace_back(handle);
+            }
+
+            static AssetType ReferencedAssetType() { return Adapter<AssetRef<Asset>>::ReferencedAssetType(); }
         };
 
         template<typename Element>
