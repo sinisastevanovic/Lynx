@@ -29,11 +29,28 @@ namespace Lynx
             glm::vec4 Planes[6];
         };
 
-        // The draw commands a batch's instances are counted into, one per view. NoCommand for a view the
-        // batch is not drawn in. Has to match BatchCommands in Cull.slang.
+        // What culling knows of the frame. Has to match CullFrame in Cull.slang.
+        struct CullFrame
+        {
+            CullView Camera;
+            CullView Sun;
+            glm::mat4 View;
+
+            // How much the camera's projection scales x and y, and the distance of its near plane.
+            float ProjectionX;
+            float ProjectionY;
+            float NearPlane;
+
+            // Only a perspective is tested against the depth pyramid.
+            uint32_t IsPerspective;
+        };
+
+        // The draw commands a batch's instances are counted into: the camera's for the two phases of
+        // culling, and the sun's. NoCommand where the batch is not drawn. Has to match BatchCommands in Cull.slang.
         struct BatchCommands
         {
             uint32_t Camera = NoCommand;
+            uint32_t CameraLate = NoCommand;
             uint32_t Sun = NoCommand;
         };
 
@@ -236,6 +253,14 @@ namespace Lynx
             desc.Name = "SceneInstances";
             m_InstanceBuffer = GpuBuffer(m_Context, desc);
             m_Uploads.Upload(m_InstanceBuffer.Handle(), 0, std::as_bytes(std::span<const GpuInstance>(m_Instances)));
+
+            // Nothing counts as seen in the last frame, so the first frame with the new buffer draws
+            // everything in the late phase. What was known is not carried over: buffers grow rarely.
+            const std::vector<uint32_t> nothingSeen(desc.Size / sizeof(GpuInstance), 0u);
+            desc.Size = nothingSeen.size() * sizeof(uint32_t);
+            desc.Name = "InstanceVisibility";
+            m_VisibilityBuffer = GpuBuffer(m_Context, desc);
+            m_Uploads.Upload(m_VisibilityBuffer.Handle(), 0, std::as_bytes(std::span<const uint32_t>(nothingSeen)));
             m_Changed.clear();
             return;
         }
@@ -262,7 +287,7 @@ namespace Lynx
         m_Changed.clear();
     }
 
-    GpuScene::Frame GpuScene::Prepare(const Frustum& camera, const Frustum& sun, const glm::vec3& cameraPosition)
+    GpuScene::Frame GpuScene::Prepare(const CullCamera& camera, const Frustum& sun, const glm::vec3& cameraPosition)
     {
         ++m_Frame;
 
@@ -311,7 +336,7 @@ namespace Lynx
         std::vector<vk::DrawIndexedIndirectCommand> commands;
         std::vector<BatchCommands> batchCommands(m_Batches.size());
         uint32_t visibleCount = 0;
-        const auto addCommands = [&](bool forCamera, bool withCutOuts)
+        const auto addCommands = [&](uint32_t BatchCommands::* view, bool withCutOuts)
         {
             DrawRange range;
             range.First = static_cast<uint32_t>(commands.size());
@@ -323,7 +348,7 @@ namespace Lynx
                 if (batch.IsTranslucent || batch.HasCutOuts != withCutOuts)
                     continue;
 
-                (forCamera ? batchCommands[index].Camera : batchCommands[index].Sun) = static_cast<uint32_t>(commands.size());
+                batchCommands[index].*view = static_cast<uint32_t>(commands.size());
 
                 const Submesh& submesh = batch.Mesh->GetSubmeshes()[batch.SubmeshIndex];
                 commands.emplace_back(submesh.IndexCount, 0u, submesh.Geometry.FirstIndex(), submesh.Geometry.VertexOffset(), visibleCount);
@@ -334,15 +359,17 @@ namespace Lynx
             return range;
         };
 
-        frame.Draws.CameraOpaque = addCommands(true, false);
-        frame.Draws.CameraCutOut = addCommands(true, true);
-        frame.Draws.ShadowOpaque = addCommands(false, false);
-        frame.Draws.ShadowCutOut = addCommands(false, true);
+        frame.Draws.CameraOpaque = addCommands(&BatchCommands::Camera, false);
+        frame.Draws.CameraCutOut = addCommands(&BatchCommands::Camera, true);
+        frame.Draws.CameraLateOpaque = addCommands(&BatchCommands::CameraLate, false);
+        frame.Draws.CameraLateCutOut = addCommands(&BatchCommands::CameraLate, true);
+        frame.Draws.ShadowOpaque = addCommands(&BatchCommands::Sun, false);
+        frame.Draws.ShadowCutOut = addCommands(&BatchCommands::Sun, true);
 
         copy.CommandCount = static_cast<uint32_t>(commands.size());
-        copy.CameraCommandCount = frame.Draws.CameraOpaque.Count + frame.Draws.CameraCutOut.Count;
+        copy.CameraCommandCount = frame.Draws.Camera().Count;
 
-        CullSeeThrough(camera, cameraPosition, visibleCount, copy);
+        CullSeeThrough(camera.Planes, cameraPosition, visibleCount, copy);
         frame.TransparentDraws = m_TransparentDraws;
 
         UploadChanges();
@@ -356,16 +383,27 @@ namespace Lynx
             EnsureSize(m_Context, m_CommandBuffer, commandList.size_bytes(), commandUsage, "MeshDrawCommands");
             m_Uploads.Upload(m_CommandBuffer.Handle(), 0, std::as_bytes(commandList));
 
-            const CullView views[2] = { ToCullView(camera), ToCullView(sun) };
+            // The near plane's distance, read from the projection the way the renderer does for reversed depth.
+            const glm::mat4& projection = camera.Projection;
+            CullFrame cullFrame;
+            cullFrame.Camera = ToCullView(camera.Planes);
+            cullFrame.Sun = ToCullView(sun);
+            cullFrame.View = camera.View;
+            cullFrame.ProjectionX = projection[0][0];
+            cullFrame.ProjectionY = projection[1][1];
+            cullFrame.IsPerspective = projection[2][3] != 0.0f ? 1u : 0u;
+            cullFrame.NearPlane = cullFrame.IsPerspective ? projection[3][2] / projection[2][2] : 0.0f;
+
             const std::span<const BatchCommands> batchList(batchCommands);
-            EnsureSize(m_Context, m_CullInputBuffer, sizeof(views) + batchList.size_bytes(),
+            EnsureSize(m_Context, m_CullInputBuffer, sizeof(CullFrame) + batchList.size_bytes(),
                 vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, "CullInput");
-            m_Uploads.Upload(m_CullInputBuffer.Handle(), 0, std::as_bytes(std::span(views)));
-            m_Uploads.Upload(m_CullInputBuffer.Handle(), sizeof(views), std::as_bytes(batchList));
+            m_Uploads.Upload(m_CullInputBuffer.Handle(), 0, std::as_bytes(std::span<const CullFrame>(&cullFrame, 1)));
+            m_Uploads.Upload(m_CullInputBuffer.Handle(), sizeof(CullFrame), std::as_bytes(batchList));
 
             frame.Culling.CommandAddress = m_CommandBuffer.Address();
-            frame.Culling.ViewAddress = m_CullInputBuffer.Address();
-            frame.Culling.BatchAddress = m_CullInputBuffer.Address() + sizeof(views);
+            frame.Culling.FrameAddress = m_CullInputBuffer.Address();
+            frame.Culling.BatchAddress = m_CullInputBuffer.Address() + sizeof(CullFrame);
+            frame.Culling.VisibilityAddress = m_VisibilityBuffer.Address();
             frame.Culling.PlaceCount = static_cast<uint32_t>(m_Instances.size());
         }
 

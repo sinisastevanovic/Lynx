@@ -114,7 +114,7 @@ namespace Lynx
         if (!m_Vulkan->OpaquePipeline || !m_Vulkan->TransparentPipeline)
             return false;
         const MeshDrawCommands& draws = renderData.MeshDraws;
-        if (draws.CameraOpaque.Count + draws.CameraCutOut.Count == 0 && renderData.TransparentDraws.empty())
+        if (draws.Camera().Count == 0 && renderData.TransparentDraws.empty())
             return false;
 
         resources.ColorTarget = renderData.SceneColor;
@@ -140,10 +140,11 @@ namespace Lynx
         push.ShadowSampler = renderData.ShadowSamplerIndex;
         m_Vulkan->Shared->Push(commands, push);
 
-        // Opaque materials and those with cut-outs are shaded by the same pipeline, and their commands
-        // lie next to each other, so one call draws everything the camera sees that is not see-through.
+        // Opaque materials and those with cut-outs are shaded by the same pipeline, whichever phase of
+        // culling found them, and their commands lie next to each other. So one call draws everything
+        // the camera sees that is not see-through.
         const MeshDrawCommands& draws = renderData.MeshDraws;
-        const DrawRange everything{ draws.CameraOpaque.First, draws.CameraOpaque.Count + draws.CameraCutOut.Count };
+        const DrawRange everything = draws.Camera();
         if (everything.Count > 0)
         {
             DrawMeshes(commands, draws, everything);

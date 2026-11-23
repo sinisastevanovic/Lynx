@@ -11,6 +11,10 @@ namespace Lynx::RenderFormats
     constexpr vk::Format SceneDepth = vk::Format::eD32Sfloat;
     constexpr vk::Format ShadowMap = vk::Format::eD32Sfloat;
 
+    // The scene's depth in ever smaller sizes, which culling reads. A depth format cannot be drawn into
+    // by a fragment shader's output, so it is a colour format with the same precision.
+    constexpr vk::Format DepthPyramid = vk::Format::eR32Sfloat;
+
     // Next to the colour of the scene in the editor: for every pixel, the ID of the entity it shows.
     constexpr vk::Format EntityIds = vk::Format::eR32Sint;
 

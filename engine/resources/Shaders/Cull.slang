@@ -6,8 +6,18 @@
 // takes the next free place in the run and the command's count goes up by one. Many instances do that
 // at the same time, so the count is raised atomically, which also hands every instance a place of its own.
 // The order of the instances within a run therefore differs from frame to frame.
+//
+// For the camera this runs twice per frame, so that what lies behind other things is not drawn
+// (after "GPU-Driven Rendering Pipelines", Haar and Aaltonen, SIGGRAPH 2015):
+//   Early: draws what the camera saw in the last frame and still has in view. Nearly everything that
+//     is seen in this frame is among it. The depth of that becomes the depth pyramid.
+//   Late: tests every instance against the pyramid. What is not hidden and was not drawn early is drawn
+//     now, and what was seen is remembered for the next frame.
+// Nothing that is visible is ever left out this way: the early phase may draw too much, the late phase
+// draws whatever is missing.
 
 import Mesh;
+import Textures;
 
 // The planes around what a view sees, pointing inwards: the normal in xyz, the distance in w.
 // Has to match CullView in GpuScene.cpp.
@@ -16,11 +26,30 @@ struct View
     float4 planes[6];
 };
 
-// The draw commands a batch's instances are counted into. noCommand for a view the batch is not drawn in.
-// Has to match BatchCommands in GpuScene.cpp.
+// What culling knows of the frame. Has to match CullFrame in GpuScene.cpp.
+struct CullFrame
+{
+    View camera;
+    View sun;
+
+    // Takes a position in the world to the camera's space, where the camera looks along -z.
+    float4x4 view;
+
+    // How much the camera's projection scales x and y, and the distance of its near plane.
+    float projectionX;
+    float projectionY;
+    float nearPlane;
+
+    // Only a perspective is tested against the depth pyramid.
+    uint isPerspective;
+};
+
+// The draw commands a batch's instances are counted into: the camera's for the two phases, and the sun's.
+// noCommand where the batch is not drawn. Has to match BatchCommands in GpuScene.cpp.
 struct BatchCommands
 {
     uint camera;
+    uint cameraLate;
     uint sun;
 };
 
@@ -37,31 +66,99 @@ struct DrawCommand
 static const uint noBatch = 0xFFFFFFFF;
 static const uint noCommand = 0xFFFFFFFF;
 
+// Has to match CullPhase in RenderPass.h.
+static const uint phaseEarly = 0;
+static const uint phaseLate = 1;
+
 struct CullConstants
 {
     MeshInstance* instances;
     uint* visibleInstances;
     DrawCommand* commands;
     BatchCommands* batches;
+    CullFrame* frame;
 
-    // The camera's view, then the sun's.
-    View* views;
+    // Per place, whether the camera saw its instance in the last frame.
+    uint* visibility;
 
     // How many places the instance buffer has. Some of them may be empty.
     uint placeCount;
+    uint phase;
+
+    // The depth pyramid: where the texture table has it, how many sizes it has and its largest size
+    // in pixels. No sizes means there is no pyramid, and nothing counts as hidden.
+    uint pyramidTexture;
+    uint pyramidMipCount;
+    int2 pyramidSize;
 };
 [vk::push_constant] ConstantBuffer<CullConstants> constants;
 
 // False only if the sphere lies wholly behind one of the planes.
-bool isSeen(uint view, float3 centre, float radius)
+bool isSeen(View view, float3 centre, float radius)
 {
     for (uint plane = 0; plane < 6; ++plane)
     {
-        float4 equation = constants.views[view].planes[plane];
-        if (dot(equation.xyz, centre) + equation.w < -radius)
+        if (dot(view.planes[plane].xyz, centre) + view.planes[plane].w < -radius)
             return false;
     }
     return true;
+}
+
+// The rectangle a sphere covers on screen, as texture coordinates: the smallest corner in xy, the
+// largest in zw. The sphere is given in the camera's space with z as the distance in front of the camera,
+// and has to lie wholly in front of the near plane.
+// From "2D Polyhedral Bounds of a Clipped, Perspective-Projected 3D Sphere" (Mara and McGuire, 2013).
+float4 screenBounds(float3 centre, float radius, float projectionX, float projectionY)
+{
+    float3 scaled = centre * radius;
+    float distanceSquared = centre.z * centre.z - radius * radius;
+
+    float lengthX = sqrt(centre.x * centre.x + distanceSquared);
+    float minX = (lengthX * centre.x - scaled.z) / (lengthX * centre.z + scaled.x);
+    float maxX = (lengthX * centre.x + scaled.z) / (lengthX * centre.z - scaled.x);
+
+    float lengthY = sqrt(centre.y * centre.y + distanceSquared);
+    float minY = (lengthY * centre.y - scaled.z) / (lengthY * centre.z + scaled.y);
+    float maxY = (lengthY * centre.y + scaled.z) / (lengthY * centre.z - scaled.y);
+
+    // Up in the camera's space is the top of the screen, where the texture coordinate is 0.
+    return float4(minX * projectionX, -maxY * projectionY, maxX * projectionX, -minY * projectionY) * 0.5 + 0.5;
+}
+
+// True if everything the early phase drew in front of the sphere covers it completely.
+bool isHidden(float3 centre, float radius)
+{
+    if (constants.pyramidMipCount == 0 || constants.frame.isPerspective == 0)
+        return false;
+
+    float3 inView = mul(constants.frame.view, float4(centre, 1.0)).xyz;
+    inView.z = -inView.z;
+
+    // A sphere that reaches the near plane has no rectangle on screen. It is close enough to be seen.
+    float nearPlane = constants.frame.nearPlane;
+    if (inView.z - radius <= nearPlane)
+        return false;
+
+    float4 bounds = saturate(screenBounds(inView, radius, constants.frame.projectionX, constants.frame.projectionY));
+
+    // The size of the pyramid in which the rectangle is at most one pixel wide and high. There it
+    // touches at most two pixels in each direction, so the four at its corners cover it.
+    float2 sizeInPixels = (bounds.zw - bounds.xy) * float2(constants.pyramidSize);
+    int level = clamp(int(ceil(log2(max(max(sizeInPixels.x, sizeInPixels.y), 1.0)))), 0, int(constants.pyramidMipCount) - 1);
+
+    int2 levelSize = max(constants.pyramidSize >> level, int2(1, 1));
+    int2 first = clamp(int2(bounds.xy * float2(levelSize)), int2(0, 0), levelSize - 1);
+    int2 last = clamp(int2(bounds.zw * float2(levelSize)), int2(0, 0), levelSize - 1);
+
+    Texture2D pyramid = textures[constants.pyramidTexture];
+    float farthest = min(
+        min(pyramid.Load(int3(first.x, first.y, level)).r, pyramid.Load(int3(last.x, first.y, level)).r),
+        min(pyramid.Load(int3(first.x, last.y, level)).r, pyramid.Load(int3(last.x, last.y, level)).r));
+
+    // Depth is reversed: the near plane is 1 and larger means nearer. The sphere is hidden if the
+    // farthest thing drawn over its rectangle is still nearer than the sphere's nearest point.
+    float nearestOfSphere = nearPlane / (inView.z - radius);
+    return farthest > nearestOfSphere;
 }
 
 void draw(uint command, uint place)
@@ -84,6 +181,7 @@ void computeMain(uint3 thread : SV_DispatchThreadID)
     if (batch == noBatch)
         return;
 
+    // A batch without commands is see-through: the CPU culls and sorts those.
     BatchCommands batchCommands = constants.batches[batch];
     if (batchCommands.camera == noCommand && batchCommands.sun == noCommand)
         return;
@@ -98,9 +196,27 @@ void computeMain(uint3 thread : SV_DispatchThreadID)
     float3 centre = mul(instance.model, float4(instance.boundingSphere.xyz, 1.0)).xyz;
     float radius = instance.boundingSphere.w * scale;
 
-    if (batchCommands.camera != noCommand && isSeen(0, centre, radius))
-        draw(batchCommands.camera, place);
+    if (batchCommands.camera != noCommand)
+    {
+        bool inView = isSeen(constants.frame.camera, centre, radius);
+        bool seenLastFrame = constants.visibility[place] != 0;
 
-    if (batchCommands.sun != noCommand && isSeen(1, centre, radius))
+        if (constants.phase == phaseEarly)
+        {
+            if (inView && seenLastFrame)
+                draw(batchCommands.camera, place);
+        }
+        else
+        {
+            bool seen = inView && !isHidden(centre, radius);
+            if (seen && !seenLastFrame)
+                draw(batchCommands.cameraLate, place);
+
+            constants.visibility[place] = seen ? 1 : 0;
+        }
+    }
+
+    // Shadows are not culled against other things, so the sun's view needs one phase only.
+    if (constants.phase == phaseEarly && batchCommands.sun != noCommand && isSeen(constants.frame.sun, centre, radius))
         draw(batchCommands.sun, place);
 }

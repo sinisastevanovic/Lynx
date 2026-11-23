@@ -28,6 +28,15 @@ namespace Lynx
         uint32_t Count = 0;
     };
 
+    // What the camera sees is found in two phases, so that what lies behind other things need not be drawn.
+    // Early: what was seen in the last frame, which is nearly everything that is seen in this one.
+    // Late: what the depth of the early phase does not hide and was not drawn yet.
+    enum class CullPhase : uint32_t
+    {
+        Early = 0,
+        Late = 1
+    };
+
     // The draw commands for the frame's meshes that are not see-through: one command per submesh and all
     // its instances, in a buffer on the GPU. A pass draws a whole range of them with one call.
     // Culling on the GPU decides how many instances each command draws, which may be none.
@@ -35,13 +44,22 @@ namespace Lynx
     {
         const GpuBuffer* Buffer = nullptr;
 
-        // What the camera sees and what the sun sees, each split by whether the material has cut-outs:
-        // only a material with cut-outs needs its texture where nothing but depth is drawn.
-        // The cut-outs of a view follow its opaque commands directly, so the two can be drawn as one range.
+        // What the camera sees, early and late, and what the sun sees, each split by whether the material
+        // has cut-outs: only a material with cut-outs needs its texture where nothing but depth is drawn.
+        // The four ranges of the camera follow each other directly, so they can be drawn as one range,
+        // and so can the two of the sun.
         DrawRange CameraOpaque;
         DrawRange CameraCutOut;
+        DrawRange CameraLateOpaque;
+        DrawRange CameraLateCutOut;
         DrawRange ShadowOpaque;
         DrawRange ShadowCutOut;
+
+        DrawRange CameraOpaqueOf(CullPhase phase) const { return phase == CullPhase::Early ? CameraOpaque : CameraLateOpaque; }
+        DrawRange CameraCutOutOf(CullPhase phase) const { return phase == CullPhase::Early ? CameraCutOut : CameraLateCutOut; }
+
+        // Everything the camera sees that is not see-through.
+        DrawRange Camera() const { return { CameraOpaque.First, CameraOpaque.Count + CameraCutOut.Count + CameraLateOpaque.Count + CameraLateCutOut.Count }; }
     };
 
     // What culling on the GPU works with besides the instances, see GpuScene and CullPass.
@@ -50,14 +68,32 @@ namespace Lynx
         // The frame's draw commands, into which culling counts the instances that are seen.
         uint64_t CommandAddress = 0;
 
-        // Per batch of instances, the commands it is drawn with in the camera's view and in the sun's.
+        // Per batch of instances, the commands it is drawn with: the camera's early and late, and the sun's.
         uint64_t BatchAddress = 0;
 
-        // The planes of the camera's view, then of the sun's.
-        uint64_t ViewAddress = 0;
+        // The planes of the camera's view and of the sun's, and how the camera projects.
+        uint64_t FrameAddress = 0;
+
+        // Per place in the instance buffer, whether the camera saw its instance in the last frame.
+        // Kept on the GPU from frame to frame, read by the early phase and written by the late one.
+        uint64_t VisibilityAddress = 0;
 
         // How many places the instance buffer has. Zero if there is nothing to cull.
         uint32_t PlaceCount = 0;
+    };
+
+    // The scene's depth in ever smaller sizes, see DepthPyramidPass.
+    struct DepthPyramidInfo
+    {
+        // Where the texture table has it, with all its sizes.
+        uint32_t TextureIndex = 0;
+
+        // The largest size, in pixels.
+        uint32_t Width = 0;
+        uint32_t Height = 0;
+
+        // Zero if no pyramid was built in this frame.
+        uint32_t MipCount = 0;
     };
 
     struct SceneData
@@ -166,6 +202,12 @@ namespace Lynx
 
         // Where the finished picture goes: the window, or the editor's viewport picture.
         GpuTexture* Output = nullptr;
+
+        // Where the texture table has the scene's depth.
+        uint32_t SceneDepthIndex = 0;
+
+        // Built from the depth of what the early phase drew, for the late phase of culling.
+        DepthPyramidInfo DepthPyramid;
 
         // Where the texture table has the scene's HDR picture, and the bloom to add to it.
         // The bloom is a black picture unless the bloom pass has run in this frame.

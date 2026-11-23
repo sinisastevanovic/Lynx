@@ -36,6 +36,7 @@
 #include "Lynx/Asset/Shader.h"
 #include "Passes/CullPass.h"
 #include "Passes/DepthPass.h"
+#include "Passes/DepthPyramidPass.h"
 #include "Passes/ParticlePass.h"
 
 
@@ -114,6 +115,7 @@ namespace Lynx
 
         // Where the texture table has the scene's HDR picture and the black default texture.
         TextureSlot SceneColorSlot;
+        TextureSlot SceneDepthSlot;
 
         // The finished scene picture, which the editor shows in a panel through ImGui.
         TextureSlot SceneOutputSlot;
@@ -234,6 +236,7 @@ namespace Lynx
         m_GpuScene.reset();
         m_Materials.reset();
         m_Frame->SceneColorSlot = TextureSlot();
+        m_Frame->SceneDepthSlot = TextureSlot();
         m_Frame->SceneOutputSlot = TextureSlot();
         m_Frame->Shared.reset();
         m_RenderContext = RenderContext();
@@ -285,12 +288,17 @@ namespace Lynx
         m_GpuScene = std::make_unique<GpuScene>(*m_Context, *m_Frame->Uploads, *m_Materials);
 
         // The frame, start to finish. Culling decides what the scene passes draw, so it comes first.
+        // It has two phases: what the camera saw in the last frame is drawn into the depth buffer, and
+        // everything else is then tested against that depth, so that what is hidden is never drawn.
         // The scene passes draw the HDR picture, bloom reads it and composite
         // turns both into the output. What is not part of the scene is drawn on top of the output, so that
         // post-processing does not touch it: the grid and debug lines, still hidden by the scene's depth, then the UI.
-        m_Graph->Add("CullMeshes", std::make_unique<CullPass>());
+        m_Graph->Add("CullMeshes", std::make_unique<CullPass>(CullPhase::Early));
         m_Graph->Add("Shadow", std::make_unique<ShadowPass>(m_ShadowMapResolution));
-        m_Graph->Add("Depth", std::make_unique<DepthPass>());
+        m_Graph->Add("Depth", std::make_unique<DepthPass>(CullPhase::Early));
+        m_Graph->Add("DepthPyramid", std::make_unique<DepthPyramidPass>());
+        m_Graph->Add("CullOccluded", std::make_unique<CullPass>(CullPhase::Late));
+        m_Graph->Add("DepthLate", std::make_unique<DepthPass>(CullPhase::Late));
         m_Graph->Add("Forward", std::make_unique<ForwardPass>());
         m_Graph->Add("Particles", std::make_unique<ParticlePass>());
         m_Graph->Add("Bloom", std::make_unique<BloomPass>());
@@ -515,6 +523,9 @@ namespace Lynx
 
         // Post-processing reads the scene through the texture table, and the editor shows the output through ImGui.
         m_Frame->SceneColorSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SceneColor.View()));
+
+        // The depth pyramid is built from the depth.
+        m_Frame->SceneDepthSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SceneDepth.View()));
         m_Frame->SceneOutputSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SceneOutput.View()));
     }
 
@@ -525,12 +536,14 @@ namespace Lynx
             // meshes, and bringing what changed in the scene to the GPU.
             ProfileScope cullScope(m_Profiler, "Cull");
 
-            Frustum cameraFrustum;
-            cameraFrustum.FromViewProjection(m_CurrentFrameData.ViewProjection);
+            CullCamera camera;
+            camera.Planes.FromViewProjection(m_CurrentFrameData.ViewProjection);
+            camera.View = m_CurrentFrameData.View;
+            camera.Projection = m_CurrentFrameData.Projection;
             Frustum sunFrustum;
             sunFrustum.FromViewProjection(m_CurrentFrameData.LightViewProj);
 
-            const GpuScene::Frame meshes = m_GpuScene->Prepare(cameraFrustum, sunFrustum, m_CurrentFrameData.CameraPosition);
+            const GpuScene::Frame meshes = m_GpuScene->Prepare(camera, sunFrustum, m_CurrentFrameData.CameraPosition);
             m_CurrentFrameData.MeshDraws = meshes.Draws;
             m_CurrentFrameData.Culling = meshes.Culling;
             m_CurrentFrameData.TransparentDraws = meshes.TransparentDraws;
@@ -769,6 +782,8 @@ namespace Lynx
         // The editor shows the finished picture inside its viewport panel. A game shows it in the window.
         m_CurrentFrameData.Output = m_ShouldCreateIDTarget ? &m_Frame->SceneOutput : &m_Swapchain->Image();
         m_CurrentFrameData.SceneColorIndex = m_Frame->SceneColorSlot.Index();
+        m_CurrentFrameData.SceneDepthIndex = m_Frame->SceneDepthSlot.Index();
+        m_CurrentFrameData.DepthPyramid = {};
         m_CurrentFrameData.BloomTextureIndex = m_Frame->BlackTextureIndex;
         m_CurrentFrameData.Bloom = m_BloomSettings;
         m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled;

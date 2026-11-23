@@ -42,7 +42,11 @@ namespace Lynx
         }
     };
 
-    DepthPass::DepthPass() = default;
+    DepthPass::DepthPass(CullPhase phase)
+        : m_Phase(phase)
+    {
+    }
+
     DepthPass::~DepthPass() = default;
 
     void DepthPass::Init(RenderContext& ctx)
@@ -105,7 +109,7 @@ namespace Lynx
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
 
         const MeshDrawCommands& draws = renderData.MeshDraws;
-        if (draws.CameraOpaque.Count + draws.CameraCutOut.Count == 0 || !m_Vulkan->OpaquePipeline)
+        if (draws.CameraOpaqueOf(m_Phase).Count + draws.CameraCutOutOf(m_Phase).Count == 0 || !m_Vulkan->OpaquePipeline)
             return false;
 
         resources.DepthTarget = renderData.SceneDepth;
@@ -123,13 +127,14 @@ namespace Lynx
         push.Materials = renderData.MaterialAddress;
         m_Vulkan->Shared->Push(commands, push);
 
+        const MeshDrawCommands& draws = renderData.MeshDraws;
         commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->OpaquePipeline);
-        DrawMeshes(commands, renderData.MeshDraws, renderData.MeshDraws.CameraOpaque);
+        DrawMeshes(commands, draws, draws.CameraOpaqueOf(m_Phase));
 
-        if (renderData.MeshDraws.CameraCutOut.Count > 0)
+        if (draws.CameraCutOutOf(m_Phase).Count > 0)
         {
             commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->CutOutPipeline);
-            DrawMeshes(commands, renderData.MeshDraws, renderData.MeshDraws.CameraCutOut);
+            DrawMeshes(commands, draws, draws.CameraCutOutOf(m_Phase));
         }
     }
 }

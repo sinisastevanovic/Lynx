@@ -19,9 +19,13 @@ namespace Lynx
             uint64_t VisibleInstances;
             uint64_t Commands;
             uint64_t Batches;
-            uint64_t Views;
+            uint64_t Frame;
+            uint64_t Visibility;
             uint32_t PlaceCount;
-            uint32_t Padding;
+            CullPhase Phase;
+            uint32_t PyramidTexture;
+            uint32_t PyramidMipCount;
+            glm::ivec2 PyramidSize;
         };
     }
 
@@ -40,7 +44,11 @@ namespace Lynx
         }
     };
 
-    CullPass::CullPass() = default;
+    CullPass::CullPass(CullPhase phase)
+        : m_Phase(phase)
+    {
+    }
+
     CullPass::~CullPass() = default;
 
     void CullPass::Init(RenderContext& ctx)
@@ -93,8 +101,13 @@ namespace Lynx
         push.VisibleInstances = renderData.VisibleInstanceAddress;
         push.Commands = renderData.Culling.CommandAddress;
         push.Batches = renderData.Culling.BatchAddress;
-        push.Views = renderData.Culling.ViewAddress;
+        push.Frame = renderData.Culling.FrameAddress;
+        push.Visibility = renderData.Culling.VisibilityAddress;
         push.PlaceCount = renderData.Culling.PlaceCount;
+        push.Phase = m_Phase;
+        push.PyramidTexture = renderData.DepthPyramid.TextureIndex;
+        push.PyramidMipCount = renderData.DepthPyramid.MipCount;
+        push.PyramidSize = { renderData.DepthPyramid.Width, renderData.DepthPyramid.Height };
 
         commands.bindPipeline(vk::PipelineBindPoint::eCompute, m_Vulkan->Pipeline);
         m_Vulkan->Shared->Push(commands, push);

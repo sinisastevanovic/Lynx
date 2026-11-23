@@ -46,6 +46,16 @@ namespace Lynx
         uint32_t Padding[2];
     };
 
+    // What culling needs to know of the camera.
+    struct CullCamera
+    {
+        Frustum Planes;
+        glm::mat4 View;
+
+        // The camera's own projection, as GLM makes it.
+        glm::mat4 Projection;
+    };
+
     // The meshes of a scene, kept on the GPU from frame to frame.
     //
     // Every submesh of every mesh in the scene is an instance with a place in one buffer. An instance is
@@ -56,6 +66,7 @@ namespace Lynx
     // Which instances are drawn is decided on the GPU (CullPass). The CPU only lays the frame out: one
     // draw command per batch and view, each with a run of the list that could hold all of the batch's
     // instances. Culling counts the instances a view sees into the command and writes their places into its run.
+    // The camera's view has two commands per batch, one for each phase of culling, see CullPhase.
     // See-through instances are the exception: they have to be sorted, which is done here, on the CPU.
     class GpuScene
     {
@@ -105,7 +116,7 @@ namespace Lynx
 
         // Lays out the frame's draw commands and queues for upload what changed since the last frame.
         // Call once per frame, before the uploads are recorded.
-        Frame Prepare(const Frustum& camera, const Frustum& sun, const glm::vec3& cameraPosition);
+        Frame Prepare(const CullCamera& camera, const Frustum& sun, const glm::vec3& cameraPosition);
 
         // Copies the draw commands to where the CPU can read them, which is how it learns what culling
         // let through. Call once per frame, after the frame's passes are recorded.
@@ -145,7 +156,7 @@ namespace Lynx
             GpuBuffer Commands;
             uint32_t CommandCount = 0;
 
-            // The commands of the camera's view come first, those of the sun's after them.
+            // The commands of the camera's view come first, of both phases, those of the sun's after them.
             uint32_t CameraCommandCount = 0;
 
             // Culled and counted on the CPU.
@@ -172,6 +183,9 @@ namespace Lynx
         std::vector<GpuInstance> m_Instances;
         GpuBuffer m_InstanceBuffer;
 
+        // Per place, whether the camera saw its instance in the last frame. Only the GPU reads and writes it.
+        GpuBuffer m_VisibilityBuffer;
+
         // Per place, where the place stands in the list of its batch.
         std::vector<uint32_t> m_IndexInBatch;
 
@@ -193,7 +207,7 @@ namespace Lynx
         GpuBuffer m_VisibleBuffer;
         GpuBuffer m_CommandBuffer;
 
-        // What culling reads besides the instances: the planes of the two views, then per batch its commands.
+        // What culling reads besides the instances: the views of the frame, then per batch its commands.
         GpuBuffer m_CullInputBuffer;
 
         std::vector<TransparentDraw> m_TransparentDraws;

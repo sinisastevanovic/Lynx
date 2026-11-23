@@ -104,6 +104,12 @@ build\bin\Debug\LynxSandboxGame.exe
   camera and the sun, counts those seen into the command and writes their places into its run. A command may end
   up drawing nothing, and the order of instances within a batch differs from frame to frame. The CPU learns what
   was drawn four frames later, from a copy of the commands, and only for the counters.
+- **Occlusion.** The camera's view is culled in two phases (`CullPhase`), so what is hidden behind other things is
+  not drawn. Early: what was seen in the last frame, kept as a flag per instance on the GPU. Its depth becomes the
+  depth pyramid (`Passes/DepthPyramidPass`): the depth in ever smaller sizes, each pixel the farthest of those it
+  stands for. Late: every instance is tested against the pyramid, and what is not hidden and was not drawn early
+  is drawn. So the depth pass runs twice ("Depth", "DepthLate") and a batch has two camera commands, which the
+  forward pass draws as one range. Nothing visible is ever left out. An orthographic camera skips the test.
 - **Uploads.** Data for buffers and pixels for textures go through the `UploadQueue`, which copies them to the GPU
   with the next frame. Nothing is submitted on its own.
 - **Memory.** Textures come from a pool of their own (`GraphicsContext::TexturePool`), apart from buffers. Sharing
