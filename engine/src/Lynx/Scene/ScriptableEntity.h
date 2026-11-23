@@ -15,6 +15,9 @@ namespace Lynx
             return m_Entity.GetComponent<T>();
         }
 
+        // The entity the script belongs to, for what is done through it, such as moving it.
+        Entity GetEntity() const { return m_Entity; }
+
         virtual void OnCreate() {}
         virtual void OnDestroy() {}
         virtual void OnUpdate(float deltaTime) {}

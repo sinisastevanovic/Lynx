@@ -4,6 +4,8 @@
 #include "Lynx/Log.h"
 #include "Lynx/UUID.h"
 
+#include <glm/fwd.hpp>
+
 namespace Lynx
 {
     class Scene;
@@ -68,6 +70,12 @@ namespace Lynx
         bool HasChild() const;
         
         void SetVisibility(bool visible);
+
+        // Where the entity is, relative to its parent. Position, rotation and scale are written here
+        // or through the scene and nowhere else, see Scene::SetTranslation.
+        void SetTranslation(const glm::vec3& translation);
+        void SetRotation(const glm::quat& rotation);
+        void SetScale(const glm::vec3& scale);
         
         Scene* GetScene() const
         {

@@ -33,6 +33,11 @@ namespace Lynx
         std::vector<FieldInfo> fields;
         std::function<void*(entt::registry&, entt::entity)> get;
 
+        // To be called after a field of the component was set: a field's setter knows the component
+        // and not its entity, so it cannot tell anyone. This announces the change the way the registry
+        // does for a patched component, which is what the scene and the renderer listen for.
+        std::function<void(entt::registry&, entt::entity)> notifyChanged;
+
         AddComponentFunc add;
         HasComponentFunc has;
         RemoveComponentFunc remove;
@@ -233,6 +238,7 @@ namespace Lynx
                 [fields](entt::registry& registry, entt::entity entity, const nlohmann::json& json)
                 {
                     ReadFields(*fields, &registry.get_or_emplace<T>(entity), json);
+                    registry.patch<T>(entity);
                 },
                 nullptr, isCore, internalUseOnly);
 
@@ -241,6 +247,10 @@ namespace Lynx
             info.get = [](entt::registry& registry, entt::entity entity) -> void*
             {
                 return registry.try_get<T>(entity);
+            };
+            info.notifyChanged = [](entt::registry& registry, entt::entity entity)
+            {
+                registry.patch<T>(entity);
             };
         }
 

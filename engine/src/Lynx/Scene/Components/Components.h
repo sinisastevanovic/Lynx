@@ -43,35 +43,35 @@ namespace Lynx
             glm::vec4(translation, 1.0f));
     }
 
-    struct TransformComponent
+    template<typename T> class FieldList;
+    class Scene;
+
+    // Where an entity is, relative to its parent: position, rotation and scale.
+    //
+    // They are read here and written through the scene: Scene::SetTranslation and its siblings, or the
+    // same calls on Entity. A write has to reach the scene, because the scene then works out where the
+    // entity and its children are in the world and tells the renderer. In return nothing ever looks at
+    // an entity that was not written to: a scene of 100,000 entities of which 50 move costs 50.
+    class TransformComponent
     {
-        glm::vec3 Translation = { 0.0f, 0.0f, 0.0f };
-        glm::quat Rotation = { 1.0f, 0.0f, 0.0f, 0.0f };
-        glm::vec3 Scale = { 1.0f, 1.0f, 1.0f };
-        
-        glm::mat4 WorldMatrix = glm::mat4(1.0f);
-
-        // What the scene needs to compute the world matrix only when it has to: the values it was last
-        // computed from, and a mark for when it has to be computed whatever they are, as for a new entity
-        // or one that got another parent. Written by the scene, not saved.
-        glm::vec3 ComputedTranslation{ 0.0f };
-        glm::quat ComputedRotation{ 1.0f, 0.0f, 0.0f, 0.0f };
-        glm::vec3 ComputedScale{ 1.0f };
-        bool NeedsWorldMatrix = true;
-        
-        // For physics interpolation
-        glm::vec3 PreviousTranslation{0.0f};
-        glm::quat PreviousRotation{1.0f, 0.0f, 0.0f, 0.0f};
-
+    public:
         TransformComponent() = default;
         TransformComponent(const TransformComponent&) = default;
-        TransformComponent(const glm::vec3& translation) : Translation(translation) {}
-        
+        TransformComponent(const glm::vec3& translation) : m_Translation(translation) {}
+
+        const glm::vec3& GetTranslation() const { return m_Translation; }
+        const glm::quat& GetRotation() const { return m_Rotation; }
+        const glm::vec3& GetScale() const { return m_Scale; }
+
+        // Where the entity is in the world, through every parent, as of the scene's last update of
+        // transforms. A write to this entity or to a parent shows here after the next one.
+        const glm::mat4& GetWorldMatrix() const { return m_WorldMatrix; }
+
         glm::vec3 GetWorldTranslation() const
         {
-            return glm::vec3(WorldMatrix[3]);
+            return glm::vec3(m_WorldMatrix[3]);
         }
-        
+
         glm::quat GetWorldRotation() const
         {
             glm::vec3 scale;
@@ -79,10 +79,10 @@ namespace Lynx
             glm::vec3 translation;
             glm::vec3 skew;
             glm::vec4 perspective;
-            glm::decompose(WorldMatrix, scale, rotation, translation, skew, perspective);
+            glm::decompose(m_WorldMatrix, scale, rotation, translation, skew, perspective);
             return rotation;
         }
-        
+
         glm::vec3 GetWorldScale() const
         {
             glm::vec3 scale;
@@ -90,43 +90,49 @@ namespace Lynx
             glm::vec3 translation;
             glm::vec3 skew;
             glm::vec4 perspective;
-            glm::decompose(WorldMatrix, scale, rotation, translation, skew, perspective);
+            glm::decompose(m_WorldMatrix, scale, rotation, translation, skew, perspective);
             return scale;
         }
 
+        // Relative to the parent.
         glm::mat4 GetTransform() const
         {
-            return ComposeTransform(Translation, Rotation, Scale);
+            return ComposeTransform(m_Translation, m_Rotation, m_Scale);
         }
-        
+
         glm::vec3 GetForward() const
         {
-            return glm::rotate(Rotation, glm::vec3(0.0f, 0.0f, 1.0f));
+            return glm::rotate(m_Rotation, glm::vec3(0.0f, 0.0f, 1.0f));
         }
-        
+
         glm::vec3 GetUp() const
         {
-            return glm::rotate(Rotation, glm::vec3(0.0f, 1.0f, 0.0f));
+            return glm::rotate(m_Rotation, glm::vec3(0.0f, 1.0f, 0.0f));
         }
-        
+
         glm::vec3 GetRight() const
         {
-            return glm::rotate(Rotation, glm::vec3(1.0f, 0.0f, 0.0f));
+            return glm::rotate(m_Rotation, glm::vec3(1.0f, 0.0f, 0.0f));
         }
-        
+
         glm::vec3 GetWorldForward() const
         {
-            return glm::normalize(glm::vec3(WorldMatrix[2]));
+            return glm::normalize(glm::vec3(m_WorldMatrix[2]));
         }
-        
+
         glm::vec3 GetWorldUp() const
         {
-            return glm::normalize(glm::vec3(WorldMatrix[1]));
+            return glm::normalize(glm::vec3(m_WorldMatrix[1]));
         }
-        
+
         glm::vec3 GetWorldRight() const
         {
-            return glm::normalize(glm::vec3(WorldMatrix[0]));
+            return glm::normalize(glm::vec3(m_WorldMatrix[0]));
+        }
+
+        glm::vec3 GetRotationEuler() const
+        {
+            return glm::eulerAngles(m_Rotation);
         }
 
         glm::vec3 GetRotationDegrees() const
@@ -134,38 +140,45 @@ namespace Lynx
             return glm::degrees(GetRotationEuler());
         }
 
-        void SetRotionDegrees(const glm::vec3& rotDegrees)
-        {
-            glm::vec3 rotRadians = glm::radians(rotDegrees);
-            Rotation = glm::quat(rotRadians);
-        }
-
-        glm::vec3 GetRotationEuler() const
-        {
-            return glm::eulerAngles(Rotation);
-        }
-
-        void SetRotationEuler(const glm::vec3& rotation)
-        {
-            Rotation = glm::quat(rotation);
-        }
-        
         glm::vec3 GetPhysicsInterpolatedTranslation(float alpha) const
         {
-            return glm::mix(PreviousTranslation, Translation, alpha);
+            return glm::mix(PreviousTranslation, m_Translation, alpha);
         }
-        
+
         glm::quat GetPhysicsInterpolatedRotation(float alpha) const
         {
-            return glm::slerp(PreviousRotation, Rotation, alpha);
+            return glm::slerp(PreviousRotation, m_Rotation, alpha);
         }
-        
+
         glm::mat4 GetPhysicsInterpolatedTransform(float alpha) const
         {
-            return ComposeTransform(GetPhysicsInterpolatedTranslation(alpha), GetPhysicsInterpolatedRotation(alpha), Scale);
+            return ComposeTransform(GetPhysicsInterpolatedTranslation(alpha), GetPhysicsInterpolatedRotation(alpha), m_Scale);
         }
+
+        // The fields that are saved, shown in the inspector and reachable from scripts.
+        static void DescribeFields(FieldList<TransformComponent>& fields);
+
+        // Where the entity was at the physics step before the last one, written by the physics system.
+        // A frame between two steps is drawn between the two poses.
+        glm::vec3 PreviousTranslation{ 0.0f };
+        glm::quat PreviousRotation{ 1.0f, 0.0f, 0.0f, 0.0f };
+
+    private:
+        friend class Scene;
+
+        glm::vec3 m_Translation = { 0.0f, 0.0f, 0.0f };
+        glm::quat m_Rotation = { 1.0f, 0.0f, 0.0f, 0.0f };
+        glm::vec3 m_Scale = { 1.0f, 1.0f, 1.0f };
+        glm::mat4 m_WorldMatrix = glm::mat4(1.0f);
+
+        // Set while the entity waits in the scene's list of transforms that were written to.
+        bool m_IsChanged = false;
+
+        // Whether the entity has a parent or children, kept in step by the scene. Most entities have
+        // neither, and for those the scene need not look at the hierarchy at all.
+        bool m_HasRelatives = false;
     };
-    
+
     struct WorldTransformComponent
     {
         glm::vec3 WorldPosition = {0.0f, 0.0f, 0.0f};
@@ -207,17 +220,29 @@ namespace Lynx
         std::map<std::string, std::string> SerializedByName;
     };
 
-    struct MeshComponent
+    // The mesh an entity is drawn with. Read here and written through the scene (Scene::SetMesh,
+    // Scene::SetMaterial), so that the renderer hears of a change instead of looking for one.
+    class MeshComponent
     {
-        AssetRef<StaticMesh> Mesh;
+    public:
+        MeshComponent() = default;
+        MeshComponent(const MeshComponent&) = default;
+
+        const AssetRef<StaticMesh>& GetMesh() const { return m_Mesh; }
 
         // Materials that take the place of the mesh's own: one per submesh, in the mesh's order.
         // An empty reference keeps the material the mesh came with, and so does a submesh past the end
         // of the list. This is how many entities share one mesh and still look different.
-        std::vector<AssetRef<Material>> Materials;
+        const std::vector<AssetRef<Material>>& GetMaterials() const { return m_Materials; }
 
-        MeshComponent() = default;
-        MeshComponent(const MeshComponent&) = default;
+        // The fields that are saved and reachable from scripts.
+        static void DescribeFields(FieldList<MeshComponent>& fields);
+
+    private:
+        friend class Scene;
+
+        AssetRef<StaticMesh> m_Mesh;
+        std::vector<AssetRef<Material>> m_Materials;
     };
 
     struct CameraComponent

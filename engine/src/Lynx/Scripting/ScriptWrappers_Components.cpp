@@ -137,6 +137,7 @@ namespace Lynx
             {
                 const FieldInfo& field = FindField(handle, key);
                 field.Set(ResolveComponent(handle), FromLua(field, value));
+                handle.Info->notifyChanged(handle.Owner.GetScene()->Reg(), handle.Owner);
             }
         );
 

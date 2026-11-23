@@ -31,20 +31,6 @@ namespace Lynx
         }
     }
 
-    static void SetTransformFromMatrix(TransformComponent& transform, const glm::mat4& matrix)
-    {
-        glm::vec3 scale;
-        glm::quat rotation;
-        glm::vec3 translation;
-        glm::vec3 skew;
-        glm::vec4 perspective;
-
-        glm::decompose(matrix, scale, rotation, translation, skew, perspective);
-        transform.Translation = translation;
-        transform.Rotation = rotation;
-        transform.Scale = scale;
-    }
-
     static void OnNativeScriptComponentDestroyed(entt::registry& registry, entt::entity entity)
     {
         auto& nsc = registry.get<NativeScriptComponent>(entity);
@@ -89,6 +75,11 @@ namespace Lynx
         
         m_Registry.on_destroy<NativeScriptComponent>().connect<&OnNativeScriptComponentDestroyed>();
         m_Registry.on_destroy<LuaScriptComponent>().connect<&OnLuaScriptComponentDestroyed>();
+
+        // A transform that is new, or was written to as a whole: by loading, by a script through its
+        // fields, by the inspector. The setters below put the entity on the list themselves.
+        m_Registry.on_construct<TransformComponent>().connect<&Scene::OnTransformWritten>(this);
+        m_Registry.on_update<TransformComponent>().connect<&Scene::OnTransformWritten>(this);
         
     }
 
@@ -296,8 +287,8 @@ namespace Lynx
         JPH::ObjectLayer Layer = (rigidBody.Type == RigidBodyType::Static) ? Layers::STATIC : Layers::MOVABLE;
         JPH::EMotionType motion = (rigidBody.Type == RigidBodyType::Static) ? JPH::EMotionType::Static : JPH::EMotionType::Dynamic;
 
-        JPH::Vec3 pos(transform.Translation.x, transform.Translation.y, transform.Translation.z);
-        JPH::Quat rot(transform.Rotation.x, transform.Rotation.y, transform.Rotation.z, transform.Rotation.w);
+        JPH::Vec3 pos(transform.GetTranslation().x, transform.GetTranslation().y, transform.GetTranslation().z);
+        JPH::Quat rot(transform.GetRotation().x, transform.GetRotation().y, transform.GetRotation().z, transform.GetRotation().w);
 
         JPH::BodyCreationSettings bodySettings(finalShape, pos, rot, motion, Layer);
         bodySettings.mUserData = (uint64_t)entity;
@@ -349,8 +340,8 @@ namespace Lynx
        // settings->mStepHeight = character.StepHeight;
         settings->mSupportingVolume = JPH::Plane(JPH::Vec3::sAxisY(), -1.0f * character.CharacterPadding); // TODO:??
         
-        JPH::Vec3 position(transform.Translation.x, transform.Translation.y + offsetY, transform.Translation.z);
-        JPH::Quat rotation(transform.Rotation.x, transform.Rotation.y, transform.Rotation.z, transform.Rotation.w);
+        JPH::Vec3 position(transform.GetTranslation().x, transform.GetTranslation().y + offsetY, transform.GetTranslation().z);
+        JPH::Quat rotation(transform.GetRotation().x, transform.GetRotation().y, transform.GetRotation().z, transform.GetRotation().w);
         
         auto& physSystem = m_PhysicsSystem->GetJoltSystem();
         
@@ -495,7 +486,7 @@ namespace Lynx
             auto [transform, camera] = camView.get<TransformComponent, CameraComponent>(entity);
             if (camera.Primary)
             {
-                cameraPos = transform.Translation; // TODO: This is wrong if the camera entity is attached to an entity 
+                cameraPos = transform.GetTranslation(); // TODO: This is wrong if the camera entity is attached to an entity 
                 break;
             }
         }*/
@@ -618,7 +609,10 @@ namespace Lynx
         childRel.Parent = parent;
 
         // Under another parent the same position means another place in the world.
-        m_Registry.get<TransformComponent>(child).NeedsWorldMatrix = true;
+        TransformComponent& childTransform = m_Registry.get<TransformComponent>(child);
+        MarkTransformChanged(child, childTransform);
+        childTransform.m_HasRelatives = true;
+        m_Registry.get<TransformComponent>(parent).m_HasRelatives = true;
 
         auto& parentRel = m_Registry.get<RelationshipComponent>(parent);
         if (parentRel.FirstChild == entt::null)
@@ -655,15 +649,9 @@ namespace Lynx
         auto& childTransform = m_Registry.get<TransformComponent>(child);
         auto& parentTransform = m_Registry.get<TransformComponent>(parent);
 
-        glm::mat4 childWorld = childTransform.WorldMatrix;
-        glm::mat4 parentWorld = parentTransform.WorldMatrix;
-        glm::mat4 parentInverse = glm::inverse(parentWorld);
-
-        glm::mat4 newLocal = parentInverse * childWorld;
-        SetTransformFromMatrix(childTransform, newLocal);
-
+        // The place in the world stays, so the place relative to the new parent is worked out from it.
+        SetLocalFromMatrix(child, glm::inverse(parentTransform.m_WorldMatrix) * childTransform.m_WorldMatrix);
         AttachEntity(child, parent);
-        UpdateEntityTransform(child, parentWorld, false);
     }
 
     void Scene::DetachEntity(entt::entity child)
@@ -694,7 +682,11 @@ namespace Lynx
         childRel.Parent = entt::null;
         childRel.NextSibling = entt::null;
         childRel.PrevSibling = entt::null;
-        m_Registry.get<TransformComponent>(child).NeedsWorldMatrix = true;
+
+        TransformComponent& childTransform = m_Registry.get<TransformComponent>(child);
+        MarkTransformChanged(child, childTransform);
+        childTransform.m_HasRelatives = childRel.FirstChild != entt::null;
+        m_Registry.get<TransformComponent>(parent).m_HasRelatives = parentRel.Parent != entt::null || parentRel.FirstChild != entt::null;
 
         parentRel.ChildrenCount--;
     }
@@ -705,10 +697,9 @@ namespace Lynx
         if (rel.Parent == entt::null)
             return;
 
-        auto& childTransform = m_Registry.get<TransformComponent>(child);
-        SetTransformFromMatrix(childTransform, childTransform.WorldMatrix);
+        // Without a parent, the place in the world is the place.
+        SetLocalFromMatrix(child, m_Registry.get<TransformComponent>(child).m_WorldMatrix);
         DetachEntity(child);
-        SetWorldMatrix(child, childTransform, childTransform.GetTransform());
     }
 
     std::shared_ptr<class UIElement> Scene::FindUIElementByID(UUID id)
@@ -727,21 +718,160 @@ namespace Lynx
         return nullptr;
     }
 
+    Scene& Scene::Of(entt::registry& registry)
+    {
+        return *registry.ctx().get<Scene*>();
+    }
+
+    void Scene::SetTranslation(entt::entity entity, const glm::vec3& translation)
+    {
+        // Writing the value it has already is not a change: a body at rest is set to where it is in every physics step.
+        TransformComponent& transform = m_Registry.get<TransformComponent>(entity);
+        if (transform.m_Translation == translation)
+            return;
+
+        transform.m_Translation = translation;
+        MarkTransformChanged(entity, transform);
+    }
+
+    void Scene::SetRotation(entt::entity entity, const glm::quat& rotation)
+    {
+        TransformComponent& transform = m_Registry.get<TransformComponent>(entity);
+        if (transform.m_Rotation == rotation)
+            return;
+
+        transform.m_Rotation = rotation;
+        MarkTransformChanged(entity, transform);
+    }
+
+    void Scene::SetScale(entt::entity entity, const glm::vec3& scale)
+    {
+        TransformComponent& transform = m_Registry.get<TransformComponent>(entity);
+        if (transform.m_Scale == scale)
+            return;
+
+        transform.m_Scale = scale;
+        MarkTransformChanged(entity, transform);
+    }
+
+    void Scene::SetLocalTransform(entt::entity entity, const glm::vec3& translation, const glm::quat& rotation, const glm::vec3& scale)
+    {
+        TransformComponent& transform = m_Registry.get<TransformComponent>(entity);
+        if (transform.m_Translation == translation && transform.m_Rotation == rotation && transform.m_Scale == scale)
+            return;
+
+        transform.m_Translation = translation;
+        transform.m_Rotation = rotation;
+        transform.m_Scale = scale;
+        MarkTransformChanged(entity, transform);
+    }
+
+    void Scene::SetLocalFromMatrix(entt::entity entity, const glm::mat4& matrix)
+    {
+        glm::vec3 scale;
+        glm::quat rotation;
+        glm::vec3 translation;
+        glm::vec3 skew;
+        glm::vec4 perspective;
+        glm::decompose(matrix, scale, rotation, translation, skew, perspective);
+        SetLocalTransform(entity, translation, rotation, scale);
+    }
+
+    void Scene::SetMesh(entt::entity entity, AssetHandle mesh)
+    {
+        // The renderer listens for the update that patch announces.
+        m_Registry.patch<MeshComponent>(entity, [mesh](MeshComponent& component) { component.m_Mesh = AssetRef<StaticMesh>(mesh); });
+    }
+
+    void Scene::SetMaterial(entt::entity entity, size_t submeshIndex, AssetHandle material)
+    {
+        m_Registry.patch<MeshComponent>(entity, [&](MeshComponent& component)
+        {
+            if (component.m_Materials.size() <= submeshIndex)
+                component.m_Materials.resize(submeshIndex + 1);
+            component.m_Materials[submeshIndex] = AssetRef<Material>(material);
+        });
+    }
+
+    void Scene::MarkTransformChanged(entt::entity entity, TransformComponent& transform)
+    {
+        if (transform.m_IsChanged)
+            return;
+
+        transform.m_IsChanged = true;
+        m_ChangedTransforms.push_back(entity);
+    }
+
+    void Scene::OnTransformWritten(entt::registry& registry, entt::entity entity)
+    {
+        // Put on the list whatever the mark says: a transform copied from another scene brings that
+        // scene's mark along, and is on no list here.
+        registry.get<TransformComponent>(entity).m_IsChanged = true;
+        m_ChangedTransforms.push_back(entity);
+    }
+
     void Scene::UpdateGlobalTransforms()
     {
-        auto view = m_Registry.view<TransformComponent, RelationshipComponent>();
-        for (auto entity : view)
-        {
-            const auto& rel = view.get<RelationshipComponent>(entity);
-            if (rel.Parent == entt::null)
-            {
-                auto& transform = view.get<TransformComponent>(entity);
-                const bool moved = UpdateWorldMatrix(entity, transform, nullptr, false);
+        // The list is taken over before it is worked through, so that it is free for what is written next.
+        m_ChangedTransformsInWork.swap(m_ChangedTransforms);
 
-                // Children are looked at even if their parent stood still: one of them may have moved.
-                if (rel.FirstChild != entt::null)
-                    UpdateEntityTransform(rel.FirstChild, transform.WorldMatrix, moved);
+        auto& transforms = m_Registry.storage<TransformComponent>();
+        for (const entt::entity entity : m_ChangedTransformsInWork)
+        {
+            // An entity that was destroyed since is no longer among the transforms.
+            if (!transforms.contains(entity))
+                continue;
+
+            // Without the mark it is done already: as the child of an entity earlier in the list, or
+            // because it is in the list twice.
+            TransformComponent& transform = transforms.get(entity);
+            if (!transform.m_IsChanged)
+                continue;
+
+            // Most entities stand alone. Their place relative to a parent is their place in the world.
+            if (!transform.m_HasRelatives)
+            {
+                transform.m_IsChanged = false;
+                SetWorldMatrix(entity, transform, transform.GetTransform());
+                continue;
             }
+
+            // A parent that is later in the list has not moved yet. The child is then worked out twice,
+            // the second time when the parent is, which is right in the end.
+            const entt::entity parent = m_Registry.get<RelationshipComponent>(entity).Parent;
+            UpdateWorldMatrices(entity, transform, parent != entt::null ? &transforms.get(parent).m_WorldMatrix : nullptr);
+        }
+
+        m_ChangedTransformsInWork.clear();
+    }
+
+    bool Scene::SetWorldMatrix(entt::entity entity, TransformComponent& transform, const glm::mat4& worldMatrix)
+    {
+        // A write does not always move the entity in the world. Compared as bytes: that is one
+        // comparison of 64 bytes where comparing the numbers is sixteen.
+        if (std::memcmp(&transform.m_WorldMatrix, &worldMatrix, sizeof(glm::mat4)) == 0)
+            return false;
+
+        transform.m_WorldMatrix = worldMatrix;
+        m_MovedEntities.push_back(entity);
+        return true;
+    }
+
+    void Scene::UpdateWorldMatrices(entt::entity entity, TransformComponent& transform, const glm::mat4* parentWorld)
+    {
+        transform.m_IsChanged = false;
+
+        // If the entity stays where it is in the world, so do its children.
+        const glm::mat4 local = transform.GetTransform();
+        if (!SetWorldMatrix(entity, transform, parentWorld ? *parentWorld * local : local))
+            return;
+
+        // The children move with it. The depth of the calls is the depth of the hierarchy.
+        entt::entity child = m_Registry.get<RelationshipComponent>(entity).FirstChild;
+        while (child != entt::null)
+        {
+            UpdateWorldMatrices(child, m_Registry.get<TransformComponent>(child), &transform.m_WorldMatrix);
+            child = m_Registry.get<RelationshipComponent>(child).NextSibling;
         }
     }
 
@@ -754,54 +884,5 @@ namespace Lynx
     void Scene::PostDeserialize()
     {
         m_Registry.on_construct<LuaScriptComponent>().connect<&OnLuaScriptComponentConstructed>();
-    }
-
-    void Scene::SetWorldMatrix(entt::entity entity, TransformComponent& transform, const glm::mat4& worldMatrix)
-    {
-        // Every world matrix is computed anew in every frame, and most come out as they were.
-        // Comparing here is what tells the few that moved from the many that did not.
-        // As bytes: that is one comparison of 64 bytes where comparing the numbers is sixteen.
-        if (std::memcmp(&transform.WorldMatrix, &worldMatrix, sizeof(glm::mat4)) == 0)
-            return;
-
-        transform.WorldMatrix = worldMatrix;
-        m_MovedEntities.push_back(entity);
-    }
-
-    bool Scene::UpdateWorldMatrix(entt::entity entity, TransformComponent& transform, const glm::mat4* parentWorld, bool parentMoved)
-    {
-        // Most entities stand still in most frames. For those, three comparisons replace building a matrix.
-        // Position, rotation and scale are plain members that anything may write to, so comparing them with
-        // what the matrix was last built from is what notices a change.
-        const bool changed = transform.NeedsWorldMatrix
-            || transform.Translation != transform.ComputedTranslation
-            || transform.Rotation != transform.ComputedRotation
-            || transform.Scale != transform.ComputedScale;
-        if (!changed && !parentMoved)
-            return false;
-
-        transform.ComputedTranslation = transform.Translation;
-        transform.ComputedRotation = transform.Rotation;
-        transform.ComputedScale = transform.Scale;
-        transform.NeedsWorldMatrix = false;
-
-        const glm::mat4 local = transform.GetTransform();
-        SetWorldMatrix(entity, transform, parentWorld ? *parentWorld * local : local);
-        return true;
-    }
-
-    void Scene::UpdateEntityTransform(entt::entity entity, const glm::mat4& parentWorld, bool parentMoved)
-    {
-        // Updates the entity and the siblings after it. Siblings are walked in a loop and only children
-        // recurse, so the stack depth is the depth of the hierarchy and not the number of siblings.
-        for (entt::entity current = entity; current != entt::null; current = m_Registry.get<RelationshipComponent>(current).NextSibling)
-        {
-            auto& transform = m_Registry.get<TransformComponent>(current);
-            const bool moved = UpdateWorldMatrix(current, transform, &parentWorld, parentMoved);
-
-            const entt::entity firstChild = m_Registry.get<RelationshipComponent>(current).FirstChild;
-            if (firstChild != entt::null)
-                UpdateEntityTransform(firstChild, transform.WorldMatrix, moved);
-        }
     }
 }

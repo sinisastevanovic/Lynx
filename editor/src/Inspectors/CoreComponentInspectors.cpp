@@ -71,11 +71,15 @@ namespace Lynx
         registry.SetComponentInspector("Mesh",
             [](entt::registry& reg, entt::entity entity)
             {
-                auto& meshComp = reg.get<MeshComponent>(entity);
+                // The component is only read here. What the user picks is written through the scene.
+                const MeshComponent& meshComp = reg.get<MeshComponent>(entity);
+                Scene& scene = Scene::Of(reg);
 
-                LXUI::DrawAssetReference("Static Mesh", meshComp.Mesh, {AssetType::StaticMesh});
+                AssetHandle meshHandle = meshComp.GetMesh().Handle;
+                if (LXUI::DrawAssetReference("Static Mesh", meshHandle, {AssetType::StaticMesh}))
+                    scene.SetMesh(entity, meshHandle);
 
-                const std::shared_ptr<StaticMesh> mesh = meshComp.Mesh.Get();
+                const std::shared_ptr<StaticMesh> mesh = meshComp.GetMesh().Get();
                 if (!mesh)
                     return;
 
@@ -85,18 +89,15 @@ namespace Lynx
                     ImGui::PushID(static_cast<int>(index));
 
                     // A material asset here takes the place of the one the mesh came with, for this entity.
-                    AssetRef<Material> given = index < meshComp.Materials.size() ? meshComp.Materials[index] : AssetRef<Material>();
+                    const std::vector<AssetRef<Material>>& materials = meshComp.GetMaterials();
+                    AssetHandle given = index < materials.size() ? materials[index].Handle : AssetHandle::Null();
                     if (LXUI::DrawAssetReference("Material " + std::to_string(index), given, {AssetType::Material}))
-                    {
-                        if (meshComp.Materials.size() <= index)
-                            meshComp.Materials.resize(index + 1);
-                        meshComp.Materials[index] = given;
-                    }
+                        scene.SetMaterial(entity, index, given);
 
                     // Without one, the values of the mesh's own material can be tried out. They belong to
                     // the mesh, so every entity with this mesh changes, and they are not saved.
                     const std::shared_ptr<Material>& own = submeshes[index].Material;
-                    if (!given && own)
+                    if (!given.IsValid() && own)
                     {
                         ImGui::ColorEdit4("Albedo Color", &own->AlbedoColor.r);
                         ImGui::DragFloat("Metallic", &own->Metallic);

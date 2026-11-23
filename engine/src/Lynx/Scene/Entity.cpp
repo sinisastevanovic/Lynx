@@ -55,6 +55,21 @@ namespace Lynx
             m_Scene->Reg().emplace<DisabledComponent>(m_Handle);
     }
 
+    void Entity::SetTranslation(const glm::vec3& translation)
+    {
+        m_Scene->SetTranslation(m_Handle, translation);
+    }
+
+    void Entity::SetRotation(const glm::quat& rotation)
+    {
+        m_Scene->SetRotation(m_Handle, rotation);
+    }
+
+    void Entity::SetScale(const glm::vec3& scale)
+    {
+        m_Scene->SetScale(m_Handle, scale);
+    }
+
     UUID Entity::GetUUID() const
     {
         return GetComponent<IDComponent>().ID;

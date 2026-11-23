@@ -106,8 +106,9 @@ namespace Lynx
         }
     }
 
-    void DrawFields(const std::vector<FieldInfo>& fields, void* component, Scene* scene)
+    bool DrawFields(const std::vector<FieldInfo>& fields, void* component, Scene* scene)
     {
+        bool changed = false;
         for (const FieldInfo& field : fields)
         {
             if (!field.ShownInEditor)
@@ -115,7 +116,11 @@ namespace Lynx
 
             FieldValue value = field.Get(component);
             if (DrawFieldControl(field, value, scene))
+            {
                 field.Set(component, value);
+                changed = true;
+            }
         }
+        return changed;
     }
 }

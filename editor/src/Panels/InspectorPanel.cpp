@@ -24,8 +24,8 @@ namespace Lynx
             ImGui::PushID(name.c_str());
             if (info.drawUI)
                 info.drawUI(scene->Reg(), entity);
-            else
-                DrawFields(info.fields, info.get(scene->Reg(), entity), scene);
+            else if (DrawFields(info.fields, info.get(scene->Reg(), entity), scene))
+                info.notifyChanged(scene->Reg(), entity);
             ImGui::PopID();
             LXUI::EndPropertyGrid();
             return true;

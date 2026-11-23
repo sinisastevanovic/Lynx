@@ -22,10 +22,7 @@ namespace Lynx
         {
             GpuScene::Range Range;
 
-            // What the instances were made from, to notice when the entity is given another mesh
-            // or other materials. Of the materials only a number is kept, see MaterialsKey.
-            AssetHandle Mesh = AssetHandle::Null();
-            uint64_t Materials = 0;
+            // The mesh the instances were made from. Null for an entity whose mesh is not set or not loaded.
             const StaticMesh* Asset = nullptr;
 
             // The entity's place in the list of the mesh's users.
@@ -35,16 +32,6 @@ namespace Lynx
         int EntityId(entt::entity entity)
         {
             return static_cast<int>(entity);
-        }
-
-        // One number for the list of materials an entity gives its mesh, which changes when the list does.
-        // Comparing it finds a change without keeping a copy of the list per entity.
-        uint64_t MaterialsKey(const MeshComponent& mesh)
-        {
-            uint64_t key = 0;
-            for (const AssetRef<Material>& material : mesh.Materials)
-                key = (key ^ static_cast<uint64_t>(material.Handle)) * 0x100000001B3ull + 1;
-            return key;
         }
     }
 
@@ -80,7 +67,9 @@ namespace Lynx
         // Left over if the scene was drawn before, by instances that are long gone.
         registry.clear<MeshInstances>();
 
+        // Added, or given another mesh or other materials: both end in new instances.
         registry.on_construct<MeshComponent>().connect<&SceneRenderer::OnMeshAdded>(this);
+        registry.on_update<MeshComponent>().connect<&SceneRenderer::OnMeshAdded>(this);
         registry.on_destroy<MeshComponent>().connect<&SceneRenderer::OnMeshRemoved>(this);
         registry.on_construct<DisabledComponent>().connect<&SceneRenderer::OnEntityDisabled>(this);
         registry.on_destroy<DisabledComponent>().connect<&SceneRenderer::OnEntityEnabled>(this);
@@ -97,6 +86,7 @@ namespace Lynx
     {
         entt::registry& registry = scene.Reg();
         registry.on_construct<MeshComponent>().disconnect(this);
+        registry.on_update<MeshComponent>().disconnect(this);
         registry.on_destroy<MeshComponent>().disconnect(this);
         registry.on_construct<DisabledComponent>().disconnect(this);
         registry.on_destroy<DisabledComponent>().disconnect(this);
@@ -159,19 +149,16 @@ namespace Lynx
         if (!meshComponent || !transform)
             return;
 
-        // An entity without a mesh is remembered too, so that it is noticed when it gets one.
+        // An entity without a mesh gets the component too, with nothing in it.
         MeshInstances instances;
-        instances.Mesh = meshComponent->Mesh.Handle;
-        instances.Materials = MaterialsKey(*meshComponent);
-
-        if (std::shared_ptr<StaticMesh> mesh = meshComponent->Mesh.Get())
+        if (std::shared_ptr<StaticMesh> mesh = meshComponent->GetMesh().Get())
         {
             // A character moves in physics steps, which are fewer than frames, so it is drawn between its last two poses.
             const bool isInterpolated = !isEditor && registry.all_of<CharacterControllerComponent>(entity);
-            const glm::mat4 matrix = isInterpolated ? transform->GetPhysicsInterpolatedTransform(physicsAlpha) : transform->WorldMatrix;
+            const glm::mat4 matrix = isInterpolated ? transform->GetPhysicsInterpolatedTransform(physicsAlpha) : transform->GetWorldMatrix();
 
             m_GivenMaterials.clear();
-            for (const AssetRef<Material>& material : meshComponent->Materials)
+            for (const AssetRef<Material>& material : meshComponent->GetMaterials())
                 m_GivenMaterials.push_back(material.Get());
 
             instances.Asset = mesh.get();
@@ -205,18 +192,6 @@ namespace Lynx
             m_PendingEntities.insert(m_PendingEntities.end(), use.Users.begin(), use.Users.end());
         }
 
-        // An entity that was given another mesh or other materials. Both are plain members that anything
-        // can write to, so there is no signal for them: every mesh entity is compared with what its
-        // instances were made from.
-        const auto meshEntities = registry.view<MeshComponent, MeshInstances>();
-        for (const entt::entity entity : meshEntities)
-        {
-            const MeshComponent& mesh = meshEntities.get<MeshComponent>(entity);
-            const MeshInstances& instances = meshEntities.get<MeshInstances>(entity);
-            if (mesh.Mesh.Handle != instances.Mesh || MaterialsKey(mesh) != instances.Materials)
-                m_PendingEntities.push_back(entity);
-        }
-
         // Pending entities get their instances, in place of the ones they had.
         std::vector<entt::entity> pending = std::move(m_PendingEntities);
         m_PendingEntities.clear();
@@ -235,7 +210,7 @@ namespace Lynx
                 continue;
 
             if (const MeshInstances* instances = registry.try_get<MeshInstances>(entity); instances && instances->Range.Count > 0)
-                gpuScene.SetTransform(instances->Range, registry.get<TransformComponent>(entity).WorldMatrix);
+                gpuScene.SetTransform(instances->Range, registry.get<TransformComponent>(entity).GetWorldMatrix());
         }
         m_Scene->ClearMovedEntities();
 
@@ -307,7 +282,7 @@ namespace Lynx
                     worldMatrix = parentTransform->GetPhysicsInterpolatedTransform(physicsAlpha) * worldMatrix;
             }
 
-            Extract(glm::inverse(worldMatrix), camera.Camera.GetProjection(), transform.Translation, deltaTime, false, physicsAlpha);
+            Extract(glm::inverse(worldMatrix), camera.Camera.GetProjection(), transform.GetTranslation(), deltaTime, false, physicsAlpha);
             m_Renderer.RenderScene(m_Extracted);
             return;
         }
@@ -335,7 +310,7 @@ namespace Lynx
         for (auto entity : suns)
         {
             auto [transform, light] = suns.get<TransformComponent, DirectionalLightComponent>(entity);
-            m_Extracted.SunDirection = glm::rotate(transform.Rotation, glm::vec3(0.0f, 0.0f, -1.0f));
+            m_Extracted.SunDirection = glm::rotate(transform.GetRotation(), glm::vec3(0.0f, 0.0f, -1.0f));
             m_Extracted.SunColor = light.Color;
             m_Extracted.SunIntensity = light.Intensity;
             break;
@@ -365,9 +340,9 @@ namespace Lynx
         for (auto entity : boxes)
         {
             auto [transform, collider] = boxes.get<TransformComponent, BoxColliderComponent>(entity);
-            const glm::vec3 position = transform.Translation + transform.Rotation * collider.Offset;
+            const glm::vec3 position = transform.GetTranslation() + transform.GetRotation() * collider.Offset;
             const glm::mat4 colliderTransform = glm::translate(glm::mat4(1.0f), position)
-                * glm::toMat4(transform.Rotation)
+                * glm::toMat4(transform.GetRotation())
                 * glm::scale(glm::mat4(1.0f), collider.HalfSize * 2.0f);
 
             DebugRenderer::DrawBox(colliderTransform, color);
@@ -377,21 +352,21 @@ namespace Lynx
         for (auto entity : spheres)
         {
             auto [transform, collider] = spheres.get<TransformComponent, SphereColliderComponent>(entity);
-            DebugRenderer::DrawSphere(transform.Translation + transform.Rotation * collider.Offset, collider.Radius, color);
+            DebugRenderer::DrawSphere(transform.GetTranslation() + transform.GetRotation() * collider.Offset, collider.Radius, color);
         }
 
         const auto capsules = registry.view<TransformComponent, CapsuleColliderComponent>();
         for (auto entity : capsules)
         {
             auto [transform, collider] = capsules.get<TransformComponent, CapsuleColliderComponent>(entity);
-            DebugRenderer::DrawCapsule(transform.Translation + transform.Rotation * collider.Offset, collider.Radius, collider.HalfHeight, transform.Rotation, color);
+            DebugRenderer::DrawCapsule(transform.GetTranslation() + transform.GetRotation() * collider.Offset, collider.Radius, collider.HalfHeight, transform.GetRotation(), color);
         }
 
         const auto characters = registry.view<TransformComponent, CharacterControllerComponent>();
         for (auto entity : characters)
         {
             auto [transform, character] = characters.get<TransformComponent, CharacterControllerComponent>(entity);
-            DebugRenderer::DrawCapsule(transform.Translation, character.CapsuleRadius, character.CapsuleHalfHeight, transform.Rotation, color);
+            DebugRenderer::DrawCapsule(transform.GetTranslation(), character.CapsuleRadius, character.CapsuleHalfHeight, transform.GetRotation(), color);
         }
     }
 }

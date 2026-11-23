@@ -57,6 +57,15 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Components.** Register a component with a field list (`Reflection/Field.h`). Saving, loading, the inspector and
   Lua access come from it. The first argument of `fields.Add` is the key in saved files: never rename it without
   migrating the scenes. Only components with real custom logic keep hand-written save and load code.
+- **Change notification.** Nothing scans the scene for changes. Position, rotation and scale of an entity, its
+  mesh and its materials are read from the component and written through the scene: `Scene::SetTranslation`,
+  `SetRotation`, `SetScale`, `SetLocalTransform`, `SetMesh`, `SetMaterial`, or the same on `Entity`. The members
+  are private, so a write that tells nobody does not compile. The scene keeps a list of written transforms and
+  works out world matrices for those only (`UpdateGlobalTransforms`). The renderer listens for EnTT's
+  `on_update<MeshComponent>`. Code that sets a field through the field system (loading, the generic inspector, Lua)
+  calls `ComponentInfo::notifyChanged` afterwards, which is `registry.patch<T>(entity)`. `Scene::Of(registry)`
+  gives the scene to code that only has a registry. A component with private members describes its own fields
+  in a static `DescribeFields`.
 - **Inspectors.** Component UI code belongs in the editor (`editor/src/Inspectors`), not in the engine.
 - **Play.** The engine starts in Edit state. `StartPlay` and `StopPlay` are the only way in and out. A copy of the
   scene is played, never the loaded asset itself.
@@ -95,8 +104,8 @@ build\bin\Debug\LynxSandboxGame.exe
   to `PackedVertex` needs the version in `MeshCache.cpp` bumped. Texture coordinates stay exact on purpose.
 - **Scene on the GPU.** Every submesh of every mesh in the scene is an instance in one buffer that stays on the GPU
   (`Renderer/GpuScene`). `SceneRenderer` keeps it in step with the scene and passes on only what changed: mesh
-  entities that came or went (EnTT signals), entities that moved (`Scene::GetMovedEntities`), meshes that were
-  reloaded. What it keeps per entity is a component of its own in the scene's registry (`MeshInstances`), which is
+  entities that came, went or got another mesh or material (EnTT signals), entities that moved
+  (`Scene::GetMovedEntities`), meshes that were reloaded. What it keeps per entity is a component of its own in the scene's registry (`MeshInstances`), which is
   never saved. A frame draws a list of places in the instance buffer, which culling writes.
 - **Mesh draws.** Meshes that are not see-through are drawn from a buffer of draw commands, one per submesh with all
   its instances that are seen (`RenderData::MeshDraws`). A pass draws a whole range of them with one call

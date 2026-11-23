@@ -19,14 +19,24 @@
 
 namespace Lynx
 {
+    // These two keep their values to themselves, so they describe their own fields. Whoever sets a
+    // field afterwards announces the change, see ComponentInfo::notifyChanged.
+    void TransformComponent::DescribeFields(FieldList<TransformComponent>& fields)
+    {
+        fields.Add("Translation", &TransformComponent::m_Translation).Label("Position");
+        fields.Add("Rotation", &TransformComponent::m_Rotation);
+        fields.Add("Scale", &TransformComponent::m_Scale);
+    }
+
+    void MeshComponent::DescribeFields(FieldList<MeshComponent>& fields)
+    {
+        fields.Add("Mesh", &MeshComponent::m_Mesh).Label("Static Mesh");
+        fields.Add("Materials", &MeshComponent::m_Materials);
+    }
+
     void RegisterCoreComponents(TypeRegistry& registry)
     {
-        registry.RegisterCoreInternalOnlyComponent<TransformComponent>("Transform", [](FieldList<TransformComponent>& fields)
-        {
-            fields.Add("Translation", &TransformComponent::Translation).Label("Position");
-            fields.Add("Rotation", &TransformComponent::Rotation);
-            fields.Add("Scale", &TransformComponent::Scale);
-        });
+        registry.RegisterCoreInternalOnlyComponent<TransformComponent>("Transform", &TransformComponent::DescribeFields);
 
         // SceneSerializer saves and loads the parent link itself, because it has to resolve the parent by entity ID.
         registry.RegisterCoreInternalOnlyComponent<RelationshipComponent>("Relationship",
@@ -44,11 +54,7 @@ namespace Lynx
             fields.Add("SubEntityID", &PrefabComponent::SubEntityID);
         });
 
-        registry.RegisterCoreComponent<MeshComponent>("Mesh", [](FieldList<MeshComponent>& fields)
-        {
-            fields.Add("Mesh", &MeshComponent::Mesh).Label("Static Mesh");
-            fields.Add("Materials", &MeshComponent::Materials);
-        });
+        registry.RegisterCoreComponent<MeshComponent>("Mesh", &MeshComponent::DescribeFields);
 
         registry.RegisterCoreComponent<DirectionalLightComponent>("DirectionalLight", [](FieldList<DirectionalLightComponent>& fields)
         {

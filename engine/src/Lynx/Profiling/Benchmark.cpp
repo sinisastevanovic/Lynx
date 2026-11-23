@@ -346,11 +346,12 @@ namespace Lynx
         const glm::vec3 up = std::abs(forward.y) > 0.999f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
 
         // The renderer blends between the previous and the current pose, so both are set.
+        m_Camera.SetTranslation(key.Position);
+        m_Camera.SetRotation(glm::quatLookAt(forward, up));
+
         TransformComponent& transform = m_Camera.GetComponent<TransformComponent>();
-        transform.Translation = key.Position;
-        transform.Rotation = glm::quatLookAt(forward, up);
-        transform.PreviousTranslation = transform.Translation;
-        transform.PreviousRotation = transform.Rotation;
+        transform.PreviousTranslation = transform.GetTranslation();
+        transform.PreviousRotation = transform.GetRotation();
     }
 
     void Benchmark::KeepScreenshots(std::vector<Screenshot> screenshots)

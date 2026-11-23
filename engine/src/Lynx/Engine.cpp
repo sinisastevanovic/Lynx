@@ -118,9 +118,9 @@ namespace Lynx
         for (auto entity : view)
         {
             auto& mesh = view.get<MeshComponent>(entity);
-            if (mesh.Mesh.Get())
+            if (mesh.GetMesh().Get())
             {
-                for (const auto& subMesh : mesh.Mesh->GetSubmeshes())
+                for (const auto& subMesh : mesh.GetMesh()->GetSubmeshes())
                 {
                     if (subMesh.Material->AlbedoTexture)
                         m_AssetManager->GetAsset<Texture>(subMesh.Material->AlbedoTexture, AssetLoadMode::Blocking);

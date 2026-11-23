@@ -190,8 +190,8 @@ namespace Lynx
         
         BodyDescriptor desc;
         desc.Shape = shape.value();
-        desc.Position = transform.Translation; // TODO: Use world!
-        desc.Rotation = transform.Rotation;
+        desc.Position = transform.GetTranslation(); // TODO: Use world!
+        desc.Rotation = transform.GetRotation();
         desc.Type = rb.Type;
         desc.Mass = rb.Mass;
         desc.Friction = rb.Friction;
@@ -255,8 +255,8 @@ namespace Lynx
             return;
         
         CharacterDescriptor desc;
-        desc.Position = transform.Translation;
-        desc.Rotation = transform.Rotation;
+        desc.Position = transform.GetTranslation();
+        desc.Rotation = transform.GetRotation();
         desc.CapsuleHalfHeight = cc.CapsuleHalfHeight;
         desc.CapsuleRadius = cc.CapsuleRadius;
         desc.Mass = cc.Mass;
@@ -312,8 +312,8 @@ namespace Lynx
             cc.GroundNormal = physics.GetCharacterGroundNormal(cc.CharacterId);
             cc.GroundVelocity = physics.GetCharacterGroundVelocity(cc.CharacterId);
             
-            transform.Translation = physics.GetCharacterPosition(cc.CharacterId);
-            transform.Rotation = physics.GetCharacterRotation(cc.CharacterId);
+            scene.SetTranslation(entity, physics.GetCharacterPosition(cc.CharacterId));
+            scene.SetRotation(entity, physics.GetCharacterRotation(cc.CharacterId));
         }
     }
 
@@ -330,7 +330,7 @@ namespace Lynx
             
             if (rb.Type == BodyType::Kinematic)
             {
-                physics.MoveKinematic(rb.BodyId, transform.Translation, transform.Rotation, fixedDeltaTime);
+                physics.MoveKinematic(rb.BodyId, transform.GetTranslation(), transform.GetRotation(), fixedDeltaTime);
             }
         }
         
@@ -357,8 +357,8 @@ namespace Lynx
             
             if (rb.Type == BodyType::Dynamic)
             {
-                transform.Translation = physics.GetPosition(rb.BodyId);
-                transform.Rotation = physics.GetRotation(rb.BodyId);
+                scene.SetTranslation(entity, physics.GetPosition(rb.BodyId));
+                scene.SetRotation(entity, physics.GetRotation(rb.BodyId));
             }
         }
         
@@ -370,8 +370,8 @@ namespace Lynx
             
             // Note: Previous transform is saved in SavePhysicsState before the update
             
-            transform.Translation = physics.GetCharacterPosition(cc.CharacterId);
-            transform.Rotation = physics.GetCharacterRotation(cc.CharacterId);
+            scene.SetTranslation(entity, physics.GetCharacterPosition(cc.CharacterId));
+            scene.SetRotation(entity, physics.GetCharacterRotation(cc.CharacterId));
         }
     }
 
@@ -423,8 +423,8 @@ namespace Lynx
         for (auto entity : view)
         {
             auto& transform = view.get<TransformComponent>(entity);
-            transform.PreviousTranslation = transform.Translation;
-            transform.PreviousRotation = transform.Rotation;
+            transform.PreviousTranslation = transform.GetTranslation();
+            transform.PreviousRotation = transform.GetRotation();
         }
     }
 }
