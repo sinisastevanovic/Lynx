@@ -49,10 +49,15 @@ namespace
         return glm::angleAxis(turns * glm::two_pi<float>(), glm::vec3(0.0f, 1.0f, 0.0f));
     }
 
-    Entity CreateMeshEntity(Scene& scene, const char* name, const std::shared_ptr<StaticMesh>& mesh, const glm::vec3& position, const glm::quat& rotation, const glm::vec3& scale)
+    Entity CreateMeshEntity(Scene& scene, const char* name, const std::shared_ptr<StaticMesh>& mesh, const std::shared_ptr<Material>& material, const glm::vec3& position, const glm::quat& rotation, const glm::vec3& scale)
     {
         Entity entity = scene.CreateEntity(name);
-        entity.AddComponent<MeshComponent>().Mesh = AssetRef<StaticMesh>(mesh);
+        MeshComponent& meshComponent = entity.AddComponent<MeshComponent>();
+        meshComponent.Mesh = AssetRef<StaticMesh>(mesh);
+
+        // Without a material the mesh keeps the ones it came with.
+        if (material)
+            meshComponent.Materials.emplace_back(material);
 
         TransformComponent& transform = entity.GetComponent<TransformComponent>();
         transform.Translation = position;
@@ -65,6 +70,7 @@ namespace
     struct Prop
     {
         std::shared_ptr<StaticMesh> Mesh;
+        std::shared_ptr<Material> Material;
         float Size;
     };
 
@@ -72,12 +78,11 @@ namespace
     {
         const uint32_t shape = Hash(index * 16u + 0u) % shapes.ShapeCount();
         const uint32_t material = Hash(index * 16u + 1u) % shapes.MaterialCount();
-        return { shapes.Mesh(shape, material), Random(index, 2, 0.6f, 1.4f) };
+        return { shapes.Mesh(shape), shapes.MaterialAt(material), Random(index, 2, 0.6f, 1.4f) };
     }
 }
 
 ShapeLibrary::ShapeLibrary(AssetManager& assetManager, uint32_t materialCount)
-    : m_MaterialCount(materialCount)
 {
     const ShapeGeometry geometries[] = {
         MakeBox(),
@@ -85,7 +90,6 @@ ShapeLibrary::ShapeLibrary(AssetManager& assetManager, uint32_t materialCount)
         MakeCylinder(24),
         MakeTorus(24, 12),
     };
-    m_ShapeCount = static_cast<uint32_t>(std::size(geometries));
 
     // The materials share a few textures, as the materials of a real scene do.
     // Loaded here and now, so that they are on the GPU before the first frame is drawn.
@@ -108,34 +112,38 @@ ShapeLibrary::ShapeLibrary(AssetManager& assetManager, uint32_t materialCount)
             LX_ERROR("RenderBench: cannot load {0}", path);
     }
 
-    // The renderer draws meshes in the order of their handles, so these are fixed.
-    const uint64_t firstHandle = 7300000000000000000ull;
+    // The renderer draws in the order of the handles of meshes and materials, so these are fixed.
+    const uint64_t firstMeshHandle = 7300000000000000000ull;
+    const uint64_t firstMaterialHandle = 7400000000000000000ull;
 
-    m_Meshes.reserve(static_cast<size_t>(m_ShapeCount) * materialCount);
-    for (uint32_t shape = 0; shape < m_ShapeCount; ++shape)
+    for (const ShapeGeometry& geometry : geometries)
     {
-        for (uint32_t materialIndex = 0; materialIndex < materialCount; ++materialIndex)
-        {
-            auto mesh = std::make_shared<StaticMesh>(geometries[shape].Vertices, geometries[shape].Indices);
-            assetManager.AddRuntimeAsset(mesh, AssetHandle(firstHandle + m_Meshes.size()));
-
-            // A mesh made in code comes with a material of its own that shows the checker texture.
-            // One material in every nine keeps it.
-            Material& material = *mesh->GetSubmeshes()[0].Material;
-            const float hue = static_cast<float>(materialIndex) / static_cast<float>(materialCount);
-            material.AlbedoColor = glm::vec4(glm::mix(glm::vec3(1.0f), ColourOfHue(hue), 0.5f), 1.0f);
-            material.Roughness = Random(materialIndex, 0, 0.25f, 0.85f);
-            material.Metallic = materialIndex % 5 == 0 ? 1.0f : 0.0f;
-
-            const size_t textureChoice = materialIndex % (textures.size() + 1);
-            if (textureChoice < textures.size())
-                material.AlbedoTexture = textures[textureChoice];
-
-            m_Meshes.push_back(std::move(mesh));
-        }
+        auto mesh = std::make_shared<StaticMesh>(geometry.Vertices, geometry.Indices);
+        assetManager.AddRuntimeAsset(mesh, AssetHandle(firstMeshHandle + m_Meshes.size()));
+        m_Meshes.push_back(std::move(mesh));
     }
 
-    LX_INFO("Created {0} meshes: {1} shapes in {2} materials.", m_Meshes.size(), m_ShapeCount, materialCount);
+    // One material in every nine shows the checker texture instead of one of Sponza's.
+    const std::shared_ptr<Texture> checker = assetManager.GetDefaultTexture();
+    for (uint32_t materialIndex = 0; materialIndex < materialCount; ++materialIndex)
+    {
+        auto material = std::make_shared<Material>();
+        const float hue = static_cast<float>(materialIndex) / static_cast<float>(materialCount);
+        material->AlbedoColor = glm::vec4(glm::mix(glm::vec3(1.0f), ColourOfHue(hue), 0.5f), 1.0f);
+        material->Roughness = Random(materialIndex, 0, 0.25f, 0.85f);
+        material->Metallic = materialIndex % 5 == 0 ? 1.0f : 0.0f;
+
+        const size_t textureChoice = materialIndex % (textures.size() + 1);
+        if (textureChoice < textures.size())
+            material->AlbedoTexture = textures[textureChoice];
+        else if (checker)
+            material->AlbedoTexture = checker->GetHandle();
+
+        assetManager.AddRuntimeAsset(material, AssetHandle(firstMaterialHandle + materialIndex));
+        m_Materials.push_back(std::move(material));
+    }
+
+    LX_INFO("Created {0} shapes and {1} materials.", m_Meshes.size(), m_Materials.size());
 }
 
 void CreateInstanceGrid(Scene& scene, AssetManager& assetManager, uint32_t count)
@@ -204,7 +212,7 @@ Entity Crowd::Place(Scene& scene, uint32_t cell, uint32_t propNumber, glm::vec3&
         GroundHeight + 0.5f * prop.Size,
         origin + spacing * static_cast<float>(cell / m_Side) + Random(propNumber, 4, -0.6f, 0.6f));
 
-    return CreateMeshEntity(scene, "Instance", prop.Mesh, position, TurnedAroundUp(Random(propNumber, 5)), glm::vec3(prop.Size));
+    return CreateMeshEntity(scene, "Instance", prop.Mesh, prop.Material, position, TurnedAroundUp(Random(propNumber, 5)), glm::vec3(prop.Size));
 }
 
 void Crowd::Update(Scene& scene, float deltaTime)
@@ -257,7 +265,7 @@ void CreateBlocks(Scene& scene, const ShapeLibrary& shapes, uint32_t blocksPerSi
 
         const float height = Random(blockIndex, 9, 20.0f, 60.0f);
         const uint32_t material = Hash(blockIndex * 16u + 10u) % shapes.MaterialCount();
-        CreateMeshEntity(scene, "Block", shapes.Mesh(ShapeLibrary::BoxShape, material),
+        CreateMeshEntity(scene, "Block", shapes.Mesh(ShapeLibrary::BoxShape), shapes.MaterialAt(material),
             centre + glm::vec3(0.0f, 0.5f * height, 0.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(blockSize, height, blockSize));
 
         for (uint32_t prop = 0; prop < propsPerBlock; ++prop, ++propIndex)
@@ -273,7 +281,7 @@ void CreateBlocks(Scene& scene, const ShapeLibrary& shapes, uint32_t blocksPerSi
                 : street == 2 ? glm::vec3(away, 0.0f, along)
                 : glm::vec3(-away, 0.0f, along);
 
-            CreateMeshEntity(scene, "Prop", chosen.Mesh, centre + offset + glm::vec3(0.0f, 0.5f * chosen.Size, 0.0f),
+            CreateMeshEntity(scene, "Prop", chosen.Mesh, chosen.Material, centre + offset + glm::vec3(0.0f, 0.5f * chosen.Size, 0.0f),
                 TurnedAroundUp(Random(propIndex, 6)), glm::vec3(chosen.Size));
         }
     }
@@ -323,7 +331,7 @@ void CreateDenseField(Scene& scene, AssetManager& assetManager, uint32_t count)
             GroundHeight,
             origin + spacing * static_cast<float>(index / side) + Random(index, 4, -1.0f, 1.0f));
 
-        CreateMeshEntity(scene, "Model", meshes[kind], position, TurnedAroundUp(Random(index, 5)), glm::vec3(kinds[kind].Scale));
+        CreateMeshEntity(scene, "Model", meshes[kind], nullptr, position, TurnedAroundUp(Random(index, 5)), glm::vec3(kinds[kind].Scale));
     }
 
     LX_INFO("Created a field of {0} detailed models.", count);

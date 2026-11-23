@@ -8,8 +8,8 @@
 // The scenes that are built in code when a benchmark starts. What they hold depends only on the numbers
 // they are given, so every run of a benchmark draws the same scene.
 
-// Every shape of Shapes.h once per material: a few meshes with many materials. A mesh has its material
-// built in today, so each combination is a mesh of its own.
+// The shapes of Shapes.h as meshes, and a number of materials to give them: a few meshes that many
+// entities share, each in a material of its choice.
 class ShapeLibrary
 {
 public:
@@ -17,14 +17,14 @@ public:
 
     ShapeLibrary(AssetManager& assetManager, uint32_t materialCount);
 
-    uint32_t ShapeCount() const { return m_ShapeCount; }
-    uint32_t MaterialCount() const { return m_MaterialCount; }
-    const std::shared_ptr<StaticMesh>& Mesh(uint32_t shape, uint32_t material) const { return m_Meshes[shape * m_MaterialCount + material]; }
+    uint32_t ShapeCount() const { return static_cast<uint32_t>(m_Meshes.size()); }
+    uint32_t MaterialCount() const { return static_cast<uint32_t>(m_Materials.size()); }
+    const std::shared_ptr<StaticMesh>& Mesh(uint32_t shape) const { return m_Meshes[shape]; }
+    const std::shared_ptr<Material>& MaterialAt(uint32_t material) const { return m_Materials[material]; }
 
 private:
-    uint32_t m_ShapeCount = 0;
-    uint32_t m_MaterialCount = 0;
     std::vector<std::shared_ptr<StaticMesh>> m_Meshes;
+    std::vector<std::shared_ptr<Material>> m_Materials;
 };
 
 // A square field of copies of three meshes.
