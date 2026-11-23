@@ -71,13 +71,11 @@ namespace Lynx
         registry.SetComponentInspector("Mesh",
             [](entt::registry& reg, entt::entity entity)
             {
-                // The component is only read here. What the user picks is written through the scene.
-                const MeshComponent& meshComp = reg.get<MeshComponent>(entity);
-                Scene& scene = Scene::Of(reg);
+                MeshComponent& meshComp = reg.get<MeshComponent>(entity);
 
                 AssetHandle meshHandle = meshComp.GetMesh().Handle;
                 if (LXUI::DrawAssetReference("Static Mesh", meshHandle, {AssetType::StaticMesh}))
-                    scene.SetMesh(entity, meshHandle);
+                    meshComp.SetMesh(meshHandle);
 
                 const std::shared_ptr<StaticMesh> mesh = meshComp.GetMesh().Get();
                 if (!mesh)
@@ -92,7 +90,7 @@ namespace Lynx
                     const std::vector<AssetRef<Material>>& materials = meshComp.GetMaterials();
                     AssetHandle given = index < materials.size() ? materials[index].Handle : AssetHandle::Null();
                     if (LXUI::DrawAssetReference("Material " + std::to_string(index), given, {AssetType::Material}))
-                        scene.SetMaterial(entity, index, given);
+                        meshComp.SetMaterial(index, given);
 
                     // Without one, the values of the mesh's own material can be tried out. They belong to
                     // the mesh, so every entity with this mesh changes, and they are not saved.

@@ -71,8 +71,7 @@ namespace Lynx
         
         void SetVisibility(bool visible);
 
-        // Where the entity is, relative to its parent. Position, rotation and scale are written here
-        // or through the scene and nowhere else, see Scene::SetTranslation.
+        // Where the entity is, relative to its parent. Short for the same calls on its TransformComponent.
         void SetTranslation(const glm::vec3& translation);
         void SetRotation(const glm::quat& rotation);
         void SetScale(const glm::vec3& scale);

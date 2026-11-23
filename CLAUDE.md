@@ -58,14 +58,14 @@ build\bin\Debug\LynxSandboxGame.exe
   Lua access come from it. The first argument of `fields.Add` is the key in saved files: never rename it without
   migrating the scenes. Only components with real custom logic keep hand-written save and load code.
 - **Change notification.** Nothing scans the scene for changes. Position, rotation and scale of an entity, its
-  mesh and its materials are read from the component and written through the scene: `Scene::SetTranslation`,
-  `SetRotation`, `SetScale`, `SetLocalTransform`, `SetMesh`, `SetMaterial`, or the same on `Entity`. The members
-  are private, so a write that tells nobody does not compile. The scene keeps a list of written transforms and
-  works out world matrices for those only (`UpdateGlobalTransforms`). The renderer listens for EnTT's
-  `on_update<MeshComponent>`. Code that sets a field through the field system (loading, the generic inspector, Lua)
-  calls `ComponentInfo::notifyChanged` afterwards, which is `registry.patch<T>(entity)`. `Scene::Of(registry)`
-  gives the scene to code that only has a registry. A component with private members describes its own fields
-  in a static `DescribeFields`.
+  mesh and its materials are private and written through setters on the component: `transform.SetTranslation(v)`,
+  `SetRotation`, `SetScale`, `SetTransform`, `mesh.SetMesh(handle)`, `mesh.SetMaterial(index, handle)`.
+  `entity.SetTranslation(v)` is short for the first. A write that tells nobody does not compile. The two components
+  know the scene and the entity they belong to, which the scene sets when they are added. The scene keeps a list
+  of written transforms and works out world matrices for those only (`UpdateGlobalTransforms`). The renderer
+  listens for EnTT's `on_update<MeshComponent>`. Code that sets a field through the field system (loading, the
+  generic inspector, Lua) calls `ComponentInfo::notifyChanged` afterwards, which is `registry.patch<T>(entity)`.
+  A component with private members describes its own fields in a static `DescribeFields`.
 - **Inspectors.** Component UI code belongs in the editor (`editor/src/Inspectors`), not in the engine.
 - **Play.** The engine starts in Edit state. `StartPlay` and `StopPlay` are the only way in and out. A copy of the
   scene is played, never the loaded asset itself.

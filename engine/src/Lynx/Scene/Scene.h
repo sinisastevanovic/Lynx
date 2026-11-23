@@ -160,28 +160,13 @@ namespace Lynx
         // and of its children. Entities that were not written to are not looked at.
         void UpdateGlobalTransforms();
 
-    public:
-        // The scene a registry belongs to, for code that is handed only the registry.
-        static Scene& Of(entt::registry& registry);
-
-        // The only ways to change where an entity is and what it is drawn with. The components hand
-        // their values out for reading only, so that no change can go unnoticed: the scene puts the
-        // entity on a list here, and whoever depends on the value is told.
-        // Position, rotation and scale are relative to the entity's parent.
-        void SetTranslation(entt::entity entity, const glm::vec3& translation);
-        void SetRotation(entt::entity entity, const glm::quat& rotation);
-        void SetScale(entt::entity entity, const glm::vec3& scale);
-        void SetLocalTransform(entt::entity entity, const glm::vec3& translation, const glm::quat& rotation, const glm::vec3& scale);
-
-        void SetMesh(entt::entity entity, AssetHandle mesh);
-
-        // The material that takes the place of the mesh's own for one submesh. A null handle gives
-        // the submesh its own material back.
-        void SetMaterial(entt::entity entity, size_t submeshIndex, AssetHandle material);
-
     private:
+        friend class TransformComponent;
+        friend class MeshComponent;
+
         void MarkTransformChanged(entt::entity entity, TransformComponent& transform);
         void OnTransformWritten(entt::registry& registry, entt::entity entity);
+        void OnMeshWritten(entt::registry& registry, entt::entity entity);
         void UpdateWorldMatrices(entt::entity entity, TransformComponent& transform, const glm::mat4* parentWorld);
         bool SetWorldMatrix(entt::entity entity, TransformComponent& transform, const glm::mat4& worldMatrix);
         void SetLocalFromMatrix(entt::entity entity, const glm::mat4& matrix);

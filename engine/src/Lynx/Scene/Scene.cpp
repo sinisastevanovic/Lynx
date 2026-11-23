@@ -77,9 +77,14 @@ namespace Lynx
         m_Registry.on_destroy<LuaScriptComponent>().connect<&OnLuaScriptComponentDestroyed>();
 
         // A transform that is new, or was written to as a whole: by loading, by a script through its
-        // fields, by the inspector. The setters below put the entity on the list themselves.
+        // fields, by the inspector. It is told whom it belongs to and put on the list of changed ones.
+        // Its own setters put it on the list themselves.
         m_Registry.on_construct<TransformComponent>().connect<&Scene::OnTransformWritten>(this);
         m_Registry.on_update<TransformComponent>().connect<&Scene::OnTransformWritten>(this);
+
+        // A mesh component is told whom it belongs to as well, so that its setters can announce a change.
+        m_Registry.on_construct<MeshComponent>().connect<&Scene::OnMeshWritten>(this);
+        m_Registry.on_update<MeshComponent>().connect<&Scene::OnMeshWritten>(this);
         
     }
 
@@ -718,54 +723,6 @@ namespace Lynx
         return nullptr;
     }
 
-    Scene& Scene::Of(entt::registry& registry)
-    {
-        return *registry.ctx().get<Scene*>();
-    }
-
-    void Scene::SetTranslation(entt::entity entity, const glm::vec3& translation)
-    {
-        // Writing the value it has already is not a change: a body at rest is set to where it is in every physics step.
-        TransformComponent& transform = m_Registry.get<TransformComponent>(entity);
-        if (transform.m_Translation == translation)
-            return;
-
-        transform.m_Translation = translation;
-        MarkTransformChanged(entity, transform);
-    }
-
-    void Scene::SetRotation(entt::entity entity, const glm::quat& rotation)
-    {
-        TransformComponent& transform = m_Registry.get<TransformComponent>(entity);
-        if (transform.m_Rotation == rotation)
-            return;
-
-        transform.m_Rotation = rotation;
-        MarkTransformChanged(entity, transform);
-    }
-
-    void Scene::SetScale(entt::entity entity, const glm::vec3& scale)
-    {
-        TransformComponent& transform = m_Registry.get<TransformComponent>(entity);
-        if (transform.m_Scale == scale)
-            return;
-
-        transform.m_Scale = scale;
-        MarkTransformChanged(entity, transform);
-    }
-
-    void Scene::SetLocalTransform(entt::entity entity, const glm::vec3& translation, const glm::quat& rotation, const glm::vec3& scale)
-    {
-        TransformComponent& transform = m_Registry.get<TransformComponent>(entity);
-        if (transform.m_Translation == translation && transform.m_Rotation == rotation && transform.m_Scale == scale)
-            return;
-
-        transform.m_Translation = translation;
-        transform.m_Rotation = rotation;
-        transform.m_Scale = scale;
-        MarkTransformChanged(entity, transform);
-    }
-
     void Scene::SetLocalFromMatrix(entt::entity entity, const glm::mat4& matrix)
     {
         glm::vec3 scale;
@@ -774,23 +731,18 @@ namespace Lynx
         glm::vec3 skew;
         glm::vec4 perspective;
         glm::decompose(matrix, scale, rotation, translation, skew, perspective);
-        SetLocalTransform(entity, translation, rotation, scale);
+        m_Registry.get<TransformComponent>(entity).SetTransform(translation, rotation, scale);
     }
 
-    void Scene::SetMesh(entt::entity entity, AssetHandle mesh)
+    void TransformComponent::NotifyScene()
     {
-        // The renderer listens for the update that patch announces.
-        m_Registry.patch<MeshComponent>(entity, [mesh](MeshComponent& component) { component.m_Mesh = AssetRef<StaticMesh>(mesh); });
+        m_Scene->MarkTransformChanged(m_Entity, *this);
     }
 
-    void Scene::SetMaterial(entt::entity entity, size_t submeshIndex, AssetHandle material)
+    void MeshComponent::NotifyScene()
     {
-        m_Registry.patch<MeshComponent>(entity, [&](MeshComponent& component)
-        {
-            if (component.m_Materials.size() <= submeshIndex)
-                component.m_Materials.resize(submeshIndex + 1);
-            component.m_Materials[submeshIndex] = AssetRef<Material>(material);
-        });
+        if (m_Scene)
+            m_Scene->m_Registry.patch<MeshComponent>(m_Entity);
     }
 
     void Scene::MarkTransformChanged(entt::entity entity, TransformComponent& transform)
@@ -804,10 +756,20 @@ namespace Lynx
 
     void Scene::OnTransformWritten(entt::registry& registry, entt::entity entity)
     {
-        // Put on the list whatever the mark says: a transform copied from another scene brings that
-        // scene's mark along, and is on no list here.
-        registry.get<TransformComponent>(entity).m_IsChanged = true;
+        // Put on the list whatever the mark says: a transform that was replaced as a whole may have
+        // lost it, or have it without being on the list.
+        TransformComponent& transform = registry.get<TransformComponent>(entity);
+        transform.m_Scene = this;
+        transform.m_Entity = entity;
+        transform.m_IsChanged = true;
         m_ChangedTransforms.push_back(entity);
+    }
+
+    void Scene::OnMeshWritten(entt::registry& registry, entt::entity entity)
+    {
+        MeshComponent& mesh = registry.get<MeshComponent>(entity);
+        mesh.m_Scene = this;
+        mesh.m_Entity = entity;
     }
 
     void Scene::UpdateGlobalTransforms()

@@ -312,8 +312,8 @@ namespace Lynx
             cc.GroundNormal = physics.GetCharacterGroundNormal(cc.CharacterId);
             cc.GroundVelocity = physics.GetCharacterGroundVelocity(cc.CharacterId);
             
-            scene.SetTranslation(entity, physics.GetCharacterPosition(cc.CharacterId));
-            scene.SetRotation(entity, physics.GetCharacterRotation(cc.CharacterId));
+            transform.SetTranslation(physics.GetCharacterPosition(cc.CharacterId));
+            transform.SetRotation(physics.GetCharacterRotation(cc.CharacterId));
         }
     }
 
@@ -357,8 +357,8 @@ namespace Lynx
             
             if (rb.Type == BodyType::Dynamic)
             {
-                scene.SetTranslation(entity, physics.GetPosition(rb.BodyId));
-                scene.SetRotation(entity, physics.GetRotation(rb.BodyId));
+                transform.SetTranslation(physics.GetPosition(rb.BodyId));
+                transform.SetRotation(physics.GetRotation(rb.BodyId));
             }
         }
         
@@ -370,8 +370,8 @@ namespace Lynx
             
             // Note: Previous transform is saved in SavePhysicsState before the update
             
-            scene.SetTranslation(entity, physics.GetCharacterPosition(cc.CharacterId));
-            scene.SetRotation(entity, physics.GetCharacterRotation(cc.CharacterId));
+            transform.SetTranslation(physics.GetCharacterPosition(cc.CharacterId));
+            transform.SetRotation(physics.GetCharacterRotation(cc.CharacterId));
         }
     }
 

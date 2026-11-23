@@ -48,20 +48,88 @@ namespace Lynx
 
     // Where an entity is, relative to its parent: position, rotation and scale.
     //
-    // They are read here and written through the scene: Scene::SetTranslation and its siblings, or the
-    // same calls on Entity. A write has to reach the scene, because the scene then works out where the
-    // entity and its children are in the world and tells the renderer. In return nothing ever looks at
-    // an entity that was not written to: a scene of 100,000 entities of which 50 move costs 50.
+    // The values are private and written through the setters, because a write has to reach the scene:
+    // the scene then works out where the entity and its children are in the world and tells the
+    // renderer. In return nothing ever looks at an entity that was not written to: a scene of 100,000
+    // entities of which 50 move costs 50. The transform knows the scene and the entity it belongs to,
+    // which the scene tells it when it is put in.
     class TransformComponent
     {
     public:
         TransformComponent() = default;
-        TransformComponent(const TransformComponent&) = default;
         TransformComponent(const glm::vec3& translation) : m_Translation(translation) {}
+
+        // A copy takes the values and not the place in a scene. Whom a transform belongs to is set by
+        // the scene it is put into.
+        TransformComponent(const TransformComponent& other)
+            : PreviousTranslation(other.PreviousTranslation), PreviousRotation(other.PreviousRotation),
+              m_Translation(other.m_Translation), m_Rotation(other.m_Rotation), m_Scale(other.m_Scale), m_WorldMatrix(other.m_WorldMatrix)
+        {
+        }
+
+        TransformComponent& operator=(const TransformComponent& other)
+        {
+            PreviousTranslation = other.PreviousTranslation;
+            PreviousRotation = other.PreviousRotation;
+            m_Translation = other.m_Translation;
+            m_Rotation = other.m_Rotation;
+            m_Scale = other.m_Scale;
+            MarkChanged();
+            return *this;
+        }
+
+        // The registry moves components around in its storage. A moved transform is still the same one.
+        TransformComponent(TransformComponent&&) = default;
+        TransformComponent& operator=(TransformComponent&&) = default;
 
         const glm::vec3& GetTranslation() const { return m_Translation; }
         const glm::quat& GetRotation() const { return m_Rotation; }
         const glm::vec3& GetScale() const { return m_Scale; }
+
+        // Setting the value it has already is not a change: a body at rest is set to where it is in
+        // every physics step, and that costs a comparison.
+        void SetTranslation(const glm::vec3& translation)
+        {
+            if (m_Translation == translation)
+                return;
+
+            m_Translation = translation;
+            MarkChanged();
+        }
+
+        void SetRotation(const glm::quat& rotation)
+        {
+            if (m_Rotation == rotation)
+                return;
+
+            m_Rotation = rotation;
+            MarkChanged();
+        }
+
+        void SetRotationEuler(const glm::vec3& radians)
+        {
+            SetRotation(glm::quat(radians));
+        }
+
+        void SetScale(const glm::vec3& scale)
+        {
+            if (m_Scale == scale)
+                return;
+
+            m_Scale = scale;
+            MarkChanged();
+        }
+
+        void SetTransform(const glm::vec3& translation, const glm::quat& rotation, const glm::vec3& scale)
+        {
+            if (m_Translation == translation && m_Rotation == rotation && m_Scale == scale)
+                return;
+
+            m_Translation = translation;
+            m_Rotation = rotation;
+            m_Scale = scale;
+            MarkChanged();
+        }
 
         // Where the entity is in the world, through every parent, as of the scene's last update of
         // transforms. A write to this entity or to a parent shows here after the next one.
@@ -166,6 +234,19 @@ namespace Lynx
     private:
         friend class Scene;
 
+        // A transform that is in no scene yet has nobody to tell. It is put on the list when it joins one.
+        void MarkChanged()
+        {
+            if (!m_IsChanged && m_Scene)
+                NotifyScene();
+        }
+
+        LX_API void NotifyScene();
+
+        // The scene the transform is in and the entity it belongs to, set by that scene.
+        Scene* m_Scene = nullptr;
+        entt::entity m_Entity = entt::null;
+
         glm::vec3 m_Translation = { 0.0f, 0.0f, 0.0f };
         glm::quat m_Rotation = { 1.0f, 0.0f, 0.0f, 0.0f };
         glm::vec3 m_Scale = { 1.0f, 1.0f, 1.0f };
@@ -220,15 +301,45 @@ namespace Lynx
         std::map<std::string, std::string> SerializedByName;
     };
 
-    // The mesh an entity is drawn with. Read here and written through the scene (Scene::SetMesh,
-    // Scene::SetMaterial), so that the renderer hears of a change instead of looking for one.
+    // The mesh an entity is drawn with. The values are private and written through the setters, so
+    // that the renderer hears of a change instead of looking for one. Like a transform, it knows the
+    // scene and the entity it belongs to.
     class MeshComponent
     {
     public:
         MeshComponent() = default;
-        MeshComponent(const MeshComponent&) = default;
+
+        // A copy takes the values and not the place in a scene, see TransformComponent.
+        MeshComponent(const MeshComponent& other) : m_Mesh(other.m_Mesh), m_Materials(other.m_Materials) {}
+
+        MeshComponent& operator=(const MeshComponent& other)
+        {
+            m_Mesh = other.m_Mesh;
+            m_Materials = other.m_Materials;
+            NotifyScene();
+            return *this;
+        }
+
+        MeshComponent(MeshComponent&&) = default;
+        MeshComponent& operator=(MeshComponent&&) = default;
 
         const AssetRef<StaticMesh>& GetMesh() const { return m_Mesh; }
+
+        void SetMesh(AssetHandle mesh)
+        {
+            m_Mesh = AssetRef<StaticMesh>(mesh);
+            NotifyScene();
+        }
+
+        // The material that takes the place of the mesh's own for one submesh. A null handle gives the
+        // submesh its own material back.
+        void SetMaterial(size_t submeshIndex, AssetHandle material)
+        {
+            if (m_Materials.size() <= submeshIndex)
+                m_Materials.resize(submeshIndex + 1);
+            m_Materials[submeshIndex] = AssetRef<Material>(material);
+            NotifyScene();
+        }
 
         // Materials that take the place of the mesh's own: one per submesh, in the mesh's order.
         // An empty reference keeps the material the mesh came with, and so does a submesh past the end
@@ -240,6 +351,13 @@ namespace Lynx
 
     private:
         friend class Scene;
+
+        // Announces the change the way the registry does for a patched component, which is what the
+        // renderer listens for. Does nothing for a component that is in no scene yet.
+        LX_API void NotifyScene();
+
+        Scene* m_Scene = nullptr;
+        entt::entity m_Entity = entt::null;
 
         AssetRef<StaticMesh> m_Mesh;
         std::vector<AssetRef<Material>> m_Materials;

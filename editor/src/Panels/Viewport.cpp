@@ -209,7 +209,7 @@ namespace Lynx
                 float matrixTranslation[3], matrixRotation[3], matrixScale[3];
                 ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(localMatrix), matrixTranslation, matrixRotation, matrixScale);
 
-                scene->SetLocalTransform(m_Selection,
+                tc.SetTransform(
                     glm::vec3(matrixTranslation[0], matrixTranslation[1], matrixTranslation[2]),
                     glm::quat(glm::radians(glm::vec3(matrixRotation[0], matrixRotation[1], matrixRotation[2]))),
                     glm::vec3(matrixScale[0], matrixScale[1], matrixScale[2]));
@@ -255,8 +255,7 @@ namespace Lynx
 
                 Scene* currScene = Engine::Get().GetActiveScene().get();
                 auto newEntity = currScene->CreateEntity();
-                newEntity.AddComponent<MeshComponent>();
-                currScene->SetMesh(newEntity, AssetHandle(data));
+                newEntity.AddComponent<MeshComponent>().SetMesh(AssetHandle(data));
             }
             ImGui::EndDragDropTarget();
         }

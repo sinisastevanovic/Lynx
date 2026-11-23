@@ -52,14 +52,14 @@ namespace
     Entity CreateMeshEntity(Scene& scene, const char* name, const std::shared_ptr<StaticMesh>& mesh, const std::shared_ptr<Material>& material, const glm::vec3& position, const glm::quat& rotation, const glm::vec3& scale)
     {
         Entity entity = scene.CreateEntity(name);
-        entity.AddComponent<MeshComponent>();
-        scene.SetMesh(entity, mesh->GetHandle());
+        MeshComponent& meshComponent = entity.AddComponent<MeshComponent>();
+        meshComponent.SetMesh(mesh->GetHandle());
 
         // Without a material the mesh keeps the ones it came with.
         if (material)
-            scene.SetMaterial(entity, 0, material->GetHandle());
+            meshComponent.SetMaterial(0, material->GetHandle());
 
-        scene.SetLocalTransform(entity, position, rotation, scale);
+        entity.GetComponent<TransformComponent>().SetTransform(position, rotation, scale);
         return entity;
     }
 
@@ -169,10 +169,9 @@ void CreateInstanceGrid(Scene& scene, AssetManager& assetManager, uint32_t count
         const Kind& kind = kinds[(column + row * 2) % std::size(kinds)];
 
         Entity entity = scene.CreateEntity("Instance");
-        entity.AddComponent<MeshComponent>();
-        scene.SetMesh(entity, kind.Mesh->GetHandle());
+        entity.AddComponent<MeshComponent>().SetMesh(kind.Mesh->GetHandle());
 
-        scene.SetLocalTransform(entity,
+        entity.GetComponent<TransformComponent>().SetTransform(
             { origin + spacing * static_cast<float>(column), kind.Height, origin + spacing * static_cast<float>(row) },
             glm::angleAxis(glm::radians(static_cast<float>((index * 37) % 360)), glm::vec3(0.0f, 1.0f, 0.0f)),
             glm::vec3(kind.Scale));
@@ -223,7 +222,7 @@ void Crowd::Update(Scene& scene, float deltaTime)
     {
         const float angle = mover.Phase + mover.Speed * m_Time;
         const glm::vec3 offset(std::cos(angle) * mover.Radius, 0.5f + 0.5f * std::sin(2.0f * angle), std::sin(angle) * mover.Radius);
-        scene.SetTranslation(mover.Handle, mover.Home + offset);
+        registry.get<TransformComponent>(mover.Handle).SetTranslation(mover.Home + offset);
     }
 
     // Time stands still while a benchmark warms up. Nothing is replaced then, so that the frames that

@@ -57,17 +57,17 @@ namespace Lynx
 
     void Entity::SetTranslation(const glm::vec3& translation)
     {
-        m_Scene->SetTranslation(m_Handle, translation);
+        GetComponent<TransformComponent>().SetTranslation(translation);
     }
 
     void Entity::SetRotation(const glm::quat& rotation)
     {
-        m_Scene->SetRotation(m_Handle, rotation);
+        GetComponent<TransformComponent>().SetRotation(rotation);
     }
 
     void Entity::SetScale(const glm::vec3& scale)
     {
-        m_Scene->SetScale(m_Handle, scale);
+        GetComponent<TransformComponent>().SetScale(scale);
     }
 
     UUID Entity::GetUUID() const

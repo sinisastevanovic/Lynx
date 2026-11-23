@@ -25,18 +25,17 @@ namespace Lynx
             lua["AssetHandle"] = lua["UUID"];
         }
 
-        // What a script holds as an entity's transform: the entity, because a write has to go through its scene.
-        struct TransformHandle
-        {
-            Entity Owner;
-        };
-
         void RegisterCoreTypes(sol::state& lua)
         {
             lua.new_usertype<Entity>("Entity",
                 sol::constructors<Entity(entt::entity, Scene*)>(),
                 "GetID", &Entity::GetUUID,
-                "Transform", sol::property([](Entity& entity) { return TransformHandle{ entity }; }),
+                "Transform", sol::property(
+                    [](Entity& entity) -> TransformComponent&
+                    {
+                        return entity.GetComponent<TransformComponent>();
+                    }
+                ),
                 "MeshComponent", sol::property(
                     [](Entity& entity) -> MeshComponent*
                     {
@@ -49,22 +48,22 @@ namespace Lynx
 
             // A script reads a value, changes it and assigns it back: "local p = t.Translation ... t.Translation = p".
             // Changing a part of what it read, as in "t.Translation.x = 1", changes the script's copy only.
-            lua.new_usertype<TransformHandle>("Transform",
+            lua.new_usertype<TransformComponent>("Transform",
                 "Translation", sol::property(
-                    [](const TransformHandle& t) { return t.Owner.GetComponent<TransformComponent>().GetTranslation(); },
-                    [](TransformHandle& t, const glm::vec3& translation) { t.Owner.SetTranslation(translation); }
+                    [](const TransformComponent& t) { return t.GetTranslation(); },
+                    [](TransformComponent& t, const glm::vec3& translation) { t.SetTranslation(translation); }
                 ),
                 "Scale", sol::property(
-                    [](const TransformHandle& t) { return t.Owner.GetComponent<TransformComponent>().GetScale(); },
-                    [](TransformHandle& t, const glm::vec3& scale) { t.Owner.SetScale(scale); }
+                    [](const TransformComponent& t) { return t.GetScale(); },
+                    [](TransformComponent& t, const glm::vec3& scale) { t.SetScale(scale); }
                 ),
                 "Rotation", sol::property(
-                    [](const TransformHandle& t) { return t.Owner.GetComponent<TransformComponent>().GetRotationDegrees(); },
-                    [](TransformHandle& t, const glm::vec3& degrees) { t.Owner.SetRotation(glm::quat(glm::radians(degrees))); }
+                    [](const TransformComponent& t) { return t.GetRotationDegrees(); },
+                    [](TransformComponent& t, const glm::vec3& degrees) { t.SetRotationEuler(glm::radians(degrees)); }
                 ),
                 "RotationQuat", sol::property(
-                    [](const TransformHandle& t) { return t.Owner.GetComponent<TransformComponent>().GetRotation(); },
-                    [](TransformHandle& t, const glm::quat& rotation) { t.Owner.SetRotation(rotation); }
+                    [](const TransformComponent& t) { return t.GetRotation(); },
+                    [](TransformComponent& t, const glm::quat& rotation) { t.SetRotation(rotation); }
                 )
             );
 
