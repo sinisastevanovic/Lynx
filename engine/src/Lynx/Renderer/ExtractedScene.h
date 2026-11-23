@@ -11,7 +11,6 @@
 namespace Lynx
 {
     class Material;
-    class StaticMesh;
     class UICanvas;
 
     // The particles of every emitter that uses one material.

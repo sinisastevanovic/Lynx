@@ -9,7 +9,7 @@ structure is heading, and "Toward the target design" the order of the steps.
 
 Renderer work follows its own plan, Renderer V2: https://claude.ai/artifact/SShPW5mVGsxRJYgqVdASKj
 It is the main line of work. Read its "Decisions" and "Status" sections before touching the renderer, and tick off
-the steps under "Stage 2 in detail" as they land. Stage 1 is complete. The non-renderer steps of the review are paused meanwhile.
+the steps of the stage in work as they land. Stages 1 and 2 are complete. The non-renderer steps of the review are paused meanwhile.
 
 ## Repositories
 
@@ -121,7 +121,7 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Y axis.** The engine's matrices have +Y up, as GLM makes them. Vulkan has +Y down. Shaders get matrices that
   are turned around for that (`RenderData::ClipViewProjection`), and nothing else in a shader turns Y around.
 - **Depth.** The scene's depth is reversed: 1 at the near plane, towards 0 at infinity, compared with "greater"
-  and cleared to 0. The GPU has no far plane, the camera's own is only used for culling on the CPU. The shadow map
+  and cleared to 0. Drawing has no far plane, the camera's own is only used for culling. The shadow map
   keeps the usual depth (0 near, "less").
 - **Texture colours.** Every RGBA8 texture is in the texture table twice. `Texture::GetColorTableIndex` reads it as
   sRGB and gives a shader linear light: use it for colours that are lit (albedo, emissive, particles).

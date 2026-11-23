@@ -632,10 +632,6 @@ namespace Lynx
 
         glm::mat4 lightProj = glm::ortho(-orthoSize, orthoSize, -orthoSize, orthoSize, zNear, zFar);
 
-        // Flip Y for Vulkan (Y is down in clip space)
-        // Handled in Shader Bias Matrix now
-        // lightProj[1][1] *= -1.0f;
-
         glm::mat4 lightViewProj = lightProj * lightView;
 
         // Shadow Map Stabilization

@@ -29,7 +29,7 @@ namespace Lynx
 
         Engine::Get().GetAssetManager().AddRuntimeAsset(submeshMaterial);
 
-        // The renderer culls with the bounds.
+        // The box around the whole mesh. The renderer culls with a sphere per submesh instead.
         for (const Vertex& vertex : vertices)
             m_Bounds.Expand(vertex.Position);
 
@@ -391,8 +391,6 @@ namespace Lynx
                 }
             }
 
-            // TODO: we should probably create a new material with the asset system here later.
-            //auto submeshMaterial = std::make_shared<Material>();
             if (primitive.material >= 0)
             {
                 const tinygltf::Material& gltfMaterial = model.materials[primitive.material];
