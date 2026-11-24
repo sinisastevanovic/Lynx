@@ -15,3 +15,9 @@ Roadmap.md
 
 # Engine scratch space of the projects in samples/
 temp/
+
+# Models that tools/fetch-polyhaven.ps1 downloads and prepares. Too large to keep here.
+samples/RenderBench/assets/Models/fir_sapling_medium/
+samples/RenderBench/assets/Models/fir_tree_01/
+samples/RenderBench/assets/Models/pine_tree_01/
+samples/RenderBench/assets/Models/grass_medium_01/
