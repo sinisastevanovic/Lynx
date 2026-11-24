@@ -43,6 +43,10 @@ namespace Lynx
         vk::PrimitiveTopology Topology = vk::PrimitiveTopology::eTriangleList;
         vk::CullModeFlags CullMode = vk::CullModeFlagBits::eNone;
 
+        // True leaves the cull mode to be set while drawing, with setCullMode, and CullMode unused.
+        // One pipeline then draws surfaces that are seen from one side and surfaces seen from both.
+        bool DynamicCullMode = false;
+
         // Which winding is the front. Only matters with a cull mode. The engine's meshes are counter-clockwise.
         vk::FrontFace FrontFace = vk::FrontFace::eCounterClockwise;
 

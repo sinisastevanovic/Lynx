@@ -34,3 +34,8 @@ materials to cut-out, which the downloads mark as blended.
 Changed here: the glTF downloads mark leaves and sails as cut-out but come without the alpha map,
 which Poly Haven offers as a separate texture. For `potted_plant_01` (leaves), `shrub_01` and
 `dutch_ship_large_01` (sails) that map is stored in the alpha of the colour texture, which is a PNG instead of a JPEG for it.
+
+Changed here as well, on 24 November 2026: Poly Haven marks every material two-sided, which is what Blender
+exports unless told otherwise. Rock, bark, hull, rigging and pot are closed surfaces, and drawing their far side
+made Dense 21 % slower. They are one-sided here, in `coast_rocks_05`, `root_cluster_01`, `dutch_ship_large_01`
+and `potted_plant_01`, and for the fetched trees the script does the same. Materials with cut-outs stay two-sided.

@@ -53,6 +53,7 @@ namespace Lynx
             float EmissiveStrength = 1.0f;
             AlphaMode Mode = AlphaMode::Opaque;
             float AlphaCutoff = 0.5f;
+            bool TwoSided = false;
 
             std::string AlbedoPath;
             std::string NormalPath;

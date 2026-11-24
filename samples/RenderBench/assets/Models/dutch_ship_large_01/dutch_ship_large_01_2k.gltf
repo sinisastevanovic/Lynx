@@ -30,7 +30,7 @@
   ],
   "materials": [
     {
-      "doubleSided": true,
+      "doubleSided": false,
       "name": "dutch_ship_large_01_hull",
       "normalTexture": {
         "index": 0
@@ -45,7 +45,7 @@
       }
     },
     {
-      "doubleSided": true,
+      "doubleSided": false,
       "name": "dutch_ship_large_01_rigging",
       "normalTexture": {
         "index": 3

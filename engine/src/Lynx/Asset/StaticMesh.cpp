@@ -136,6 +136,7 @@ namespace Lynx
             material->EmissiveStrength = source.MaterialData.EmissiveStrength;
             material->Mode = source.MaterialData.Mode;
             material->AlphaCutoff = source.MaterialData.AlphaCutoff;
+            material->TwoSided = source.MaterialData.TwoSided;
 
             auto& am = Engine::Get().GetAssetManager();
             if (!source.MaterialData.AlbedoPath.empty())
@@ -466,6 +467,8 @@ namespace Lynx
                 {
                     sourceData.MaterialData.Mode = AlphaMode::Opaque;
                 }
+
+                sourceData.MaterialData.TwoSided = gltfMaterial.doubleSided;
             }
             sourceData.Name = mesh.name;
             submeshes.push_back(sourceData);

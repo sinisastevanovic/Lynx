@@ -132,7 +132,9 @@ float3 fresnelSchlick(float cosTheta, float3 f0)
     return f0 + (1.0 - f0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
-public float4 standardFragment(StandardConstants constants, StandardVaryings input)
+// isFrontFace is false for a pixel of a triangle that is seen from behind, which only a two-sided
+// material lets through.
+public float4 standardFragment(StandardConstants constants, StandardVaryings input, bool isFrontFace)
 {
     StandardMaterial material = constants.materials[input.material];
 
@@ -153,6 +155,10 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
         float3 mapped = sampleMaterialTexture(material.normalTexture, material.materialSampler, input.uv).rgb * 2.0 - 1.0;
         normal = normalize(tangent * mapped.x + bitangent * mapped.y + normal * mapped.z);
     }
+
+    // A surface seen from behind is lit as what it is from there: one that faces the other way.
+    if (!isFrontFace)
+        normal = -normal;
 
     float3 toEye = normalize(scene.cameraPosition.xyz - input.worldPosition);
     float3 toLight = normalize(-scene.lightDirection.xyz);

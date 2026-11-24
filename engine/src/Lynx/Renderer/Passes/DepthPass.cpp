@@ -79,7 +79,7 @@ namespace Lynx
             { MeshVertexLayout::TexCoordFormat, offsetof(PackedVertex, TexCoord) },
         };
         desc.VertexStride = sizeof(PackedVertex);
-        desc.CullMode = vk::CullModeFlagBits::eBack;
+        desc.DynamicCullMode = true;
         desc.DepthFormat = RenderFormats::SceneDepth;
         desc.DepthTest = true;
         desc.DepthWrite = true;
@@ -108,8 +108,7 @@ namespace Lynx
     {
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
 
-        const MeshDrawCommands& draws = renderData.MeshDraws;
-        if (draws.CameraOpaqueOf(m_Phase).Count + draws.CameraCutOutOf(m_Phase).Count == 0 || !m_Vulkan->OpaquePipeline)
+        if (renderData.MeshDraws.CameraOf(m_Phase).All().Count == 0 || !m_Vulkan->OpaquePipeline)
             return false;
 
         resources.DepthTarget = renderData.SceneDepth;
@@ -118,7 +117,6 @@ namespace Lynx
 
     void DepthPass::Execute(vk::CommandBuffer commands, RenderData& renderData)
     {
-        // The pool and the push constants stay set when the pipeline changes.
         renderData.Geometry->Bind(commands);
 
         DepthPushData push{};
@@ -128,13 +126,6 @@ namespace Lynx
         m_Vulkan->Shared->Push(commands, push);
 
         const MeshDrawCommands& draws = renderData.MeshDraws;
-        commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->OpaquePipeline);
-        DrawMeshes(commands, draws, draws.CameraOpaqueOf(m_Phase));
-
-        if (draws.CameraCutOutOf(m_Phase).Count > 0)
-        {
-            commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->CutOutPipeline);
-            DrawMeshes(commands, draws, draws.CameraCutOutOf(m_Phase));
-        }
+        DrawDepthOfMeshes(commands, draws, draws.CameraOf(m_Phase), m_Vulkan->OpaquePipeline, m_Vulkan->CutOutPipeline);
     }
 }

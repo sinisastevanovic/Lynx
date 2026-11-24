@@ -26,6 +26,9 @@ namespace Lynx
         AlphaMode Mode = AlphaMode::Opaque;
         float AlphaCutoff = 0.5f;
 
+        // Seen from both sides, like a leaf or a sheet of cloth. Otherwise the side that faces away is not drawn.
+        bool TwoSided = false;
+
         glm::vec2 Tiling = { 1.0f, 1.0f };
 
         AssetHandle AlbedoTexture = AssetHandle::Null();

@@ -111,6 +111,11 @@ build\bin\Debug\LynxSandboxGame.exe
   its instances that are seen (`RenderData::MeshDraws`). A pass draws a whole range of them with one call
   (`DrawMeshes`). Depth and shadow use a pipeline without a fragment shader for opaque materials and a second one
   for cut-outs. See-through meshes are culled and sorted on the CPU and drawn one by one.
+  The commands of a view are grouped by kind (`MeshDrawKind`: cut-outs or not, two-sided or not) and a pass walks
+  through the groups. A further way of drawing is a further member of the kind.
+- **Two-sided materials.** `Material::TwoSided`, read from glTF's `doubleSided`. The mesh passes set which side is
+  left out while drawing (`SetCulling`, a dynamic state), so no pipeline exists twice for it. Blender exports every
+  material as two-sided unless backface culling is ticked: on closed surfaces that costs 20 to 30 % of the frame.
 - **Culling.** The GPU decides what is drawn (`Passes/CullPass`, `Cull.slang`). The CPU lays out one draw command
   per batch (the instances of one submesh in one material) and view, drawing nothing, each with a run of the list of drawn
   instances long enough for the whole batch. The compute shader tests the sphere of every instance against the

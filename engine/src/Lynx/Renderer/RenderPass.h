@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 
+#include <array>
 #include <filesystem>
 #include <span>
 
@@ -37,6 +38,41 @@ namespace Lynx
         Late = 1
     };
 
+    // What about a material decides how the mesh passes draw a surface: with which pipeline, and in which
+    // state. The draw commands of a frame are grouped by it, so that a pass sets each state once and draws
+    // a whole group with one call. A further way of drawing is a further member here and a larger Count,
+    // not another set of ranges in every pass.
+    struct MeshDrawKind
+    {
+        // Only a material with cut-outs needs its texture where nothing but depth is drawn.
+        bool HasCutOuts = false;
+
+        // Seen from both sides, so no triangle is left out for facing away.
+        bool IsTwoSided = false;
+
+        static constexpr uint32_t Count = 4;
+
+        uint32_t Index() const { return (HasCutOuts ? 1u : 0u) | (IsTwoSided ? 2u : 0u); }
+        static MeshDrawKind At(uint32_t index) { return { (index & 1u) != 0, (index & 2u) != 0 }; }
+    };
+
+    // The draw commands of one view: a run per kind. The runs follow each other directly, in the order
+    // of the kinds, and a kind that nothing is drawn in has an empty run.
+    struct MeshDrawGroups
+    {
+        std::array<DrawRange, MeshDrawKind::Count> Ranges;
+
+        DrawRange Of(MeshDrawKind kind) const { return Ranges[kind.Index()]; }
+
+        DrawRange All() const
+        {
+            DrawRange all{ Ranges.front().First, 0 };
+            for (const DrawRange& range : Ranges)
+                all.Count += range.Count;
+            return all;
+        }
+    };
+
     // The draw commands for the frame's meshes that are not see-through: one command per submesh and all
     // its instances, in a buffer on the GPU. A pass draws a whole range of them with one call.
     // Culling on the GPU decides how many instances each command draws, which may be none.
@@ -44,22 +80,16 @@ namespace Lynx
     {
         const GpuBuffer* Buffer = nullptr;
 
-        // What the camera sees, early and late, and what the sun sees, each split by whether the material
-        // has cut-outs: only a material with cut-outs needs its texture where nothing but depth is drawn.
-        // The four ranges of the camera follow each other directly, so they can be drawn as one range,
-        // and so can the two of the sun.
-        DrawRange CameraOpaque;
-        DrawRange CameraCutOut;
-        DrawRange CameraLateOpaque;
-        DrawRange CameraLateCutOut;
-        DrawRange ShadowOpaque;
-        DrawRange ShadowCutOut;
+        // What the camera sees, early and late, then what the sun sees. The camera's commands of both
+        // phases follow each other directly.
+        MeshDrawGroups CameraEarly;
+        MeshDrawGroups CameraLate;
+        MeshDrawGroups Shadow;
 
-        DrawRange CameraOpaqueOf(CullPhase phase) const { return phase == CullPhase::Early ? CameraOpaque : CameraLateOpaque; }
-        DrawRange CameraCutOutOf(CullPhase phase) const { return phase == CullPhase::Early ? CameraCutOut : CameraLateCutOut; }
+        const MeshDrawGroups& CameraOf(CullPhase phase) const { return phase == CullPhase::Early ? CameraEarly : CameraLate; }
 
         // Everything the camera sees that is not see-through.
-        DrawRange Camera() const { return { CameraOpaque.First, CameraOpaque.Count + CameraCutOut.Count + CameraLateOpaque.Count + CameraLateCutOut.Count }; }
+        DrawRange Camera() const { return { CameraEarly.All().First, CameraEarly.All().Count + CameraLate.All().Count }; }
     };
 
     // What culling on the GPU works with besides the instances, see GpuScene and CullPass.
@@ -113,6 +143,7 @@ namespace Lynx
         uint32_t FirstIndex;
         int32_t VertexOffset;
         uint32_t FirstInstance;
+        bool IsTwoSided;
     };
 
     struct ParticleInstanceData

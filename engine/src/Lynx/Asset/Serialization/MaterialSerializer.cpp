@@ -14,6 +14,7 @@ namespace Lynx
         json["EmissiveColor"] = { material->EmissiveColor.r, material->EmissiveColor.g, material->EmissiveColor.b };
         json["EmissiveStrength"] = material->EmissiveStrength;
         json["AlphaCutoff"] = material->AlphaCutoff;
+        json["TwoSided"] = material->TwoSided;
         json["Tiling"] = { material->Tiling.x, material->Tiling.y };
 
         // Serialize Enums (as int for simplicity, or string for readability)
@@ -76,6 +77,7 @@ namespace Lynx
         if (json.contains("EmissiveStrength")) outMaterial.EmissiveStrength = json["EmissiveStrength"];
         if (json.contains("AlphaCutoff")) outMaterial.AlphaCutoff = json["AlphaCutoff"];
         if (json.contains("Tiling")) outMaterial.Tiling = getVec2(json["Tiling"]);
+        outMaterial.TwoSided = json.value("TwoSided", false);
 
         if (json.contains("Mode")) outMaterial.Mode = (AlphaMode)json["Mode"];
         if (json.contains("UseNormalMap")) outMaterial.UseNormalMap = json["UseNormalMap"];

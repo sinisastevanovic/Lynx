@@ -19,10 +19,10 @@ StandardVaryings vertexMain(StandardVertex input, uint instanceIndex : SV_Vulkan
 }
 
 [shader("fragment")]
-FragmentOutput fragmentMain(StandardVaryings input)
+FragmentOutput fragmentMain(StandardVaryings input, bool isFrontFace : SV_IsFrontFace)
 {
     FragmentOutput output;
-    output.color = standardFragment(constants, input);
+    output.color = standardFragment(constants, input, isFrontFace);
     output.entityId = input.entityId;
     return output;
 }

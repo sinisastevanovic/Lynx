@@ -20,7 +20,7 @@
   ],
   "materials": [
     {
-      "doubleSided": true,
+      "doubleSided": false,
       "name": "coast_rocks_05",
       "normalTexture": {
         "index": 0

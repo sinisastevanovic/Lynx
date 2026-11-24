@@ -120,6 +120,9 @@ namespace Lynx
             m_IsDirty = true;
         }
 
+        if (LXUI::DrawCheckBox("Two Sided", material->TwoSided))
+            m_IsDirty = true;
+
         if (LXUI::DrawColorControl("Albedo Color", material->AlbedoColor))
             m_IsDirty = true;
 

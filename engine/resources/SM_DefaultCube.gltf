@@ -20,7 +20,7 @@
 	],
 	"materials":[
 		{
-			"doubleSided":true,
+			"doubleSided":false,
 			"name":"DefaultMat",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{

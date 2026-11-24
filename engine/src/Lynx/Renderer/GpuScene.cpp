@@ -314,7 +314,8 @@ namespace Lynx
                 continue;
 
             m_Materials.IndexOf(batch.Material);
-            batch.HasCutOuts = batch.Material->Mode == AlphaMode::Mask;
+            batch.Kind.HasCutOuts = batch.Material->Mode == AlphaMode::Mask;
+            batch.Kind.IsTwoSided = batch.Material->TwoSided;
             batch.IsTranslucent = batch.Material->Mode == AlphaMode::Translucent;
         }
 
@@ -361,35 +362,37 @@ namespace Lynx
         std::vector<vk::DrawIndexedIndirectCommand> commands;
         std::vector<BatchCommands> batchCommands(m_Batches.size());
         uint32_t visibleCount = 0;
-        const auto addCommands = [&](uint32_t BatchCommands::* view, bool withCutOuts)
+        const auto addCommands = [&](uint32_t BatchCommands::* view)
         {
-            DrawRange range;
-            range.First = static_cast<uint32_t>(commands.size());
-
-            for (const uint32_t index : m_DrawOrder)
+            // The commands of a view are grouped by kind, so that a pass draws each kind with one call.
+            MeshDrawGroups groups;
+            for (uint32_t kind = 0; kind < MeshDrawKind::Count; ++kind)
             {
-                // See-through surfaces cast no shadow, and the camera's are drawn one by one.
-                const Batch& batch = m_Batches[index];
-                if (batch.IsTranslucent || batch.HasCutOuts != withCutOuts)
-                    continue;
+                DrawRange& range = groups.Ranges[kind];
+                range.First = static_cast<uint32_t>(commands.size());
 
-                batchCommands[index].*view = static_cast<uint32_t>(commands.size());
+                for (const uint32_t index : m_DrawOrder)
+                {
+                    // See-through surfaces cast no shadow, and the camera's are drawn one by one.
+                    const Batch& batch = m_Batches[index];
+                    if (batch.IsTranslucent || batch.Kind.Index() != kind)
+                        continue;
 
-                const Submesh& submesh = batch.Mesh->GetSubmeshes()[batch.SubmeshIndex];
-                commands.emplace_back(submesh.IndexCount, 0u, submesh.Geometry.FirstIndex(), submesh.Geometry.VertexOffset(), visibleCount);
-                visibleCount += static_cast<uint32_t>(batch.Places.size());
+                    batchCommands[index].*view = static_cast<uint32_t>(commands.size());
+
+                    const Submesh& submesh = batch.Mesh->GetSubmeshes()[batch.SubmeshIndex];
+                    commands.emplace_back(submesh.IndexCount, 0u, submesh.Geometry.FirstIndex(), submesh.Geometry.VertexOffset(), visibleCount);
+                    visibleCount += static_cast<uint32_t>(batch.Places.size());
+                }
+
+                range.Count = static_cast<uint32_t>(commands.size()) - range.First;
             }
-
-            range.Count = static_cast<uint32_t>(commands.size()) - range.First;
-            return range;
+            return groups;
         };
 
-        frame.Draws.CameraOpaque = addCommands(&BatchCommands::Camera, false);
-        frame.Draws.CameraCutOut = addCommands(&BatchCommands::Camera, true);
-        frame.Draws.CameraLateOpaque = addCommands(&BatchCommands::CameraLate, false);
-        frame.Draws.CameraLateCutOut = addCommands(&BatchCommands::CameraLate, true);
-        frame.Draws.ShadowOpaque = addCommands(&BatchCommands::Sun, false);
-        frame.Draws.ShadowCutOut = addCommands(&BatchCommands::Sun, true);
+        frame.Draws.CameraEarly = addCommands(&BatchCommands::Camera);
+        frame.Draws.CameraLate = addCommands(&BatchCommands::CameraLate);
+        frame.Draws.Shadow = addCommands(&BatchCommands::Sun);
 
         copy.CommandCount = static_cast<uint32_t>(commands.size());
         copy.CameraCommandCount = frame.Draws.Camera().Count;
@@ -476,7 +479,8 @@ namespace Lynx
         for (const Sorted& entry : sorted)
         {
             const GpuInstance& instance = m_Instances[entry.Place];
-            m_TransparentDraws.push_back({ instance.IndexCount, instance.FirstIndex, instance.VertexOffset, firstVisible + static_cast<uint32_t>(places.size()) });
+            m_TransparentDraws.push_back({ instance.IndexCount, instance.FirstIndex, instance.VertexOffset,
+                firstVisible + static_cast<uint32_t>(places.size()), m_Batches[instance.Batch].Kind.IsTwoSided });
             places.push_back(entry.Place);
             counted.SeeThroughTriangles += instance.IndexCount / 3;
         }

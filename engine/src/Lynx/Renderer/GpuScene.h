@@ -137,7 +137,7 @@ namespace Lynx
             std::vector<uint32_t> Places;
 
             // Renewed every frame: the editor can change a material's kind while it is on screen.
-            bool HasCutOuts = false;
+            MeshDrawKind Kind;
             bool IsTranslucent = false;
         };
 

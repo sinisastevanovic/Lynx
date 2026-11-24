@@ -12,6 +12,10 @@
     picture. It is stored in the alpha of the colour texture here, which becomes a PNG for it, and the
     materials that use it are set to cut-out.
 
+    Every material of a download is marked two-sided, which is what Blender exports unless told otherwise.
+    Bark and rock are closed surfaces whose inside is never seen, and drawing their far side costs a
+    quarter to a third of the frame. So only materials with cut-outs stay two-sided.
+
     Files that are already there with the right size are not downloaded again.
 
     The models are not kept in the repository: they are large, and this script makes them again. So that
@@ -206,6 +210,20 @@ function Get-TriangleCount($Gltf, $Node)
     return $count
 }
 
+# Marks the materials without cut-outs one-sided. Call it after Merge-Alpha, which decides what has cut-outs.
+function Set-Sides($Gltf)
+{
+    foreach ($material in $Gltf.materials)
+    {
+        $alphaMode = $material.PSObject.Properties['alphaMode']
+        if ($null -ne $alphaMode -and $alphaMode.Value -ne 'OPAQUE')
+        {
+            continue
+        }
+        $material | Add-Member -Force -NotePropertyName doubleSided -NotePropertyValue $false
+    }
+}
+
 # Writes one .gltf per object of the file. Each is the whole file with a scene that holds that object only.
 function Split-Objects($Gltf, [string]$Id, [string]$Folder)
 {
@@ -288,6 +306,7 @@ foreach ($id in $Asset)
     Remove-Item $sourcePath
 
     Merge-Alpha $gltf $files $id $folder
+    Set-Sides $gltf
     Split-Objects $gltf $id $folder
     Test-Files $id $folder
 }

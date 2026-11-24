@@ -20,7 +20,7 @@
   ],
   "materials": [
     {
-      "doubleSided": true,
+      "doubleSided": false,
       "name": "root_cluster_01",
       "normalTexture": {
         "index": 0

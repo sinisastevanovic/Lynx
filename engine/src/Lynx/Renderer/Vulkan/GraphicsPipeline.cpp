@@ -60,7 +60,9 @@ namespace Lynx
         const vk::PipelineInputAssemblyStateCreateInfo inputAssembly({}, desc.Topology);
 
         const vk::PipelineViewportStateCreateInfo viewport({}, 1, nullptr, 1, nullptr);
-        const vk::DynamicState dynamicStates[] = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+        std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+        if (desc.DynamicCullMode)
+            dynamicStates.push_back(vk::DynamicState::eCullMode);
         const vk::PipelineDynamicStateCreateInfo dynamicState({}, dynamicStates);
 
         vk::PipelineRasterizationStateCreateInfo rasterization;

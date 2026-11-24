@@ -11,7 +11,7 @@ StandardVaryings vertexMain(StandardVertex input, uint instanceIndex : SV_Vulkan
 }
 
 [shader("fragment")]
-float4 fragmentMain(StandardVaryings input) : SV_Target
+float4 fragmentMain(StandardVaryings input, bool isFrontFace : SV_IsFrontFace) : SV_Target
 {
-    return standardFragment(constants, input);
+    return standardFragment(constants, input, isFrontFace);
 }

@@ -116,7 +116,7 @@ namespace Lynx
             { MeshVertexLayout::TexCoordFormat, offsetof(PackedVertex, TexCoord) },
         };
         desc.VertexStride = sizeof(PackedVertex);
-        desc.CullMode = vk::CullModeFlagBits::eBack;
+        desc.DynamicCullMode = true;
         desc.DepthFormat = RenderFormats::ShadowMap;
         desc.DepthTest = true;
         desc.DepthWrite = true;
@@ -164,10 +164,9 @@ namespace Lynx
         renderData.ShadowSamplerIndex = m_ShadowSamplerIndex;
 
         const MeshDrawCommands& draws = renderData.MeshDraws;
-        if (!m_Vulkan->OpaquePipeline || draws.ShadowOpaque.Count + draws.ShadowCutOut.Count == 0)
+        if (!m_Vulkan->OpaquePipeline || draws.Shadow.All().Count == 0)
             return;
 
-        // The pool and the push constants stay set when the pipeline changes.
         renderData.Geometry->Bind(commands);
 
         ShadowPushData push{};
@@ -177,13 +176,6 @@ namespace Lynx
         push.Materials = renderData.MaterialAddress;
         m_Vulkan->Shared->Push(commands, push);
 
-        commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->OpaquePipeline);
-        DrawMeshes(commands, draws, draws.ShadowOpaque);
-
-        if (draws.ShadowCutOut.Count > 0)
-        {
-            commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->CutOutPipeline);
-            DrawMeshes(commands, draws, draws.ShadowCutOut);
-        }
+        DrawDepthOfMeshes(commands, draws, draws.Shadow, m_Vulkan->OpaquePipeline, m_Vulkan->CutOutPipeline);
     }
 }

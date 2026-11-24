@@ -29,6 +29,31 @@ namespace Lynx
         commands.drawIndexedIndirect(draws.Buffer->Handle(), vk::DeviceSize(range.First) * commandSize, range.Count, commandSize);
     }
 
+    // Says which triangles the draws that follow leave out: those that face away, or none.
+    // For pipelines made with DynamicCullMode.
+    inline void SetCulling(vk::CommandBuffer commands, bool isTwoSided)
+    {
+        commands.setCullMode(isTwoSided ? vk::CullModeFlagBits::eNone : vk::CullModeFlagBits::eBack);
+    }
+
+    // Draws the commands of one view where nothing but depth is drawn. Opaque materials go through a
+    // pipeline without a fragment shader, materials with cut-outs through one that reads their texture.
+    // The geometry pool has to be bound and the push constants set: both stay as they are when the pipeline changes.
+    inline void DrawDepthOfMeshes(vk::CommandBuffer commands, const MeshDrawCommands& draws, const MeshDrawGroups& groups, vk::Pipeline opaquePipeline, vk::Pipeline cutOutPipeline)
+    {
+        for (uint32_t index = 0; index < MeshDrawKind::Count; ++index)
+        {
+            const MeshDrawKind kind = MeshDrawKind::At(index);
+            const DrawRange range = groups.Of(kind);
+            if (range.Count == 0)
+                continue;
+
+            commands.bindPipeline(vk::PipelineBindPoint::eGraphics, kind.HasCutOuts ? cutOutPipeline : opaquePipeline);
+            SetCulling(commands, kind.IsTwoSided);
+            DrawMeshes(commands, draws, range);
+        }
+    }
+
     // Draws one see-through instance. The geometry pool has to be bound. The shader finds the instance
     // by its place in the list of drawn instances, and its material through it, so a draw needs no
     // push constants of its own.

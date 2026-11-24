@@ -79,7 +79,7 @@ namespace Lynx
             { MeshVertexLayout::TexCoordFormat, offsetof(PackedVertex, TexCoord) },
         };
         desc.VertexStride = sizeof(PackedVertex);
-        desc.CullMode = vk::CullModeFlagBits::eBack;
+        desc.DynamicCullMode = true;
         desc.ColorFormat = RenderFormats::SceneColor;
         if (m_WritesEntityIds)
             desc.IdFormat = RenderFormats::EntityIds;
@@ -141,15 +141,43 @@ namespace Lynx
         m_Vulkan->Shared->Push(commands, push);
 
         // Opaque materials and those with cut-outs are shaded by the same pipeline, whichever phase of
-        // culling found them, and their commands lie next to each other. So one call draws everything
-        // the camera sees that is not see-through.
+        // culling found them, and the commands of the camera lie next to each other. So one call draws
+        // as many of them as are drawn in the same state: everything, in a scene without two-sided materials.
         const MeshDrawCommands& draws = renderData.MeshDraws;
-        const DrawRange everything = draws.Camera();
-        if (everything.Count > 0)
+        DrawRange run;
+        bool runIsTwoSided = false;
+        const auto drawRun = [&]()
         {
-            DrawMeshes(commands, draws, everything);
+            if (run.Count == 0)
+                return;
+
+            SetCulling(commands, runIsTwoSided);
+            DrawMeshes(commands, draws, run);
             renderData.DrawCalls++;
+            run = {};
+        };
+
+        for (const CullPhase phase : { CullPhase::Early, CullPhase::Late })
+        {
+            for (uint32_t index = 0; index < MeshDrawKind::Count; ++index)
+            {
+                // An empty range is skipped, which leaves no gap: the run goes on behind it.
+                const MeshDrawKind kind = MeshDrawKind::At(index);
+                const DrawRange range = draws.CameraOf(phase).Of(kind);
+                if (range.Count == 0)
+                    continue;
+
+                if (kind.IsTwoSided != runIsTwoSided)
+                    drawRun();
+                if (run.Count == 0)
+                {
+                    run.First = range.First;
+                    runIsTwoSided = kind.IsTwoSided;
+                }
+                run.Count += range.Count;
+            }
         }
+        drawRun();
 
         if (renderData.TransparentDraws.empty())
             return;
@@ -157,6 +185,7 @@ namespace Lynx
         commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->TransparentPipeline);
         for (const TransparentDraw& draw : renderData.TransparentDraws)
         {
+            SetCulling(commands, draw.IsTwoSided);
             DrawTransparent(commands, draw);
             renderData.DrawCalls++;
         }

@@ -11,7 +11,8 @@ namespace Lynx
     {
         // Bump this when the stored form changes, or when cooking gives another result for the same file:
         // another vertex layout (PackedVertex), another draw order, other tangents.
-        constexpr uint32_t s_MeshVersion = 1;
+        // 2: a material says whether it is two-sided.
+        constexpr uint32_t s_MeshVersion = 2;
         constexpr uint32_t s_MeshMagicNumber = 0x4d43584c; // "LXCM"
 
         // More than any mesh has. A damaged file that claims more is refused before memory is reserved for it.
@@ -34,6 +35,7 @@ namespace Lynx
             writer.Write(material.EmissiveStrength);
             writer.Write(material.Mode);
             writer.Write(material.AlphaCutoff);
+            writer.Write(material.TwoSided);
             writer.Write(std::string_view(material.AlbedoPath));
             writer.Write(std::string_view(material.NormalPath));
             writer.Write(std::string_view(material.MetallicRoughnessPath));
@@ -54,6 +56,7 @@ namespace Lynx
                 && reader.Read(material.EmissiveStrength)
                 && reader.Read(material.Mode)
                 && reader.Read(material.AlphaCutoff)
+                && reader.Read(material.TwoSided)
                 && reader.Read(material.AlbedoPath)
                 && reader.Read(material.NormalPath)
                 && reader.Read(material.MetallicRoughnessPath)
