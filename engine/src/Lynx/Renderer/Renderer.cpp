@@ -1026,6 +1026,18 @@ namespace Lynx
         return m_Frame->Geometry->Add(std::as_bytes(vertices), indices);
     }
 
+    std::shared_ptr<const GpuBuffer> Renderer::CreateLeafData(std::span<const LeafVertex> leaves)
+    {
+        GpuBufferDesc desc;
+        desc.Size = leaves.size_bytes();
+        desc.Usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        desc.Name = "LeafData";
+
+        auto buffer = std::make_shared<GpuBuffer>(*m_Context, desc);
+        m_Frame->Uploads->Upload(buffer->Handle(), 0, std::as_bytes(leaves));
+        return buffer;
+    }
+
     void Renderer::OnResize(uint32_t width, uint32_t height)
     {
         if (width == 0 || height == 0)

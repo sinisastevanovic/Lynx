@@ -35,12 +35,13 @@ struct VertexOutput
 };
 
 [shader("vertex")]
-VertexOutput vertexMain(VertexInput input, uint instanceIndex : SV_VulkanInstanceID)
+VertexOutput vertexMain(VertexInput input, uint instanceIndex : SV_VulkanInstanceID, uint vertexIndex : SV_VulkanVertexID)
 {
     MeshInstance instance = meshInstance(constants.instances, constants.visibleInstances, instanceIndex);
+    float3 position = leafPosition(instance, input.position, vertexIndex, drawnLevel(constants.visibleInstances, instanceIndex));
 
     VertexOutput output;
-    output.position = mul(mul(constants.lightViewProjection, instance.model), float4(input.position, 1.0));
+    output.position = mul(mul(constants.lightViewProjection, instance.model), float4(position, 1.0));
     output.uv = input.uv;
     output.material = instance.material;
     return output;

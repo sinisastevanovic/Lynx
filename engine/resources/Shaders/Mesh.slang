@@ -3,6 +3,19 @@ module Mesh;
 
 import Scene;
 
+// What a vertex of foliage knows about the leaf it is part of. Has to match LeafVertex in StaticMesh.h,
+// which stores four numbers of 16 bits: they are read as two of 32 here.
+public struct LeafVertex
+{
+    // The centre of the leaf in x and y: from the centre of the sphere around the submesh, in units of
+    // its radius, as numbers from -32767 to 32767.
+    public uint pivotXY;
+
+    // The same for z in the lower half. In the upper half, where the leaf ends in the list of all
+    // leaves, from 1 to 65535 for the whole list. Zero for what is no leaf and is always drawn as it is.
+    public uint pivotZAndRank;
+};
+
 // One submesh of one mesh in the scene. The instances of the whole scene are in one buffer that stays
 // on the GPU from frame to frame. Has to match GpuInstance in GpuScene.h.
 public struct MeshInstance
@@ -25,15 +38,66 @@ public struct MeshInstance
 
     // The instances of one submesh form a batch, which shares draw commands. See Cull.slang.
     public uint batch;
-    int padding0;
-    int padding1;
+
+    // For foliage, what its vertices know about their leaves. Null otherwise.
+    public LeafVertex* leaves;
 };
 
 // The instance a vertex belongs to. A frame draws the instances in a list of places in the instance
 // buffer, and drawnIndex is where the vertex's instance stands in that list.
+//
+// An entry of the list holds the place in its lower 24 bits and, above them, the level of detail the
+// instance is drawn in, in sixteenths of a level.
 public MeshInstance meshInstance(MeshInstance* instances, uint* visibleInstances, uint drawnIndex)
 {
-    return instances[visibleInstances[drawnIndex]];
+    return instances[visibleInstances[drawnIndex] & 0x00FFFFFF];
+}
+
+// The level of detail an instance is drawn in. Whole levels for most meshes. Foliage is drawn in
+// levels in between, so that it changes little by little.
+public float drawnLevel(uint* visibleInstances, uint drawnIndex)
+{
+    return float(visibleInstances[drawnIndex] >> 24) / 16.0;
+}
+
+// A number from -1 to 1 that is stored in the lower 16 bits.
+float fromSnorm16(uint bits)
+{
+    return max(float(int(bits << 16) >> 16) / 32767.0, -1.0);
+}
+
+// Over how many levels a leaf shrinks before it is no longer drawn.
+static const float leafFadeLevels = 0.5;
+
+// Where a vertex of a mesh is, in the mesh's own space, at the level the mesh is drawn in. Only foliage
+// moves: a coarser level draws fewer leaves, and those are made larger about their centres, so that
+// together they cover what all the leaves covered. A leaf that the next level leaves out shrinks away
+// before, so no leaf is there in one frame and gone in the next.
+//
+// vertexIndex is the index the vertex is drawn with (SV_VulkanVertexID), which counts on from where
+// the submesh's vertices start in the geometry pool.
+public float3 leafPosition(MeshInstance instance, float3 position, uint vertexIndex, float level)
+{
+    if (level <= 0.0 || instance.leaves == nullptr)
+        return position;
+
+    LeafVertex leaf = instance.leaves[int(vertexIndex) - instance.vertexOffset];
+    uint rank = leaf.pivotZAndRank >> 16;
+    if (rank == 0)
+        return position;
+
+    float3 fromCentre = float3(fromSnorm16(leaf.pivotXY), fromSnorm16(leaf.pivotXY >> 16), fromSnorm16(leaf.pivotZAndRank));
+    float3 pivot = instance.boundingSphere.xyz + fromCentre * instance.boundingSphere.w;
+
+    // Level k draws the first 1 / 2^k of the list, so a leaf that ends at a share s of the list is
+    // drawn up to level -log2(s).
+    float share = float(rank) / 65535.0;
+    float lastLevel = -log2(share);
+    float shrink = saturate((lastLevel - level) / max(min(lastLevel, leafFadeLevels), 0.0001));
+
+    // Half the leaves at twice the area each: larger by the square root of two per level.
+    float grow = sqrt(exp2(level));
+    return pivot + (position - pivot) * (grow * shrink);
 }
 
 // The semantic to give a vertex shader's instance index: SV_VulkanInstanceID counts on from the first

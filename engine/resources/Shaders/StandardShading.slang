@@ -53,10 +53,11 @@ static const float4x4 clipToTexture = float4x4(
     0.0,  0.0, 1.0, 0.0,
     0.0,  0.0, 0.0, 1.0);
 
-public StandardVaryings standardVertex(StandardConstants constants, StandardVertex input, uint instanceIndex)
+public StandardVaryings standardVertex(StandardConstants constants, StandardVertex input, uint instanceIndex, uint vertexIndex)
 {
     MeshInstance instance = meshInstance(constants.instances, constants.visibleInstances, instanceIndex);
-    MeshPosition position = meshPosition(instance, input.position);
+    float3 inMesh = leafPosition(instance, input.position, vertexIndex, drawnLevel(constants.visibleInstances, instanceIndex));
+    MeshPosition position = meshPosition(instance, inMesh);
 
     StandardVaryings output;
     output.position = position.clip;

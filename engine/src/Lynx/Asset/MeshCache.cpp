@@ -13,7 +13,8 @@ namespace Lynx
         // another vertex layout (PackedVertex), another draw order, other tangents.
         // 2: a material says whether it is two-sided.
         // 3: a submesh has levels of detail.
-        constexpr uint32_t s_MeshVersion = 3;
+        // 4: foliage has levels of detail, and its vertices know their leaf.
+        constexpr uint32_t s_MeshVersion = 4;
         constexpr uint32_t s_MeshMagicNumber = 0x4d43584c; // "LXCM"
 
         // More than any mesh has. A damaged file that claims more is refused before memory is reserved for it.
@@ -27,6 +28,8 @@ namespace Lynx
             writer.WriteArray(submesh.PackedVertices);
             writer.WriteArray(submesh.Indices);
             writer.WriteArray(submesh.Lods);
+            writer.WriteArray(submesh.Leaves);
+            writer.Write(submesh.LeafSize);
             writer.Write(submesh.BoundingSphere);
 
             const auto& material = submesh.MaterialData;
@@ -52,6 +55,8 @@ namespace Lynx
                 && reader.ReadArray(submesh.Indices, s_LargestIndexCount)
                 && reader.ReadArray(submesh.Lods, MeshLod::MaxCount)
                 && !submesh.Lods.empty()
+                && reader.ReadArray(submesh.Leaves, s_LargestVertexCount)
+                && reader.Read(submesh.LeafSize)
                 && reader.Read(submesh.BoundingSphere)
                 && reader.Read(material.AlbedoColor)
                 && reader.Read(material.Metallic)

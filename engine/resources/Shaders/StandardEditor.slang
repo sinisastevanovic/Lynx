@@ -13,9 +13,9 @@ struct FragmentOutput
 };
 
 [shader("vertex")]
-StandardVaryings vertexMain(StandardVertex input, uint instanceIndex : SV_VulkanInstanceID)
+StandardVaryings vertexMain(StandardVertex input, uint instanceIndex : SV_VulkanInstanceID, uint vertexIndex : SV_VulkanVertexID)
 {
-    return standardVertex(constants, input, instanceIndex);
+    return standardVertex(constants, input, instanceIndex, vertexIndex);
 }
 
 [shader("fragment")]

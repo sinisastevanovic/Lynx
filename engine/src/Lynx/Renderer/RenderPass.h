@@ -98,6 +98,10 @@ namespace Lynx
         // A coarser level is drawn once its surface is at most this far from the original's, in pixels on screen.
         float ErrorPixels = 1.0f;
 
+        // Foliage is drawn with fewer and larger leaves once a leaf is at most this large on screen, in
+        // pixels, and with half as many again every time the leaves have grown back to that size.
+        float LeafPixels = 8.0f;
+
         // How many levels coarser than for the camera a mesh is drawn into the shadow map.
         uint32_t ShadowBias = 1;
 

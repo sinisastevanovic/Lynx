@@ -43,7 +43,9 @@ namespace Lynx
 
         // The instances of one submesh in one material form a batch. GpuScene::NoBatch for a place that holds no instance.
         uint32_t Batch;
-        uint32_t Padding[2];
+
+        // For foliage, the address of what its vertices know about their leaves, see LeafVertex. Zero otherwise.
+        uint64_t LeafData;
     };
 
     // What culling needs to know of the camera.
@@ -76,6 +78,9 @@ namespace Lynx
     {
     public:
         static constexpr uint32_t NoBatch = ~0u;
+
+        // The list of drawn instances holds a place in 24 bits and the level it is drawn in above them.
+        static constexpr uint32_t MaxPlaces = 1u << 24;
 
         // The instances of one mesh in the scene: one per submesh that can be drawn, next to each other.
         struct Range

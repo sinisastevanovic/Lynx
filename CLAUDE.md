@@ -127,8 +127,17 @@ build\bin\Debug\LynxSandboxGame.exe
   (`MeshLod`, `Submesh::Lods`) and knows how far it is off the original. The cull shader picks, per instance, the
   coarsest level whose error stays under `LodSettings::ErrorPixels` on screen, so a batch has a draw command per
   level and view. Shadows are drawn one level coarser. `LodSettings::ForcedLevel` shows one level everywhere
-  ("Show level" in the renderer settings panel). Surfaces with cut-outs keep their finest level: simplifying
-  leaves and needles makes trees visibly barer.
+  ("Show level" in the renderer settings panel).
+- **Foliage levels.** Simplifying leaves and needles makes trees visibly barer, so foliage gets its levels another
+  way (`BuildFoliageLods`, after Pixar's stochastic pruning). Foliage is a submesh with cut-outs made of at least
+  256 separate pieces. The cooker stores those "leaves" in a random order, so a level is the first part of the
+  index list and costs nothing, and gives every vertex the centre of its leaf (`LeafVertex`, 8 bytes, in a buffer
+  per submesh that an instance carries the address of). A coarser level draws half the leaves, and the vertex
+  shaders grow the rest about their centres so the crown covers the same area (`leafPosition` in `Mesh.slang`).
+  The level of foliage is picked in sixteenths and a leaf shrinks away before it is dropped, so nothing pops.
+  Pieces more than four times the usual leaf size are always drawn as they are. `LodSettings::LeafPixels` says
+  how large a leaf may be on screen. An entry of the list of drawn instances holds the place in 24 bits and the
+  level above them. A surface with cut-outs of few pieces, like a sail, keeps its one level.
 - **Occlusion.** The camera's view is culled in two phases (`CullPhase`), so what is hidden behind other things is
   not drawn. Early: what was seen in the last frame, kept as a flag per instance on the GPU. Its depth becomes the
   depth pyramid (`Passes/DepthPyramidPass`): the depth in ever smaller sizes, each pixel the farthest of those it

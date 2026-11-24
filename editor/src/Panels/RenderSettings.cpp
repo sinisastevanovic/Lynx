@@ -40,6 +40,9 @@ namespace Lynx
                 ImGui::DragFloat("Error in pixels", &lods.ErrorPixels, 0.05f, 0.1f, 32.0f);
                 ImGui::SetItemTooltip("A mesh is drawn in a coarser level once that level is off by no more than this on screen.");
 
+                ImGui::DragFloat("Leaf in pixels", &lods.LeafPixels, 0.1f, 0.5f, 64.0f);
+                ImGui::SetItemTooltip("Foliage is drawn with fewer and larger leaves once a leaf is at most this large on screen.");
+
                 int shadowBias = static_cast<int>(lods.ShadowBias);
                 if (ImGui::SliderInt("Coarser in shadows", &shadowBias, 0, 4))
                     lods.ShadowBias = static_cast<uint32_t>(shadowBias);

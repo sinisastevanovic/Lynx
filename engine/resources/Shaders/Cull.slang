@@ -61,6 +61,10 @@ struct BatchLods
 {
     uint first;
     uint count;
+
+    // For foliage: the size of a leaf, in the units a level's error is in. Zero for everything else.
+    float leafSize;
+    uint padding;
 };
 
 // One level of detail of a batch: how far its surface is from the original's at most, in the mesh's
@@ -183,30 +187,46 @@ bool isHidden(float3 centre, float radius)
     return farthest > nearestOfSphere;
 }
 
+// Levels are counted in sixteenths here, so that foliage can be drawn between two levels.
+static const uint levelSteps = 16;
+
 // The coarsest level of a batch whose error cannot be seen at the instance's distance: it stays under
 // the pixels allowed even at the point of the instance that is nearest to the camera.
+// In sixteenths of a level. A mesh is drawn in whole levels. Foliage is drawn in the whole level below
+// the one returned, and its leaves grow and shrink by what is left over, see leafPosition in Mesh.slang.
 uint levelOfDetail(BatchLods batchLods, float3 centre, float radius, float scale)
 {
     uint coarsest = batchLods.count - 1;
     if (constants.frame.forcedLevel >= 0)
-        return min(uint(constants.frame.forcedLevel), coarsest);
+        return min(uint(constants.frame.forcedLevel), coarsest) * levelSteps;
     if (constants.frame.isPerspective == 0)
         return 0;
 
     float distanceToCamera = length(mul(constants.frame.view, float4(centre, 1.0)).xyz);
     float nearest = max(distanceToCamera - radius, constants.frame.nearPlane);
 
+    // Foliage: level k has leaves larger by the square root of 2^k, and is fine while those are small
+    // enough on screen. So the level grows by two every time the distance doubles.
+    if (batchLods.leafSize > 0.0)
+    {
+        float firstCoarserAt = max(batchLods.leafSize * scale * constants.frame.lodScale, 0.000001);
+        float level = 2.0 * log2(nearest / firstCoarserAt);
+        return uint(clamp(level, 0.0, float(coarsest)) * float(levelSteps));
+    }
+
     uint level = 0;
     while (level < coarsest && constants.lods[batchLods.first + level + 1].error * scale * constants.frame.lodScale <= nearest)
         ++level;
-    return level;
+    return level * levelSteps;
 }
 
-void draw(uint command, uint place)
+// Adds an instance to a draw command. The level it is drawn in goes into the list with its place,
+// where the vertex shaders find it.
+void draw(uint command, uint place, uint level)
 {
     uint countBefore;
     InterlockedAdd(constants.commands[command].instanceCount, 1, countBefore);
-    constants.visibleInstances[constants.commands[command].firstInstance + countBefore] = place;
+    constants.visibleInstances[constants.commands[command].firstInstance + countBefore] = place | (level << 24);
 }
 
 [shader("compute")]
@@ -240,9 +260,9 @@ void computeMain(uint3 thread : SV_DispatchThreadID)
     // Both phases pick the same level, so an instance is drawn in one level per frame. The shadow may be
     // coarser: it is seen less sharply than the thing itself.
     uint level = levelOfDetail(batchLods, centre, radius, scale);
-    LodCommands batchCommands = constants.lods[batchLods.first + level];
-    uint shadowLevel = min(level + constants.frame.shadowBias, batchLods.count - 1);
-    uint sunCommand = constants.lods[batchLods.first + shadowLevel].sun;
+    LodCommands batchCommands = constants.lods[batchLods.first + level / levelSteps];
+    uint shadowLevel = min(level + constants.frame.shadowBias * levelSteps, (batchLods.count - 1) * levelSteps);
+    uint sunCommand = constants.lods[batchLods.first + shadowLevel / levelSteps].sun;
 
     if (batchCommands.camera != noCommand)
     {
@@ -252,13 +272,13 @@ void computeMain(uint3 thread : SV_DispatchThreadID)
         if (constants.phase == phaseEarly)
         {
             if (inView && seenLastFrame)
-                draw(batchCommands.camera, place);
+                draw(batchCommands.camera, place, level);
         }
         else
         {
             bool seen = inView && !isHidden(centre, radius);
             if (seen && !seenLastFrame)
-                draw(batchCommands.cameraLate, place);
+                draw(batchCommands.cameraLate, place, level);
 
             constants.visibility[place] = seen ? 1 : 0;
         }
@@ -266,5 +286,5 @@ void computeMain(uint3 thread : SV_DispatchThreadID)
 
     // Shadows are not culled against other things, so the sun's view needs one phase only.
     if (constants.phase == phaseEarly && sunCommand != noCommand && isSeen(constants.frame.sun, centre, radius))
-        draw(sunCommand, place);
+        draw(sunCommand, place, shadowLevel);
 }

@@ -99,17 +99,32 @@ namespace Lynx
         for (SubmeshSourceData& submesh : m_SourceData)
         {
             OptimizeDrawOrder(submesh.Vertices, submesh.Indices);
-            submesh.Lods = BuildLods(submesh.Vertices, submesh.Indices, submesh.MaterialData.Mode == AlphaMode::Mask);
+            // A surface with cut-outs that is made of many separate pieces is foliage, and gets its levels
+            // by drawing fewer and larger leaves. Everything else gets them by making its surface simpler.
+            const bool hasCutOuts = submesh.MaterialData.Mode == AlphaMode::Mask;
+            Foliage foliage;
+            if (hasCutOuts)
+                foliage = BuildFoliageLods(submesh.Vertices, submesh.Indices);
+            const bool isFoliage = !foliage.Lods.empty();
+            submesh.Lods = isFoliage ? std::move(foliage.Lods) : BuildLods(submesh.Vertices, submesh.Indices, hasCutOuts);
             if (submesh.Lods.size() > 1)
             {
                 std::string triangles;
                 for (const MeshLod& lod : submesh.Lods)
                     triangles += (triangles.empty() ? "" : ", ") + std::to_string(lod.IndexCount / 3);
-                LX_CORE_INFO("Levels of detail of {0} in {1}, in triangles: {2}. The coarsest is off by {3} units.", submesh.Name, m_FilePath, triangles, submesh.Lods.back().Error);
+                if (isFoliage)
+                    LX_CORE_INFO("Levels of detail of {0} in {1}, foliage with leaves of {3} units, in triangles: {2}.", submesh.Name, m_FilePath, triangles, foliage.LeafSize);
+                else
+                    LX_CORE_INFO("Levels of detail of {0} in {1}, in triangles: {2}. The coarsest is off by {3} units.", submesh.Name, m_FilePath, triangles, submesh.Lods.back().Error);
             }
 
             submesh.PackedVertices = PackVertices(submesh.Vertices);
             submesh.BoundingSphere = ComputeBoundingSphere(submesh.PackedVertices);
+            if (isFoliage)
+            {
+                submesh.Leaves = PackLeaves(foliage.Leaves, submesh.BoundingSphere);
+                submesh.LeafSize = foliage.LeafSize;
+            }
             submesh.Vertices = {};
         }
 
@@ -169,6 +184,11 @@ namespace Lynx
             sub.Geometry = Engine::Get().GetRenderer().CreateMeshGeometry(source.PackedVertices, source.Indices);
             sub.BoundingSphere = source.BoundingSphere;
             sub.Lods = source.Lods;
+            if (!source.Leaves.empty())
+            {
+                sub.LeafData = Engine::Get().GetRenderer().CreateLeafData(source.Leaves);
+                sub.LeafSize = source.LeafSize;
+            }
             sub.IndexCount = source.Lods.front().IndexCount;
             sub.Material = material;
             sub.Name = source.Name;

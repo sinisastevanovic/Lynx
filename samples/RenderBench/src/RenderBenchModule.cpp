@@ -26,6 +26,7 @@ public:
         // How levels of detail are picked, for measuring what they gain and for looking at one level.
         LodSettings& lods = engine.GetRenderer().GetLodSettings();
         lods.ErrorPixels = static_cast<float>(settings.Parameter("LodErrorPixels", lods.ErrorPixels));
+        lods.LeafPixels = static_cast<float>(settings.Parameter("LodLeafPixels", lods.LeafPixels));
         lods.ShadowBias = static_cast<uint32_t>(std::max(settings.Parameter("LodShadowBias", lods.ShadowBias), 0.0));
         lods.ForcedLevel = static_cast<int32_t>(settings.Parameter("LodForcedLevel", lods.ForcedLevel));
 

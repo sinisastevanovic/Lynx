@@ -11,6 +11,8 @@
 
 namespace Lynx
 {
+    class GpuBuffer;
+
     struct Vertex
     {
         glm::vec3 Position;
@@ -36,6 +38,20 @@ namespace Lynx
         float Error = 0.0f;
     };
 
+    // What a vertex of foliage knows about the leaf it is part of, so that a vertex shader can make the
+    // leaf larger or let it shrink away, see BuildFoliageLods. Shaders read it as LeafVertex in Mesh.slang.
+    struct LeafVertex
+    {
+        // The centre of the leaf, counted from the centre of the sphere around the submesh in units of
+        // its radius: three numbers from -1 to 1 in 16 bits each.
+        int16_t Pivot[3];
+
+        // Where the leaf ends in the list of all leaves, from 1 to 65535 for the whole list.
+        // A level that draws less of the list than that does not draw the leaf.
+        // Zero for a vertex of something that is no leaf: it is always drawn and never made larger.
+        uint16_t Rank;
+    };
+
     struct Submesh
     {
         // Where the renderer has the vertices and indices.
@@ -49,6 +65,11 @@ namespace Lynx
 
         // The finest first, each one coarser than the one before. Never empty for a submesh that can be drawn.
         std::vector<MeshLod> Lods;
+
+        // For foliage: one LeafVertex per vertex, on the GPU, and the size of an average leaf in the
+        // mesh's units. Null and zero for everything else.
+        std::shared_ptr<const GpuBuffer> LeafData;
+        float LeafSize = 0.0f;
         std::shared_ptr<Material> Material;
         std::string Name;
     };
@@ -61,6 +82,10 @@ namespace Lynx
         // The indices of all levels of detail, one level after the other.
         std::vector<uint32_t> Indices;
         std::vector<MeshLod> Lods;
+
+        // For foliage, see Submesh. Empty and zero for everything else.
+        std::vector<LeafVertex> Leaves;
+        float LeafSize = 0.0f;
         std::string Name;
 
         // The vertices as the GPU stores them, made where the file is read so that it happens off the main thread.

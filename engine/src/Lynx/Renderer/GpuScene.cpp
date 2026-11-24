@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cassert>
 #include <cstring>
 #include <span>
 #include <tuple>
@@ -61,6 +62,10 @@ namespace Lynx
         {
             uint32_t First = 0;
             uint32_t Count = 0;
+
+            // For foliage: the size of a leaf, in the units a level's error is in. Zero for everything else.
+            float LeafSize = 0.0f;
+            uint32_t Padding = 0;
         };
 
         // One level of detail of a batch: its error, and the draw commands its instances are counted into,
@@ -174,6 +179,7 @@ namespace Lynx
             instance.Material = m_Materials.IndexOf(material);
             instance.EntityId = entityId;
             instance.Batch = batchIndex;
+            instance.LeafData = submesh.LeafData ? submesh.LeafData->Address() : 0;
 
             m_Changed.push_back(place);
             ++place;
@@ -238,6 +244,7 @@ namespace Lynx
         }
 
         const uint32_t first = static_cast<uint32_t>(m_Instances.size());
+        assert(m_Instances.size() + count <= MaxPlaces);
         m_Instances.resize(m_Instances.size() + count);
         m_IndexInBatch.resize(m_Instances.size());
         return first;
@@ -384,8 +391,13 @@ namespace Lynx
             if (batch.IsTranslucent)
                 continue;
 
-            const std::vector<MeshLod>& levels = batch.Mesh->GetSubmeshes()[batch.SubmeshIndex].Lods;
-            batchLods[index] = { static_cast<uint32_t>(lodCommands.size()), static_cast<uint32_t>(levels.size()) };
+            // A leaf may be as many pixels large as the setting for foliage says, an error as many as the
+            // one for everything else. The shader knows one scale, so the size of a leaf is brought to it here.
+            const Submesh& submesh = batch.Mesh->GetSubmeshes()[batch.SubmeshIndex];
+            const std::vector<MeshLod>& levels = submesh.Lods;
+            batchLods[index].First = static_cast<uint32_t>(lodCommands.size());
+            batchLods[index].Count = static_cast<uint32_t>(levels.size());
+            batchLods[index].LeafSize = submesh.LeafSize * lods.ErrorPixels / std::max(lods.LeafPixels, 0.01f);
             for (const MeshLod& level : levels)
                 lodCommands.push_back({ .Error = level.Error });
         }

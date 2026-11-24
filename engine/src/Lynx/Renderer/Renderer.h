@@ -20,6 +20,7 @@ struct GLFWwindow;
 namespace Lynx
 {
     class AssetManager;
+    class GpuBuffer;
     class GpuScene;
     class GpuTexture;
     class MaterialTable;
@@ -87,6 +88,10 @@ namespace Lynx
         // Puts the vertices and indices of a submesh into the geometry pool. They can be drawn from the next frame on.
         MeshGeometry CreateMeshGeometry(std::span<const PackedVertex> vertices, std::span<const uint32_t> indices);
 
+
+        // Puts what the vertices of a foliage submesh know about their leaves on the GPU, one entry per
+        // vertex. Shaders reach it through its address, which an instance of the submesh carries.
+        std::shared_ptr<const GpuBuffer> CreateLeafData(std::span<const LeafVertex> leaves);
 
         // Makes a texture on the GPU from pixels, with all its smaller sizes if the specification asks for them.
         // Null if the pixels are missing or the format cannot be used.
