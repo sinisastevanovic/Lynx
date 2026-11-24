@@ -139,6 +139,9 @@ namespace Lynx
         BloomSettings& GetBloomSettings() { return m_BloomSettings; }
         const BloomSettings& GetBloomSettings() const { return m_BloomSettings; }
 
+        LodSettings& GetLodSettings() { return m_LodSettings; }
+        const LodSettings& GetLodSettings() const { return m_LodSettings; }
+
         void SetFXAAEnabled(bool enabled) { m_FXAAEnabled = enabled; }
         bool GetFXAAEnabled() const { return m_FXAAEnabled; }
 
@@ -188,6 +191,7 @@ namespace Lynx
         std::unique_ptr<RenderGraph> m_Graph;
 
         BloomSettings m_BloomSettings;
+        LodSettings m_LodSettings;
 
         RenderContext m_RenderContext;
         RenderData m_CurrentFrameData;

@@ -19,6 +19,7 @@ namespace Lynx
             uint64_t VisibleInstances;
             uint64_t Commands;
             uint64_t Batches;
+            uint64_t Lods;
             uint64_t Frame;
             uint64_t Visibility;
             uint32_t PlaceCount;
@@ -101,6 +102,7 @@ namespace Lynx
         push.VisibleInstances = renderData.VisibleInstanceAddress;
         push.Commands = renderData.Culling.CommandAddress;
         push.Batches = renderData.Culling.BatchAddress;
+        push.Lods = renderData.Culling.LodAddress;
         push.Frame = renderData.Culling.FrameAddress;
         push.Visibility = renderData.Culling.VisibilityAddress;
         push.PlaceCount = renderData.Culling.PlaceCount;

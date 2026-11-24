@@ -540,10 +540,11 @@ namespace Lynx
             camera.Planes.FromViewProjection(m_CurrentFrameData.ViewProjection);
             camera.View = m_CurrentFrameData.View;
             camera.Projection = m_CurrentFrameData.Projection;
+            camera.ViewportHeight = m_SceneSize ? static_cast<float>(m_SceneSize->second) : 0.0f;
             Frustum sunFrustum;
             sunFrustum.FromViewProjection(m_CurrentFrameData.LightViewProj);
 
-            const GpuScene::Frame meshes = m_GpuScene->Prepare(camera, sunFrustum, m_CurrentFrameData.CameraPosition);
+            const GpuScene::Frame meshes = m_GpuScene->Prepare(camera, sunFrustum, m_CurrentFrameData.CameraPosition, m_LodSettings);
             m_CurrentFrameData.MeshDraws = meshes.Draws;
             m_CurrentFrameData.Culling = meshes.Culling;
             m_CurrentFrameData.TransparentDraws = meshes.TransparentDraws;

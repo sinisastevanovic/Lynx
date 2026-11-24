@@ -23,6 +23,12 @@ public:
         const BenchmarkSettings& settings = benchmark->Settings();
         const auto count = [&settings](const char* name) { return static_cast<uint32_t>(std::max(settings.Parameter(name, 0.0), 0.0)); };
 
+        // How levels of detail are picked, for measuring what they gain and for looking at one level.
+        LodSettings& lods = engine.GetRenderer().GetLodSettings();
+        lods.ErrorPixels = static_cast<float>(settings.Parameter("LodErrorPixels", lods.ErrorPixels));
+        lods.ShadowBias = static_cast<uint32_t>(std::max(settings.Parameter("LodShadowBias", lods.ShadowBias), 0.0));
+        lods.ForcedLevel = static_cast<int32_t>(settings.Parameter("LodForcedLevel", lods.ForcedLevel));
+
         Scene& scene = *engine.GetActiveScene();
         AssetManager& assetManager = engine.GetAssetManager();
 

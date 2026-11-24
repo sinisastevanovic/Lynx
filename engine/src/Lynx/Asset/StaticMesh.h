@@ -20,6 +20,22 @@ namespace Lynx
         glm::vec4 Color;
     };
 
+    // One level of detail of a submesh: the same surface in fewer triangles, for when it is small on screen.
+    // Every level is a run of the submesh's indices over the same vertices.
+    struct MeshLod
+    {
+        // More levels than this are not made, so that what is kept per level stays small.
+        static constexpr size_t MaxCount = 12;
+
+        // Counted from the first index of the submesh.
+        uint32_t FirstIndex = 0;
+        uint32_t IndexCount = 0;
+
+        // How far the level's surface is from the original's at most, in the mesh's own units.
+        // Zero for the level the file holds.
+        float Error = 0.0f;
+    };
+
     struct Submesh
     {
         // Where the renderer has the vertices and indices.
@@ -27,7 +43,12 @@ namespace Lynx
 
         // A sphere around the submesh, in the mesh's own space: its centre in xyz, its radius in w.
         glm::vec4 BoundingSphere{ 0.0f };
+
+        // Of the finest level.
         uint32_t IndexCount;
+
+        // The finest first, each one coarser than the one before. Never empty for a submesh that can be drawn.
+        std::vector<MeshLod> Lods;
         std::shared_ptr<Material> Material;
         std::string Name;
     };
@@ -36,7 +57,10 @@ namespace Lynx
     {
         // What the file holds. Emptied once the vertices are packed.
         std::vector<Vertex> Vertices;
+
+        // The indices of all levels of detail, one level after the other.
         std::vector<uint32_t> Indices;
+        std::vector<MeshLod> Lods;
         std::string Name;
 
         // The vertices as the GPU stores them, made where the file is read so that it happens off the main thread.

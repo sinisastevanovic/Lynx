@@ -54,6 +54,9 @@ namespace Lynx
 
         // The camera's own projection, as GLM makes it.
         glm::mat4 Projection;
+
+        // The height of the picture in pixels, which says how large a distance in the world is on screen.
+        float ViewportHeight = 0.0f;
     };
 
     // The meshes of a scene, kept on the GPU from frame to frame.
@@ -63,10 +66,11 @@ namespace Lynx
     // what the scene holds. What a frame draws is a list of places in that buffer, and a draw command
     // covers a run of it.
     //
-    // Which instances are drawn is decided on the GPU (CullPass). The CPU only lays the frame out: one
-    // draw command per batch and view, each with a run of the list that could hold all of the batch's
-    // instances. Culling counts the instances a view sees into the command and writes their places into its run.
-    // The camera's view has two commands per batch, one for each phase of culling, see CullPhase.
+    // Which instances are drawn, and in which level of detail, is decided on the GPU (CullPass). The CPU
+    // only lays the frame out: one draw command per batch, level and view, each with a run of the list
+    // that could hold all of the batch's instances. Culling counts the instances a view sees into the
+    // command of their level and writes their places into its run.
+    // The camera's view has two commands per batch and level, one for each phase of culling, see CullPhase.
     // See-through instances are the exception: they have to be sorted, which is done here, on the CPU.
     class GpuScene
     {
@@ -118,7 +122,7 @@ namespace Lynx
 
         // Lays out the frame's draw commands and queues for upload what changed since the last frame.
         // Call once per frame, before the uploads are recorded.
-        Frame Prepare(const CullCamera& camera, const Frustum& sun, const glm::vec3& cameraPosition);
+        Frame Prepare(const CullCamera& camera, const Frustum& sun, const glm::vec3& cameraPosition, const LodSettings& lods);
 
         // Copies the draw commands to where the CPU can read them, which is how it learns what culling
         // let through. Call once per frame, after the frame's passes are recorded.

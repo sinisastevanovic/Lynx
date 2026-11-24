@@ -41,14 +41,33 @@ namespace Lynx
             float ProjectionY;
             float NearPlane;
 
-            // Only a perspective is tested against the depth pyramid.
+            // Only a perspective is tested against the depth pyramid, and only a perspective picks levels of detail.
             uint32_t IsPerspective;
+
+            // A level is fine enough for an instance at a distance of at least its error times this.
+            float LodScale;
+
+            // The level every instance is drawn in. Negative for the level its distance picks.
+            int32_t ForcedLevel;
+
+            // How many levels coarser the sun's view draws.
+            uint32_t ShadowBias;
+            uint32_t Padding;
         };
 
-        // The draw commands a batch's instances are counted into: the camera's for the two phases of
-        // culling, and the sun's. NoCommand where the batch is not drawn. Has to match BatchCommands in Cull.slang.
-        struct BatchCommands
+        // Where the list of levels has those of a batch. No levels for a batch that culling on the GPU
+        // does not draw. Has to match BatchLods in Cull.slang.
+        struct BatchLods
         {
+            uint32_t First = 0;
+            uint32_t Count = 0;
+        };
+
+        // One level of detail of a batch: its error, and the draw commands its instances are counted into,
+        // the camera's for the two phases of culling and the sun's. Has to match LodCommands in Cull.slang.
+        struct LodCommands
+        {
+            float Error = 0.0f;
             uint32_t Camera = NoCommand;
             uint32_t CameraLate = NoCommand;
             uint32_t Sun = NoCommand;
@@ -296,7 +315,7 @@ namespace Lynx
         m_Changed.clear();
     }
 
-    GpuScene::Frame GpuScene::Prepare(const CullCamera& camera, const Frustum& sun, const glm::vec3& cameraPosition)
+    GpuScene::Frame GpuScene::Prepare(const CullCamera& camera, const Frustum& sun, const glm::vec3& cameraPosition, const LodSettings& lods)
     {
         ++m_Frame;
 
@@ -356,13 +375,28 @@ namespace Lynx
             m_DrawOrderIsStale = false;
         }
 
-        // One draw command per batch and view, drawing nothing yet. Each gets a run in the list of drawn
-        // instances that is long enough for the whole batch. Culling on the GPU counts the instances a
-        // view sees into the command and writes their places into its run.
+        // The levels of detail of every batch that culling on the GPU draws, one batch after the other.
+        std::vector<BatchLods> batchLods(m_Batches.size());
+        std::vector<LodCommands> lodCommands;
+        for (const uint32_t index : m_DrawOrder)
+        {
+            const Batch& batch = m_Batches[index];
+            if (batch.IsTranslucent)
+                continue;
+
+            const std::vector<MeshLod>& levels = batch.Mesh->GetSubmeshes()[batch.SubmeshIndex].Lods;
+            batchLods[index] = { static_cast<uint32_t>(lodCommands.size()), static_cast<uint32_t>(levels.size()) };
+            for (const MeshLod& level : levels)
+                lodCommands.push_back({ .Error = level.Error });
+        }
+
+        // One draw command per batch, level and view, drawing nothing yet. Each gets a run in the list
+        // of drawn instances that is long enough for the whole batch, because all of its instances may
+        // be drawn in one level. Culling on the GPU counts the instances a view sees into the command of
+        // their level and writes their places into its run.
         std::vector<vk::DrawIndexedIndirectCommand> commands;
-        std::vector<BatchCommands> batchCommands(m_Batches.size());
         uint32_t visibleCount = 0;
-        const auto addCommands = [&](uint32_t BatchCommands::* view)
+        const auto addCommands = [&](uint32_t LodCommands::* view)
         {
             // The commands of a view are grouped by kind, so that a pass draws each kind with one call.
             MeshDrawGroups groups;
@@ -378,11 +412,14 @@ namespace Lynx
                     if (batch.IsTranslucent || batch.Kind.Index() != kind)
                         continue;
 
-                    batchCommands[index].*view = static_cast<uint32_t>(commands.size());
-
                     const Submesh& submesh = batch.Mesh->GetSubmeshes()[batch.SubmeshIndex];
-                    commands.emplace_back(submesh.IndexCount, 0u, submesh.Geometry.FirstIndex(), submesh.Geometry.VertexOffset(), visibleCount);
-                    visibleCount += static_cast<uint32_t>(batch.Places.size());
+                    for (uint32_t level = 0; level < submesh.Lods.size(); ++level)
+                    {
+                        const MeshLod& lod = submesh.Lods[level];
+                        lodCommands[batchLods[index].First + level].*view = static_cast<uint32_t>(commands.size());
+                        commands.emplace_back(lod.IndexCount, 0u, submesh.Geometry.FirstIndex() + lod.FirstIndex, submesh.Geometry.VertexOffset(), visibleCount);
+                        visibleCount += static_cast<uint32_t>(batch.Places.size());
+                    }
                 }
 
                 range.Count = static_cast<uint32_t>(commands.size()) - range.First;
@@ -390,9 +427,9 @@ namespace Lynx
             return groups;
         };
 
-        frame.Draws.CameraEarly = addCommands(&BatchCommands::Camera);
-        frame.Draws.CameraLate = addCommands(&BatchCommands::CameraLate);
-        frame.Draws.Shadow = addCommands(&BatchCommands::Sun);
+        frame.Draws.CameraEarly = addCommands(&LodCommands::Camera);
+        frame.Draws.CameraLate = addCommands(&LodCommands::CameraLate);
+        frame.Draws.Shadow = addCommands(&LodCommands::Sun);
 
         copy.CommandCount = static_cast<uint32_t>(commands.size());
         copy.CameraCommandCount = frame.Draws.Camera().Count;
@@ -422,15 +459,27 @@ namespace Lynx
             cullFrame.IsPerspective = projection[2][3] != 0.0f ? 1u : 0u;
             cullFrame.NearPlane = cullFrame.IsPerspective ? projection[3][2] / projection[2][2] : 0.0f;
 
-            const std::span<const BatchCommands> batchList(batchCommands);
-            EnsureSize(m_Context, m_CullInputBuffer, sizeof(CullFrame) + batchList.size_bytes(),
+            // An error of e units at a distance of d covers e / d * projection * half the height in pixels.
+            // A level may be drawn while that is no more than the pixels allowed, so from this distance on.
+            const float pixelsPerUnitAtDistanceOne = std::abs(cullFrame.ProjectionY) * camera.ViewportHeight * 0.5f;
+            cullFrame.LodScale = pixelsPerUnitAtDistanceOne / std::max(lods.ErrorPixels, 0.01f);
+            cullFrame.ForcedLevel = lods.ForcedLevel;
+            cullFrame.ShadowBias = lods.ShadowBias;
+            cullFrame.Padding = 0;
+
+            const std::span<const BatchLods> batchList(batchLods);
+            const std::span<const LodCommands> lodList(lodCommands);
+            const uint64_t lodOffset = sizeof(CullFrame) + batchList.size_bytes();
+            EnsureSize(m_Context, m_CullInputBuffer, lodOffset + lodList.size_bytes(),
                 vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, "CullInput");
             m_Uploads.Upload(m_CullInputBuffer.Handle(), 0, std::as_bytes(std::span<const CullFrame>(&cullFrame, 1)));
             m_Uploads.Upload(m_CullInputBuffer.Handle(), sizeof(CullFrame), std::as_bytes(batchList));
+            m_Uploads.Upload(m_CullInputBuffer.Handle(), lodOffset, std::as_bytes(lodList));
 
             frame.Culling.CommandAddress = m_CommandBuffer.Address();
             frame.Culling.FrameAddress = m_CullInputBuffer.Address();
             frame.Culling.BatchAddress = m_CullInputBuffer.Address() + sizeof(CullFrame);
+            frame.Culling.LodAddress = m_CullInputBuffer.Address() + lodOffset;
             frame.Culling.VisibilityAddress = m_VisibilityBuffer.Address();
             frame.Culling.PlaceCount = static_cast<uint32_t>(m_Instances.size());
         }

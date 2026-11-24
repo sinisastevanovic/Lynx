@@ -2,6 +2,8 @@
 
 #include <meshoptimizer.h>
 
+#include <algorithm>
+
 namespace Lynx
 {
     void OptimizeDrawOrder(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices)
@@ -26,6 +28,69 @@ namespace Lynx
         const size_t usedVertexCount = meshopt_optimizeVertexFetch(uniqueVertices.data(), indices.data(), indices.size(), uniqueVertices.data(), uniqueVertexCount, sizeof(Vertex));
         uniqueVertices.resize(usedVertexCount);
         vertices = std::move(uniqueVertices);
+    }
+
+    namespace
+    {
+        // Below this many triangles, a coarser level saves too little to be worth draw commands of its own.
+        constexpr size_t FewestTrianglesForLods = 1024;
+
+        // No level is made coarser than this.
+        constexpr size_t FewestTrianglesOfALod = 128;
+
+        // A level that keeps more than this share of the triangles of the one before is not kept: the
+        // mesh cannot be made simpler in a way that pays.
+        constexpr float LargestShareOfTriangles = 0.75f;
+    }
+
+    std::vector<MeshLod> BuildLods(std::span<const Vertex> vertices, std::vector<uint32_t>& indices, bool hasCutOuts)
+    {
+        std::vector<MeshLod> lods;
+        lods.push_back({ 0, static_cast<uint32_t>(indices.size()), 0.0f });
+        if (hasCutOuts || indices.size() / 3 < FewestTrianglesForLods)
+            return lods;
+
+        const float* positions = &vertices.front().Position.x;
+
+        // The normal counts in what removing a vertex costs, so that a level keeps its shading and not
+        // only its shape.
+        const float* normals = &vertices.front().Normal.x;
+        const float normalWeights[3] = { 0.5f, 0.5f, 0.5f };
+
+        const unsigned int options = 0;
+
+        // The simplifier counts error relative to the size of the mesh. This turns it into the mesh's units.
+        const float errorScale = meshopt_simplifyScale(positions, vertices.size(), sizeof(Vertex));
+
+        // Each level is made from the one before, which is much faster than from the original and
+        // adds up the errors: the sum is at least as large as the true distance to the original.
+        std::vector<uint32_t> previous(indices);
+        std::vector<uint32_t> level;
+        float error = 0.0f;
+        while (lods.size() < MeshLod::MaxCount && previous.size() / 3 > FewestTrianglesOfALod)
+        {
+            const size_t targetIndexCount = std::max(previous.size() / 6, FewestTrianglesOfALod) * 3;
+
+            // Any error is allowed: how coarse a level may be is decided when it is drawn, from its error.
+            float relativeError = 0.0f;
+            level.resize(previous.size());
+            const size_t indexCount = meshopt_simplifyWithAttributes(level.data(), previous.data(), previous.size(), positions, vertices.size(), sizeof(Vertex),
+                normals, sizeof(Vertex), normalWeights, 3, nullptr, targetIndexCount, 1.0f, options, &relativeError);
+            const bool isTooCoarse = indexCount / 3 < FewestTrianglesOfALod;
+            const bool savesTooLittle = static_cast<float>(indexCount) > static_cast<float>(previous.size()) * LargestShareOfTriangles;
+            if (isTooCoarse || savesTooLittle)
+                break;
+
+            level.resize(indexCount);
+            meshopt_optimizeVertexCache(level.data(), level.data(), level.size(), vertices.size());
+
+            error += relativeError * errorScale;
+            lods.push_back({ static_cast<uint32_t>(indices.size()), static_cast<uint32_t>(level.size()), error });
+            indices.insert(indices.end(), level.begin(), level.end());
+            previous.swap(level);
+        }
+
+        return lods;
     }
 
     namespace

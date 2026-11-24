@@ -92,16 +92,33 @@ namespace Lynx
         DrawRange Camera() const { return { CameraEarly.All().First, CameraEarly.All().Count + CameraLate.All().Count }; }
     };
 
+    // How the level of detail of a mesh is picked, see Cull.slang.
+    struct LodSettings
+    {
+        // A coarser level is drawn once its surface is at most this far from the original's, in pixels on screen.
+        float ErrorPixels = 1.0f;
+
+        // How many levels coarser than for the camera a mesh is drawn into the shadow map.
+        uint32_t ShadowBias = 1;
+
+        // Draws every mesh in this level, or in its coarsest if it has fewer: for looking at the levels.
+        // Negative for the level its distance picks.
+        int32_t ForcedLevel = -1;
+    };
+
     // What culling on the GPU works with besides the instances, see GpuScene and CullPass.
     struct MeshCulling
     {
         // The frame's draw commands, into which culling counts the instances that are seen.
         uint64_t CommandAddress = 0;
 
-        // Per batch of instances, the commands it is drawn with: the camera's early and late, and the sun's.
+        // Per batch of instances, where the list of levels has those of the batch.
         uint64_t BatchAddress = 0;
 
-        // The planes of the camera's view and of the sun's, and how the camera projects.
+        // Per level of a batch, its error and the commands it is drawn with: the camera's early and late, and the sun's.
+        uint64_t LodAddress = 0;
+
+        // The planes of the camera's view and of the sun's, how the camera projects and how levels are picked.
         uint64_t FrameAddress = 0;
 
         // Per place in the instance buffer, whether the camera saw its instance in the last frame.

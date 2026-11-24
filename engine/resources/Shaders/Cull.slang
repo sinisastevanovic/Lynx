@@ -1,8 +1,9 @@
-// Decides which mesh instances a frame draws: every instance of the scene is tested against the camera's
-// view and the sun's, and those that are seen are added to the draw command of their batch.
+// Decides which mesh instances a frame draws, and how finely: every instance of the scene is tested
+// against the camera's view and the sun's, and those that are seen are added to the draw command of
+// their batch and of the level of detail that suits their distance.
 //
-// The CPU has laid the frame out: one draw command per batch and view that draws nothing yet, each with
-// a run in the list of drawn instances that could hold the whole batch. Here an instance that is seen
+// The CPU has laid the frame out: one draw command per batch, level and view that draws nothing yet,
+// each with a run in the list of drawn instances that could hold the whole batch. Here an instance that is seen
 // takes the next free place in the run and the command's count goes up by one. Many instances do that
 // at the same time, so the count is raised atomically, which also hands every instance a place of its own.
 // The order of the instances within a run therefore differs from frame to frame.
@@ -40,14 +41,34 @@ struct CullFrame
     float projectionY;
     float nearPlane;
 
-    // Only a perspective is tested against the depth pyramid.
+    // Only a perspective is tested against the depth pyramid, and only a perspective picks levels of detail.
     uint isPerspective;
+
+    // A level is fine enough for an instance at a distance of at least its error times this.
+    float lodScale;
+
+    // The level every instance is drawn in. Negative for the level its distance picks.
+    int forcedLevel;
+
+    // How many levels coarser the sun's view draws.
+    uint shadowBias;
+    uint padding;
 };
 
-// The draw commands a batch's instances are counted into: the camera's for the two phases, and the sun's.
-// noCommand where the batch is not drawn. Has to match BatchCommands in GpuScene.cpp.
-struct BatchCommands
+// Where the list of levels has those of a batch. No levels for a batch that is not drawn from here.
+// Has to match BatchLods in GpuScene.cpp.
+struct BatchLods
 {
+    uint first;
+    uint count;
+};
+
+// One level of detail of a batch: how far its surface is from the original's at most, in the mesh's
+// units, and the draw commands its instances are counted into, the camera's for the two phases and the
+// sun's. The levels of a batch get coarser one by one. Has to match LodCommands in GpuScene.cpp.
+struct LodCommands
+{
+    float error;
     uint camera;
     uint cameraLate;
     uint sun;
@@ -75,7 +96,8 @@ struct CullConstants
     MeshInstance* instances;
     uint* visibleInstances;
     DrawCommand* commands;
-    BatchCommands* batches;
+    BatchLods* batches;
+    LodCommands* lods;
     CullFrame* frame;
 
     // Per place, whether the camera saw its instance in the last frame.
@@ -161,6 +183,25 @@ bool isHidden(float3 centre, float radius)
     return farthest > nearestOfSphere;
 }
 
+// The coarsest level of a batch whose error cannot be seen at the instance's distance: it stays under
+// the pixels allowed even at the point of the instance that is nearest to the camera.
+uint levelOfDetail(BatchLods batchLods, float3 centre, float radius, float scale)
+{
+    uint coarsest = batchLods.count - 1;
+    if (constants.frame.forcedLevel >= 0)
+        return min(uint(constants.frame.forcedLevel), coarsest);
+    if (constants.frame.isPerspective == 0)
+        return 0;
+
+    float distanceToCamera = length(mul(constants.frame.view, float4(centre, 1.0)).xyz);
+    float nearest = max(distanceToCamera - radius, constants.frame.nearPlane);
+
+    uint level = 0;
+    while (level < coarsest && constants.lods[batchLods.first + level + 1].error * scale * constants.frame.lodScale <= nearest)
+        ++level;
+    return level;
+}
+
 void draw(uint command, uint place)
 {
     uint countBefore;
@@ -181,9 +222,9 @@ void computeMain(uint3 thread : SV_DispatchThreadID)
     if (batch == noBatch)
         return;
 
-    // A batch without commands is see-through: the CPU culls and sorts those.
-    BatchCommands batchCommands = constants.batches[batch];
-    if (batchCommands.camera == noCommand && batchCommands.sun == noCommand)
+    // A batch without levels is see-through: the CPU culls and sorts those.
+    BatchLods batchLods = constants.batches[batch];
+    if (batchLods.count == 0)
         return;
 
     // The sphere around the instance in the world. Its radius grows by the largest of the three scales,
@@ -195,6 +236,13 @@ void computeMain(uint3 thread : SV_DispatchThreadID)
     float scale = sqrt(max(dot(axisX, axisX), max(dot(axisY, axisY), dot(axisZ, axisZ))));
     float3 centre = mul(instance.model, float4(instance.boundingSphere.xyz, 1.0)).xyz;
     float radius = instance.boundingSphere.w * scale;
+
+    // Both phases pick the same level, so an instance is drawn in one level per frame. The shadow may be
+    // coarser: it is seen less sharply than the thing itself.
+    uint level = levelOfDetail(batchLods, centre, radius, scale);
+    LodCommands batchCommands = constants.lods[batchLods.first + level];
+    uint shadowLevel = min(level + constants.frame.shadowBias, batchLods.count - 1);
+    uint sunCommand = constants.lods[batchLods.first + shadowLevel].sun;
 
     if (batchCommands.camera != noCommand)
     {
@@ -217,6 +265,6 @@ void computeMain(uint3 thread : SV_DispatchThreadID)
     }
 
     // Shadows are not culled against other things, so the sun's view needs one phase only.
-    if (constants.phase == phaseEarly && batchCommands.sun != noCommand && isSeen(constants.frame.sun, centre, radius))
-        draw(batchCommands.sun, place);
+    if (constants.phase == phaseEarly && sunCommand != noCommand && isSeen(constants.frame.sun, centre, radius))
+        draw(sunCommand, place);
 }

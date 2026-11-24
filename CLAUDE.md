@@ -122,6 +122,13 @@ build\bin\Debug\LynxSandboxGame.exe
   camera and the sun, counts those seen into the command and writes their places into its run. A command may end
   up drawing nothing, and the order of instances within a batch differs from frame to frame. The CPU learns what
   was drawn four frames later, from a copy of the commands, and only for the counters.
+- **Levels of detail.** Cooking makes coarser levels of every submesh of 1,024 triangles or more, each about half
+  the one before, with meshoptimizer (`BuildLods`). A level is a further run of indices over the same vertices
+  (`MeshLod`, `Submesh::Lods`) and knows how far it is off the original. The cull shader picks, per instance, the
+  coarsest level whose error stays under `LodSettings::ErrorPixels` on screen, so a batch has a draw command per
+  level and view. Shadows are drawn one level coarser. `LodSettings::ForcedLevel` shows one level everywhere
+  ("Show level" in the renderer settings panel). Surfaces with cut-outs keep their finest level: simplifying
+  leaves and needles makes trees visibly barer.
 - **Occlusion.** The camera's view is culled in two phases (`CullPhase`), so what is hidden behind other things is
   not drawn. Early: what was seen in the last frame, kept as a flag per instance on the GPU. Its depth becomes the
   depth pyramid (`Passes/DepthPyramidPass`): the depth in ever smaller sizes, each pixel the farthest of those it

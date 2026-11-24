@@ -12,7 +12,8 @@ namespace Lynx
         // Bump this when the stored form changes, or when cooking gives another result for the same file:
         // another vertex layout (PackedVertex), another draw order, other tangents.
         // 2: a material says whether it is two-sided.
-        constexpr uint32_t s_MeshVersion = 2;
+        // 3: a submesh has levels of detail.
+        constexpr uint32_t s_MeshVersion = 3;
         constexpr uint32_t s_MeshMagicNumber = 0x4d43584c; // "LXCM"
 
         // More than any mesh has. A damaged file that claims more is refused before memory is reserved for it.
@@ -25,6 +26,7 @@ namespace Lynx
             writer.Write(std::string_view(submesh.Name));
             writer.WriteArray(submesh.PackedVertices);
             writer.WriteArray(submesh.Indices);
+            writer.WriteArray(submesh.Lods);
             writer.Write(submesh.BoundingSphere);
 
             const auto& material = submesh.MaterialData;
@@ -48,6 +50,8 @@ namespace Lynx
             return reader.Read(submesh.Name)
                 && reader.ReadArray(submesh.PackedVertices, s_LargestVertexCount)
                 && reader.ReadArray(submesh.Indices, s_LargestIndexCount)
+                && reader.ReadArray(submesh.Lods, MeshLod::MaxCount)
+                && !submesh.Lods.empty()
                 && reader.Read(submesh.BoundingSphere)
                 && reader.Read(material.AlbedoColor)
                 && reader.Read(material.Metallic)

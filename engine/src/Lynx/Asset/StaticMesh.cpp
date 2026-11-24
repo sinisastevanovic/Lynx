@@ -39,6 +39,7 @@ namespace Lynx
         sub.Geometry = Engine::Get().GetRenderer().CreateMeshGeometry(packed, indices);
         sub.BoundingSphere = ComputeBoundingSphere(packed);
         sub.IndexCount = (uint32_t)indices.size();
+        sub.Lods = { MeshLod{ 0, sub.IndexCount, 0.0f } };
         sub.Material = submeshMaterial;
         sub.Name = "RuntimeCreated";
 
@@ -98,6 +99,14 @@ namespace Lynx
         for (SubmeshSourceData& submesh : m_SourceData)
         {
             OptimizeDrawOrder(submesh.Vertices, submesh.Indices);
+            submesh.Lods = BuildLods(submesh.Vertices, submesh.Indices, submesh.MaterialData.Mode == AlphaMode::Mask);
+            if (submesh.Lods.size() > 1)
+            {
+                std::string triangles;
+                for (const MeshLod& lod : submesh.Lods)
+                    triangles += (triangles.empty() ? "" : ", ") + std::to_string(lod.IndexCount / 3);
+                LX_CORE_INFO("Levels of detail of {0} in {1}, in triangles: {2}. The coarsest is off by {3} units.", submesh.Name, m_FilePath, triangles, submesh.Lods.back().Error);
+            }
 
             submesh.PackedVertices = PackVertices(submesh.Vertices);
             submesh.BoundingSphere = ComputeBoundingSphere(submesh.PackedVertices);
@@ -159,7 +168,8 @@ namespace Lynx
             Submesh sub;
             sub.Geometry = Engine::Get().GetRenderer().CreateMeshGeometry(source.PackedVertices, source.Indices);
             sub.BoundingSphere = source.BoundingSphere;
-            sub.IndexCount = (uint32_t)source.Indices.size();
+            sub.Lods = source.Lods;
+            sub.IndexCount = source.Lods.front().IndexCount;
             sub.Material = material;
             sub.Name = source.Name;
             m_Submeshes.push_back(sub);
