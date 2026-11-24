@@ -34,6 +34,23 @@ public float4 sampleMaterialTexture(uint texture, uint materialSampler, float2 u
     return textures[NonUniformResourceIndex(texture)].Sample(samplers[NonUniformResourceIndex(materialSampler)], uv);
 }
 
+// By how much the alpha of a cut-out is raised for every size of its texture below the full one.
+static const float alphaGainPerSize = 0.25;
+
+// The alpha a cut-out is tested with, from the alpha that was read at uv.
+//
+// A texture seen from far away is read from one of its smaller sizes, in which a texel is the average
+// of many. Of a twig with thin needles that average lies below the cut-off nearly everywhere, so the
+// whole twig is left out, and a tree gets barer the farther away it is. Raising the alpha with the size
+// that is read keeps about as much of the surface as its full size shows. It is a rule of thumb that
+// is in wide use, not an exact repair: that would be to make the smaller sizes so that they keep the
+// share of texels above the cut-off, where textures are cooked.
+public float cutOutAlpha(uint texture, uint materialSampler, float2 uv, float alpha)
+{
+    float size = textures[NonUniformResourceIndex(texture)].CalculateLevelOfDetail(samplers[NonUniformResourceIndex(materialSampler)], uv);
+    return alpha * (1.0 + max(size, 0.0) * alphaGainPerSize);
+}
+
 // True where a material with cut-outs leaves the surface out. For the passes that only draw depth:
 // they read no more of the material than this needs.
 public bool isCutOut(StandardMaterial* materials, uint material, float2 uv)
@@ -42,5 +59,8 @@ public bool isCutOut(StandardMaterial* materials, uint material, float2 uv)
     if (alphaCutoff < 0.0)
         return false;
 
-    return sampleMaterialTexture(materials[material].albedoTexture, materials[material].materialSampler, uv).a < alphaCutoff;
+    uint texture = materials[material].albedoTexture;
+    uint materialSampler = materials[material].materialSampler;
+    float alpha = sampleMaterialTexture(texture, materialSampler, uv).a;
+    return cutOutAlpha(texture, materialSampler, uv, alpha) < alphaCutoff;
 }

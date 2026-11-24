@@ -168,7 +168,7 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     float4 albedoSample = sampleMaterialTexture(material.albedoTexture, material.materialSampler, input.uv);
     if (material.alphaCutoff >= 0.0)
     {
-        if (albedoSample.a < material.alphaCutoff)
+        if (cutOutAlpha(material.albedoTexture, material.materialSampler, input.uv, albedoSample.a) < material.alphaCutoff)
             discard;
     }
     float3 albedo = albedoSample.rgb * material.albedoColor.rgb;
