@@ -29,7 +29,7 @@ namespace Lynx
 {
     Engine* Engine::s_Instance = nullptr;
     
-    void Engine::Initialize(const Project& project, bool editorMode)
+    void Engine::Initialize(const Project& project, bool editorMode, bool windowTakesFocus)
     {
         s_Instance = this;
         m_IsEditor = editorMode;
@@ -41,7 +41,9 @@ namespace Lynx
 
         RegisterCoreComponents(m_ComponentRegistry);
 
-        m_Window = Window::Create();
+        WindowProps windowProps;
+        windowProps.TakesFocus = windowTakesFocus;
+        m_Window = Window::Create(windowProps);
         m_Window->SetEventCallback([this](Event& event){ this->OnEvent(event); });
 
         m_ShaderCache = std::make_unique<ShaderCache>(m_ContentPaths->TempDirectory() / "ShaderCache");

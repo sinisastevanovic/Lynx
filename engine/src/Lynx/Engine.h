@@ -35,7 +35,9 @@ namespace Lynx
     public:
         static Engine& Get() { return *s_Instance; }
         
-        void Initialize(const Project& project, bool editorMode = false);
+        // windowTakesFocus is false for a run nobody sits in front of: its window then appears without
+        // taking the keyboard away from what the user is doing.
+        void Initialize(const Project& project, bool editorMode = false, bool windowTakesFocus = true);
         // Registers the game's components and scripts. Call it before any scene is loaded:
         // a scene drops the components whose types are not registered yet.
         void SetGameModule(IGameModule* gameModule);

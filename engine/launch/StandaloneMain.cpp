@@ -22,7 +22,9 @@ int main(int argc, char** argv)
     }
 
     Lynx::Engine engine;
-    engine.Initialize(*project);
+    // A benchmark runs many times in a row while its user does something else: its window stays in the background.
+    const bool isEditor = false;
+    engine.Initialize(*project, isEditor, !commandLine.Has("bench"));
     engine.SetProfilerOverlayVisible(commandLine.Has("profiler"));
 
     auto benchmark = Lynx::BenchmarkSettings::FromCommandLine(commandLine, project->RootDirectory, engine.GetContentPaths().TempDirectory() / "bench");

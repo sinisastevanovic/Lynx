@@ -17,6 +17,10 @@ namespace Lynx
         uint32_t Width;
         uint32_t Height;
 
+        // False for a window that appears without becoming the active one, so that it does not take the
+        // keyboard away from whatever the user is doing. For runs nobody sits in front of, like a benchmark.
+        bool TakesFocus = true;
+
         WindowProps(const std::string& title = "Lynx Engine", uint32_t width = 1600, uint32_t height = 900)
             : Title(title), Width(width), Height(height) {}
     };

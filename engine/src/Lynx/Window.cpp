@@ -109,8 +109,23 @@ namespace Lynx
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
+        // A window that must not take focus is created hidden and shown afterwards. GLFW shows a visible
+        // window while creating it, and activates it then if the process was started with a window style,
+        // which PowerShell's Start-Process always sets.
+        glfwWindowHint(GLFW_VISIBLE, props.TakesFocus ? GLFW_TRUE : GLFW_FALSE);
+        glfwWindowHint(GLFW_FOCUS_ON_SHOW, props.TakesFocus ? GLFW_TRUE : GLFW_FALSE);
+
         m_Window = glfwCreateWindow(static_cast<int>(m_Data.Width), static_cast<int>(m_Data.Height), m_Data.Title.c_str(), nullptr, nullptr);
         LX_ASSERT(m_Window, "Failed to create GLFW window!");
+
+        if (!props.TakesFocus)
+        {
+#if defined(_WIN32)
+            ShowWindow(glfwGetWin32Window(m_Window), SW_SHOWNOACTIVATE);
+#else
+            glfwShowWindow(m_Window);
+#endif
+        }
 
         glfwSetWindowUserPointer(m_Window, &m_Data);
 

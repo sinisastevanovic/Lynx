@@ -118,7 +118,13 @@ foreach ($benchName in $Bench) {
         $arguments = @("`"$projectFile`"", "--bench=bench/$benchName.json", "--bench-out=`"$runDirectory`"")
         foreach ($assignment in $Set) { $arguments += "--bench-set=$assignment" }
 
-        $process = Start-Process -FilePath $executable -ArgumentList $arguments -WorkingDirectory $projectRoot -PassThru -Wait -WindowStyle Normal
+        # No console window of its own: a new one would come to the front at every run and take the
+        # keyboard away from whatever else is being done on the machine. What the run prints goes to
+        # files instead, its log is copied below. The game's own window stays in the background too,
+        # which the engine does for a benchmark.
+        $printed = Join-Path ([IO.Path]::GetTempPath()) "lynx-bench-printed.txt"
+        $process = Start-Process -FilePath $executable -ArgumentList $arguments -WorkingDirectory $projectRoot -PassThru -Wait `
+            -NoNewWindow -RedirectStandardOutput $printed -RedirectStandardError "$printed.errors"
         $resultFile = Join-Path $runDirectory "bench.json"
 
         # The log is overwritten by the next run, so each run keeps its own copy.
