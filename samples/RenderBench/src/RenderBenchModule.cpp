@@ -32,6 +32,9 @@ public:
         if (const uint32_t dense = count("Dense"))
             CreateDenseField(scene, assetManager, dense);
 
+        if (const uint32_t trees = count("Trees"))
+            CreateTrees(scene, assetManager, trees);
+
         const uint32_t crowd = count("Crowd");
         const uint32_t blocksPerSide = count("BlocksPerSide");
         if (crowd == 0 && blocksPerSide == 0)

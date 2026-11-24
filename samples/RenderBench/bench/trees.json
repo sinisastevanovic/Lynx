@@ -1,0 +1,54 @@
+{
+    "Name": "trees",
+    "Scene": "Scenes/Trees.lxscene",
+    "Frames": 600,
+    "ScreenshotFrames": [
+        0,
+        300,
+        599
+    ],
+    "Parameters": {
+        "Trees": 100
+    },
+    "CameraPath": [
+        {
+            "Frame": 0,
+            "Position": [
+                -60.0,
+                2.0,
+                -60.0
+            ],
+            "Target": [
+                0.0,
+                6.0,
+                0.0
+            ]
+        },
+        {
+            "Frame": 300,
+            "Position": [
+                0.0,
+                1.8,
+                0.0
+            ],
+            "Target": [
+                30.0,
+                5.0,
+                30.0
+            ]
+        },
+        {
+            "Frame": 599,
+            "Position": [
+                70.0,
+                60.0,
+                -70.0
+            ],
+            "Target": [
+                0.0,
+                5.0,
+                0.0
+            ]
+        }
+    ]
+}

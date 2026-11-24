@@ -1,0 +1,102 @@
+{
+    "Entities": [
+        {
+            "ID": 7000000000000000018,
+            "Tag": {
+                "Tag": "Sun"
+            },
+            "Transform": {
+                "Translation": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Rotation": [
+                    0.8567866719650288,
+                    -0.44601491077688155,
+                    0.22957529683877867,
+                    0.11950933515490465
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "DirectionalLight": {
+                "Color": [
+                    1.0,
+                    0.96,
+                    0.9
+                ],
+                "Intensity": 3.0,
+                "CastShadows": true
+            }
+        },
+        {
+            "ID": 7000000000000000019,
+            "Tag": {
+                "Tag": "Ground"
+            },
+            "Transform": {
+                "Translation": [
+                    0.0,
+                    -0.6,
+                    0.0
+                ],
+                "Rotation": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Scale": [
+                    2400.0,
+                    0.2,
+                    2400.0
+                ]
+            },
+            "Mesh": {
+                "Mesh": 1803605728040638312
+            }
+        },
+        {
+            "ID": 7200000000000000012,
+            "Tag": {
+                "Tag": "Camera"
+            },
+            "Transform": {
+                "Translation": [
+                    -110.0,
+                    25.0,
+                    -110.0
+                ],
+                "Rotation": [
+                    -0.38146951409777774,
+                    0.03045684193628128,
+                    0.9209488745667295,
+                    0.07352932086962391
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "Camera": {
+                "FixedAspectRatio": false,
+                "Primary": true,
+                "SceneCamera": {
+                    "OrthographicFar": 1.0,
+                    "OrthographicNear": -1.0,
+                    "OrthographicSize": 10.0,
+                    "PerspectiveFOV": 1.0471975511965976,
+                    "PerspectiveFar": 1000.0,
+                    "PerspectiveNear": 0.1,
+                    "ProjectionType": 0
+                }
+            }
+        }
+    ],
+    "Scene": "Trees"
+}

@@ -76,3 +76,9 @@ void CreateBlocks(Scene& scene, const ShapeLibrary& shapes, uint32_t blocksPerSi
 // plants with leaves, and models made of several parts. Where the other scenes are about the number of
 // objects, this one is about the number of triangles and vertices.
 void CreateDenseField(Scene& scene, AssetManager& assetManager, uint32_t count);
+
+// A stand of trees, each an entity: nine trees of three kinds, from 0.4 to 7 million triangles each, as
+// their makers modelled them, with every needle. It is what a forest costs before the renderer has levels
+// of detail, shadows that reach far and trees that are not entities.
+// The models are not in the repository: tools/fetch-polyhaven.ps1 fetches them.
+void CreateTrees(Scene& scene, AssetManager& assetManager, uint32_t count);

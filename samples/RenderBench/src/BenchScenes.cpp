@@ -333,3 +333,47 @@ void CreateDenseField(Scene& scene, AssetManager& assetManager, uint32_t count)
 
     LX_INFO("Created a field of {0} detailed models.", count);
 }
+
+void CreateTrees(Scene& scene, AssetManager& assetManager, uint32_t count)
+{
+    const char* const paths[] = {
+        "Models/fir_sapling_medium/fir_sapling_medium_a.gltf",
+        "Models/fir_sapling_medium/fir_sapling_medium_b.gltf",
+        "Models/fir_sapling_medium/fir_sapling_medium_c.gltf",
+        "Models/fir_tree_01/fir_tree_01_a.gltf",
+        "Models/fir_tree_01/fir_tree_01_b.gltf",
+        "Models/fir_tree_01/fir_tree_01_c.gltf",
+        "Models/pine_tree_01/pine_tree_01_a.gltf",
+        "Models/pine_tree_01/pine_tree_01_b.gltf",
+        "Models/pine_tree_01/pine_tree_01_c.gltf",
+    };
+
+    std::vector<std::shared_ptr<StaticMesh>> meshes;
+    for (const char* path : paths)
+    {
+        meshes.push_back(assetManager.GetProjectAsset<StaticMesh>(path, AssetLoadMode::Blocking));
+        if (!meshes.back())
+            LX_ERROR("RenderBench: cannot load {0}. The tree models are fetched by tools/fetch-polyhaven.ps1.", path);
+    }
+
+    const float spacing = 7.0f;
+    const uint32_t side = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<float>(count))));
+    const float origin = -0.5f * spacing * static_cast<float>(side - 1);
+
+    for (uint32_t index = 0; index < count; ++index)
+    {
+        const size_t kind = Hash(index * 16u + 0u) % std::size(paths);
+        if (!meshes[kind])
+            continue;
+
+        // Off the grid by up to a third of the spacing, so that no rows show.
+        const glm::vec3 position(
+            origin + spacing * static_cast<float>(index % side) + Random(index, 3, -2.3f, 2.3f),
+            GroundHeight,
+            origin + spacing * static_cast<float>(index / side) + Random(index, 4, -2.3f, 2.3f));
+
+        CreateMeshEntity(scene, "Tree", meshes[kind], nullptr, position, TurnedAroundUp(Random(index, 5)), glm::vec3(Random(index, 6, 0.85f, 1.15f)));
+    }
+
+    LX_INFO("Created a stand of {0} trees.", count);
+}

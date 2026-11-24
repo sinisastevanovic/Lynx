@@ -27,7 +27,7 @@
 # The exit code is 1 if a run failed or wrote errors to the engine log.
 param(
     [string]$Label = "",
-    [string[]]$Bench = @("features", "sponza", "grid", "crowd", "blocks", "dense"),
+    [string[]]$Bench = @("features", "sponza", "grid", "crowd", "blocks", "dense", "trees"),
     [int]$Runs = 5,
     [ValidateSet("Release", "Debug")][string]$Configuration = "Release",
     [string]$BuildDirectory = "",
