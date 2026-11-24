@@ -127,7 +127,8 @@ namespace Lynx
 
         // Lays out the frame's draw commands and queues for upload what changed since the last frame.
         // Call once per frame, before the uploads are recorded.
-        Frame Prepare(const CullCamera& camera, const Frustum& sun, const glm::vec3& cameraPosition, const LodSettings& lods);
+        // sun holds the cascades of the sun's shadow.
+        Frame Prepare(const CullCamera& camera, std::span<const ShadowCascade, ShadowCascadeCount> sun, const ShadowSettings& shadows, const glm::vec3& cameraPosition, const LodSettings& lods);
 
         // Copies the draw commands to where the CPU can read them, which is how it learns what culling
         // let through. Call once per frame, after the frame's passes are recorded.

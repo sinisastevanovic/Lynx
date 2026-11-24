@@ -8,8 +8,6 @@
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
 #include "Lynx/Renderer/Vulkan/SharedBindings.h"
 
-#include <limits>
-
 namespace Lynx
 {
     namespace
@@ -37,11 +35,6 @@ namespace Lynx
         vk::Pipeline OpaquePipeline;
         vk::Pipeline CutOutPipeline;
 
-        GpuTexture ShadowMap;
-
-        // Compares instead of reading, and treats everything outside the map as lit.
-        vk::Sampler ShadowSampler;
-
         // The renderer waits for the GPU before it destroys its passes, so nothing here is still in use.
         ~VulkanObjects()
         {
@@ -50,12 +43,11 @@ namespace Lynx
 
             Device.destroyPipeline(OpaquePipeline);
             Device.destroyPipeline(CutOutPipeline);
-            Device.destroySampler(ShadowSampler);
         }
     };
 
-    ShadowPass::ShadowPass(uint32_t resolution)
-        : m_Resolution(resolution)
+    ShadowPass::ShadowPass(uint32_t cascade)
+        : m_Cascade(cascade)
     {
     }
 
@@ -67,31 +59,6 @@ namespace Lynx
         m_Vulkan->Context = ctx.Graphics;
         m_Vulkan->Shared = ctx.Shared;
         m_Vulkan->Device = ctx.Graphics->Device();
-
-        GpuTextureDesc shadowDesc;
-        shadowDesc.Width = m_Resolution;
-        shadowDesc.Height = m_Resolution;
-        shadowDesc.Format = RenderFormats::ShadowMap;
-        shadowDesc.Usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
-        shadowDesc.Name = "ShadowMap";
-        m_Vulkan->ShadowMap = GpuTexture(*ctx.Graphics, shadowDesc);
-
-        vk::SamplerCreateInfo samplerInfo;
-        samplerInfo.magFilter = vk::Filter::eLinear;
-        samplerInfo.minFilter = vk::Filter::eLinear;
-        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToBorder;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToBorder;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToBorder;
-        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
-        samplerInfo.compareEnable = VK_TRUE;
-        samplerInfo.compareOp = vk::CompareOp::eLess;
-        samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.maxLod = std::numeric_limits<float>::max();
-        m_Vulkan->ShadowSampler = m_Vulkan->Device.createSampler(samplerInfo);
-
-        m_ShadowMapIndex = ctx.Shared->AddTexture(m_Vulkan->ShadowMap.View());
-        m_ShadowSamplerIndex = ctx.Shared->ComparisonSamplerIndex(m_Vulkan->ShadowSampler);
 
         m_PipelineState.SetShader("Shaders/Shadow.slang");
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
@@ -146,36 +113,33 @@ namespace Lynx
         m_Vulkan->CutOutPipeline = cutOutPipeline;
     }
 
-    bool ShadowPass::Declare(const RenderContext&, const RenderData&, PassResources& resources)
+    bool ShadowPass::Declare(const RenderContext&, const RenderData& renderData, PassResources& resources)
     {
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
 
         // The map is cleared even if nothing casts a shadow or the shader is broken:
         // the forward pass reads it either way, and an empty map means no shadows.
-        resources.DepthTarget = &m_Vulkan->ShadowMap;
+        resources.DepthTarget = renderData.ShadowMaps[m_Cascade];
         resources.ClearsDepth = true;
         return true;
     }
 
     void ShadowPass::Execute(vk::CommandBuffer commands, RenderData& renderData)
     {
-        renderData.ShadowMap = &m_Vulkan->ShadowMap;
-        renderData.ShadowMapIndex = m_ShadowMapIndex;
-        renderData.ShadowSamplerIndex = m_ShadowSamplerIndex;
-
         const MeshDrawCommands& draws = renderData.MeshDraws;
-        if (!m_Vulkan->OpaquePipeline || draws.Shadow.All().Count == 0)
+        const MeshDrawGroups& groups = draws.Shadow[m_Cascade];
+        if (!m_Vulkan->OpaquePipeline || groups.All().Count == 0)
             return;
 
         renderData.Geometry->Bind(commands);
 
         ShadowPushData push{};
-        push.LightViewProjection = renderData.ClipLightViewProjection;
+        push.LightViewProjection = renderData.ClipCascadeViewProjection[m_Cascade];
         push.Instances = renderData.MeshInstanceAddress;
         push.VisibleInstances = renderData.VisibleInstanceAddress;
         push.Materials = renderData.MaterialAddress;
         m_Vulkan->Shared->Push(commands, push);
 
-        DrawDepthOfMeshes(commands, draws, draws.Shadow, m_Vulkan->OpaquePipeline, m_Vulkan->CutOutPipeline);
+        DrawDepthOfMeshes(commands, draws, groups, m_Vulkan->OpaquePipeline, m_Vulkan->CutOutPipeline);
     }
 }

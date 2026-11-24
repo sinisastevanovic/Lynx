@@ -27,16 +27,20 @@ namespace Lynx
 
         // The level of detail each mesh is drawn in: green for the finest, towards red for coarser ones.
         LevelOfDetail,
+
+        // Which cascade of the sun's shadow each surface is in, nearest first: red, green, blue, yellow.
+        ShadowCascades,
     };
 
     // The modes by their numbers, as a list to choose from.
-    inline constexpr std::array<const char*, 6> ViewModeNames = { "Lit", "Wireframe", "Unlit", "Lighting only", "Normals", "Level of detail" };
+    inline constexpr std::array<const char*, 7> ViewModeNames = { "Lit", "Wireframe", "Unlit", "Lighting only", "Normals", "Level of detail", "Shadow cascades" };
 
     // True for a mode whose colours mean something as they are. They are shown without bloom and tone
     // mapping, which would change them.
     constexpr bool ShowsRawColours(ViewMode mode)
     {
-        return mode == ViewMode::Wireframe || mode == ViewMode::Unlit || mode == ViewMode::Normals || mode == ViewMode::LevelOfDetail;
+        return mode == ViewMode::Wireframe || mode == ViewMode::Unlit || mode == ViewMode::Normals || mode == ViewMode::LevelOfDetail
+            || mode == ViewMode::ShadowCascades;
     }
 
     // How one view of a scene is shown. It belongs to the view, not to the renderer: whoever draws a

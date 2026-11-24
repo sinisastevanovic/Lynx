@@ -30,6 +30,10 @@ public:
         lods.ShadowBias = static_cast<uint32_t>(std::max(settings.Parameter("LodShadowBias", lods.ShadowBias), 0.0));
         lods.ForcedLevel = static_cast<int32_t>(settings.Parameter("LodForcedLevel", lods.ForcedLevel));
 
+        ShadowSettings& shadows = engine.GetRenderer().GetShadowSettings();
+        shadows.Distance = static_cast<float>(settings.Parameter("ShadowDistance", shadows.Distance));
+        shadows.SmallestCasterInTexels = static_cast<float>(settings.Parameter("ShadowSmallestCaster", shadows.SmallestCasterInTexels));
+
         // What the view shows, for pictures of every view mode. See ViewMode for the numbers.
         ViewSettings& viewing = engine.GetSceneRenderer().GetViewSettings();
         const double mode = std::clamp(settings.Parameter("ViewMode", 0.0), 0.0, static_cast<double>(ViewModeNames.size() - 1));

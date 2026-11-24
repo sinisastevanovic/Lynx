@@ -34,6 +34,17 @@ namespace Lynx
                 ImGui::DragFloat("Intensity", &bloom.Intensity, 0.001f, 0.0f, 1.0f);
             }
 
+            if (ImGui::CollapsingHeader("Shadows", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                ShadowSettings& shadows = renderer.GetShadowSettings();
+                ImGui::DragFloat("Distance", &shadows.Distance, 1.0f, 10.0f, 5000.0f);
+                ImGui::SetItemTooltip("How far from the camera the sun's shadow is drawn.");
+                ImGui::SliderFloat("Detail near the camera", &shadows.SplitWeight, 0.0f, 1.0f);
+                ImGui::SetItemTooltip("How the distance is shared out among the four cascades.\nHigher gives the near ones more of the detail.");
+                ImGui::DragFloat("Smallest caster in texels", &shadows.SmallestCasterInTexels, 0.1f, 0.0f, 64.0f);
+                ImGui::SetItemTooltip("Things smaller than this many texels of a cascade's map cast no shadow into it.\nSmall things then lose their shadow some way off, which is where most of the cost of far shadows lies.");
+            }
+
             if (ImGui::CollapsingHeader("Level of Detail", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 LodSettings& lods = renderer.GetLodSettings();

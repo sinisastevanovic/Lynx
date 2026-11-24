@@ -18,8 +18,6 @@ namespace Lynx
             uint64_t Instances;
             uint64_t VisibleInstances;
             uint64_t Materials;
-            uint32_t ShadowMap;
-            uint32_t ShadowSampler;
             ViewMode Mode;
             uint32_t ShowCutOuts;
         };
@@ -139,7 +137,8 @@ namespace Lynx
         if (m_WritesEntityIds)
             resources.IdTarget = renderData.SceneEntityIds;
         resources.DepthTarget = renderData.SceneDepth;
-        resources.Sample(renderData.ShadowMap);
+        for (GpuTexture* shadowMap : renderData.ShadowMaps)
+            resources.Sample(shadowMap);
         return true;
     }
 
@@ -157,8 +156,6 @@ namespace Lynx
         push.Instances = renderData.MeshInstanceAddress;
         push.VisibleInstances = renderData.VisibleInstanceAddress;
         push.Materials = renderData.MaterialAddress;
-        push.ShadowMap = renderData.ShadowMapIndex;
-        push.ShadowSampler = renderData.ShadowSamplerIndex;
         push.Mode = renderData.Viewing.Mode;
         push.ShowCutOuts = renderData.Viewing.ShowCutOuts ? 1u : 0u;
         m_Vulkan->Shared->Push(commands, push);

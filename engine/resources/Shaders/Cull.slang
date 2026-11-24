@@ -17,6 +17,7 @@
 // Nothing that is visible is ever left out this way: the early phase may draw too much, the late phase
 // draws whatever is missing.
 
+import Scene;
 import Mesh;
 import Textures;
 
@@ -31,7 +32,9 @@ struct View
 struct CullFrame
 {
     View camera;
-    View sun;
+
+    // What the sun sees of each cascade of its shadow.
+    View sun[shadowCascadeCount];
 
     // Takes a position in the world to the camera's space, where the camera looks along -z.
     float4x4 view;
@@ -52,7 +55,14 @@ struct CullFrame
 
     // How many levels coarser the sun's view draws.
     uint shadowBias;
-    uint padding;
+
+    // What is smaller than this many texels of a cascade's map casts no shadow into it.
+    float smallestCasterInTexels;
+
+    // The world as the sun sees it, turned but not moved, and per cascade the square of ground its map
+    // covers in that view: the middle in xy, half its width in z, and in w the size of one of its texels.
+    float4x4 sunView;
+    float4 cascades[shadowCascadeCount];
 };
 
 // Where the list of levels has those of a batch. No levels for a batch that is not drawn from here.
@@ -75,7 +85,8 @@ struct LodCommands
     float error;
     uint camera;
     uint cameraLate;
-    uint sun;
+    uint sun[shadowCascadeCount];
+    uint padding;
 };
 
 // What a draw call reads from a buffer, as Vulkan defines it (VkDrawIndexedIndirectCommand).
@@ -190,11 +201,10 @@ bool isHidden(float3 centre, float radius)
 // Levels are counted in sixteenths here, so that foliage can be drawn between two levels.
 static const uint levelSteps = 16;
 
-// The coarsest level of a batch whose error cannot be seen at the instance's distance: it stays under
-// the pixels allowed even at the point of the instance that is nearest to the camera.
-// In sixteenths of a level. A mesh is drawn in whole levels. Foliage is drawn in the whole level below
-// the one returned, and its leaves grow and shrink by what is left over, see leafPosition in Mesh.slang.
-uint levelOfDetail(BatchLods batchLods, float3 centre, float radius, float scale)
+// The coarsest level of a batch whose error cannot be seen from a distance: it stays under the pixels
+// allowed. In sixteenths of a level. A mesh is drawn in whole levels. Foliage is drawn in the whole level
+// below the one returned, and its leaves grow and shrink by what is left over, see leafPosition in Mesh.slang.
+uint levelAtDistance(BatchLods batchLods, float distance, float scale)
 {
     uint coarsest = batchLods.count - 1;
     if (constants.frame.forcedLevel >= 0)
@@ -202,22 +212,52 @@ uint levelOfDetail(BatchLods batchLods, float3 centre, float radius, float scale
     if (constants.frame.isPerspective == 0)
         return 0;
 
-    float distanceToCamera = length(mul(constants.frame.view, float4(centre, 1.0)).xyz);
-    float nearest = max(distanceToCamera - radius, constants.frame.nearPlane);
-
     // Foliage: level k has leaves larger by the square root of 2^k, and is fine while those are small
     // enough on screen. So the level grows by two every time the distance doubles.
     if (batchLods.leafSize > 0.0)
     {
         float firstCoarserAt = max(batchLods.leafSize * scale * constants.frame.lodScale, 0.000001);
-        float level = 2.0 * log2(nearest / firstCoarserAt);
+        float level = 2.0 * log2(distance / firstCoarserAt);
         return uint(clamp(level, 0.0, float(coarsest)) * float(levelSteps));
     }
 
     uint level = 0;
-    while (level < coarsest && constants.lods[batchLods.first + level + 1].error * scale * constants.frame.lodScale <= nearest)
+    while (level < coarsest && constants.lods[batchLods.first + level + 1].error * scale * constants.frame.lodScale <= distance)
         ++level;
     return level * levelSteps;
+}
+
+// How many texels of a shadow map an error may be large: a shadow cannot show more than its map holds.
+static const float shadowErrorInTexels = 1.0;
+
+// The level an instance is drawn in for one cascade of the sun's shadow. It is at least as coarse as the
+// level the camera sees it in, by the shadow bias, and coarser if the cascade's map could not show the
+// difference: an error smaller than a texel of the map is lost in it. So a far cascade, whose texels are
+// large, draws coarse levels of everything, however near the camera it stands.
+uint shadowLevel(BatchLods batchLods, uint cascade, float distanceToCamera, float scale)
+{
+    // The distance at which an error as large as the texels allowed would be as large as the pixels allowed.
+    float asIfAt = constants.frame.cascades[cascade].w * shadowErrorInTexels * constants.frame.lodScale;
+    uint level = levelAtDistance(batchLods, max(distanceToCamera, asIfAt), scale);
+    return min(level + constants.frame.shadowBias * levelSteps, (batchLods.count - 1) * levelSteps);
+}
+
+// True if a cascade does not need the shadow of an instance, because the cascade before it shows all of
+// it. A place takes its shadow from the first cascade whose map it lies in. A shadow falls along the
+// sun's direction, so everything it falls on lies, as the sun sees it, where its caster lies. If that is
+// well inside the square the cascade before covers, inside the part that is not mixed with this one,
+// then nothing that looks into this cascade's map can be in that shadow.
+bool isCoveredByNearerCascade(uint cascade, float3 centre, float radius)
+{
+    if (cascade == 0)
+        return false;
+
+    float4 nearer = constants.frame.cascades[cascade - 1];
+
+    // A few texels are left for the softening of the shadow's edge and for looking it up off the surface.
+    float unmixed = nearer.z * (1.0 - shadowCascadeBlend) - 4.0 * nearer.w;
+    float2 fromMiddle = abs(mul(constants.frame.sunView, float4(centre, 1.0)).xy - nearer.xy);
+    return max(fromMiddle.x, fromMiddle.y) + radius <= unmixed;
 }
 
 // Adds an instance to a draw command. The level it is drawn in goes into the list with its place,
@@ -257,12 +297,12 @@ void computeMain(uint3 thread : SV_DispatchThreadID)
     float3 centre = mul(instance.model, float4(instance.boundingSphere.xyz, 1.0)).xyz;
     float radius = instance.boundingSphere.w * scale;
 
-    // Both phases pick the same level, so an instance is drawn in one level per frame. The shadow may be
-    // coarser: it is seen less sharply than the thing itself.
-    uint level = levelOfDetail(batchLods, centre, radius, scale);
+    // The distance from the camera to the point of the instance that is nearest to it.
+    float distanceToCamera = max(length(mul(constants.frame.view, float4(centre, 1.0)).xyz) - radius, constants.frame.nearPlane);
+
+    // Both phases pick the same level, so an instance is drawn in one level per frame.
+    uint level = levelAtDistance(batchLods, distanceToCamera, scale);
     LodCommands batchCommands = constants.lods[batchLods.first + level / levelSteps];
-    uint shadowLevel = min(level + constants.frame.shadowBias * levelSteps, (batchLods.count - 1) * levelSteps);
-    uint sunCommand = constants.lods[batchLods.first + shadowLevel / levelSteps].sun;
 
     if (batchCommands.camera != noCommand)
     {
@@ -284,7 +324,25 @@ void computeMain(uint3 thread : SV_DispatchThreadID)
         }
     }
 
-    // Shadows are not culled against other things, so the sun's view needs one phase only.
-    if (constants.phase == phaseEarly && sunCommand != noCommand && isSeen(constants.frame.sun, centre, radius))
-        draw(sunCommand, place, shadowLevel);
+    // Shadows are not culled against other things, so the sun's views need one phase only. The maps of
+    // the cascades lie inside each other, so an instance reaches into several: it is drawn into those
+    // that need its shadow, each in the level that the map can still show.
+    if (constants.phase == phaseEarly)
+    {
+        for (uint cascade = 0; cascade < shadowCascadeCount; ++cascade)
+        {
+            uint levelInShadow = shadowLevel(batchLods, cascade, distanceToCamera, scale);
+            uint command = constants.lods[batchLods.first + levelInShadow / levelSteps].sun[cascade];
+            if (command == noCommand || !isSeen(constants.frame.sun[cascade], centre, radius))
+                continue;
+            if (isCoveredByNearerCascade(cascade, centre, radius))
+                continue;
+
+            // Too small for this cascade's map to show more of it than a blur.
+            if (radius < constants.frame.smallestCasterInTexels * constants.frame.cascades[cascade].w)
+                continue;
+
+            draw(command, place, levelInShadow);
+        }
+    }
 }

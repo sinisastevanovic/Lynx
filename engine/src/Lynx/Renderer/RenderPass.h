@@ -6,6 +6,7 @@
 #include <span>
 
 #include "DebugRenderer.h"
+#include "ShadowCascades.h"
 #include "ViewMode.h"
 #include "Lynx/Asset/StaticMesh.h"
 #include "Lynx/Asset/TextureSpecification.h"
@@ -81,11 +82,11 @@ namespace Lynx
     {
         const GpuBuffer* Buffer = nullptr;
 
-        // What the camera sees, early and late, then what the sun sees. The camera's commands of both
-        // phases follow each other directly.
+        // What the camera sees, early and late, then what the sun sees in each cascade of its shadow.
+        // The camera's commands of both phases follow each other directly.
         MeshDrawGroups CameraEarly;
         MeshDrawGroups CameraLate;
-        MeshDrawGroups Shadow;
+        std::array<MeshDrawGroups, ShadowCascadeCount> Shadow;
 
         const MeshDrawGroups& CameraOf(CullPhase phase) const { return phase == CullPhase::Early ? CameraEarly : CameraLate; }
 
@@ -148,13 +149,26 @@ namespace Lynx
         uint32_t MipCount = 0;
     };
 
+    // What every shader knows about the frame. Has to match SceneConstants in Scene.slang.
     struct SceneData
     {
         glm::mat4 ViewProjectionMatrix;
-        glm::mat4 LightViewProjection;
         glm::vec4 CameraPosition;
         glm::vec4 LightDirection; // w is intensity
         glm::vec4 LightColor;
+
+        // The sun's shadow. The world as the sun sees it, turned but not moved. Then per cascade: from the
+        // world to where a place lies in the cascade's map (xy as texture coordinates, z as the depth to
+        // compare), the square of ground the map covers as the sun sees it (its middle in xy, one over half
+        // its width in z, and in w the size of a texel in the world), and where the texture table has the map.
+        glm::mat4 SunView;
+        glm::mat4 CascadeToTexture[ShadowCascadeCount];
+        glm::vec4 CascadeFootprint[ShadowCascadeCount];
+        glm::uvec4 CascadeTextures;
+
+        // Where the table of comparing samplers has the one the maps are read with.
+        uint32_t ShadowSampler;
+        uint32_t Padding[3];
     };
 
     // One see-through instance, drawn on its own: these are sorted by distance, which a shared draw
@@ -237,16 +251,15 @@ namespace Lynx
         glm::vec3 LightColor;
         float LightIntensity;
 
-        glm::mat4 LightViewProj; // TODO: Can't we use the normal ViewProjection for this?
 
-        // The two above as shaders get them. The engine's matrices have +Y up on screen, as GLM makes them.
+        // The camera's matrix as shaders get it. The engine's matrices have +Y up on screen, as GLM makes them.
         // Vulkan has +Y down, so what goes to a shader is turned around once, here.
         glm::mat4 ClipViewProjection;
-        glm::mat4 ClipLightViewProjection;
-        // The shadow map, and where the texture table and the table of comparing samplers have it and its sampler.
-        GpuTexture* ShadowMap = nullptr;
-        uint32_t ShadowMapIndex = 0;
-        uint32_t ShadowSamplerIndex = 0;
+
+        // The cascades of the sun's shadow: what each covers, its matrix as shaders get it, and its map.
+        std::array<ShadowCascade, ShadowCascadeCount> Cascades;
+        std::array<glm::mat4, ShadowCascadeCount> ClipCascadeViewProjection;
+        std::array<GpuTexture*, ShadowCascadeCount> ShadowMaps{};
 
         // Where the scene passes draw: the HDR picture, its depth and, in the editor, the entity ID of every pixel.
         GpuTexture* SceneColor = nullptr;

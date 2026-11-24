@@ -128,7 +128,6 @@ namespace Lynx
 
         std::string GetAdapterName() const;
 
-        glm::mat4 GetLightViewProjMatrix() const { return m_CurrentFrameData.LightViewProj; }
         glm::mat4 GetCameraViewProjMatrix() const { return m_CurrentFrameData.ViewProjection; }
 
         // Puts a texture into the table that shaders read from. The slot keeps the texture alive.
@@ -143,6 +142,9 @@ namespace Lynx
 
         BloomSettings& GetBloomSettings() { return m_BloomSettings; }
         const BloomSettings& GetBloomSettings() const { return m_BloomSettings; }
+
+        ShadowSettings& GetShadowSettings() { return m_ShadowSettings; }
+        const ShadowSettings& GetShadowSettings() const { return m_ShadowSettings; }
 
         LodSettings& GetLodSettings() { return m_LodSettings; }
         const LodSettings& GetLodSettings() const { return m_LodSettings; }
@@ -159,6 +161,7 @@ namespace Lynx
         void EndScene();
 
         void CreateDefaultTextures();
+        void CreateShadowMaps();
         void ApplySwapchainSettings(const SwapchainSettings& settings);
         void ReleaseSwapchainImages();
         void CreateSceneTargets(uint32_t width, uint32_t height);
@@ -197,11 +200,11 @@ namespace Lynx
 
         BloomSettings m_BloomSettings;
         LodSettings m_LodSettings;
+        ShadowSettings m_ShadowSettings;
 
         RenderContext m_RenderContext;
         RenderData m_CurrentFrameData;
 
-        int m_ShadowMapResolution = 4096;
 
         bool m_ShowGrid = true;
         bool m_ShowColliders = false;

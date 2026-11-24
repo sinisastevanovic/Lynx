@@ -34,7 +34,9 @@ namespace Lynx
         struct CullFrame
         {
             CullView Camera;
-            CullView Sun;
+
+            // What the sun sees of each cascade of its shadow.
+            CullView Sun[ShadowCascadeCount];
             glm::mat4 View;
 
             // How much the camera's projection scales x and y, and the distance of its near plane.
@@ -53,7 +55,15 @@ namespace Lynx
 
             // How many levels coarser the sun's view draws.
             uint32_t ShadowBias;
-            uint32_t Padding;
+
+            // What is smaller than this many texels of a cascade's map casts no shadow into it.
+            float SmallestCasterInTexels;
+
+            // The world as the sun sees it, turned but not moved, and per cascade the square of ground
+            // its map covers in that view: the middle in xy, half its width in z, and in w the size of
+            // one of its texels.
+            glm::mat4 SunView;
+            glm::vec4 Cascades[ShadowCascadeCount];
         };
 
         // Where the list of levels has those of a batch. No levels for a batch that culling on the GPU
@@ -69,14 +79,17 @@ namespace Lynx
         };
 
         // One level of detail of a batch: its error, and the draw commands its instances are counted into,
-        // the camera's for the two phases of culling and the sun's. Has to match LodCommands in Cull.slang.
+        // the camera's for the two phases of culling and the sun's for each cascade of its shadow.
+        // Has to match LodCommands in Cull.slang.
         struct LodCommands
         {
             float Error = 0.0f;
             uint32_t Camera = NoCommand;
             uint32_t CameraLate = NoCommand;
-            uint32_t Sun = NoCommand;
+            uint32_t Sun[ShadowCascadeCount] = { NoCommand, NoCommand, NoCommand, NoCommand };
+            uint32_t Padding = 0;
         };
+        static_assert(ShadowCascadeCount == 4);
 
         CullView ToCullView(const Frustum& frustum)
         {
@@ -322,7 +335,7 @@ namespace Lynx
         m_Changed.clear();
     }
 
-    GpuScene::Frame GpuScene::Prepare(const CullCamera& camera, const Frustum& sun, const glm::vec3& cameraPosition, const LodSettings& lods)
+    GpuScene::Frame GpuScene::Prepare(const CullCamera& camera, std::span<const ShadowCascade, ShadowCascadeCount> sun, const ShadowSettings& shadows, const glm::vec3& cameraPosition, const LodSettings& lods)
     {
         ++m_Frame;
 
@@ -408,7 +421,8 @@ namespace Lynx
         // their level and writes their places into its run.
         std::vector<vk::DrawIndexedIndirectCommand> commands;
         uint32_t visibleCount = 0;
-        const auto addCommands = [&](uint32_t LodCommands::* view)
+        // commandOf says which of a level's commands is being laid out: that of one view.
+        const auto addCommands = [&](auto&& commandOf)
         {
             // The commands of a view are grouped by kind, so that a pass draws each kind with one call.
             MeshDrawGroups groups;
@@ -428,7 +442,7 @@ namespace Lynx
                     for (uint32_t level = 0; level < submesh.Lods.size(); ++level)
                     {
                         const MeshLod& lod = submesh.Lods[level];
-                        lodCommands[batchLods[index].First + level].*view = static_cast<uint32_t>(commands.size());
+                        commandOf(lodCommands[batchLods[index].First + level]) = static_cast<uint32_t>(commands.size());
                         commands.emplace_back(lod.IndexCount, 0u, submesh.Geometry.FirstIndex() + lod.FirstIndex, submesh.Geometry.VertexOffset(), visibleCount);
                         visibleCount += static_cast<uint32_t>(batch.Places.size());
                     }
@@ -439,9 +453,10 @@ namespace Lynx
             return groups;
         };
 
-        frame.Draws.CameraEarly = addCommands(&LodCommands::Camera);
-        frame.Draws.CameraLate = addCommands(&LodCommands::CameraLate);
-        frame.Draws.Shadow = addCommands(&LodCommands::Sun);
+        frame.Draws.CameraEarly = addCommands([](LodCommands& level) -> uint32_t& { return level.Camera; });
+        frame.Draws.CameraLate = addCommands([](LodCommands& level) -> uint32_t& { return level.CameraLate; });
+        for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
+            frame.Draws.Shadow[cascade] = addCommands([cascade](LodCommands& level) -> uint32_t& { return level.Sun[cascade]; });
 
         copy.CommandCount = static_cast<uint32_t>(commands.size());
         copy.CameraCommandCount = frame.Draws.Camera().Count;
@@ -464,7 +479,14 @@ namespace Lynx
             const glm::mat4& projection = camera.Projection;
             CullFrame cullFrame;
             cullFrame.Camera = ToCullView(camera.Planes);
-            cullFrame.Sun = ToCullView(sun);
+            cullFrame.SunView = sun.front().SunView;
+            for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
+            {
+                Frustum seenBySun;
+                seenBySun.FromViewProjection(sun[cascade].ViewProjection);
+                cullFrame.Sun[cascade] = ToCullView(seenBySun);
+                cullFrame.Cascades[cascade] = glm::vec4(sun[cascade].Centre, sun[cascade].Radius, sun[cascade].TexelSize);
+            }
             cullFrame.View = camera.View;
             cullFrame.ProjectionX = projection[0][0];
             cullFrame.ProjectionY = projection[1][1];
@@ -477,7 +499,7 @@ namespace Lynx
             cullFrame.LodScale = pixelsPerUnitAtDistanceOne / std::max(lods.ErrorPixels, 0.01f);
             cullFrame.ForcedLevel = lods.ForcedLevel;
             cullFrame.ShadowBias = lods.ShadowBias;
-            cullFrame.Padding = 0;
+            cullFrame.SmallestCasterInTexels = shadows.SmallestCasterInTexels;
 
             const std::span<const BatchLods> batchList(batchLods);
             const std::span<const LodCommands> lodList(lodCommands);

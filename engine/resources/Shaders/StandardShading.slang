@@ -1,4 +1,4 @@
-// How a mesh with a standard material is lit: one sun with a shadow map, a metallic-roughness surface
+// How a mesh with a standard material is lit: one sun with a shadow in cascades, a metallic-roughness surface
 // (the Cook-Torrance model with the GGX distribution) and a little constant light from everywhere.
 // Standard.slang and StandardEditor.slang are the two programs made from it.
 module StandardShading;
@@ -16,10 +16,6 @@ public struct StandardConstants
     public uint* visibleInstances;
     public StandardMaterial* materials;
 
-    // Indices into the texture table and the table of comparing samplers.
-    public uint shadowMap;
-    public uint shadowSampler;
-
     // What the view shows, one of the numbers below, and whether materials with cut-outs are cut out.
     public uint viewMode;
     public uint showCutOuts;
@@ -32,6 +28,7 @@ static const uint viewUnlit = 2;
 static const uint viewLightingOnly = 3;
 static const uint viewNormals = 4;
 static const uint viewLevelOfDetail = 5;
+static const uint viewShadowCascades = 6;
 
 public struct StandardVertex
 {
@@ -51,22 +48,12 @@ public struct StandardVaryings
     public float3 normal : NORMAL;
     public float4 tangent : TANGENT;
 
-    // Where the pixel lies in the shadow map: xy in texture coordinates, z as the depth to compare.
-    public float4 shadowCoordinate : SHADOWCOORDINATE;
     public nointerpolation int entityId : ENTITYID;
     public nointerpolation uint material : MATERIAL;
 
     // The level of detail the instance is drawn in, for the view that shows it.
     public nointerpolation float level : LEVEL;
 };
-
-// From the sun's clip space, where x and y run from -1 to 1, to texture coordinates from 0 to 1.
-// Both start at the top left, so nothing is turned around.
-static const float4x4 clipToTexture = float4x4(
-    0.5,  0.0, 0.0, 0.5,
-    0.0,  0.5, 0.0, 0.5,
-    0.0,  0.0, 1.0, 0.0,
-    0.0,  0.0, 0.0, 1.0);
 
 public StandardVaryings standardVertex(StandardConstants constants, StandardVertex input, uint instanceIndex, uint vertexIndex)
 {
@@ -81,7 +68,6 @@ public StandardVaryings standardVertex(StandardConstants constants, StandardVert
     output.worldPosition = position.world.xyz;
     output.normal = normalize(meshNormal(instance, input.normal));
     output.tangent = float4(normalize(meshDirection(instance, input.tangent.xyz)), input.tangent.w);
-    output.shadowCoordinate = mul(mul(clipToTexture, scene.lightViewProjection), float4(output.worldPosition, 1.0));
     output.entityId = instance.entityId;
     output.material = instance.material;
     output.level = level;
@@ -107,21 +93,55 @@ float3 levelColour(float level)
 
 static const float pi = 3.14159265359;
 
-// How much of the sun reaches the pixel: 1 for all of it, 0 for none. Nine comparisons around the pixel
-// are averaged, which softens the edge of a shadow.
-float sunVisibility(StandardConstants constants, float4 shadowCoordinate)
+// Which cascade of the sun's shadow a place takes its shadow from, and where it lies in that cascade's map.
+struct CascadePlace
 {
-    float3 coordinate = shadowCoordinate.xyz / shadowCoordinate.w;
+    // shadowCascadeCount for a place outside all cascades.
+    uint cascade;
 
-    // Outside of what the shadow map covers, everything is lit.
+    // From 0 in the middle of the map to 1 on its edge.
+    float towardsEdge;
+};
+
+// A place takes its shadow from the first cascade whose map it lies in, which is the one with the finest
+// detail there. Where the maps lie is known as the sun sees the world, so one matrix serves all of them.
+CascadePlace cascadePlaceOf(float3 worldPosition)
+{
+    float2 seenBySun = mul(scene.sunView, float4(worldPosition, 1.0)).xy;
+
+    CascadePlace place;
+    place.cascade = shadowCascadeCount;
+    place.towardsEdge = 0.0;
+    for (uint cascade = 0; cascade < shadowCascadeCount; ++cascade)
+    {
+        float2 fromMiddle = abs(seenBySun - scene.cascadeFootprint[cascade].xy) * scene.cascadeFootprint[cascade].z;
+        float towardsEdge = max(fromMiddle.x, fromMiddle.y);
+        if (towardsEdge < 1.0)
+        {
+            place.cascade = cascade;
+            place.towardsEdge = towardsEdge;
+            break;
+        }
+    }
+    return place;
+}
+
+// How much of the sun reaches a place according to one cascade: 1 for all of it, 0 for none.
+// Nine comparisons around the place are averaged, which softens the edge of a shadow.
+float cascadeVisibility(uint cascade, float3 worldPosition, float3 normal)
+{
+    // A texel of the map covers a patch of the surface but holds one depth, so a surface at a slant to
+    // the sun would shadow itself in stripes. The place is looked up a little off the surface, by as much
+    // as the texels of this cascade are large.
+    float3 offSurface = worldPosition + normal * (scene.cascadeFootprint[cascade].w * 2.0);
+    float3 coordinate = mul(scene.cascadeToTexture[cascade], float4(offSurface, 1.0)).xyz;
+
+    // Beyond what the map covers in depth, everything is lit. To its sides the sampler says so.
     if (coordinate.z > 1.0 || coordinate.z < 0.0)
         return 1.0;
-    if (coordinate.x < 0.0 || coordinate.x > 1.0 || coordinate.y < 0.0 || coordinate.y > 1.0)
-        return 1.0;
 
-    uint width, height;
-    textures[constants.shadowMap].GetDimensions(width, height);
-    float2 texelSize = 1.0 / float2(width, height);
+    Texture2D map = textures[NonUniformResourceIndex(scene.cascadeTextures[cascade])];
+    float texelSize = 1.0 / float(shadowCascadeResolution);
 
     float visibility = 0.0;
     for (int x = -1; x <= 1; ++x)
@@ -129,10 +149,37 @@ float sunVisibility(StandardConstants constants, float4 shadowCoordinate)
         for (int y = -1; y <= 1; ++y)
         {
             float2 uv = coordinate.xy + float2(x, y) * texelSize;
-            visibility += textures[constants.shadowMap].SampleCmp(comparisonSamplers[constants.shadowSampler], uv, coordinate.z);
+            visibility += map.SampleCmpLevelZero(comparisonSamplers[scene.shadowSampler], uv, coordinate.z);
         }
     }
     return visibility / 9.0;
+}
+
+// How much of the sun reaches a place: 1 for all of it, 0 for none. Outside the last cascade there
+// is no shadow. Near the edge of a cascade's map its shadow is mixed with that of the next one, so that
+// no line shows where the detail of the shadow changes.
+float sunVisibility(float3 worldPosition, float3 normal)
+{
+    CascadePlace place = cascadePlaceOf(worldPosition);
+    if (place.cascade == shadowCascadeCount)
+        return 1.0;
+
+    float visibility = cascadeVisibility(place.cascade, worldPosition, normal);
+
+    float intoBlend = (place.towardsEdge - (1.0 - shadowCascadeBlend)) / shadowCascadeBlend;
+    if (intoBlend > 0.0)
+    {
+        float next = place.cascade + 1 < shadowCascadeCount ? cascadeVisibility(place.cascade + 1, worldPosition, normal) : 1.0;
+        visibility = lerp(visibility, next, saturate(intoBlend));
+    }
+    return visibility;
+}
+
+// A colour per cascade of the sun's shadow, from the nearest: red, green, blue, yellow. Grey beyond the last.
+float3 cascadeColour(uint cascade)
+{
+    static const float3 colours[5] = { float3(1.0, 0.25, 0.25), float3(0.25, 1.0, 0.25), float3(0.3, 0.45, 1.0), float3(1.0, 1.0, 0.25), float3(0.5, 0.5, 0.5) };
+    return colours[min(cascade, 4u)];
 }
 
 // How many of the surface's tiny mirrors face halfway between the light and the eye.
@@ -222,6 +269,12 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
         return float4(shownAsItIs(levelColour(input.level) * (0.35 + 0.65 * facingTheSun)), 1.0);
     }
 
+    if (constants.viewMode == viewShadowCascades)
+    {
+        float lit = max(dot(normal, toLight), 0.0) * sunVisibility(input.worldPosition, normal);
+        return float4(shownAsItIs(cascadeColour(cascadePlaceOf(input.worldPosition).cascade) * (0.35 + 0.65 * lit)), 1.0);
+    }
+
     // The light alone: every surface the same grey, not a metal, and not glowing.
     bool isLightingOnly = constants.viewMode == viewLightingOnly;
     if (isLightingOnly)
@@ -252,7 +305,7 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     float3 diffuseShare = (float3(1.0, 1.0, 1.0) - fresnel) * (1.0 - metallic);
 
     float nDotL = max(dot(normal, toLight), 0.0);
-    float visibility = sunVisibility(constants, input.shadowCoordinate);
+    float visibility = sunVisibility(input.worldPosition, normal);
 
     float3 sunLight = (diffuseShare * albedo / pi + specular) * scene.lightColor.rgb * scene.lightDirection.w * nDotL * visibility;
     float3 ambient = float3(0.03, 0.03, 0.03) * albedo;

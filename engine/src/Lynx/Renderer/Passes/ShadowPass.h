@@ -3,11 +3,12 @@
 
 namespace Lynx
 {
-    // Draws the shadow map: the depth of the scene's meshes as the sun sees them.
+    // Draws the shadow map of one cascade: the depth of the scene's meshes as the sun sees them in the
+    // stretch of the camera's view that the cascade covers. See ShadowCascades.h.
     class ShadowPass : public VulkanPass
     {
     public:
-        explicit ShadowPass(uint32_t resolution);
+        explicit ShadowPass(uint32_t cascade);
         ~ShadowPass() override;
 
         void Init(RenderContext& ctx) override;
@@ -21,11 +22,7 @@ namespace Lynx
         struct VulkanObjects;
         std::unique_ptr<VulkanObjects> m_Vulkan;
 
-        uint32_t m_Resolution;
-
-        // Where the texture table and the table of comparing samplers have the map and its sampler.
-        uint32_t m_ShadowMapIndex = 0;
-        uint32_t m_ShadowSamplerIndex = 0;
+        uint32_t m_Cascade;
 
         PipelineState m_PipelineState;
     };

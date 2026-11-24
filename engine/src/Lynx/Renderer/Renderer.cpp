@@ -120,6 +120,13 @@ namespace Lynx
         // The finished scene picture, which the editor shows in a panel through ImGui.
         TextureSlot SceneOutputSlot;
 
+        // The maps of the cascades of the sun's shadow, where the texture table has them, and the sampler
+        // they are read with: it compares instead of reading, and treats everything outside a map as lit.
+        std::array<GpuTexture, ShadowCascadeCount> ShadowMaps;
+        std::array<TextureSlot, ShadowCascadeCount> ShadowMapSlots;
+        vk::Sampler ShadowSampler;
+        uint32_t ShadowSamplerIndex = 0;
+
         // Picking: the pixel that was asked for, the buffer its entity ID is copied into, the frame the copy
         // was recorded in, and an answer that needed no copy.
         std::optional<glm::uvec2> PickRequest;
@@ -238,6 +245,7 @@ namespace Lynx
         m_Frame->SceneColorSlot = TextureSlot();
         m_Frame->SceneDepthSlot = TextureSlot();
         m_Frame->SceneOutputSlot = TextureSlot();
+        m_Frame->ShadowMapSlots = {};
         m_Frame->Shared.reset();
         m_RenderContext = RenderContext();
         m_CurrentFrameData = RenderData();
@@ -254,6 +262,8 @@ namespace Lynx
         m_Frame->SceneDepth = {};
         m_Frame->SceneOutput = {};
         m_Frame->SceneEntityIds = {};
+        m_Frame->ShadowMaps = {};
+        m_Context->Device().destroySampler(m_Frame->ShadowSampler);
         m_ImGui.reset();
 
         for (int frame = 0; frame < MAX_FRAMES_IN_FLIGHT; ++frame)
@@ -277,6 +287,7 @@ namespace Lynx
         m_RenderContext.WritesEntityIds = m_ShouldCreateIDTarget;
 
         SamplerCache::Init(m_Context->Device(), m_MaxAnisotropy);
+        CreateShadowMaps();
 
         MaterialTextureIndices defaults;
         defaults.Albedo = m_Frame->WhiteTextureIndex;
@@ -294,7 +305,8 @@ namespace Lynx
         // turns both into the output. What is not part of the scene is drawn on top of the output, so that
         // post-processing does not touch it: the grid and debug lines, still hidden by the scene's depth, then the UI.
         m_Graph->Add("CullMeshes", std::make_unique<CullPass>(CullPhase::Early));
-        m_Graph->Add("Shadow", std::make_unique<ShadowPass>(m_ShadowMapResolution));
+        for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
+            m_Graph->Add("Shadow" + std::to_string(cascade), std::make_unique<ShadowPass>(cascade));
         m_Graph->Add("Depth", std::make_unique<DepthPass>(CullPhase::Early));
         m_Graph->Add("DepthPyramid", std::make_unique<DepthPyramidPass>());
         m_Graph->Add("CullOccluded", std::make_unique<CullPass>(CullPhase::Late));
@@ -541,10 +553,7 @@ namespace Lynx
             camera.View = m_CurrentFrameData.View;
             camera.Projection = m_CurrentFrameData.Projection;
             camera.ViewportHeight = m_SceneSize ? static_cast<float>(m_SceneSize->second) : 0.0f;
-            Frustum sunFrustum;
-            sunFrustum.FromViewProjection(m_CurrentFrameData.LightViewProj);
-
-            const GpuScene::Frame meshes = m_GpuScene->Prepare(camera, sunFrustum, m_CurrentFrameData.CameraPosition, m_LodSettings);
+            const GpuScene::Frame meshes = m_GpuScene->Prepare(camera, m_CurrentFrameData.Cascades, m_ShadowSettings, m_CurrentFrameData.CameraPosition, m_LodSettings);
             m_CurrentFrameData.MeshDraws = meshes.Draws;
             m_CurrentFrameData.Culling = meshes.Culling;
             m_CurrentFrameData.TransparentDraws = meshes.TransparentDraws;
@@ -616,48 +625,6 @@ namespace Lynx
         m_CurrentFrameData.TransparentDraws = {};
         m_CurrentFrameData.ParticleQueue.clear();
 
-        glm::vec3 center = cameraPosition;
-
-        glm::vec3 lightDirNorm = glm::normalize(lightDir);
-        glm::vec3 lightPos = center - lightDirNorm * 100.0f; // Move back enough to not clip near objects
-
-        glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-        if (glm::abs(glm::dot(lightDirNorm, up)) > 0.99f)
-            up = glm::vec3(0.0f, 0.0f, 1.0f);
-
-        glm::mat4 lightView = glm::lookAt(lightPos, center, up);
-
-        float orthoSize = 100.0f;
-        float zNear = 0.1f;
-        float zFar = 1000.0f;
-
-        glm::mat4 lightProj = glm::ortho(-orthoSize, orthoSize, -orthoSize, orthoSize, zNear, zFar);
-
-        glm::mat4 lightViewProj = lightProj * lightView;
-
-        // Shadow Map Stabilization
-        // We need to snap the projection to the nearest texel in Light Space to avoid shimmering
-        float shadowMapRes = (float)m_ShadowMapResolution;
-
-        // Project a reference point (Origin) to Shadow Map NDC Space
-        glm::vec4 shadowOrigin = lightViewProj * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        shadowOrigin /= shadowOrigin.w;
-
-        // NDC is [-1, 1] for XY. Resolution is [0, Res].
-        float texelSizeNDC = 2.0f / shadowMapRes;
-
-        // Snap to grid
-        float snappedX = round(shadowOrigin.x / texelSizeNDC) * texelSizeNDC;
-        float snappedY = round(shadowOrigin.y / texelSizeNDC) * texelSizeNDC;
-
-        // Calculate offset
-        float dX = snappedX - shadowOrigin.x;
-        float dY = snappedY - shadowOrigin.y;
-
-        // Apply offset to the Projection Matrix
-        lightViewProj[3][0] += dX;
-        lightViewProj[3][1] += dY;
-
         m_CurrentFrameData.View = view;
         m_CurrentFrameData.Projection = projection;
         m_CurrentFrameData.ViewProjection = projection * view;
@@ -665,7 +632,6 @@ namespace Lynx
         m_CurrentFrameData.LightDirection = lightDir;
         m_CurrentFrameData.LightColor = lightColor;
         m_CurrentFrameData.LightIntensity = lightIntensity;
-        m_CurrentFrameData.LightViewProj = lightViewProj;
         m_CurrentFrameData.ShowGrid = editMode && m_ShowGrid;
         if (!m_SceneSize)
         {
@@ -709,13 +675,28 @@ namespace Lynx
         };
         m_CurrentFrameData.ClipViewProjection = toVulkanClip(toReversedDepth(projection) * view);
 
-        // The shadow map keeps the usual depth: its view has no perspective, so there is nothing to gain.
-        m_CurrentFrameData.ClipLightViewProjection = toVulkanClip(lightViewProj);
-
-        SceneData sceneData;
+        SceneData sceneData{};
         sceneData.ViewProjectionMatrix = m_CurrentFrameData.ClipViewProjection;
-        sceneData.LightViewProjection = m_CurrentFrameData.ClipLightViewProjection;
         sceneData.CameraPosition = glm::vec4(cameraPosition, 1.0f);
+
+        // The sun's shadow. Its maps keep the usual depth: the sun's view has no perspective, so the
+        // reversed depth of the scene would gain nothing there.
+        // From clip space, where x and y run from -1 to 1, to texture coordinates from 0 to 1. Both start
+        // at the top left, so nothing is turned around.
+        const glm::mat4 clipToTexture = glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 1.0f));
+        m_CurrentFrameData.Cascades = FitShadowCascades(view, projection, lightDir, m_ShadowSettings);
+        for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
+        {
+            m_CurrentFrameData.ClipCascadeViewProjection[cascade] = toVulkanClip(m_CurrentFrameData.Cascades[cascade].ViewProjection);
+            m_CurrentFrameData.ShadowMaps[cascade] = &m_Frame->ShadowMaps[cascade];
+
+            sceneData.CascadeToTexture[cascade] = clipToTexture * m_CurrentFrameData.ClipCascadeViewProjection[cascade];
+            const ShadowCascade& fitted = m_CurrentFrameData.Cascades[cascade];
+            sceneData.CascadeFootprint[cascade] = glm::vec4(fitted.Centre, 1.0f / fitted.Radius, fitted.TexelSize);
+            sceneData.CascadeTextures[cascade] = m_Frame->ShadowMapSlots[cascade].Index();
+        }
+        sceneData.SunView = m_CurrentFrameData.Cascades.front().SunView;
+        sceneData.ShadowSampler = m_Frame->ShadowSamplerIndex;
         sceneData.LightDirection = glm::vec4(lightDir, lightIntensity);
         sceneData.LightColor = glm::vec4(lightColor, 1.0f);
         m_Frame->Uploads->Upload(m_Frame->SceneConstants.Handle(), 0, std::as_bytes(std::span<const SceneData>(&sceneData, 1)));
@@ -1027,6 +1008,36 @@ namespace Lynx
     MeshGeometry Renderer::CreateMeshGeometry(std::span<const PackedVertex> vertices, std::span<const uint32_t> indices)
     {
         return m_Frame->Geometry->Add(std::as_bytes(vertices), indices);
+    }
+
+    void Renderer::CreateShadowMaps()
+    {
+        for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
+        {
+            GpuTextureDesc desc;
+            desc.Width = ShadowCascadeResolution;
+            desc.Height = ShadowCascadeResolution;
+            desc.Format = RenderFormats::ShadowMap;
+            desc.Usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
+            desc.Name = "ShadowMap";
+            m_Frame->ShadowMaps[cascade] = GpuTexture(*m_Context, desc);
+            m_Frame->ShadowMapSlots[cascade] = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->ShadowMaps[cascade].View()));
+        }
+
+        vk::SamplerCreateInfo samplerInfo;
+        samplerInfo.magFilter = vk::Filter::eLinear;
+        samplerInfo.minFilter = vk::Filter::eLinear;
+        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToBorder;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToBorder;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToBorder;
+        samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+        samplerInfo.compareEnable = VK_TRUE;
+        samplerInfo.compareOp = vk::CompareOp::eLess;
+        samplerInfo.maxAnisotropy = 1.0f;
+        samplerInfo.maxLod = std::numeric_limits<float>::max();
+        m_Frame->ShadowSampler = m_Context->Device().createSampler(samplerInfo);
+        m_Frame->ShadowSamplerIndex = m_Frame->Shared->ComparisonSamplerIndex(m_Frame->ShadowSampler);
     }
 
     std::shared_ptr<const GpuBuffer> Renderer::CreateLeafData(std::span<const LeafVertex> leaves)
