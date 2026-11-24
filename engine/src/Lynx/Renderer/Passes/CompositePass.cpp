@@ -20,6 +20,7 @@ namespace Lynx
             uint32_t SceneTexture;
             uint32_t BloomTexture;
             uint32_t LinearSampler;
+            int ToneMapped;
         };
 
     }
@@ -106,6 +107,7 @@ namespace Lynx
         push.SceneTexture = renderData.SceneColorIndex;
         push.BloomTexture = renderData.BloomTextureIndex;
         push.LinearSampler = m_LinearSampler;
+        push.ToneMapped = ShowsRawColours(renderData.Viewing.Mode) ? 0 : 1;
         m_Vulkan->Shared->Push(commands, push);
 
         commands.draw(3, 1, 0, 0);

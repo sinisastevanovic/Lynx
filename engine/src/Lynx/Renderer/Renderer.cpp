@@ -730,6 +730,7 @@ namespace Lynx
 
     void Renderer::RenderScene(const ExtractedScene& scene)
     {
+        m_CurrentFrameData.Viewing = scene.Viewing;
         BeginScene(scene.View, scene.Projection, scene.CameraPosition, scene.SunDirection, scene.SunColor, scene.SunIntensity, scene.DeltaTime, scene.IsEditorView);
 
         for (const ExtractedParticles& particles : scene.Particles)
@@ -783,6 +784,8 @@ namespace Lynx
         m_CurrentFrameData.DepthPyramid = {};
         m_CurrentFrameData.BloomTextureIndex = m_Frame->BlackTextureIndex;
         m_CurrentFrameData.Bloom = m_BloomSettings;
+        if (ShowsRawColours(m_CurrentFrameData.Viewing.Mode))
+            m_CurrentFrameData.Bloom.Enabled = false;
         m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled;
 
         m_Graph->Execute(m_RenderContext, m_CurrentFrameData);

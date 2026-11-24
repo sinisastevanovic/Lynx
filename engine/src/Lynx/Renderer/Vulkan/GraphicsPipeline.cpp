@@ -66,7 +66,7 @@ namespace Lynx
         const vk::PipelineDynamicStateCreateInfo dynamicState({}, dynamicStates);
 
         vk::PipelineRasterizationStateCreateInfo rasterization;
-        rasterization.polygonMode = vk::PolygonMode::eFill;
+        rasterization.polygonMode = desc.Wireframe ? vk::PolygonMode::eLine : vk::PolygonMode::eFill;
         rasterization.cullMode = desc.CullMode;
         rasterization.frontFace = desc.FrontFace;
         rasterization.lineWidth = 1.0f;

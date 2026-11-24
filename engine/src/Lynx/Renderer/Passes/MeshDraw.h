@@ -39,7 +39,8 @@ namespace Lynx
     // Draws the commands of one view where nothing but depth is drawn. Opaque materials go through a
     // pipeline without a fragment shader, materials with cut-outs through one that reads their texture.
     // The geometry pool has to be bound and the push constants set: both stay as they are when the pipeline changes.
-    inline void DrawDepthOfMeshes(vk::CommandBuffer commands, const MeshDrawCommands& draws, const MeshDrawGroups& groups, vk::Pipeline opaquePipeline, vk::Pipeline cutOutPipeline)
+    // Without showCutOuts, materials with cut-outs are drawn whole, through the pipeline for opaque ones.
+    inline void DrawDepthOfMeshes(vk::CommandBuffer commands, const MeshDrawCommands& draws, const MeshDrawGroups& groups, vk::Pipeline opaquePipeline, vk::Pipeline cutOutPipeline, bool showCutOuts = true)
     {
         for (uint32_t index = 0; index < MeshDrawKind::Count; ++index)
         {
@@ -48,7 +49,7 @@ namespace Lynx
             if (range.Count == 0)
                 continue;
 
-            commands.bindPipeline(vk::PipelineBindPoint::eGraphics, kind.HasCutOuts ? cutOutPipeline : opaquePipeline);
+            commands.bindPipeline(vk::PipelineBindPoint::eGraphics, kind.HasCutOuts && showCutOuts ? cutOutPipeline : opaquePipeline);
             SetCulling(commands, kind.IsTwoSided);
             DrawMeshes(commands, draws, range);
         }

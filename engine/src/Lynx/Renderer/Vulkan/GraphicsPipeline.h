@@ -47,6 +47,9 @@ namespace Lynx
         // One pipeline then draws surfaces that are seen from one side and surfaces seen from both.
         bool DynamicCullMode = false;
 
+        // True draws the edges of the triangles instead of filling them.
+        bool Wireframe = false;
+
         // Which winding is the front. Only matters with a cull mode. The engine's meshes are counter-clockwise.
         vk::FrontFace FrontFace = vk::FrontFace::eCounterClockwise;
 

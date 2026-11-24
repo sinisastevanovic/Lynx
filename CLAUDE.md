@@ -138,6 +138,13 @@ build\bin\Debug\LynxSandboxGame.exe
   Pieces more than four times the usual leaf size are always drawn as they are. `LodSettings::LeafPixels` says
   how large a leaf may be on screen. An entry of the list of drawn instances holds the place in 24 bits and the
   level above them. A surface with cut-outs of few pieces, like a sail, keeps its one level.
+- **View modes.** A view of a scene can show one thing about the picture instead of the picture (`ViewMode` in
+  `Renderer/ViewMode.h`: wireframe, unlit, lighting only, normals, level of detail) and draw cut-outs whole
+  (`ViewSettings::ShowCutOuts`). The settings belong to the view and travel with it (`ExtractedScene::Viewing`),
+  so two views can show a scene differently. `SceneRenderer::GetViewSettings` holds those of the main view, the
+  viewport panel has the dropdown, and a benchmark takes `ViewMode=<number>` and `ShowCutOuts=0`. The forward
+  shader does the modes, modes with raw colours skip bloom and tone mapping (`ShowsRawColours`). A new mode is a
+  new enum value, its name, and a branch in `StandardShading.slang`.
 - **Occlusion.** The camera's view is culled in two phases (`CullPhase`), so what is hidden behind other things is
   not drawn. Early: what was seen in the last frame, kept as a flag per instance on the GPU. Its depth becomes the
   depth pyramid (`Passes/DepthPyramidPass`): the depth in ever smaller sizes, each pixel the farthest of those it

@@ -126,6 +126,6 @@ namespace Lynx
         m_Vulkan->Shared->Push(commands, push);
 
         const MeshDrawCommands& draws = renderData.MeshDraws;
-        DrawDepthOfMeshes(commands, draws, draws.CameraOf(m_Phase), m_Vulkan->OpaquePipeline, m_Vulkan->CutOutPipeline);
+        DrawDepthOfMeshes(commands, draws, draws.CameraOf(m_Phase), m_Vulkan->OpaquePipeline, m_Vulkan->CutOutPipeline, renderData.Viewing.ShowCutOuts);
     }
 }

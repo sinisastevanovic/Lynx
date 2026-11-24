@@ -20,6 +20,8 @@ namespace Lynx
             uint64_t Materials;
             uint32_t ShadowMap;
             uint32_t ShadowSampler;
+            ViewMode Mode;
+            uint32_t ShowCutOuts;
         };
     }
 
@@ -32,6 +34,9 @@ namespace Lynx
         vk::Pipeline OpaquePipeline;
         vk::Pipeline TransparentPipeline;
 
+        // For the wireframe view: the edges of the triangles, of everything, see-through or not.
+        vk::Pipeline WireframePipeline;
+
         // The renderer waits for the GPU before it destroys its passes, so nothing here is still in use.
         ~VulkanObjects()
         {
@@ -40,6 +45,7 @@ namespace Lynx
 
             Device.destroyPipeline(OpaquePipeline);
             Device.destroyPipeline(TransparentPipeline);
+            Device.destroyPipeline(WireframePipeline);
         }
     };
 
@@ -97,14 +103,26 @@ namespace Lynx
         desc.Blend = BlendMode::Alpha;
         const vk::Pipeline transparentPipeline = CreateGraphicsPipeline(m_Vulkan->Device, desc);
 
+        // The edges of the triangles. The depth pass has drawn the surfaces filled, so an edge is drawn where
+        // it is not behind one, and edges of hidden triangles stay hidden. A line does not get exactly the
+        // depth the filled triangle got, so it is pulled a little towards the camera.
+        desc.Wireframe = true;
+        desc.Blend = BlendMode::Opaque;
+        desc.DepthCompare = vk::CompareOp::eGreaterOrEqual;
+        desc.DepthBias = 4.0f;
+        desc.DepthBiasSlope = 1.0f;
+        const vk::Pipeline wireframePipeline = CreateGraphicsPipeline(m_Vulkan->Device, desc);
+
         // A reloaded shader replaces pipelines that frames still on the GPU may be using.
-        m_Vulkan->Context->Deletions().Retire([device = m_Vulkan->Device, oldOpaque = m_Vulkan->OpaquePipeline, oldTransparent = m_Vulkan->TransparentPipeline]()
+        m_Vulkan->Context->Deletions().Retire([device = m_Vulkan->Device, oldOpaque = m_Vulkan->OpaquePipeline, oldTransparent = m_Vulkan->TransparentPipeline, oldWireframe = m_Vulkan->WireframePipeline]()
         {
             device.destroyPipeline(oldOpaque);
             device.destroyPipeline(oldTransparent);
+            device.destroyPipeline(oldWireframe);
         });
         m_Vulkan->OpaquePipeline = opaquePipeline;
         m_Vulkan->TransparentPipeline = transparentPipeline;
+        m_Vulkan->WireframePipeline = wireframePipeline;
     }
 
     bool ForwardPass::Declare(const RenderContext&, const RenderData& renderData, PassResources& resources)
@@ -127,8 +145,11 @@ namespace Lynx
 
     void ForwardPass::Execute(vk::CommandBuffer commands, RenderData& renderData)
     {
+        // The wireframe view draws everything with one pipeline of its own.
+        const bool isWireframe = renderData.Viewing.Mode == ViewMode::Wireframe && m_Vulkan->WireframePipeline;
+
         // Binding another pipeline leaves the bound buffers as they are, so once is enough for both pipelines.
-        commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->OpaquePipeline);
+        commands.bindPipeline(vk::PipelineBindPoint::eGraphics, isWireframe ? m_Vulkan->WireframePipeline : m_Vulkan->OpaquePipeline);
         renderData.Geometry->Bind(commands);
 
         // Push constants stay set across pipelines too, because all pipelines share one layout.
@@ -138,6 +159,8 @@ namespace Lynx
         push.Materials = renderData.MaterialAddress;
         push.ShadowMap = renderData.ShadowMapIndex;
         push.ShadowSampler = renderData.ShadowSamplerIndex;
+        push.Mode = renderData.Viewing.Mode;
+        push.ShowCutOuts = renderData.Viewing.ShowCutOuts ? 1u : 0u;
         m_Vulkan->Shared->Push(commands, push);
 
         // Opaque materials and those with cut-outs are shaded by the same pipeline, whichever phase of
@@ -182,7 +205,8 @@ namespace Lynx
         if (renderData.TransparentDraws.empty())
             return;
 
-        commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->TransparentPipeline);
+        if (!isWireframe)
+            commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->TransparentPipeline);
         for (const TransparentDraw& draw : renderData.TransparentDraws)
         {
             SetCulling(commands, draw.IsTwoSided);

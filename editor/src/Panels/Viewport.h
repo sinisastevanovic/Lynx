@@ -22,6 +22,10 @@ namespace Lynx
         bool IsClicked() const { return m_IsClicked; }
 
     private:
+        // The row above the picture: what the view shows.
+        void DrawViewSettings();
+
+    private:
         entt::entity m_Selection{ entt::null };
         std::shared_ptr<UIElement> m_SelectedUIElement = nullptr;
         std::function<void(entt::entity)> OnSelectionChangedCallback = nullptr;

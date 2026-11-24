@@ -65,6 +65,7 @@ namespace Lynx
         AssetManager& GetAssetManager() { return *m_AssetManager; }
         AssetRegistry& GetAssetRegistry() { return *m_AssetRegistry; }
         Renderer& GetRenderer() { return *m_Renderer; }
+        SceneRenderer& GetSceneRenderer() { return *m_SceneRenderer; }
         ScriptEngine* GetScriptEngine() { return m_ScriptEngine.get(); }
         EditorCamera& GetEditorCamera() { return m_EditorCamera; }
         TypeRegistry& GetComponentRegistry() { return m_ComponentRegistry;}

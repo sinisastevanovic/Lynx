@@ -6,6 +6,7 @@
 #include <span>
 
 #include "DebugRenderer.h"
+#include "ViewMode.h"
 #include "Lynx/Asset/StaticMesh.h"
 #include "Lynx/Asset/TextureSpecification.h"
 
@@ -267,6 +268,9 @@ namespace Lynx
         uint32_t BloomTextureIndex = 0;
 
         BloomSettings Bloom;
+
+        // How the view that is being drawn is shown.
+        ViewSettings Viewing;
         bool ShowGrid = true;
         bool FXAAEnabled;
 

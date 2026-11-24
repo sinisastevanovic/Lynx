@@ -298,6 +298,7 @@ namespace Lynx
         m_Extracted.Projection = projection;
         m_Extracted.CameraPosition = cameraPosition;
         m_Extracted.IsEditorView = isEditor;
+        m_Extracted.Viewing = m_Viewing;
         m_Extracted.DeltaTime = deltaTime;
 
         // The first enabled sun lights the scene. Without one, the defaults of ExtractedScene apply.

@@ -31,6 +31,9 @@ namespace Lynx
         void SetScene(std::shared_ptr<Scene> scene);
         void SetViewportSize(uint32_t width, uint32_t height);
 
+        // How the scene is shown: the lit picture, or one thing about it. Applies from the next frame.
+        ViewSettings& GetViewSettings() { return m_Viewing; }
+
         // Both have to be called inside a frame of the renderer.
         void RenderEditor(EditorCamera& camera, float deltaTime);
 
@@ -61,6 +64,7 @@ namespace Lynx
         uint32_t m_ViewportWidth = 0;
         uint32_t m_ViewportHeight = 0;
         bool m_ViewportDirty = true;
+        ViewSettings m_Viewing;
 
         // Reused every frame for its memory.
         ExtractedScene m_Extracted;

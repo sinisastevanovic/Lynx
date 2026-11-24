@@ -11,6 +11,9 @@ struct CompositeConstants
     uint sceneTexture;
     uint bloomTexture;
     uint linearSampler;
+
+    // Zero for a view whose colours mean something as they are: they are shown without tone mapping.
+    int toneMapped;
 };
 [vk::push_constant] ConstantBuffer<CompositeConstants> constants;
 
@@ -109,7 +112,7 @@ float4 fragmentMain(VertexOutput input) : SV_Target
     float3 bloomColor = textures[constants.bloomTexture].Sample(samplers[constants.linearSampler], input.uv).rgb;
     sceneColor += bloomColor * constants.bloomIntensity;
 
-    float3 mapped = acesToneMapping(sceneColor);
+    float3 mapped = constants.toneMapped == 1 ? acesToneMapping(sceneColor) : saturate(sceneColor);
     mapped = pow(mapped, float3(1.0 / 2.2));
     return float4(mapped, 1.0);
 }

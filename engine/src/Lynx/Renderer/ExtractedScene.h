@@ -37,6 +37,9 @@ namespace Lynx
         // An editor view also gets the grid.
         bool IsEditorView = false;
 
+        // How this view is shown: the lit picture, or one thing about it.
+        ViewSettings Viewing;
+
         float DeltaTime = 0.0f;
 
         std::vector<ExtractedParticles> Particles;

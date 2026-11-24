@@ -14,6 +14,21 @@
 
 namespace Lynx
 {
+    void Viewport::DrawViewSettings()
+    {
+        ViewSettings& viewing = Engine::Get().GetSceneRenderer().GetViewSettings();
+
+        int mode = static_cast<int>(viewing.Mode);
+        ImGui::SetNextItemWidth(170.0f);
+        if (ImGui::Combo("##ViewMode", &mode, ViewModeNames.data(), static_cast<int>(ViewModeNames.size())))
+            viewing.Mode = static_cast<ViewMode>(mode);
+        ImGui::SetItemTooltip("What the view shows: the lit picture, or one thing about it.");
+
+        ImGui::SameLine();
+        ImGui::Checkbox("Cut-outs", &viewing.ShowCutOuts);
+        ImGui::SetItemTooltip("Off draws leaves and other cut-out materials whole, as the triangles they are made of.");
+    }
+
     void Viewport::OnImGuiRender()
     {
         auto& renderer = Lynx::Engine::Get().GetRenderer();
@@ -33,6 +48,8 @@ namespace Lynx
             if (ImGui::IsKeyPressed(ImGuiKey_E)) m_CurrentGizmoOperation = ImGuizmo::ROTATE;
             if (ImGui::IsKeyPressed(ImGuiKey_R)) m_CurrentGizmoOperation = ImGuizmo::SCALE;
         }
+
+        DrawViewSettings();
 
         ImVec2 viewportSize = ImGui::GetContentRegionAvail();
         if (viewportSize.x > 0 && viewportSize.y > 0)

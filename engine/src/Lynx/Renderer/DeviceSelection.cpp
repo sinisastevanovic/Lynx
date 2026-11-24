@@ -45,6 +45,8 @@ namespace Lynx
         const Feature RequiredFeatures[] = {
             LX_FEATURE(Core.features, independentBlend),
             LX_FEATURE(Core.features, samplerAnisotropy),
+            // Drawing triangles as their edges, for the wireframe view.
+            LX_FEATURE(Core.features, fillModeNonSolid),
             // Drawing many objects with one call whose arguments the GPU wrote itself.
             LX_FEATURE(Core.features, multiDrawIndirect),
             LX_FEATURE(Core.features, drawIndirectFirstInstance),

@@ -19,7 +19,19 @@ public struct StandardConstants
     // Indices into the texture table and the table of comparing samplers.
     public uint shadowMap;
     public uint shadowSampler;
+
+    // What the view shows, one of the numbers below, and whether materials with cut-outs are cut out.
+    public uint viewMode;
+    public uint showCutOuts;
 };
+
+// Has to match ViewMode in ViewMode.h.
+static const uint viewLit = 0;
+static const uint viewWireframe = 1;
+static const uint viewUnlit = 2;
+static const uint viewLightingOnly = 3;
+static const uint viewNormals = 4;
+static const uint viewLevelOfDetail = 5;
 
 public struct StandardVertex
 {
@@ -43,6 +55,9 @@ public struct StandardVaryings
     public float4 shadowCoordinate : SHADOWCOORDINATE;
     public nointerpolation int entityId : ENTITYID;
     public nointerpolation uint material : MATERIAL;
+
+    // The level of detail the instance is drawn in, for the view that shows it.
+    public nointerpolation float level : LEVEL;
 };
 
 // From the sun's clip space, where x and y run from -1 to 1, to texture coordinates from 0 to 1.
@@ -56,7 +71,8 @@ static const float4x4 clipToTexture = float4x4(
 public StandardVaryings standardVertex(StandardConstants constants, StandardVertex input, uint instanceIndex, uint vertexIndex)
 {
     MeshInstance instance = meshInstance(constants.instances, constants.visibleInstances, instanceIndex);
-    float3 inMesh = leafPosition(instance, input.position, vertexIndex, drawnLevel(constants.visibleInstances, instanceIndex));
+    float level = drawnLevel(constants.visibleInstances, instanceIndex);
+    float3 inMesh = leafPosition(instance, input.position, vertexIndex, level);
     MeshPosition position = meshPosition(instance, inMesh);
 
     StandardVaryings output;
@@ -68,7 +84,25 @@ public StandardVaryings standardVertex(StandardConstants constants, StandardVert
     output.shadowCoordinate = mul(mul(clipToTexture, scene.lightViewProjection), float4(output.worldPosition, 1.0));
     output.entityId = instance.entityId;
     output.material = instance.material;
+    output.level = level;
     return output;
+}
+
+// A colour that is meant to reach the screen as it is, for the views that show one thing about a surface.
+// Such a view is shown without tone mapping, but the picture is still brought from linear light to what a
+// screen expects, which this undoes beforehand.
+float3 shownAsItIs(float3 colour)
+{
+    return pow(colour, float3(2.2, 2.2, 2.2));
+}
+
+// A colour for a level of detail: green for the finest, through yellow to red for the eighth and beyond.
+// Every other level is a little darker, so that neighbouring levels can be told apart.
+float3 levelColour(float level)
+{
+    float coarseness = saturate(level / 8.0);
+    float3 colour = float3(saturate(2.0 * coarseness), saturate(2.0 - 2.0 * coarseness), 0.1);
+    return (uint(level) & 1) == 1 ? colour * 0.7 : colour;
 }
 
 static const float pi = 3.14159265359;
@@ -165,16 +199,36 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     float3 toLight = normalize(-scene.lightDirection.xyz);
     float3 halfway = normalize(toEye + toLight);
 
+    // The edges of the triangles are drawn whole and in one colour.
+    if (constants.viewMode == viewWireframe)
+        return float4(shownAsItIs(float3(0.8, 0.8, 0.8)), 1.0);
+
     float4 albedoSample = sampleMaterialTexture(material.albedoTexture, material.materialSampler, input.uv);
-    if (material.alphaCutoff >= 0.0)
+    if (material.alphaCutoff >= 0.0 && constants.showCutOuts != 0)
     {
         if (cutOutAlpha(material.albedoTexture, material.materialSampler, input.uv, albedoSample.a) < material.alphaCutoff)
             discard;
     }
     float3 albedo = albedoSample.rgb * material.albedoColor.rgb;
 
+    // The views that show one thing about the surface instead of the lit picture.
+    if (constants.viewMode == viewUnlit)
+        return float4(albedo, 1.0);
+    if (constants.viewMode == viewNormals)
+        return float4(shownAsItIs(normal * 0.5 + 0.5), 1.0);
+    if (constants.viewMode == viewLevelOfDetail)
+    {
+        float facingTheSun = max(dot(normal, toLight), 0.0);
+        return float4(shownAsItIs(levelColour(input.level) * (0.35 + 0.65 * facingTheSun)), 1.0);
+    }
+
+    // The light alone: every surface the same grey, not a metal, and not glowing.
+    bool isLightingOnly = constants.viewMode == viewLightingOnly;
+    if (isLightingOnly)
+        albedo = float3(0.5, 0.5, 0.5);
+
     float4 metallicRoughness = sampleMaterialTexture(material.metallicRoughnessTexture, material.materialSampler, input.uv);
-    float metallic = metallicRoughness.b * material.metallic;
+    float metallic = isLightingOnly ? 0.0 : metallicRoughness.b * material.metallic;
 
     // A roughness of zero is a perfect mirror, whose highlight is a single point of infinite brightness:
     // the formula below divides zero by zero there. No real surface is that smooth, so it is kept away from zero.
@@ -202,6 +256,9 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
 
     float3 sunLight = (diffuseShare * albedo / pi + specular) * scene.lightColor.rgb * scene.lightDirection.w * nDotL * visibility;
     float3 ambient = float3(0.03, 0.03, 0.03) * albedo;
+
+    if (isLightingOnly)
+        emissive = float3(0.0, 0.0, 0.0);
 
     return float4(ambient + sunLight + emissive, albedoSample.a);
 }

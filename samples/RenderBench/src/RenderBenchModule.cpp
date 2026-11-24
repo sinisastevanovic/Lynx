@@ -30,6 +30,12 @@ public:
         lods.ShadowBias = static_cast<uint32_t>(std::max(settings.Parameter("LodShadowBias", lods.ShadowBias), 0.0));
         lods.ForcedLevel = static_cast<int32_t>(settings.Parameter("LodForcedLevel", lods.ForcedLevel));
 
+        // What the view shows, for pictures of every view mode. See ViewMode for the numbers.
+        ViewSettings& viewing = engine.GetSceneRenderer().GetViewSettings();
+        const double mode = std::clamp(settings.Parameter("ViewMode", 0.0), 0.0, static_cast<double>(ViewModeNames.size() - 1));
+        viewing.Mode = static_cast<ViewMode>(static_cast<uint32_t>(mode));
+        viewing.ShowCutOuts = settings.Parameter("ShowCutOuts", 1.0) > 0.0;
+
         Scene& scene = *engine.GetActiveScene();
         AssetManager& assetManager = engine.GetAssetManager();
 
