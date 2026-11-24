@@ -51,7 +51,15 @@ namespace Lynx
 
         DrawViewSettings();
 
+        // Where the picture of the scene lies on screen. Whatever turns a place of the mouse into a pixel
+        // of the picture goes by these bounds: picking, the gizmo, the input a game gets, and the size the
+        // scene is drawn in. So they are taken from where the picture is put, not from the panel around it.
+        // Controls above or beside the picture, like the row of view settings, then cannot shift them.
+        const ImVec2 pictureStart = ImGui::GetCursorScreenPos();
         ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+        m_Bounds[0] = { pictureStart.x, pictureStart.y };
+        m_Bounds[1] = { pictureStart.x + viewportSize.x, pictureStart.y + viewportSize.y };
+
         if (viewportSize.x > 0 && viewportSize.y > 0)
             renderer.EnsureEditorViewport((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
         
@@ -232,13 +240,6 @@ namespace Lynx
                     glm::vec3(matrixScale[0], matrixScale[1], matrixScale[2]));
             }
         }
-
-        auto viewportMinRegion = ImGui::GetWindowContentRegionMin();
-        auto viewportMaxRegion = ImGui::GetWindowContentRegionMax();
-        auto viewportOffset = ImGui::GetWindowPos();
-
-        m_Bounds[0] = { viewportMinRegion.x + viewportOffset.x, viewportMinRegion.y + viewportOffset.y };
-        m_Bounds[1] = { viewportMaxRegion.x + viewportOffset.x, viewportMaxRegion.y + viewportOffset.y };
 
         if (m_IsFocused && !ImGuizmo::IsUsing())
         {

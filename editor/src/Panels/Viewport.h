@@ -31,6 +31,8 @@ namespace Lynx
         std::function<void(entt::entity)> OnSelectionChangedCallback = nullptr;
         int m_CurrentGizmoOperation = 7;
 
+        // The corners of the picture of the scene on screen, top left and bottom right. Not those of the
+        // panel: the panel also holds controls.
         glm::vec2 m_Bounds[2];
         bool m_IsFocused = false;
         bool m_IsHovered = false;
