@@ -15,6 +15,9 @@ namespace Lynx::RenderFormats
     // by a fragment shader's output, so it is a colour format with the same precision.
     constexpr vk::Format DepthPyramid = vk::Format::eR32Sfloat;
 
+    // The tables the sky is read from, see Atmosphere.h. They hold light, which can be brighter than 1.
+    constexpr vk::Format AtmosphereTable = vk::Format::eR16G16B16A16Sfloat;
+
     // Next to the colour of the scene in the editor: for every pixel, the ID of the entity it shows.
     constexpr vk::Format EntityIds = vk::Format::eR32Sint;
 

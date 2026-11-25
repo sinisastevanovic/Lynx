@@ -143,6 +143,9 @@ namespace Lynx
         BloomSettings& GetBloomSettings() { return m_BloomSettings; }
         const BloomSettings& GetBloomSettings() const { return m_BloomSettings; }
 
+        AtmosphereSettings& GetAtmosphereSettings() { return m_AtmosphereSettings; }
+        const AtmosphereSettings& GetAtmosphereSettings() const { return m_AtmosphereSettings; }
+
         ShadowSettings& GetShadowSettings() { return m_ShadowSettings; }
         const ShadowSettings& GetShadowSettings() const { return m_ShadowSettings; }
 
@@ -162,6 +165,7 @@ namespace Lynx
 
         void CreateDefaultTextures();
         void CreateShadowMaps();
+        void CreateAtmosphereTables();
         void ApplySwapchainSettings(const SwapchainSettings& settings);
         void ReleaseSwapchainImages();
         void CreateSceneTargets(uint32_t width, uint32_t height);
@@ -201,6 +205,7 @@ namespace Lynx
         BloomSettings m_BloomSettings;
         LodSettings m_LodSettings;
         ShadowSettings m_ShadowSettings;
+        AtmosphereSettings m_AtmosphereSettings;
         ShadowFit m_ShadowFit;
 
         RenderContext m_RenderContext;

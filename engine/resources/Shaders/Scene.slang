@@ -7,6 +7,29 @@ public static const uint shadowCascadeCount = 4;
 public static const uint shadowCascadeResolution = 2048;
 public static const float shadowCascadeBlend = 0.1;
 
+// The air above the ground, in kilometres and per kilometre of the way through it. Atmosphere.slang
+// works with it. Has to match AtmosphereData in Atmosphere.h.
+public struct AtmosphereConstants
+{
+    // What the air's molecules scatter at ground level in xyz, one over the height they thin out by in w.
+    public float4 rayleigh;
+
+    // Dust and droplets: what they scatter, what they swallow, one over their height, and how strongly
+    // they scatter onwards.
+    public float4 mie;
+
+    // What ozone swallows.
+    public float4 ozone;
+    public float4 groundAlbedo;
+
+    // From the middle of the planet: the ground, the top of the air, the camera.
+    public float4 radii;
+
+    // Where the texture table has the tables of transmittance, multiple scattering and the sky view,
+    // and the sampler table the sampler they are read with.
+    public uint4 tables;
+};
+
 // Has to match SceneData in RenderPass.h.
 public struct SceneConstants
 {
@@ -38,6 +61,8 @@ public struct SceneConstants
     // what casts the shadow and what receives it. And the widest it gets, in the scene's units.
     public float shadowSoftening;
     public float shadowWidestEdge;
+
+    public AtmosphereConstants atmosphere;
 };
 
 // The binding number has to match SharedBindings.h.

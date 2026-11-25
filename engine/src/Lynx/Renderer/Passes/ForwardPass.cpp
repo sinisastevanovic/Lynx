@@ -139,6 +139,10 @@ namespace Lynx
         resources.DepthTarget = renderData.SceneDepth;
         for (GpuTexture* shadowMap : renderData.ShadowMaps)
             resources.Sample(shadowMap);
+
+        // The colour of the sun's light comes from the atmosphere.
+        if (GpuTexture* transmittance = renderData.AtmosphereTables[static_cast<size_t>(AtmosphereTable::Transmittance)])
+            resources.Sample(transmittance);
         return true;
     }
 

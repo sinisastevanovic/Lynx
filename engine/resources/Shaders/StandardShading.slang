@@ -7,6 +7,7 @@ import Scene;
 import Textures;
 import Mesh;
 import Material;
+import Atmosphere;
 
 // The same for every draw of the pass. What differs between draws comes from the instance and its material.
 public struct StandardConstants
@@ -391,7 +392,8 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     // A surface that faces away from the sun is dark whatever its shadow says.
     float visibility = nDotL > 0.0 ? sunVisibility(input.worldPosition, faceNormal, input.position.xy) : 0.0;
 
-    float3 sunLight = (diffuseShare * albedo / pi + specular) * scene.lightColor.rgb * scene.lightDirection.w * nDotL * visibility;
+    // The sun as it arrives through the air: dimmer and redder the lower it stands.
+    float3 sunLight = (diffuseShare * albedo / pi + specular) * sunlightOnGround() * nDotL * visibility;
     float3 ambient = float3(0.03, 0.03, 0.03) * albedo;
 
     if (isLightingOnly)

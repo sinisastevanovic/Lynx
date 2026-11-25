@@ -31,7 +31,9 @@
 #include "Passes/BloomPass.h"
 #include "Passes/GridPass.h"
 #include "RenderFormats.h"
+#include "Passes/AtmospherePass.h"
 #include "Passes/DepthRangePass.h"
+#include "Passes/SkyPass.h"
 #include "Passes/ShadowPass.h"
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
@@ -130,6 +132,12 @@ namespace Lynx
         uint32_t ShadowSamplerIndex = 0;
         vk::Sampler ShadowDepthSampler;
         uint32_t ShadowDepthSamplerIndex = 0;
+
+        // The tables the sky is read from, in the order of AtmosphereTable, where the texture table has
+        // them, and where the sampler table has the sampler they are read with.
+        std::array<GpuTexture, static_cast<size_t>(AtmosphereTable::Count)> AtmosphereTables;
+        std::array<TextureSlot, static_cast<size_t>(AtmosphereTable::Count)> AtmosphereTableSlots;
+        uint32_t AtmosphereSamplerIndex = 0;
 
         // Picking: the pixel that was asked for, the buffer its entity ID is copied into, the frame the copy
         // was recorded in, and an answer that needed no copy.
@@ -250,6 +258,7 @@ namespace Lynx
         m_Frame->SceneDepthSlot = TextureSlot();
         m_Frame->SceneOutputSlot = TextureSlot();
         m_Frame->ShadowMapSlots = {};
+        m_Frame->AtmosphereTableSlots = {};
         m_Frame->Shared.reset();
         m_RenderContext = RenderContext();
         m_CurrentFrameData = RenderData();
@@ -267,6 +276,7 @@ namespace Lynx
         m_Frame->SceneOutput = {};
         m_Frame->SceneEntityIds = {};
         m_Frame->ShadowMaps = {};
+        m_Frame->AtmosphereTables = {};
         m_Context->Device().destroySampler(m_Frame->ShadowSampler);
         m_Context->Device().destroySampler(m_Frame->ShadowDepthSampler);
         m_ImGui.reset();
@@ -293,6 +303,7 @@ namespace Lynx
 
         SamplerCache::Init(m_Context->Device(), m_MaxAnisotropy);
         CreateShadowMaps();
+        CreateAtmosphereTables();
 
         MaterialTextureIndices defaults;
         defaults.Albedo = m_Frame->WhiteTextureIndex;
@@ -309,6 +320,7 @@ namespace Lynx
         // The scene passes draw the HDR picture, bloom reads it and composite
         // turns both into the output. What is not part of the scene is drawn on top of the output, so that
         // post-processing does not touch it: the grid and debug lines, still hidden by the scene's depth, then the UI.
+        m_Graph->Add("Atmosphere", std::make_unique<AtmospherePass>());
         m_Graph->Add("CullMeshes", std::make_unique<CullPass>(CullPhase::Early));
         for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
             m_Graph->Add("Shadow" + std::to_string(cascade), std::make_unique<ShadowPass>(cascade));
@@ -318,6 +330,7 @@ namespace Lynx
         m_Graph->Add("DepthLate", std::make_unique<DepthPass>(CullPhase::Late));
         // Only the fitting of the shadow's cascades asks how far the scene reaches.
         m_Graph->Add("DepthRange", std::make_unique<DepthRangePass>(), [this]() { return m_ShadowSettings.FitsToView; });
+        m_Graph->Add("Sky", std::make_unique<SkyPass>());
         m_Graph->Add("Forward", std::make_unique<ForwardPass>());
         m_Graph->Add("Particles", std::make_unique<ParticlePass>());
         m_Graph->Add("Bloom", std::make_unique<BloomPass>());
@@ -712,6 +725,17 @@ namespace Lynx
         // Half the sun's disc is what widens an edge to one side.
         sceneData.ShadowSoftening = std::tan(glm::radians(0.5f * m_ShadowSettings.SunAngle));
         sceneData.ShadowWidestEdge = m_ShadowSettings.WidestEdge;
+
+        // The air. The ground of the scene is where the planet's is, at height zero.
+        glm::uvec4 atmosphereTables(0);
+        for (size_t table = 0; table < m_Frame->AtmosphereTables.size(); ++table)
+        {
+            atmosphereTables[static_cast<glm::length_t>(table)] = m_Frame->AtmosphereTableSlots[table].Index();
+            m_CurrentFrameData.AtmosphereTables[table] = &m_Frame->AtmosphereTables[table];
+        }
+        atmosphereTables.w = m_Frame->AtmosphereSamplerIndex;
+        sceneData.Atmosphere = ToAtmosphereData(m_AtmosphereSettings, cameraPosition.y, atmosphereTables);
+        m_CurrentFrameData.Atmosphere = m_AtmosphereSettings;
         sceneData.LightDirection = glm::vec4(lightDir, lightIntensity);
         sceneData.LightColor = glm::vec4(lightColor, 1.0f);
         m_Frame->Uploads->Upload(m_Frame->SceneConstants.Handle(), 0, std::as_bytes(std::span<const SceneData>(&sceneData, 1)));
@@ -1068,6 +1092,25 @@ namespace Lynx
         depthSamplerInfo.maxAnisotropy = 1.0f;
         m_Frame->ShadowDepthSampler = m_Context->Device().createSampler(depthSamplerInfo);
         m_Frame->ShadowDepthSamplerIndex = m_Frame->Shared->SamplerIndex(m_Frame->ShadowDepthSampler);
+    }
+
+    void Renderer::CreateAtmosphereTables()
+    {
+        for (size_t table = 0; table < m_Frame->AtmosphereTables.size(); ++table)
+        {
+            GpuTextureDesc desc;
+            desc.Width = AtmosphereTableSizes[table].x;
+            desc.Height = AtmosphereTableSizes[table].y;
+            desc.Format = RenderFormats::AtmosphereTable;
+            desc.Usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
+            desc.Name = "AtmosphereTable";
+            m_Frame->AtmosphereTables[table] = GpuTexture(*m_Context, desc);
+            m_Frame->AtmosphereTableSlots[table] = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->AtmosphereTables[table].View()));
+        }
+
+        // Read between their pixels, and never beyond their edges: the two ends of a table mean opposite things.
+        m_Frame->AtmosphereSamplerIndex = m_Frame->Shared->SamplerIndex(
+            SamplerCache::Get()->GetSampler(SamplerSettings{ TextureWrap::Clamp, TextureFilter::Bilinear, false }));
     }
 
     std::shared_ptr<const GpuBuffer> Renderer::CreateLeafData(std::span<const LeafVertex> leaves)

@@ -6,6 +6,7 @@
 #include <optional>
 #include <span>
 
+#include "Atmosphere.h"
 #include "DebugRenderer.h"
 #include "ShadowCascades.h"
 #include "ViewMode.h"
@@ -178,6 +179,9 @@ namespace Lynx
         // between what casts the shadow and what receives it. And the widest it gets, in the scene's units.
         float ShadowSoftening;
         float ShadowWidestEdge;
+
+        // The air, which colours the sky and the sun's light.
+        AtmosphereData Atmosphere;
     };
 
     // One see-through instance, drawn on its own: these are sorted by distance, which a shared draw
@@ -269,6 +273,10 @@ namespace Lynx
         std::array<ShadowCascade, ShadowCascadeCount> Cascades;
         std::array<glm::mat4, ShadowCascadeCount> ClipCascadeViewProjection;
         std::array<GpuTexture*, ShadowCascadeCount> ShadowMaps{};
+
+        // The air above the scene, and the tables the sky is read from, in the order of AtmosphereTable.
+        AtmosphereSettings Atmosphere;
+        std::array<GpuTexture*, static_cast<size_t>(AtmosphereTable::Count)> AtmosphereTables{};
 
         // Where the scene passes draw: the HDR picture, its depth and, in the editor, the entity ID of every pixel.
         GpuTexture* SceneColor = nullptr;
