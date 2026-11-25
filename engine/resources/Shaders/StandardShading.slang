@@ -314,6 +314,69 @@ float3 mirroredShare(float3 f0, float roughness, float nDotV)
     return f0 * scaleAndBias.x + scaleAndBias.y;
 }
 
+// What the light needs to know about a place on a surface.
+public struct LitSurface
+{
+    public float3 position;
+
+    // The way the surface faces, with its normal map, and without it: its shadow is looked up by the latter.
+    public float3 normal;
+    public float3 faceNormal;
+
+    public float3 albedo;
+    public float metallic;
+    public float roughness;
+};
+
+// The light a surface sends towards the eye: what it takes from the sun, shadowed, and from the sky.
+// Everything that is lit goes through here, meshes and terrain alike. pixel is where the place is on screen.
+public float3 lightOn(LitSurface surface, float2 pixel)
+{
+    float3 toEye = normalize(scene.cameraPosition.xyz - surface.position);
+    float3 toLight = normalize(-scene.lightDirection.xyz);
+    float3 halfway = normalize(toEye + toLight);
+
+    // A metal reflects in its own colour, everything else reflects a little white.
+    float3 f0 = lerp(float3(0.04, 0.04, 0.04), surface.albedo, surface.metallic);
+    float3 fresnel = fresnelSchlick(max(dot(halfway, toEye), 0.0), f0);
+
+    float distribution = distributionGGX(surface.normal, halfway, surface.roughness);
+    float geometry = geometrySmith(surface.normal, toEye, toLight, surface.roughness);
+
+    float3 numerator = distribution * geometry * fresnel;
+    float denominator = 4.0 * max(dot(surface.normal, toEye), 0.0) * max(dot(surface.normal, toLight), 0.0) + 0.0001;
+    float3 specular = numerator / denominator;
+
+    // What is not reflected enters the surface and comes back out in its colour, except in metals.
+    float3 diffuseShare = (float3(1.0, 1.0, 1.0) - fresnel) * (1.0 - surface.metallic);
+
+    float nDotL = max(dot(surface.normal, toLight), 0.0);
+    // A surface that faces away from the sun is dark whatever its shadow says.
+    float visibility = nDotL > 0.0 ? sunVisibility(surface.position, surface.faceNormal, pixel) : 0.0;
+
+    // The sun as it arrives through the air: dimmer and redder the lower it stands.
+    float3 sunLight = (diffuseShare * surface.albedo / pi + specular) * sunlightOnGround() * nDotL * visibility;
+    // The light of the sky, from every direction the surface faces, comes back out in the surface's
+    // colour. A metal has no such colour: it only mirrors.
+    float3 ambient = surface.albedo * (1.0 - surface.metallic) / pi * skyIrradiance(surface.normal);
+
+    // And what the surface mirrors of the sky: sharply if it is smooth, as a blur if it is rough.
+    // A rough surface mirrors most from a direction between the mirrored one and its normal, the
+    // rougher the nearer the normal. Looking the blur up along the mirrored direction instead would
+    // put the bright horizon onto every rough floor ("Moving Frostbite to Physically Based Rendering",
+    // Lagarde and de Rousiers, 2014).
+    float3 mirrored = reflect(-toEye, surface.normal);
+    float spread = surface.roughness * surface.roughness;
+    float towardsMirrored = (1.0 - spread) * (sqrt(1.0 - spread) + spread);
+    float3 mostMirrored = normalize(lerp(surface.normal, mirrored, towardsMirrored));
+
+    // A normal map can tilt the mirrored direction into the surface itself, where there is no sky to see.
+    float aboveSurface = saturate(1.0 + dot(mirrored, surface.faceNormal));
+    ambient += skyReflection(mostMirrored, surface.roughness) * mirroredShare(f0, surface.roughness, max(dot(surface.normal, toEye), 0.0)) * (aboveSurface * aboveSurface);
+
+    return ambient + sunLight;
+}
+
 // isFrontFace is false for a pixel of a triangle that is seen from behind, which only a two-sided
 // material lets through.
 public float4 standardFragment(StandardConstants constants, StandardVaryings input, bool isFrontFace)
@@ -393,46 +456,17 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     float3 emissive = sampleMaterialTexture(material.emissiveTexture, material.materialSampler, input.uv).rgb
         * material.emissiveColorStrength.rgb * material.emissiveColorStrength.a;
 
-    // A metal reflects in its own colour, everything else reflects a little white.
-    float3 f0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
-    float3 fresnel = fresnelSchlick(max(dot(halfway, toEye), 0.0), f0);
-
-    float distribution = distributionGGX(normal, halfway, roughness);
-    float geometry = geometrySmith(normal, toEye, toLight, roughness);
-
-    float3 numerator = distribution * geometry * fresnel;
-    float denominator = 4.0 * max(dot(normal, toEye), 0.0) * max(dot(normal, toLight), 0.0) + 0.0001;
-    float3 specular = numerator / denominator;
-
-    // What is not reflected enters the surface and comes back out in its colour, except in metals.
-    float3 diffuseShare = (float3(1.0, 1.0, 1.0) - fresnel) * (1.0 - metallic);
-
-    float nDotL = max(dot(normal, toLight), 0.0);
-    // A surface that faces away from the sun is dark whatever its shadow says.
-    float visibility = nDotL > 0.0 ? sunVisibility(input.worldPosition, faceNormal, input.position.xy) : 0.0;
-
-    // The sun as it arrives through the air: dimmer and redder the lower it stands.
-    float3 sunLight = (diffuseShare * albedo / pi + specular) * sunlightOnGround() * nDotL * visibility;
-    // The light of the sky, from every direction the surface faces, comes back out in the surface's
-    // colour. A metal has no such colour: it only mirrors.
-    float3 ambient = albedo * (1.0 - metallic) / pi * skyIrradiance(normal);
-
-    // And what the surface mirrors of the sky: sharply if it is smooth, as a blur if it is rough.
-    // A rough surface mirrors most from a direction between the mirrored one and its normal, the
-    // rougher the nearer the normal. Looking the blur up along the mirrored direction instead would
-    // put the bright horizon onto every rough floor ("Moving Frostbite to Physically Based Rendering",
-    // Lagarde and de Rousiers, 2014).
-    float3 mirrored = reflect(-toEye, normal);
-    float spread = roughness * roughness;
-    float towardsMirrored = (1.0 - spread) * (sqrt(1.0 - spread) + spread);
-    float3 mostMirrored = normalize(lerp(normal, mirrored, towardsMirrored));
-
-    // A normal map can tilt the mirrored direction into the surface itself, where there is no sky to see.
-    float aboveSurface = saturate(1.0 + dot(mirrored, faceNormal));
-    ambient += skyReflection(mostMirrored, roughness) * mirroredShare(f0, roughness, max(dot(normal, toEye), 0.0)) * (aboveSurface * aboveSurface);
+    LitSurface surface;
+    surface.position = input.worldPosition;
+    surface.normal = normal;
+    surface.faceNormal = faceNormal;
+    surface.albedo = albedo;
+    surface.metallic = metallic;
+    surface.roughness = roughness;
+    float3 light = lightOn(surface, input.position.xy);
 
     if (isLightingOnly)
         emissive = float3(0.0, 0.0, 0.0);
 
-    return float4(ambient + sunLight + emissive, albedoSample.a);
+    return float4(light + emissive, albedoSample.a);
 }
