@@ -626,7 +626,7 @@ namespace Lynx
             for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
                 seenBySun[cascade].FromViewProjection(m_CurrentFrameData.Cascades[cascade].ViewProjection);
 
-            m_CurrentFrameData.Terrain = m_Terrain->Prepare(m_SceneTerrains, camera.Planes, seenBySun, m_CurrentFrameData.CameraPosition);
+            m_CurrentFrameData.Terrain = m_Terrain->Prepare(m_SceneTerrains, camera.Planes.WithoutFarPlane(), seenBySun, m_CurrentFrameData.CameraPosition);
             const TerrainViews& terrain = m_CurrentFrameData.Terrain;
             uint64_t shadowTriangles = 0;
             for (const TerrainDraws& cascade : terrain.Sun)

@@ -48,6 +48,15 @@ namespace Lynx
                 plane /= glm::length(glm::vec3(plane));
         }
 
+        // The same view without an end: for what is drawn however far away it is, like the ground.
+        // Drawing itself has no far plane, the camera's own only says where culling stops.
+        Frustum WithoutFarPlane() const
+        {
+            Frustum endless = *this;
+            endless.Planes[5] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+            return endless;
+        }
+
         // False only if the box lies wholly behind one of the six planes: its corner farthest along a
         // plane's normal is tested, which is behind the plane only if all of the box is.
         bool IsOnFrustum(const AABB& box) const
