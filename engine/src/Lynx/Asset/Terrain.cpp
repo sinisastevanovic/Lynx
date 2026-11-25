@@ -1,6 +1,8 @@
 #include "Terrain.h"
 
+#include "Material.h"
 #include "TextureSpecification.h"
+#include "Serialization/TerrainSerializer.h"
 #include "Lynx/Engine.h"
 #include "Lynx/Renderer/Renderer.h"
 #include "Lynx/Renderer/TextureSlot.h"
@@ -14,13 +16,75 @@ namespace Lynx
     Terrain::Terrain(uint32_t resolution, float size, float lowest, float highest, std::vector<uint16_t> heights)
         : m_Size(size), m_Lowest(lowest), m_Highest(highest)
     {
+        if (!SetHeights(resolution, std::move(heights)))
+        {
+            SetState(AssetState::Error);
+            return;
+        }
+
+        CreateRenderResources();
+    }
+
+    Terrain::Terrain(const std::string& filePath)
+        : Asset(filePath)
+    {
+    }
+
+    std::shared_ptr<Terrain> Terrain::LoadFromFile(const std::filesystem::path& filePath)
+    {
+        auto terrain = std::make_shared<Terrain>(filePath.string());
+        if (!terrain->LoadSourceData() || !terrain->CreateRenderResources())
+            return nullptr;
+        return terrain;
+    }
+
+    bool Terrain::Save(const std::filesystem::path& filePath) const
+    {
+        TerrainSource source;
+        source.Resolution = m_Resolution;
+        source.Size = m_Size;
+        source.Lowest = m_Lowest;
+        source.Highest = m_Highest;
+        source.Heights = m_Heights;
+        source.WeightResolution = m_WeightResolution;
+        source.Weights = m_Weights;
+        for (const TerrainLayer& layer : GetLayers())
+            source.Layers.push_back({ layer.Material->GetHandle(), layer.TileSize });
+        return TerrainSerializer::Serialize(filePath, source);
+    }
+
+    bool Terrain::LoadSourceData()
+    {
+        // A terrain made in code has nothing to read.
+        if (m_FilePath.empty())
+            return true;
+
+        TerrainSource source;
+        if (!TerrainSerializer::Deserialize(m_FilePath, source))
+            return false;
+
+        m_Size = source.Size;
+        m_Lowest = source.Lowest;
+        m_Highest = source.Highest;
+        if (!SetHeights(source.Resolution, std::move(source.Heights)))
+            return false;
+
+        m_WeightResolution = source.WeightResolution;
+        m_Weights = std::move(source.Weights);
+        m_PendingLayers.clear();
+        for (const TerrainSource::Layer& layer : source.Layers)
+            m_PendingLayers.push_back({ layer.Material, layer.TileSize });
+        return true;
+    }
+
+    bool Terrain::SetHeights(uint32_t resolution, std::vector<uint16_t> heights)
+    {
         // The largest resolution that fits both the heights given and the patches, see the class.
         const uint32_t patches = resolution > TerrainQuadsPerPatch ? std::bit_floor((resolution - 1) / TerrainQuadsPerPatch) : 0;
         if (patches == 0 || heights.size() < static_cast<size_t>(resolution) * resolution)
         {
             LX_CORE_ERROR("A terrain needs at least {0} heights a side, and one for every place. It stays empty.", TerrainQuadsPerPatch + 1);
-            SetState(AssetState::Error);
-            return;
+            return false;
         }
 
         m_Resolution = patches * TerrainQuadsPerPatch + 1;
@@ -77,8 +141,7 @@ namespace Lynx
             }
         }
 
-        // Made in code, on the main thread: the heights go to the GPU at once.
-        CreateRenderResources();
+        return true;
     }
 
     Terrain::~Terrain() = default;
@@ -118,23 +181,31 @@ namespace Lynx
         if (m_LayerCount == 0)
             return;
 
+        m_WeightResolution = resolution;
+        m_Weights = std::move(weights);
+        if (!UploadWeights())
+            m_LayerCount = 0;
+    }
+
+    bool Terrain::UploadWeights()
+    {
         // Smaller sizes for ground far away, like any texture.
         TextureSpecification specification;
-        specification.Width = resolution;
-        specification.Height = resolution;
+        specification.Width = m_WeightResolution;
+        specification.Height = m_WeightResolution;
         specification.Format = TextureFormat::RGBA8;
         specification.GenerateMips = true;
         specification.DebugName = "TerrainWeights";
 
         Renderer& renderer = Engine::Get().GetRenderer();
-        m_WeightMap = renderer.CreateTexture(specification, weights.data());
+        m_WeightSlot.reset();
+        m_WeightMap = renderer.CreateTexture(specification, m_Weights.data());
         if (!m_WeightMap)
-        {
-            m_LayerCount = 0;
-            return;
-        }
+            return false;
+
         m_WeightSlot = std::make_unique<TextureSlot>(renderer.AddToTextureTable(*m_WeightMap));
         IncrementVersion();
+        return true;
     }
 
     uint32_t Terrain::GetWeightTableIndex() const
@@ -173,6 +244,31 @@ namespace Lynx
         m_HeightSlot = std::make_unique<TextureSlot>(renderer.AddToTextureTable(*m_HeightMap));
         m_HeightSampler = renderer.SamplerIndex(SamplerSettings{ TextureWrap::Clamp, TextureFilter::Trilinear, false });
         IncrementVersion();
+
+        // The layers of a terrain that was read from a file: their materials are looked up now, on the
+        // main thread. One that cannot be found ends the list, as in SetLayers.
+        if (!m_PendingLayers.empty())
+        {
+            AssetManager& assets = Engine::Get().GetAssetManager();
+            m_LayerCount = 0;
+            for (const PendingLayer& pending : m_PendingLayers)
+            {
+                if (m_LayerCount == TerrainLayerCount)
+                    break;
+
+                std::shared_ptr<Material> material = assets.GetAsset<Material>(pending.Material, AssetLoadMode::Blocking);
+                if (!material)
+                {
+                    LX_CORE_ERROR("Terrain {0}: the material of layer {1} was not found. The layers after it are left out.", m_FilePath, m_LayerCount);
+                    break;
+                }
+                m_Layers[m_LayerCount++] = { std::move(material), pending.TileSize };
+            }
+            m_PendingLayers.clear();
+
+            if (m_LayerCount > 0 && (m_Weights.size() < static_cast<size_t>(m_WeightResolution) * m_WeightResolution * TerrainLayerCount || !UploadWeights()))
+                m_LayerCount = 0;
+        }
         return true;
     }
 }

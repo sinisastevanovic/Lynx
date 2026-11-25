@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <iterator>
 #include <string>
 
@@ -408,7 +409,7 @@ namespace
     }
 }
 
-void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution)
+void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution, bool throughFile)
 {
     // Hills from seven layers of noise, each twice as fine and half as high as the one before.
     const float highest = 0.12f * static_cast<float>(resolution);
@@ -496,6 +497,20 @@ void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution
     const float size = static_cast<float>(resolution - 1);
     auto terrain = std::make_shared<Terrain>(resolution, size, 0.0f, highest, std::move(heights));
     terrain->SetLayers(layers, weightResolution, std::move(weights));
+
+    // For checking the terrain's file: saved, and the one that is drawn read back from what was saved.
+    // The pictures have to come out as without this.
+    if (throughFile)
+    {
+        const std::filesystem::path file = Engine::Get().GetContentPaths().TempDirectory() / "BenchTerrain.lxterrain";
+        if (terrain->Save(file))
+        {
+            if (std::shared_ptr<Terrain> loaded = Terrain::LoadFromFile(file))
+                terrain = std::move(loaded);
+            else
+                LX_ERROR("RenderBench: cannot load the terrain back from {0}", file.string());
+        }
+    }
     assetManager.AddRuntimeAsset(terrain, AssetHandle(7600000000000000001ull));
 
     Entity entity = scene.CreateEntity("Terrain");

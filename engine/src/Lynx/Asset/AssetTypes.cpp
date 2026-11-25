@@ -26,7 +26,8 @@ namespace Lynx::AssetUtils
         { AssetType::Script , { "Lua Script", { "*.lua" }, "ASSET_SCRIPT" } },
         { AssetType::Sprite , { "Sprite Asset", { "*.lxsprite" }, "ASSET_SPRITE" } },
         { AssetType::Font , { "Font Asset", { "*.lxfont" }, "ASSET_FONT" } },
-        { AssetType::Prefab , { "Prefab Asset", { "*.lxprefab" }, "ASSET_PREFAB" } }
+        { AssetType::Prefab , { "Prefab Asset", { "*.lxprefab" }, "ASSET_PREFAB" } },
+        { AssetType::Terrain , { "Terrain Asset", { "*.lxterrain" }, "ASSET_TERRAIN" } }
     };
 
 

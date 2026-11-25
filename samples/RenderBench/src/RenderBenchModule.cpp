@@ -73,7 +73,7 @@ public:
             CreateTrees(scene, assetManager, trees);
 
         if (const uint32_t terrain = count("Terrain"))
-            CreateTerrain(scene, assetManager, terrain);
+            CreateTerrain(scene, assetManager, terrain, settings.Parameter("TerrainThroughFile", 0.0) > 0.0);
 
         const uint32_t crowd = count("Crowd");
         const uint32_t blocksPerSide = count("BlocksPerSide");

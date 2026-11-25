@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <span>
 #include <vector>
@@ -45,12 +46,26 @@ namespace Lynx
     // whole terrain at a resolution of its own. Without layers a terrain is drawn in two plain colours,
     // by how steep it is.
     //
-    // For now a terrain is made in code. Loading one from a file comes with the rest of step 3.7.
+    // A terrain is made in code from its heights, or loaded from an .lxterrain file, see TerrainSerializer
+    // for what that holds. Save writes one made in code to such a file.
     class LX_API Terrain : public Asset
     {
     public:
+        // Made in code, on the main thread: the heights go to the GPU at once.
         Terrain(uint32_t resolution, float size, float lowest, float highest, std::vector<uint16_t> heights);
+
+        // Loaded from a file by the asset manager, which reads it on any thread (LoadSourceData) and
+        // brings it to the GPU on the main thread (CreateRenderResources).
+        explicit Terrain(const std::string& filePath);
         ~Terrain() override;
+
+        // Loads a terrain from a file here and now, without the asset manager. On the main thread.
+        // Null if the file cannot be read.
+        static std::shared_ptr<Terrain> LoadFromFile(const std::filesystem::path& filePath);
+
+        // Writes the terrain to an .lxterrain file and the pictures next to it. The layers are saved
+        // by the handles of their materials, so those have to be assets the next load can find.
+        bool Save(const std::filesystem::path& filePath) const;
 
         static AssetType GetStaticType() { return AssetType::Terrain; }
         AssetType GetType() const override { return GetStaticType(); }
@@ -91,9 +106,15 @@ namespace Lynx
         uint32_t GetHeightTableIndex() const;
         uint32_t GetHeightSamplerIndex() const { return m_HeightSampler; }
 
+        bool LoadSourceData() override;
         bool CreateRenderResources() override;
 
     private:
+        // Takes the heights over, cut down to a resolution the patches fit into, and works out the
+        // lowest and highest height of every patch. False if there are too few heights.
+        bool SetHeights(uint32_t resolution, std::vector<uint16_t> heights);
+        bool UploadWeights();
+
         float ToHeight(uint16_t stored) const { return m_Lowest + (m_Highest - m_Lowest) * (static_cast<float>(stored) / 65535.0f); }
 
     private:
@@ -117,6 +138,17 @@ namespace Lynx
 
         std::array<TerrainLayer, TerrainLayerCount> m_Layers;
         size_t m_LayerCount = 0;
+
+        // The weights are kept, for saving. The materials of a terrain that was read from a file are
+        // known by their handles until it comes to the GPU, where they are looked up.
+        uint32_t m_WeightResolution = 0;
+        std::vector<uint8_t> m_Weights;
+        struct PendingLayer
+        {
+            AssetHandle Material = AssetHandle::Null();
+            float TileSize = 4.0f;
+        };
+        std::vector<PendingLayer> m_PendingLayers;
         std::unique_ptr<GpuTexture> m_WeightMap;
         std::unique_ptr<TextureSlot> m_WeightSlot;
     };

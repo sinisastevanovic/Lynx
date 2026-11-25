@@ -208,7 +208,7 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Depth.** The scene's depth is reversed: 1 at the near plane, towards 0 at infinity, compared with "greater"
   and cleared to 0. Drawing has no far plane, the camera's own is only used for culling. The shadow map
   keeps the usual depth (0 near, "less").
-- **Terrain.** A terrain is a square of 16-bit heights (`Asset/Terrain`, made in code so far, no file yet), put
+- **Terrain.** A terrain is a square of 16-bit heights (`Asset/Terrain`), made in code or loaded from a file, put
   into a scene by a `TerrainComponent`, whose entity's position is the terrain's first corner. It is drawn as
   patches (continuous distance-dependent level of detail, Strugar 2010): `Renderer/TerrainRenderer` walks a tree
   of square patches on the CPU every frame and picks small ones near the camera and large ones far away, a few
@@ -228,7 +228,10 @@ build\bin\Debug\LynxSandboxGame.exe
   and eight times larger, and the larger one takes over as a repeat of the smaller shrinks below 256 pixels on
   screen, or a repeating texture shows as a pattern and then as one flat colour. Slow noise also makes the
   ground a little lighter and darker in patches of tens of units. A terrain without layers is drawn in two plain
-  colours by slope. Loading a terrain from a file is the rest of step 3.7.
+  colours by slope. A terrain's file is `.lxterrain` (`Asset/Serialization/TerrainSerializer`): a small text
+  file with the size, the lowest and highest height and the layers, naming a picture of heights next to it (raw
+  16-bit numbers as `.r16`, or a 16-bit grey PNG) and a PNG of the weights. `Terrain::Save` writes one,
+  the asset manager loads them, and a benchmark with `TerrainThroughFile=1` draws its terrain from a saved file.
 - **Lit surfaces.** Everything that is lit calls `lightOn(surface, pixel)` in `StandardShading.slang` with a
   `LitSurface` (position, normals, colour, metalness, roughness): the sun, its shadow, the sky. The view modes
   are `shownInPlaceOfLight` and `inLightAlone` next to it. A new kind of surface, like terrain, fills in a

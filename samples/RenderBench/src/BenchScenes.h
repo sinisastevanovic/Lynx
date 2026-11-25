@@ -85,4 +85,5 @@ void CreateTrees(Scene& scene, AssetManager& assetManager, uint32_t count);
 
 // A square of hilly ground, made from noise: a terrain of the given number of heights a side, one
 // unit apart, around the middle of the scene. The same hills in every run.
-void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution);
+// throughFile saves the terrain and draws what is read back, to check the terrain's file.
+void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution, bool throughFile);

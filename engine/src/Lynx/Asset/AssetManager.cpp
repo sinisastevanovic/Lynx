@@ -6,6 +6,7 @@
 #include "Font.h"
 #include "Material.h"
 #include "Prefab.h"
+#include "Terrain.h"
 #include "Script.h"
 #include "Shader.h"
 #include "Sprite.h"
@@ -194,8 +195,9 @@ namespace Lynx
             case AssetType::Prefab:
                 newAsset = std::make_shared<Prefab>(metadata.FilePath.string());
                 break;
-            // A terrain is made in code for now, see Terrain.h.
             case AssetType::Terrain:
+                newAsset = std::make_shared<Terrain>(metadata.FilePath.string());
+                break;
             case AssetType::None:
             case AssetType::SkeletalMesh:
             default: LX_CORE_ERROR("AssetType not supported yet ({0})!", static_cast<int>(metadata.Type)); return nullptr;
