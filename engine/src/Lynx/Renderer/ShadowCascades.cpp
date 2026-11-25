@@ -147,6 +147,7 @@ namespace Lynx
             cascades[index].Centre = glm::vec2(centre);
             cascades[index].Radius = radius;
             cascades[index].TexelSize = texelSize;
+            cascades[index].Depth = farthestFromSun - nearestToSun;
             sliceNear = sliceFar;
         }
 

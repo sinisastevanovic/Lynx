@@ -1,4 +1,4 @@
-// How a mesh with a standard material is lit: one sun with a shadow in cascades, a metallic-roughness surface
+// How a mesh with a standard material is lit: one sun with a soft shadow in cascades, a metallic-roughness surface
 // (the Cook-Torrance model with the GGX distribution) and a little constant light from everywhere.
 // Standard.slang and StandardEditor.slang are the two programs made from it.
 module StandardShading;
@@ -91,8 +91,6 @@ float3 levelColour(float level)
     return (uint(level) & 1) == 1 ? colour * 0.7 : colour;
 }
 
-static const float pi = 3.14159265359;
-
 // Which cascade of the sun's shadow a place takes its shadow from, and where it lies in that cascade's map.
 struct CascadePlace
 {
@@ -126,14 +124,56 @@ CascadePlace cascadePlaceOf(float3 worldPosition)
     return place;
 }
 
+// The sun is a disc in the sky, not a point, so the edge of a shadow is soft: sharp where the thing that
+// casts it touches the ground, and wider the farther the shadow has travelled. A map holds one depth per
+// texel and knows nothing of that, so the edge is made here, per pixel, in two steps
+// ("Percentage-Closer Soft Shadows", Fernando 2005):
+//   1. Depths of the map around the place are read. Those nearer to the sun are what casts the shadow,
+//      and their average distance to the place says how wide the edge is here.
+//   2. Comparisons are averaged over a disc of that width.
+// Both use the same points, spread evenly over a disc and turned by a different angle in every pixel:
+// a pattern that repeated from pixel to pixel would show as bands, a turned one shows as fine grain.
+static const uint blockerTaps = 8;
+static const uint filterTaps = 16;
+
+// The edge is never narrower than this, in texels from its middle to its rim, or the texels would show.
+// And never wider, or the points of the disc would lie too far apart to find what is between them.
+static const float narrowestEdge = 1.5;
+static const float widestEdge = 12.0;
+
+static const float pi = 3.14159265359;
+
+// A number from 0 to 1 that differs from pixel to pixel with no pattern the eye picks up
+// ("interleaved gradient noise", Jimenez 2014).
+float noiseOfPixel(float2 pixel)
+{
+    return frac(52.9829189 * frac(dot(pixel, float2(0.06711056, 0.00583715))));
+}
+
+// The direction of the next point of a disc from the one before: turned by the golden angle, which never
+// lines points up. With the distance below, the points cover the disc evenly, however many there are.
+float2 turnedOn(float2 direction)
+{
+    static const float cosine = -0.73736888;
+    static const float sine = 0.67549029;
+    return float2(direction.x * cosine - direction.y * sine, direction.x * sine + direction.y * cosine);
+}
+
+// How far from the middle of a disc of radius one the point with this number lies.
+float fromMiddle(uint point, uint count)
+{
+    return sqrt((float(point) + 0.5) / float(count));
+}
+
 // How much of the sun reaches a place according to one cascade: 1 for all of it, 0 for none.
-// Nine comparisons around the place are averaged, which softens the edge of a shadow.
-float cascadeVisibility(uint cascade, float3 worldPosition, float3 normal)
+// The normal is that of the surface itself, without its normal map. turn is the angle for this pixel.
+float cascadeVisibility(uint cascade, float3 worldPosition, float3 normal, float turn)
 {
     // A texel of the map covers a patch of the surface but holds one depth, so a surface at a slant to
     // the sun would shadow itself in stripes. The place is looked up a little off the surface, by as much
     // as the texels of this cascade are large.
-    float3 offSurface = worldPosition + normal * (scene.cascadeFootprint[cascade].w * 2.0);
+    float texelInWorld = scene.cascadeFootprint[cascade].w;
+    float3 offSurface = worldPosition + normal * (texelInWorld * 2.0);
     float3 coordinate = mul(scene.cascadeToTexture[cascade], float4(offSurface, 1.0)).xyz;
 
     // Beyond what the map covers in depth, everything is lit. To its sides the sampler says so.
@@ -141,35 +181,75 @@ float cascadeVisibility(uint cascade, float3 worldPosition, float3 normal)
         return 1.0;
 
     Texture2D map = textures[NonUniformResourceIndex(scene.cascadeTextures[cascade])];
-    float texelSize = 1.0 / float(shadowCascadeResolution);
+    float texel = 1.0 / float(shadowCascadeResolution);
+    float depthInWorld = scene.cascadeDepth[cascade];
 
-    float visibility = 0.0;
-    for (int x = -1; x <= 1; ++x)
+    // A point of the disc lies beside the place, and the surface is there too, at another depth unless
+    // it faces the sun squarely. Comparing with the depth of the place itself would find the surface in
+    // its own shadow, the more so the wider the disc. So every point is compared with the depth the
+    // surface has there, which follows from the way it faces: by this much per texel to the side.
+    // A surface the sun only grazes would need more than is sensible, so it gets a limit.
+    float3 seenBySun = mul(scene.sunView, float4(normal, 0.0)).xyz;
+    float2 depthPerTexel = float2(seenBySun.x, -seenBySun.y) / max(seenBySun.z, 0.25) * (texelInWorld / depthInWorld);
+
+    // What casts a shadow here, and from how far. A read fetches the four texels around its point.
+    float searchRadius = clamp(scene.shadowWidestEdge / texelInWorld, narrowestEdge, widestEdge);
+    float2 direction = float2(cos(turn), sin(turn));
+    float blockers = 0.0;
+    float depthToBlockers = 0.0;
+    for (uint tap = 0; tap < blockerTaps; ++tap)
     {
-        for (int y = -1; y <= 1; ++y)
-        {
-            float2 uv = coordinate.xy + float2(x, y) * texelSize;
-            visibility += map.SampleCmpLevelZero(comparisonSamplers[scene.shadowSampler], uv, coordinate.z);
-        }
+        float2 offset = direction * (fromMiddle(tap, blockerTaps) * searchRadius);
+        direction = turnedOn(direction);
+
+        float surface = coordinate.z + dot(depthPerTexel, offset);
+        float4 depths = map.GatherRed(samplers[scene.shadowDepthSampler], coordinate.xy + offset * texel);
+        float4 isBlocker = float4(depths < float4(surface, surface, surface, surface));
+        blockers += dot(isBlocker, float4(1.0, 1.0, 1.0, 1.0));
+        depthToBlockers += dot(isBlocker, surface - depths);
     }
-    return visibility / 9.0;
+
+    // Nothing in the way: lit. Everything in the way: deep inside a shadow, where the second step
+    // would find the same.
+    if (blockers == 0.0)
+        return 1.0;
+    if (blockers == float(4 * blockerTaps))
+        return 0.0;
+
+    // The width of the edge grows with the distance the shadow has travelled, by the size of the sun.
+    float edgeInWorld = depthToBlockers / blockers * depthInWorld * scene.shadowSoftening;
+    float radius = clamp(edgeInWorld / texelInWorld, narrowestEdge, searchRadius);
+
+    direction = float2(cos(turn), sin(turn));
+    float visibility = 0.0;
+    for (uint tap = 0; tap < filterTaps; ++tap)
+    {
+        float2 offset = direction * (fromMiddle(tap, filterTaps) * radius);
+        direction = turnedOn(direction);
+
+        float surface = coordinate.z + dot(depthPerTexel, offset);
+        visibility += map.SampleCmpLevelZero(comparisonSamplers[scene.shadowSampler], coordinate.xy + offset * texel, surface);
+    }
+    return visibility / float(filterTaps);
 }
 
 // How much of the sun reaches a place: 1 for all of it, 0 for none. Outside the last cascade there
 // is no shadow. Near the edge of a cascade's map its shadow is mixed with that of the next one, so that
 // no line shows where the detail of the shadow changes.
-float sunVisibility(float3 worldPosition, float3 normal)
+// The normal is that of the surface itself, without its normal map. pixel is where the place is on screen.
+float sunVisibility(float3 worldPosition, float3 normal, float2 pixel)
 {
     CascadePlace place = cascadePlaceOf(worldPosition);
     if (place.cascade == shadowCascadeCount)
         return 1.0;
 
-    float visibility = cascadeVisibility(place.cascade, worldPosition, normal);
+    float turn = noiseOfPixel(pixel) * 2.0 * pi;
+    float visibility = cascadeVisibility(place.cascade, worldPosition, normal, turn);
 
     float intoBlend = (place.towardsEdge - (1.0 - shadowCascadeBlend)) / shadowCascadeBlend;
     if (intoBlend > 0.0)
     {
-        float next = place.cascade + 1 < shadowCascadeCount ? cascadeVisibility(place.cascade + 1, worldPosition, normal) : 1.0;
+        float next = place.cascade + 1 < shadowCascadeCount ? cascadeVisibility(place.cascade + 1, worldPosition, normal, turn) : 1.0;
         visibility = lerp(visibility, next, saturate(intoBlend));
     }
     return visibility;
@@ -223,6 +303,9 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     // The normal map tilts the surface's normal. It is stored relative to the surface, so it is
     // brought into the world with the surface's own three directions.
     float3 normal = normalize(input.normal);
+
+    // The surface as it faces without its normal map, which is how its shadow is looked up.
+    float3 faceNormal = isFrontFace ? normal : -normal;
     float3 tangent = normalize(input.tangent.xyz);
     tangent = tangent - dot(tangent, normal) * normal;
 
@@ -271,7 +354,7 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
 
     if (constants.viewMode == viewShadowCascades)
     {
-        float lit = max(dot(normal, toLight), 0.0) * sunVisibility(input.worldPosition, normal);
+        float lit = max(dot(normal, toLight), 0.0) * sunVisibility(input.worldPosition, faceNormal, input.position.xy);
         return float4(shownAsItIs(cascadeColour(cascadePlaceOf(input.worldPosition).cascade) * (0.35 + 0.65 * lit)), 1.0);
     }
 
@@ -305,7 +388,8 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     float3 diffuseShare = (float3(1.0, 1.0, 1.0) - fresnel) * (1.0 - metallic);
 
     float nDotL = max(dot(normal, toLight), 0.0);
-    float visibility = sunVisibility(input.worldPosition, normal);
+    // A surface that faces away from the sun is dark whatever its shadow says.
+    float visibility = nDotL > 0.0 ? sunVisibility(input.worldPosition, faceNormal, input.position.xy) : 0.0;
 
     float3 sunLight = (diffuseShare * albedo / pi + specular) * scene.lightColor.rgb * scene.lightDirection.w * nDotL * visibility;
     float3 ambient = float3(0.03, 0.03, 0.03) * albedo;

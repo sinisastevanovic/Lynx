@@ -123,10 +123,13 @@ namespace Lynx
 
         // The maps of the cascades of the sun's shadow, where the texture table has them, and the sampler
         // they are read with: it compares instead of reading, and treats everything outside a map as lit.
+        // A second one reads the depths themselves, to find how far away what casts a shadow is.
         std::array<GpuTexture, ShadowCascadeCount> ShadowMaps;
         std::array<TextureSlot, ShadowCascadeCount> ShadowMapSlots;
         vk::Sampler ShadowSampler;
         uint32_t ShadowSamplerIndex = 0;
+        vk::Sampler ShadowDepthSampler;
+        uint32_t ShadowDepthSamplerIndex = 0;
 
         // Picking: the pixel that was asked for, the buffer its entity ID is copied into, the frame the copy
         // was recorded in, and an answer that needed no copy.
@@ -265,6 +268,7 @@ namespace Lynx
         m_Frame->SceneEntityIds = {};
         m_Frame->ShadowMaps = {};
         m_Context->Device().destroySampler(m_Frame->ShadowSampler);
+        m_Context->Device().destroySampler(m_Frame->ShadowDepthSampler);
         m_ImGui.reset();
 
         for (int frame = 0; frame < MAX_FRAMES_IN_FLIGHT; ++frame)
@@ -699,9 +703,15 @@ namespace Lynx
             const ShadowCascade& fitted = m_CurrentFrameData.Cascades[cascade];
             sceneData.CascadeFootprint[cascade] = glm::vec4(fitted.Centre, 1.0f / fitted.Radius, fitted.TexelSize);
             sceneData.CascadeTextures[cascade] = m_Frame->ShadowMapSlots[cascade].Index();
+            sceneData.CascadeDepth[cascade] = fitted.Depth;
         }
         sceneData.SunView = m_CurrentFrameData.Cascades.front().SunView;
         sceneData.ShadowSampler = m_Frame->ShadowSamplerIndex;
+        sceneData.ShadowDepthSampler = m_Frame->ShadowDepthSamplerIndex;
+
+        // Half the sun's disc is what widens an edge to one side.
+        sceneData.ShadowSoftening = std::tan(glm::radians(0.5f * m_ShadowSettings.SunAngle));
+        sceneData.ShadowWidestEdge = m_ShadowSettings.WidestEdge;
         sceneData.LightDirection = glm::vec4(lightDir, lightIntensity);
         sceneData.LightColor = glm::vec4(lightColor, 1.0f);
         m_Frame->Uploads->Upload(m_Frame->SceneConstants.Handle(), 0, std::as_bytes(std::span<const SceneData>(&sceneData, 1)));
@@ -1044,6 +1054,20 @@ namespace Lynx
         samplerInfo.maxLod = std::numeric_limits<float>::max();
         m_Frame->ShadowSampler = m_Context->Device().createSampler(samplerInfo);
         m_Frame->ShadowSamplerIndex = m_Frame->Shared->ComparisonSamplerIndex(m_Frame->ShadowSampler);
+
+        // Depths are read as they are, never mixed: the middle between two depths is the depth of nothing.
+        // Outside a map nothing casts a shadow, which is the farthest depth.
+        vk::SamplerCreateInfo depthSamplerInfo;
+        depthSamplerInfo.magFilter = vk::Filter::eNearest;
+        depthSamplerInfo.minFilter = vk::Filter::eNearest;
+        depthSamplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
+        depthSamplerInfo.addressModeU = vk::SamplerAddressMode::eClampToBorder;
+        depthSamplerInfo.addressModeV = vk::SamplerAddressMode::eClampToBorder;
+        depthSamplerInfo.addressModeW = vk::SamplerAddressMode::eClampToBorder;
+        depthSamplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+        depthSamplerInfo.maxAnisotropy = 1.0f;
+        m_Frame->ShadowDepthSampler = m_Context->Device().createSampler(depthSamplerInfo);
+        m_Frame->ShadowDepthSamplerIndex = m_Frame->Shared->SamplerIndex(m_Frame->ShadowDepthSampler);
     }
 
     std::shared_ptr<const GpuBuffer> Renderer::CreateLeafData(std::span<const LeafVertex> leaves)

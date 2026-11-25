@@ -45,6 +45,10 @@ namespace Lynx
                 ImGui::SliderFloat("Detail near the camera", &shadows.SplitWeight, 0.0f, 1.0f);
                 ImGui::SetItemTooltip("How the distance is shared out among the four cascades while they are not fitted.\nHigher gives the near ones more of the detail.");
                 ImGui::EndDisabled();
+                ImGui::DragFloat("Sun size in degrees", &shadows.SunAngle, 0.01f, 0.0f, 10.0f);
+                ImGui::SetItemTooltip("How large the sun is in the sky. The real one is 0.53.\nA larger sun makes the edge of a shadow widen faster with the distance from what casts it.");
+                ImGui::DragFloat("Widest shadow edge", &shadows.WidestEdge, 0.01f, 0.0f, 2.0f);
+                ImGui::SetItemTooltip("The widest the soft edge of a shadow gets, from its middle to its rim.");
                 ImGui::DragFloat("Smallest caster in texels", &shadows.SmallestCasterInTexels, 0.1f, 0.0f, 64.0f);
                 ImGui::SetItemTooltip("Things smaller than this many texels of a cascade's map cast no shadow into it.\nSmall things then lose their shadow some way off, which is where most of the cost of far shadows lies.");
             }

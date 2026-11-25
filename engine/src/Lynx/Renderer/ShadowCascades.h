@@ -49,6 +49,15 @@ namespace Lynx
         // So small things lose their shadow some way from the camera, large things keep it to the end.
         float SmallestCasterInTexels = 4.0f;
 
+        // How large the sun is in the sky, as an angle in degrees. The real sun is 0.53. The edge of a
+        // shadow is sharp where the thing that casts it stands and gets wider with the distance from it,
+        // the faster the larger the sun: at 0.53 by about a centimetre per metre.
+        float SunAngle = 0.53f;
+
+        // The widest the edge of a shadow gets, from its middle to its rim, in the scene's units.
+        // Also how far around a place the renderer looks for what casts a shadow on it.
+        float WidestEdge = 0.25f;
+
         // How far towards the sun and away from it a cascade reaches beyond the stretch of the view it is
         // fitted to: for what stands outside and casts its shadow in, and for what lies outside and receives it.
         float DepthRange = 500.0f;
@@ -68,6 +77,9 @@ namespace Lynx
 
         // The size of one texel of its map in the world.
         float TexelSize = 0.0f;
+
+        // How far the map reaches along the sun's light, from its depth 0 to its depth 1.
+        float Depth = 0.0f;
     };
 
     // Decides which stretch of the view the cascades are shared out over, from what the camera saw a few

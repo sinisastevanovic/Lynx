@@ -161,15 +161,23 @@ namespace Lynx
         // The sun's shadow. The world as the sun sees it, turned but not moved. Then per cascade: from the
         // world to where a place lies in the cascade's map (xy as texture coordinates, z as the depth to
         // compare), the square of ground the map covers as the sun sees it (its middle in xy, one over half
-        // its width in z, and in w the size of a texel in the world), and where the texture table has the map.
+        // its width in z, and in w the size of a texel in the world), where the texture table has the map,
+        // and how far the map reaches along the sun's light: its depths from 0 to 1 stand for that distance.
         glm::mat4 SunView;
         glm::mat4 CascadeToTexture[ShadowCascadeCount];
         glm::vec4 CascadeFootprint[ShadowCascadeCount];
         glm::uvec4 CascadeTextures;
+        glm::vec4 CascadeDepth;
 
-        // Where the table of comparing samplers has the one the maps are read with.
+        // Where the table of comparing samplers has the one the maps are compared with, and the table of
+        // samplers the one their depths are read with.
         uint32_t ShadowSampler;
-        uint32_t Padding[3];
+        uint32_t ShadowDepthSampler;
+
+        // The edge of a shadow gets this much wider, from its middle to its rim, per unit of distance
+        // between what casts the shadow and what receives it. And the widest it gets, in the scene's units.
+        float ShadowSoftening;
+        float ShadowWidestEdge;
     };
 
     // One see-through instance, drawn on its own: these are sorted by distance, which a shared draw
