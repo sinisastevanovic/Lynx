@@ -38,6 +38,10 @@ public:
         shadows.SmallestCasterInTexels = static_cast<float>(settings.Parameter("ShadowSmallestCaster", shadows.SmallestCasterInTexels));
         shadows.FitsToView = settings.Parameter("ShadowFit", shadows.FitsToView ? 1.0 : 0.0) > 0.0;
 
+        TemporalSettings& temporal = engine.GetRenderer().GetTemporalSettings();
+        temporal.Jitters = settings.Parameter("Jitter", temporal.Jitters ? 1.0 : 0.0) > 0.0;
+        temporal.JitterLength = static_cast<uint32_t>(std::max(settings.Parameter("JitterLength", temporal.JitterLength), 1.0));
+
         // What the view shows, for pictures of every view mode. See ViewMode for the numbers.
         ViewSettings& viewing = engine.GetSceneRenderer().GetViewSettings();
         const double mode = std::clamp(settings.Parameter("ViewMode", 0.0), 0.0, static_cast<double>(ViewModeNames.size() - 1));

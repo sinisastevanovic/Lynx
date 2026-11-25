@@ -162,9 +162,11 @@ namespace Lynx
 
     struct SceneData
     {
+        // From the world to the screen, shifted by the frame's jitter.
         glm::mat4 ViewProjectionMatrix;
 
-        // The same of the frame before.
+        // The same without the shift, of this frame and of the frame before.
+        glm::mat4 UnjitteredViewProjectionMatrix;
         glm::mat4 PreviousViewProjectionMatrix;
         glm::vec4 CameraPosition;
         glm::vec4 LightDirection; // w is intensity
@@ -205,7 +207,9 @@ namespace Lynx
 
         // The address of an ExposureState: how bright the picture is made, which ExposurePass keeps up to date.
         uint64_t Exposure;
-        uint64_t Padding;
+
+        // How far the view projection shifts the picture in this frame, in texture coordinates.
+        glm::vec2 Jitter;
     };
 
     // One see-through instance, drawn on its own: these are sorted by distance, which a shared draw
@@ -238,6 +242,18 @@ namespace Lynx
         // Where the texture and sampler tables have the material's albedo texture.
         uint32_t AlbedoTexture;
         uint32_t AlbedoSampler;
+    };
+
+    // How a picture is put together from several frames (temporal anti-aliasing, step 3.10 of Renderer V2).
+    struct TemporalSettings
+    {
+        // Shifts the camera by a part of a pixel, differently in every frame, so that the frames
+        // together sample every pixel in several places. A single frame looks the same as without.
+        bool Jitters = false;
+
+        // After this many frames the shifts repeat. They follow the Halton sequence of bases 2 and 3,
+        // of which any run of frames covers a pixel evenly.
+        uint32_t JitterLength = 8;
     };
 
     struct BloomSettings
@@ -332,6 +348,7 @@ namespace Lynx
 
         // The camera's matrix as shaders get it. The engine's matrices have +Y up on screen, as GLM makes them.
         // Vulkan has +Y down, so what goes to a shader is turned around once, here.
+        // It holds the frame's jitter: what is drawn with it, or found back through its inverse, is shifted.
         glm::mat4 ClipViewProjection;
 
         // The cascades of the sun's shadow: what each covers, its matrix as shaders get it, and its map.

@@ -44,9 +44,13 @@ public struct ExposureState
 // Has to match SceneData in RenderPass.h.
 public struct SceneConstants
 {
+    // From the world to the screen. With jitter on, it shifts everything by a part of a pixel, differently
+    // in every frame: draw with it, and the frames together sample every pixel in several places.
     public float4x4 viewProjection;
 
-    // The same of the frame before, which says where something was on screen then. See screenMotion.
+    // The same without the shift, of this frame and of the frame before. How far something moved on
+    // screen is worked out with these two, or the shift would count as motion. See screenMotion.
+    public float4x4 unjitteredViewProjection;
     public float4x4 previousViewProjection;
     public float4 cameraPosition;
 
@@ -88,7 +92,9 @@ public struct SceneConstants
 
     // How bright the picture is made, for the shaders that finish it.
     public ExposureState* exposure;
-    public uint64_t padding;
+
+    // How far viewProjection shifts the picture in this frame, in texture coordinates. Zero without jitter.
+    public float2 jitter;
 };
 
 // The binding number has to match SharedBindings.h.
@@ -96,7 +102,7 @@ public struct SceneConstants
 
 // How far a point moved on screen since the last frame, in texture coordinates: where it is minus where
 // it was. Both are given as x, y and w of the point's position in clip space, this frame's from
-// scene.viewProjection and the last frame's from scene.previousViewProjection.
+// scene.unjitteredViewProjection and the last frame's from scene.previousViewProjection.
 // What is drawn in the same way in both frames comes out as exactly zero.
 public float2 screenMotion(float3 clip, float3 previousClip)
 {

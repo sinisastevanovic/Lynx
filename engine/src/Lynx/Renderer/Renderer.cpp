@@ -757,16 +757,47 @@ namespace Lynx
             }
             return cameraProjection;
         };
-        m_CurrentFrameData.ClipViewProjection = toVulkanClip(toReversedDepth(projection) * view);
+        const glm::mat4 unjittered = toVulkanClip(toReversedDepth(projection) * view);
+
+        // The jitter of the frame, in pixels from the middle of a pixel. It goes by a count of frames
+        // and not by time, so a run that draws the same frames shifts them the same way.
+        const auto halton = [](uint64_t index, uint32_t base)
+        {
+            float result = 0.0f;
+            float digitValue = 1.0f / static_cast<float>(base);
+            for (; index > 0; index /= base, digitValue /= static_cast<float>(base))
+                result += static_cast<float>(index % base) * digitValue;
+            return result;
+        };
+        glm::vec2 jitterInPixels(0.0f);
+        if (m_TemporalSettings.Jitters)
+        {
+            const uint64_t step = m_JitterFrame++ % std::max(m_TemporalSettings.JitterLength, 1u) + 1;
+            jitterInPixels = glm::vec2(halton(step, 2), halton(step, 3)) - 0.5f;
+        }
+
+        // A shift on screen is a shift of x and y by a share of w, which the division by w turns into
+        // the same distance for everything, near or far.
+        const glm::vec2 sceneSize(static_cast<float>(m_SceneSize->first), static_cast<float>(m_SceneSize->second));
+        const glm::vec2 jitterInClip = 2.0f * jitterInPixels / sceneSize;
+        glm::mat4 jittered = unjittered;
+        for (int column = 0; column < 4; ++column)
+        {
+            jittered[column][0] += jitterInClip.x * unjittered[column][3];
+            jittered[column][1] += jitterInClip.y * unjittered[column][3];
+        }
+        m_CurrentFrameData.ClipViewProjection = jittered;
 
         SceneData sceneData{};
-        sceneData.ViewProjectionMatrix = m_CurrentFrameData.ClipViewProjection;
+        sceneData.ViewProjectionMatrix = jittered;
+        sceneData.UnjitteredViewProjectionMatrix = unjittered;
+        sceneData.Jitter = jitterInPixels / sceneSize;
+        sceneData.CameraPosition = glm::vec4(cameraPosition, 1.0f);
 
         // How far something moved on screen is worked out from where the last frame's camera saw it.
         // The first frame has none before it, and nothing moved.
-        sceneData.PreviousViewProjectionMatrix = m_PreviousClipViewProjection.value_or(m_CurrentFrameData.ClipViewProjection);
-        m_PreviousClipViewProjection = m_CurrentFrameData.ClipViewProjection;
-        sceneData.CameraPosition = glm::vec4(cameraPosition, 1.0f);
+        sceneData.PreviousViewProjectionMatrix = m_PreviousClipViewProjection.value_or(unjittered);
+        m_PreviousClipViewProjection = unjittered;
 
         // The sun's shadow. Its maps keep the usual depth: the sun's view has no perspective, so the
         // reversed depth of the scene would gain nothing there.

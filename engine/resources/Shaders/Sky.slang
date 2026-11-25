@@ -54,7 +54,7 @@ FragmentOutput fragmentMain(VertexOutput input)
     float3 direction = normalize(input.farPoint - input.nearPoint);
 
     // The sky is infinitely far away: it moves on screen as the camera turns, and not as it travels.
-    float4 clip = mul(scene.viewProjection, float4(direction, 0.0));
+    float4 clip = mul(scene.unjitteredViewProjection, float4(direction, 0.0));
     float4 previousClip = mul(scene.previousViewProjection, float4(direction, 0.0));
 
     FragmentOutput output;

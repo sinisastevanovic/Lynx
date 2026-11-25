@@ -148,6 +148,9 @@ namespace Lynx
         ShadowSettings& GetShadowSettings() { return m_ShadowSettings; }
         const ShadowSettings& GetShadowSettings() const { return m_ShadowSettings; }
 
+        TemporalSettings& GetTemporalSettings() { return m_TemporalSettings; }
+        const TemporalSettings& GetTemporalSettings() const { return m_TemporalSettings; }
+
         LodSettings& GetLodSettings() { return m_LodSettings; }
         const LodSettings& GetLodSettings() const { return m_LodSettings; }
 
@@ -206,8 +209,13 @@ namespace Lynx
         ShadowSettings m_ShadowSettings;
         ShadowFit m_ShadowFit;
 
-        // The camera's matrix as shaders got it in the last frame. Empty before the first frame.
+        // The camera's matrix as shaders got it in the last frame, without jitter. Empty before the first frame.
         std::optional<glm::mat4> m_PreviousClipViewProjection;
+
+        TemporalSettings m_TemporalSettings;
+
+        // How many frames have been jittered, which says how the next one is.
+        uint64_t m_JitterFrame = 0;
         std::unique_ptr<TerrainRenderer> m_Terrain;
 
         // The terrains of the scene that is being drawn. Valid only while it is.

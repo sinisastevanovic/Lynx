@@ -188,12 +188,10 @@ TerrainVaryings vertexMain(uint vertexIndex : SV_VulkanVertexID, uint patchIndex
 
     // Ground stays where it is, so it moves on screen by the camera alone. That a vertex slides
     // between two levels as the camera travels is left out: it slides along the ground.
-    float4 clip = mul(scene.viewProjection, float4(world, 1.0));
-
     TerrainVaryings output;
-    output.position = constants.isSeenBySun != 0 ? mul(constants.sunViewProjection, float4(world, 1.0)) : clip;
+    output.position = constants.isSeenBySun != 0 ? mul(constants.sunViewProjection, float4(world, 1.0)) : mul(scene.viewProjection, float4(world, 1.0));
     output.worldPosition = world;
-    output.clip = clip.xyw;
+    output.clip = mul(scene.unjitteredViewProjection, float4(world, 1.0)).xyw;
     output.previousClip = mul(scene.previousViewProjection, float4(world, 1.0)).xyw;
     output.terrain = terrainIndex;
     output.level = float(level);

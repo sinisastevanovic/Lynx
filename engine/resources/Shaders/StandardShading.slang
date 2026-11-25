@@ -82,7 +82,7 @@ public StandardVaryings standardVertex(StandardConstants constants, StandardVert
     output.worldPosition = position.world.xyz;
     output.normal = normalize(meshNormal(model, input.normal));
     output.tangent = float4(normalize(meshDirection(model, input.tangent.xyz)), input.tangent.w);
-    output.clip = position.clip.xyw;
+    output.clip = mul(scene.unjitteredViewProjection, position.world).xyw;
     output.previousClip = previousClip.xyw;
     output.entityId = instance.entityId;
     output.material = instance.material;
