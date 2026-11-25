@@ -290,6 +290,11 @@ namespace Lynx
         AtmosphereSettings Atmosphere;
         std::array<GpuTexture*, static_cast<size_t>(AtmosphereTable::Count)> AtmosphereTables{};
 
+        // True once the atmosphere pass has drawn the tables in this frame. The passes that work the
+        // sky's light out from them wait for that: the passes get their shaders one by one while the
+        // program starts, and a result worked out from tables nobody has drawn yet would be kept.
+        bool HasSkyView = false;
+
         // The cube shiny surfaces mirror the sky from, see SkyReflectionPass.
         GpuTexture* SkyReflection = nullptr;
 

@@ -93,7 +93,7 @@ namespace Lynx
     {
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
 
-        if (!m_Vulkan->Pipeline || !renderData.SkyReflection || !renderData.AtmosphereTables.front())
+        if (!m_Vulkan->Pipeline || !renderData.SkyReflection || !renderData.HasSkyView)
             return false;
 
         // Still right from an earlier frame.

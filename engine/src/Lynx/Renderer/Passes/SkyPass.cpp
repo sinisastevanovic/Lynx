@@ -80,7 +80,7 @@ namespace Lynx
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
 
         // The sky's brightness means nothing in a view that shows colours as they are.
-        if (!m_Vulkan->Pipeline || !renderData.AtmosphereTables.front() || ShowsRawColours(renderData.Viewing.Mode))
+        if (!m_Vulkan->Pipeline || !renderData.HasSkyView || ShowsRawColours(renderData.Viewing.Mode))
             return false;
 
         resources.ColorTarget = renderData.SceneColor;

@@ -151,6 +151,10 @@ namespace Lynx
         TextureSlot SkyReflectionSlot;
         uint32_t SkyReflectionSamplerIndex = 0;
 
+        // False until the tables and the cube have been filled with black once. Their passes may get
+        // their shaders some frames after the forward pass has its own, which reads them from the start.
+        bool HasClearedSkyPictures = false;
+
         // Picking: the pixel that was asked for, the buffer its entity ID is copied into, the frame the copy
         // was recorded in, and an answer that needed no copy.
         std::optional<glm::uvec2> PickRequest;
@@ -762,6 +766,14 @@ namespace Lynx
 
         // The scene starts as a dark grey with everything farthest away, which is depth 0, and with no entity anywhere.
         const vk::CommandBuffer commands = m_Frame->Commands;
+        if (!m_Frame->HasClearedSkyPictures)
+        {
+            const vk::ClearColorValue black(0.0f, 0.0f, 0.0f, 1.0f);
+            for (GpuTexture& table : m_Frame->AtmosphereTables)
+                table.ClearColor(commands, black);
+            m_Frame->SkyReflection.ClearColor(commands, black);
+            m_Frame->HasClearedSkyPictures = true;
+        }
         m_Frame->SceneColor.ClearColor(commands, vk::ClearColorValue(0.05f, 0.05f, 0.05f, 1.0f));
         m_Frame->SceneDepth.ClearDepth(commands, 0.0f);
         if (m_Frame->SceneEntityIds)
@@ -825,6 +837,7 @@ namespace Lynx
         m_CurrentFrameData.SceneDepthIndex = m_Frame->SceneDepthSlot.Index();
         m_CurrentFrameData.DepthPyramid = {};
         m_CurrentFrameData.SeenDepthRange.reset();
+        m_CurrentFrameData.HasSkyView = false;
         m_CurrentFrameData.BloomTextureIndex = m_Frame->BlackTextureIndex;
         m_CurrentFrameData.Bloom = m_BloomSettings;
         if (ShowsRawColours(m_CurrentFrameData.Viewing.Mode))
@@ -1124,7 +1137,8 @@ namespace Lynx
             desc.Width = AtmosphereTableSizes[table].x;
             desc.Height = AtmosphereTableSizes[table].y;
             desc.Format = RenderFormats::AtmosphereTable;
-            desc.Usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
+            // Drawn into, read by shaders, and filled with black once at the start.
+            desc.Usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
             desc.Name = "AtmosphereTable";
             m_Frame->AtmosphereTables[table] = GpuTexture(*m_Context, desc);
             m_Frame->AtmosphereTableSlots[table] = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->AtmosphereTables[table].View()));
@@ -1144,7 +1158,7 @@ namespace Lynx
         reflectionDesc.Width = SkyReflectionSize;
         reflectionDesc.Height = SkyReflectionSize;
         reflectionDesc.Format = RenderFormats::AtmosphereTable;
-        reflectionDesc.Usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
+        reflectionDesc.Usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
         reflectionDesc.MipLevels = SkyReflectionMips;
         reflectionDesc.ViewPerMip = true;
         reflectionDesc.IsCube = true;

@@ -118,5 +118,6 @@ namespace Lynx
             m_Drawn = renderData.Atmosphere;
         }
         draw(AtmosphereTable::SkyView);
+        renderData.HasSkyView = true;
     }
 }
