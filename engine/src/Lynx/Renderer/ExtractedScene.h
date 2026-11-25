@@ -34,6 +34,9 @@ namespace Lynx
         glm::vec3 SunColor{ 1.0f };
         float SunIntensity = 1.0f;
 
+        // How large the sun is in the sky, as an angle in degrees.
+        float SunAngularSize = 0.53f;
+
         // The air above the scene. The Earth's unless the scene says otherwise.
         AtmosphereSettings Atmosphere;
 

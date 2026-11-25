@@ -306,6 +306,7 @@ namespace Lynx
         m_Extracted.SunDirection = defaults.SunDirection;
         m_Extracted.SunColor = defaults.SunColor;
         m_Extracted.SunIntensity = defaults.SunIntensity;
+        m_Extracted.SunAngularSize = defaults.SunAngularSize;
 
         const auto suns = registry.view<TransformComponent, DirectionalLightComponent>(entt::exclude<DisabledComponent>);
         for (auto entity : suns)
@@ -314,6 +315,7 @@ namespace Lynx
             m_Extracted.SunDirection = glm::rotate(transform.GetRotation(), glm::vec3(0.0f, 0.0f, -1.0f));
             m_Extracted.SunColor = light.Color;
             m_Extracted.SunIntensity = light.Intensity;
+            m_Extracted.SunAngularSize = light.AngularSize;
             break;
         }
 

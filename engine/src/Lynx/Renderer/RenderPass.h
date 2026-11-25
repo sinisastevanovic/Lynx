@@ -273,6 +273,9 @@ namespace Lynx
         glm::vec3 LightColor;
         float LightIntensity;
 
+        // How large the sun is in the sky, as an angle in degrees.
+        float SunAngularSize = 0.53f;
+
 
         // The camera's matrix as shaders get it. The engine's matrices have +Y up on screen, as GLM makes them.
         // Vulkan has +Y down, so what goes to a shader is turned around once, here.

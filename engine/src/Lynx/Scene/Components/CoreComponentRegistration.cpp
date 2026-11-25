@@ -61,6 +61,7 @@ namespace Lynx
         {
             fields.Add("Color", &DirectionalLightComponent::Color).AsColor();
             fields.Add("Intensity", &DirectionalLightComponent::Intensity).DragSpeed(0.1f).Range(0.0f, 10000.0f);
+            fields.Add("AngularSize", &DirectionalLightComponent::AngularSize).Label("Size (degrees)").DragSpeed(0.01f).Range(0.0f, 10.0f);
             fields.Add("CastShadows", &DirectionalLightComponent::CastShadows);
         });
 

@@ -163,7 +163,7 @@ build\bin\Debug\LynxSandboxGame.exe
   by ratio. The last always reaches from the camera to the shadow distance, so what comes into view before the
   measurement catches up still has a shadow. Finer near cascades draw more: small scenes pay up to 0.2 ms for it.
 - **Soft shadows.** The edge of a shadow is sharp at its caster and widens with the distance from it, by
-  `ShadowSettings::SunAngle` (`cascadeVisibility` in `StandardShading.slang`, percentage-closer soft shadows).
+  the size of the sun, `DirectionalLightComponent::AngularSize` (`cascadeVisibility` in `StandardShading.slang`, percentage-closer soft shadows).
   Eight reads of four depths each find how far away the caster is, sixteen comparisons over a disc of that width
   give the shadow. The disc is turned by a different angle per pixel, which shows as fine grain until TAA exists.
   Every point is compared with the depth the surface has there, worked out from its normal without the normal

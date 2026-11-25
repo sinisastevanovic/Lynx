@@ -378,6 +378,12 @@ namespace Lynx
         glm::vec3 Color = { 1.0f, 1.0f, 1.0f };
         float Intensity = 1.0f;
 
+        // How large the light's source is in the sky, as an angle in degrees. The real sun is 0.53.
+        // It is the size of the disc that is drawn, and what softens the edges of shadows: sharp where
+        // the thing that casts one stands, wider with the distance from it, by about a centimetre per
+        // metre for the real sun.
+        float AngularSize = 0.53f;
+
         bool CastShadows = true;
 
         DirectionalLightComponent() = default;

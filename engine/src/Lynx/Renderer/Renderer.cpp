@@ -740,7 +740,7 @@ namespace Lynx
         sceneData.ShadowDepthSampler = m_Frame->ShadowDepthSamplerIndex;
 
         // Half the sun's disc is what widens an edge to one side.
-        sceneData.ShadowSoftening = std::tan(glm::radians(0.5f * m_ShadowSettings.SunAngle));
+        sceneData.ShadowSoftening = std::tan(glm::radians(0.5f * m_CurrentFrameData.SunAngularSize));
         sceneData.ShadowWidestEdge = m_ShadowSettings.WidestEdge;
 
         // The air. The ground of the scene is where the planet's is, at height zero.
@@ -772,6 +772,7 @@ namespace Lynx
     {
         m_CurrentFrameData.Viewing = scene.Viewing;
         m_CurrentFrameData.Atmosphere = scene.Atmosphere;
+        m_CurrentFrameData.SunAngularSize = scene.SunAngularSize;
         BeginScene(scene.View, scene.Projection, scene.CameraPosition, scene.SunDirection, scene.SunColor, scene.SunIntensity, scene.DeltaTime, scene.IsEditorView);
 
         for (const ExtractedParticles& particles : scene.Particles)

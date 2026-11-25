@@ -49,12 +49,9 @@ namespace Lynx
         // So small things lose their shadow some way from the camera, large things keep it to the end.
         float SmallestCasterInTexels = 4.0f;
 
-        // How large the sun is in the sky, as an angle in degrees. The real sun is 0.53. The edge of a
-        // shadow is sharp where the thing that casts it stands and gets wider with the distance from it,
-        // the faster the larger the sun: at 0.53 by about a centimetre per metre.
-        float SunAngle = 0.53f;
-
-        // The widest the edge of a shadow gets, from its middle to its rim, in the scene's units.
+        // The edge of a shadow widens with the distance from what casts it, by the size of the sun
+        // (DirectionalLightComponent::AngularSize). This is the widest it gets, from its middle to its
+        // rim, in the scene's units.
         // Also how far around a place the renderer looks for what casts a shadow on it.
         float WidestEdge = 0.25f;
 
