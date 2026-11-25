@@ -32,7 +32,7 @@ the steps of the stage in work as they land. Stages 1 and 2 are complete. The no
 - `editor/src/` the editor: `EditorLayer`, `Panels/`, `Inspectors/`
 - `cmake/LynxGame.cmake` `lynx_add_game()`, which builds a game
 - `samples/RenderBench/` the project the renderer is measured with: benchmark scenes, and one file per benchmark in `bench/`.
-  Its code hands out asset IDs of its own, meshes from 7300000000000000000, materials from 7400000000000000000 and a terrain at 7600000000000000001:
+  Its code hands out asset IDs of its own, meshes from 7300000000000000000, materials from 7400000000000000000, and a terrain with its layers from 7600000000000000001:
   an asset file in that project must not use one of those.
 - `tools/` scripts for verifying changes
 
@@ -220,8 +220,12 @@ build\bin\Debug\LynxSandboxGame.exe
   The resolution has to be 32 times a power of two, plus one. Terrain casts shadows: the patches are picked
   once more per cascade, with the sun's view but as fine as the camera's distance asks for, so the shadow has
   the shape of the ground that is seen, and "TerrainShadow0" to "3" draw them after the meshes' shadow passes.
-  Filling four maps with ground costs about 0.1 ms. The colour is a stand-in by slope: ground layers and
-  loading from a file are the rest of step 3.7.
+  Filling four maps with ground costs about 0.1 ms. What the ground looks like is up to four layers
+  (`TerrainLayer`: a material asset and how many units one repeat of its textures covers) and a picture of
+  weights, four bytes per place, that says how much of each shows where (`Terrain::SetLayers`). The layers'
+  materials are entries of the material table, and the shader mixes colour, normal map, metalness and roughness
+  by the weights, reading the textures by the place in the world. A terrain without layers is drawn in two plain
+  colours by slope. Loading a terrain from a file is the rest of step 3.7.
 - **Lit surfaces.** Everything that is lit calls `lightOn(surface, pixel)` in `StandardShading.slang` with a
   `LitSurface` (position, normals, colour, metalness, roughness): the sun, its shadow, the sky. The view modes
   are `shownInPlaceOfLight` and `inLightAlone` next to it. A new kind of surface, like terrain, fills in a

@@ -4,6 +4,7 @@
 
 import Scene;
 import Textures;
+import Material;
 import StandardShading;
 
 // Has to match TerrainQuadsPerPatch in Terrain.h.
@@ -39,7 +40,13 @@ struct TerrainData
 
     // How far from the camera the smallest patches are drawn. Each larger level reaches twice as far.
     float finestRange;
-    float2 padding;
+
+    // The ground: where the texture table has the picture of weights, how many layers it is mixed
+    // from, and per layer its entry of the material table and how often its textures repeat per unit.
+    uint weightTexture;
+    uint layerCount;
+    uint4 layerMaterials;
+    float4 layerTilesPerUnit;
 };
 
 struct TerrainConstants
@@ -49,6 +56,7 @@ struct TerrainConstants
 
     TerrainPatch* patches;
     TerrainData* terrains;
+    StandardMaterial* materials;
 
     // What the view shows, one of the view modes of StandardShading.
     uint viewMode;
@@ -126,18 +134,75 @@ float4 fragmentMain(TerrainVaryings input) : SV_Target
     float north = heightAt(terrain, place + float2(0.0, reach), smaller);
     float3 normal = normalize(float3(west - east, 2.0 * reach, south - north));
 
-    // A stand-in until the ground has layers of its own (step 3.7): grass where it is flat, rock where
-    // it is steep, so that the shape can be read.
-    float steepness = saturate((1.0 - normal.y) * 3.0);
-    float3 albedo = lerp(float3(0.13, 0.18, 0.07), float3(0.30, 0.28, 0.26), smoothstep(0.35, 0.65, steepness));
-
     LitSurface surface;
     surface.position = input.worldPosition;
     surface.normal = normal;
     surface.faceNormal = normal;
-    surface.albedo = albedo;
-    surface.metallic = 0.0;
-    surface.roughness = 0.9;
+
+    if (terrain.layerCount == 0)
+    {
+        // A terrain without layers: grass where it is flat, rock where it is steep, so that its shape can be read.
+        float steepness = saturate((1.0 - normal.y) * 3.0);
+        surface.albedo = lerp(float3(0.13, 0.18, 0.07), float3(0.30, 0.28, 0.26), smoothstep(0.35, 0.65, steepness));
+        surface.metallic = 0.0;
+        surface.roughness = 0.9;
+    }
+    else
+    {
+        // How much of each layer shows here. The weights of the layers there are add up to one.
+        float2 across = place / terrain.size;
+        float4 weights = textures[NonUniformResourceIndex(terrain.weightTexture)].Sample(samplers[terrain.heightSampler], across);
+        float total = 0.0;
+        for (uint layer = 0; layer < terrain.layerCount; ++layer)
+            total += weights[layer];
+        if (total <= 0.0001)
+        {
+            weights = float4(1.0, 0.0, 0.0, 0.0);
+            total = 1.0;
+        }
+
+        // The layers lie flat on the ground: their textures are read by where the place is in the
+        // world. How fast that changes from pixel to pixel is worked out once, outside the loop, and
+        // handed to every read: inside a loop that leaves layers out the GPU could not tell.
+        float2 perPixelAcross = ddx(input.worldPosition.xz);
+        float2 perPixelDown = ddy(input.worldPosition.xz);
+
+        float3 albedo = float3(0.0, 0.0, 0.0);
+        float3 tilt = float3(0.0, 0.0, 0.0);
+        float metallic = 0.0;
+        float roughness = 0.0;
+        for (uint layer = 0; layer < terrain.layerCount; ++layer)
+        {
+            float share = weights[layer] / total;
+            if (share <= 0.001)
+                continue;
+
+            StandardMaterial material = constants.materials[terrain.layerMaterials[layer]];
+            float tiles = terrain.layerTilesPerUnit[layer];
+            float2 uv = input.worldPosition.xz * tiles;
+            SamplerState layerSampler = samplers[NonUniformResourceIndex(material.materialSampler)];
+
+            float3 colour = textures[NonUniformResourceIndex(material.albedoTexture)].SampleGrad(layerSampler, uv, perPixelAcross * tiles, perPixelDown * tiles).rgb;
+            float3 mapped = textures[NonUniformResourceIndex(material.normalTexture)].SampleGrad(layerSampler, uv, perPixelAcross * tiles, perPixelDown * tiles).rgb;
+            float4 metallicRoughness = textures[NonUniformResourceIndex(material.metallicRoughnessTexture)].SampleGrad(layerSampler, uv, perPixelAcross * tiles, perPixelDown * tiles);
+
+            albedo += share * colour * material.albedoColor.rgb;
+            tilt += share * (mapped * 2.0 - 1.0);
+            metallic += share * metallicRoughness.b * material.metallic;
+            roughness += share * metallicRoughness.g * material.roughness;
+        }
+
+        // The layers' normal maps tilt the ground's normal. A texture's u runs along the world's x and
+        // its v along z, so those two, laid onto the ground, are the directions the map is stored in.
+        float3 alongU = normalize(float3(1.0, 0.0, 0.0) - normal * normal.x);
+        float3 alongV = cross(alongU, normal);
+        surface.normal = normalize(alongU * tilt.x + alongV * tilt.y + normal * tilt.z);
+        surface.albedo = albedo;
+        surface.metallic = metallic;
+
+        // Kept away from zero like every other surface's, see StandardShading.
+        surface.roughness = max(roughness, 0.045);
+    }
 
     float3 shown;
     if (shownInPlaceOfLight(constants.viewMode, surface, input.level, input.position.xy, shown))

@@ -17,11 +17,9 @@ namespace Lynx
             glm::mat4 SunViewProjection;
             uint64_t Patches;
             uint64_t Terrains;
+            uint64_t Materials;
             ViewMode Mode;
             uint32_t IsSeenBySun;
-
-            // The matrix makes the shader's size a multiple of 16 bytes.
-            uint64_t Padding;
         };
     }
 
@@ -175,6 +173,7 @@ namespace Lynx
         TerrainPushData push{};
         push.Patches = terrain.PatchAddress;
         push.Terrains = terrain.TerrainAddress;
+        push.Materials = renderData.MaterialAddress;
         push.Mode = renderData.Viewing.Mode;
         push.IsSeenBySun = isShadow ? 1 : 0;
         if (isShadow)

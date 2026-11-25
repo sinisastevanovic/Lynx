@@ -2,6 +2,7 @@
 
 #include "Shapes.h"
 
+#include <Lynx/Asset/Material.h>
 #include <Lynx/Asset/Terrain.h>
 #include <Lynx/Asset/Texture.h>
 #include <Lynx/Scene/Components/TerrainComponent.h>
@@ -428,9 +429,63 @@ void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution
         }
     }
 
-    // One unit between heights. The handle is fixed, like those of the other things made here.
+    // Three kinds of ground: grass where it is flat and low, rock where it is steep, bare earth high up.
+    // One byte per layer and place, at half the resolution of the heights.
+    const uint32_t weightResolution = (resolution - 1) / 2;
+    std::vector<uint8_t> weights(static_cast<size_t>(weightResolution) * weightResolution * TerrainLayerCount, 0);
+    const auto heightAt = [&](uint32_t x, uint32_t z)
+    {
+        return highest * static_cast<float>(heights[static_cast<size_t>(std::min(z, resolution - 1)) * resolution + std::min(x, resolution - 1)]) / 65535.0f;
+    };
+    for (uint32_t z = 0; z < weightResolution; ++z)
+    {
+        for (uint32_t x = 0; x < weightResolution; ++x)
+        {
+            // The rise over two steps of the heights, each way.
+            const uint32_t hx = x * 2 + 1;
+            const uint32_t hz = z * 2 + 1;
+            const float riseX = (heightAt(hx + 1, hz) - heightAt(hx - 1, hz)) * 0.5f;
+            const float riseZ = (heightAt(hx, hz + 1) - heightAt(hx, hz - 1)) * 0.5f;
+            const float steepness = std::sqrt(riseX * riseX + riseZ * riseZ);
+
+            const float rock = glm::smoothstep(0.35f, 0.6f, steepness);
+            const float earth = (1.0f - rock) * glm::smoothstep(0.55f, 0.75f, heightAt(hx, hz) / highest);
+            const float grass = 1.0f - rock - earth;
+
+            uint8_t* place = &weights[(static_cast<size_t>(z) * weightResolution + x) * TerrainLayerCount];
+            place[0] = static_cast<uint8_t>(grass * 255.0f);
+            place[1] = static_cast<uint8_t>(rock * 255.0f);
+            place[2] = static_cast<uint8_t>(earth * 255.0f);
+        }
+    }
+
+    // The rock wears one of Sponza's stone textures, repeated every 12 units, as a stand-in: the project
+    // has no ground textures yet. Grass and earth are plain colours.
+    const auto makeLayer = [&assetManager](const glm::vec3& colour, const char* texturePath, float tileSize, uint64_t handle)
+    {
+        auto material = std::make_shared<Material>();
+        material->AlbedoColor = glm::vec4(colour, 1.0f);
+        material->Roughness = 0.9f;
+        if (texturePath)
+        {
+            if (const std::shared_ptr<Texture> texture = assetManager.GetProjectAsset<Texture>(texturePath, AssetLoadMode::Blocking))
+                material->AlbedoTexture = texture->GetHandle();
+            else
+                LX_ERROR("RenderBench: cannot load {0}", texturePath);
+        }
+        assetManager.AddRuntimeAsset(material, AssetHandle(handle));
+        return TerrainLayer{ material, tileSize };
+    };
+    const TerrainLayer layers[] = {
+        makeLayer(glm::vec3(0.13f, 0.18f, 0.07f), nullptr, 4.0f, 7600000000000000002ull),
+        makeLayer(glm::vec3(0.75f, 0.72f, 0.68f), "Models/Sponza/7268504077753552595.jpg", 12.0f, 7600000000000000003ull),
+        makeLayer(glm::vec3(0.22f, 0.17f, 0.11f), nullptr, 4.0f, 7600000000000000004ull),
+    };
+
+    // One unit between heights. The handles are fixed, like those of the other things made here.
     const float size = static_cast<float>(resolution - 1);
     auto terrain = std::make_shared<Terrain>(resolution, size, 0.0f, highest, std::move(heights));
+    terrain->SetLayers(layers, weightResolution, std::move(weights));
     assetManager.AddRuntimeAsset(terrain, AssetHandle(7600000000000000001ull));
 
     Entity entity = scene.CreateEntity("Terrain");

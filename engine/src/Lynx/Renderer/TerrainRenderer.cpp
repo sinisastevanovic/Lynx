@@ -1,6 +1,7 @@
 #include "TerrainRenderer.h"
 
 #include "GraphicsContext.h"
+#include "MaterialTable.h"
 #include "Vulkan/UploadQueue.h"
 #include "Lynx/Asset/Terrain.h"
 
@@ -43,7 +44,13 @@ namespace Lynx
 
             // How far from the camera the smallest patches are drawn.
             float FinestRange;
-            float Padding[2];
+
+            // The ground: where the texture table has the weights, how many layers there are, and per
+            // layer its entry of the material table and how often its textures repeat per unit.
+            uint32_t WeightTexture;
+            uint32_t LayerCount;
+            glm::uvec4 LayerMaterials;
+            glm::vec4 LayerTilesPerUnit;
         };
 
         template<typename Entry>
@@ -100,8 +107,8 @@ namespace Lynx
         }
     };
 
-    TerrainRenderer::TerrainRenderer(GraphicsContext& context, UploadQueue& uploads)
-        : m_Context(context), m_Uploads(uploads)
+    TerrainRenderer::TerrainRenderer(GraphicsContext& context, UploadQueue& uploads, MaterialTable& materials)
+        : m_Context(context), m_Uploads(uploads), m_Materials(materials)
     {
         // The grid has one more vertex a side than quads, numbered row by row. Two triangles per quad,
         // counter-clockwise seen from above.
@@ -187,6 +194,17 @@ namespace Lynx
             gpu.HeightSampler = asset.GetHeightSamplerIndex();
             gpu.Resolution = static_cast<float>(asset.GetResolution());
             gpu.FinestRange = asset.GetSize() / static_cast<float>(asset.GetPatchesPerSide(0)) * FinestRangeInPatches;
+
+            const std::span<const TerrainLayer> layers = asset.GetLayers();
+            gpu.WeightTexture = asset.GetWeightTableIndex();
+            gpu.LayerCount = static_cast<uint32_t>(layers.size());
+            gpu.LayerMaterials = glm::uvec4(0);
+            gpu.LayerTilesPerUnit = glm::vec4(0.0f);
+            for (uint32_t layer = 0; layer < layers.size(); ++layer)
+            {
+                gpu.LayerMaterials[static_cast<glm::length_t>(layer)] = m_Materials.IndexOf(layers[layer].Material);
+                gpu.LayerTilesPerUnit[static_cast<glm::length_t>(layer)] = 1.0f / std::max(layers[layer].TileSize, 0.001f);
+            }
             drawn.push_back(&terrain);
         }
 

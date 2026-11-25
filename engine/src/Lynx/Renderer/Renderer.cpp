@@ -343,7 +343,7 @@ namespace Lynx
         defaults.Sampler = SamplerIndex(SamplerSettings());
         m_Materials = std::make_unique<MaterialTable>(*m_Context, *m_Frame->Uploads, m_Assets, defaults);
         m_GpuScene = std::make_unique<GpuScene>(*m_Context, *m_Frame->Uploads, *m_Materials);
-        m_Terrain = std::make_unique<TerrainRenderer>(*m_Context, *m_Frame->Uploads);
+        m_Terrain = std::make_unique<TerrainRenderer>(*m_Context, *m_Frame->Uploads, *m_Materials);
 
         // The frame, start to finish. Culling decides what the scene passes draw, so it comes first.
         // It has two phases: what the camera saw in the last frame is drawn into the depth buffer, and

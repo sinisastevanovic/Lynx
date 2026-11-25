@@ -96,6 +96,52 @@ namespace Lynx
         return ToHeight(m_Heights[static_cast<size_t>(std::min(z, m_Resolution - 1)) * m_Resolution + std::min(x, m_Resolution - 1)]);
     }
 
+    void Terrain::SetLayers(std::span<const TerrainLayer> layers, uint32_t resolution, std::vector<uint8_t> weights)
+    {
+        m_LayerCount = 0;
+        m_WeightSlot.reset();
+        m_WeightMap.reset();
+
+        if (weights.size() < static_cast<size_t>(resolution) * resolution * TerrainLayerCount)
+        {
+            LX_CORE_ERROR("A terrain's weights need four bytes for every place. It keeps its plain colours.");
+            return;
+        }
+
+        // A layer without a material ends the list: the shader reads the weights of the first ones only.
+        for (const TerrainLayer& layer : layers.first(std::min(layers.size(), TerrainLayerCount)))
+        {
+            if (!layer.Material)
+                break;
+            m_Layers[m_LayerCount++] = layer;
+        }
+        if (m_LayerCount == 0)
+            return;
+
+        // Smaller sizes for ground far away, like any texture.
+        TextureSpecification specification;
+        specification.Width = resolution;
+        specification.Height = resolution;
+        specification.Format = TextureFormat::RGBA8;
+        specification.GenerateMips = true;
+        specification.DebugName = "TerrainWeights";
+
+        Renderer& renderer = Engine::Get().GetRenderer();
+        m_WeightMap = renderer.CreateTexture(specification, weights.data());
+        if (!m_WeightMap)
+        {
+            m_LayerCount = 0;
+            return;
+        }
+        m_WeightSlot = std::make_unique<TextureSlot>(renderer.AddToTextureTable(*m_WeightMap));
+        IncrementVersion();
+    }
+
+    uint32_t Terrain::GetWeightTableIndex() const
+    {
+        return m_WeightSlot ? m_WeightSlot->Index() : 0;
+    }
+
     uint32_t Terrain::GetHeightTableIndex() const
     {
         return m_HeightSlot ? m_HeightSlot->Index() : 0;

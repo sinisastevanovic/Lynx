@@ -11,6 +11,7 @@
 namespace Lynx
 {
     class GraphicsContext;
+    class MaterialTable;
     class UploadQueue;
 
     // Decides, every frame, which patches of the scene's terrains are drawn and how finely
@@ -30,7 +31,8 @@ namespace Lynx
     class TerrainRenderer
     {
     public:
-        TerrainRenderer(GraphicsContext& context, UploadQueue& uploads);
+        // The materials of a terrain's layers are entries of the material table, like those of meshes.
+        TerrainRenderer(GraphicsContext& context, UploadQueue& uploads, MaterialTable& materials);
 
         // Picks the patches for the camera and for the sun's view of every cascade, and queues them for
         // upload. camera and sun are what each of them sees. The distance to the camera decides how fine
@@ -45,6 +47,7 @@ namespace Lynx
     private:
         GraphicsContext& m_Context;
         UploadQueue& m_Uploads;
+        MaterialTable& m_Materials;
 
         // The triangles of one patch as indices into its grid of vertices, the four quarters one after
         // the other. A vertex has no data of its own: the shader works its place out from its index.
