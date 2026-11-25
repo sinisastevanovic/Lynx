@@ -87,7 +87,8 @@ public:
 
         const uint32_t crowd = count("Crowd");
         const uint32_t blocksPerSide = count("BlocksPerSide");
-        if (crowd == 0 && blocksPerSide == 0)
+        const bool hasMotionProps = count("MotionProps") > 0;
+        if (crowd == 0 && blocksPerSide == 0 && !hasMotionProps)
             return;
 
         // The scenes hold the meshes they use, so the library is only needed while they are built.
@@ -96,6 +97,8 @@ public:
             m_Crowd.emplace(scene, shapes, crowd, count("ReplacedPerFrame"));
         if (blocksPerSide > 0)
             CreateBlocks(scene, shapes, blocksPerSide, count("PropsPerBlock"));
+        if (hasMotionProps)
+            m_MotionProps.emplace(scene, shapes);
     }
 
     void OnUpdate(float deltaTime) override
@@ -103,6 +106,8 @@ public:
         Engine& engine = Engine::Get();
         if (m_Crowd)
             m_Crowd->Update(*engine.GetActiveScene(), deltaTime);
+        if (m_MotionProps)
+            m_MotionProps->Update(*engine.GetActiveScene(), deltaTime);
         if (m_TerrainPhysics)
             m_TerrainPhysics->Update(*engine.GetActiveScene(), deltaTime);
 
@@ -119,11 +124,13 @@ public:
     void OnShutdown() override
     {
         m_Crowd.reset();
+        m_MotionProps.reset();
         m_TerrainPhysics.reset();
     }
 
 private:
     std::optional<Crowd> m_Crowd;
+    std::optional<MotionProps> m_MotionProps;
     std::optional<TerrainPhysicsCheck> m_TerrainPhysics;
 };
 

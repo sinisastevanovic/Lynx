@@ -95,6 +95,7 @@ namespace Lynx
         registry.on_destroy<MeshInstances>().disconnect(this);
 
         m_Renderer.GetGpuScene().Clear();
+        m_Renderer.ResetHistory();
         m_MeshUses.clear();
         m_PendingEntities.clear();
     }

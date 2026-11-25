@@ -148,6 +148,11 @@ namespace Lynx
         ShadowSettings& GetShadowSettings() { return m_ShadowSettings; }
         const ShadowSettings& GetShadowSettings() const { return m_ShadowSettings; }
 
+        // Call when the next frame shows something else than the last: another scene, or a camera that
+        // jumped. Nothing then counts as having moved from where the last frame had it, and what is put
+        // together from several frames starts over.
+        void ResetHistory() { m_PreviousClipViewProjection.reset(); }
+
         TemporalSettings& GetTemporalSettings() { return m_TemporalSettings; }
         const TemporalSettings& GetTemporalSettings() const { return m_TemporalSettings; }
 

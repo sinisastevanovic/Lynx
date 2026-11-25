@@ -1,0 +1,68 @@
+{
+    "Name": "motion",
+    "Scene": "Scenes/Sponza.lxscene",
+    "Frames": 600,
+    "ScreenshotFrames": [
+        150,
+        375,
+        520
+    ],
+    "Parameters": {
+        "MotionProps": 1,
+        "Materials": 6
+    },
+    "CameraPath": [
+        {
+            "Frame": 0,
+            "Position": [
+                -2.0,
+                2.0,
+                -1.5
+            ],
+            "Target": [
+                10.0,
+                2.5,
+                -1.5
+            ]
+        },
+        {
+            "Frame": 300,
+            "Position": [
+                -2.0,
+                2.0,
+                0.5
+            ],
+            "Target": [
+                10.0,
+                2.5,
+                0.5
+            ]
+        },
+        {
+            "Frame": 450,
+            "Position": [
+                -2.0,
+                2.0,
+                0.5
+            ],
+            "Target": [
+                10.0,
+                2.5,
+                0.5
+            ]
+        },
+        {
+            "Frame": 599,
+            "Position": [
+                -2.0,
+                2.0,
+                0.5
+            ],
+            "Target": [
+                8.0,
+                2.5,
+                7.0
+            ]
+        }
+    ]
+}

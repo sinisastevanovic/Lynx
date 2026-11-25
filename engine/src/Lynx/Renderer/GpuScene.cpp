@@ -343,15 +343,20 @@ namespace Lynx
             m_InstanceBuffer = GpuBuffer(m_Context, desc);
             m_Uploads.Upload(m_InstanceBuffer.Handle(), 0, std::as_bytes(std::span<const GpuInstance>(m_Instances)));
 
-            // Both buffers of transforms get where everything is now. Where it was is not carried over,
-            // so nothing counts as having moved in this one frame: buffers grow rarely.
+            // This frame's transforms are written whole. Last frame's are on the GPU only: what the
+            // smaller buffer held is copied over there, and the instances that are new, which did not
+            // move to where they are, are written after it.
             desc.Size = capacity * sizeof(InstanceTransform);
             desc.Name = "InstanceTransforms";
-            for (GpuBuffer& buffer : m_TransformBuffers)
-            {
-                buffer = GpuBuffer(m_Context, desc);
-                m_Uploads.Upload(buffer.Handle(), 0, std::as_bytes(std::span<const InstanceTransform>(m_Transforms)));
-            }
+            transforms = GpuBuffer(m_Context, desc);
+            m_Uploads.Upload(transforms.Handle(), 0, std::as_bytes(std::span<const InstanceTransform>(m_Transforms)));
+
+            GpuBuffer grown(m_Context, desc);
+            if (previousTransforms.Size() > 0)
+                m_Uploads.MoveContents(std::move(previousTransforms), grown.Handle());
+            previousTransforms = std::move(grown);
+            std::ranges::sort(m_Placed);
+            UploadPlaces(m_Uploads, previousTransforms, m_Placed, m_Transforms);
 
             // Nothing counts as seen in the last frame either, so the first frame with the new buffers
             // draws everything in the late phase.
@@ -361,9 +366,12 @@ namespace Lynx
             m_VisibilityBuffer = GpuBuffer(m_Context, desc);
             m_Uploads.Upload(m_VisibilityBuffer.Handle(), 0, std::as_bytes(std::span<const uint32_t>(nothingSeen)));
 
-            m_Changed.clear();
+            // What moved in this frame is still missing in the buffer of the next one.
+            std::ranges::sort(m_Moved);
+            m_Moved.erase(std::ranges::unique(m_Moved).begin(), m_Moved.end());
+            std::swap(m_Moved, m_MovedLastFrame);
             m_Moved.clear();
-            m_MovedLastFrame.clear();
+            m_Changed.clear();
             m_Placed.clear();
             return;
         }

@@ -248,6 +248,47 @@ void Crowd::Update(Scene& scene, float deltaTime)
     }
 }
 
+namespace
+{
+    // Where the box of MotionProps is after a time: back and forth across the hall, once in four seconds.
+    glm::vec3 MoverPlace(float time)
+    {
+        return glm::vec3(6.0f, 1.3f, 3.0f * std::sin(time * glm::half_pi<float>()));
+    }
+}
+
+MotionProps::MotionProps(Scene& scene, const ShapeLibrary& shapes)
+{
+    const std::shared_ptr<StaticMesh>& box = shapes.Mesh(ShapeLibrary::BoxShape);
+    const glm::quat upright = glm::identity<glm::quat>();
+
+    m_Mover = CreateMeshEntity(scene, "Mover", box, shapes.MaterialAt(1 % shapes.MaterialCount()), MoverPlace(0.0f), upright, glm::vec3(0.6f, 1.8f, 0.6f));
+
+    // Bars of 12 millimetres, 10 centimetres apart: about a pixel wide from ten units away.
+    constexpr uint32_t barCount = 41;
+    for (uint32_t bar = 0; bar < barCount; ++bar)
+    {
+        const float z = -2.0f + 0.1f * static_cast<float>(bar);
+        CreateMeshEntity(scene, "Bar", box, shapes.MaterialAt(2 % shapes.MaterialCount()), glm::vec3(8.0f, 1.25f, z), upright, glm::vec3(0.012f, 2.5f, 0.012f));
+    }
+
+    // Wires of 6 millimetres across the hall, well under a pixel thick.
+    for (uint32_t wire = 0; wire < 3; ++wire)
+    {
+        const float height = 3.0f + 0.3f * static_cast<float>(wire);
+        CreateMeshEntity(scene, "Wire", box, shapes.MaterialAt(3 % shapes.MaterialCount()), glm::vec3(8.0f, height, 0.0f), upright, glm::vec3(0.006f, 0.006f, 8.0f));
+    }
+
+    LX_INFO("Created the props for judging motion: a mover, {0} bars and 3 wires.", barCount);
+}
+
+void MotionProps::Update(Scene& scene, float deltaTime)
+{
+    // A benchmark advances every frame by the same time, so frame N shows the same pose in every run.
+    m_Time += deltaTime;
+    scene.Reg().get<TransformComponent>(m_Mover).SetTranslation(MoverPlace(m_Time));
+}
+
 void CreateBlocks(Scene& scene, const ShapeLibrary& shapes, uint32_t blocksPerSide, uint32_t propsPerBlock)
 {
     // A block and half a street on each of its sides make one cell of the city.

@@ -68,6 +68,22 @@ private:
     float m_Time = 0.0f;
 };
 
+// What anti-aliasing over time finds hard, put into a scene that has fine textures already: a box that
+// keeps crossing in front of them, which leaves a trail if old frames are trusted too long, and a row of
+// bars and a few wires that are thinner than a pixel from where the camera is, which flicker if they
+// are trusted too little. Made for Sponza, in front of the end of its hall.
+class MotionProps
+{
+public:
+    MotionProps(Scene& scene, const ShapeLibrary& shapes);
+
+    void Update(Scene& scene, float deltaTime);
+
+private:
+    entt::entity m_Mover = entt::null;
+    float m_Time = 0.0f;
+};
+
 // A city of tall blocks with small props in the streets between them. Seen from a street, the blocks
 // hide nearly everything that lies inside the camera's view.
 void CreateBlocks(Scene& scene, const ShapeLibrary& shapes, uint32_t blocksPerSide, uint32_t propsPerBlock);
