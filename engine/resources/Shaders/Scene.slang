@@ -63,6 +63,10 @@ public struct SceneConstants
     public float shadowWidestEdge;
 
     public AtmosphereConstants atmosphere;
+
+    // The light of the sky on surfaces, as nine numbers per colour. See skyIrradiance in Atmosphere.slang.
+    public float4* skyIrradiance;
+    public uint64_t padding;
 };
 
 // The binding number has to match SharedBindings.h.

@@ -182,6 +182,11 @@ namespace Lynx
 
         // The air, which colours the sky and the sun's light.
         AtmosphereData Atmosphere;
+
+        // The address of the light of the sky on surfaces: nine numbers per colour, a vec4 each,
+        // which SkyLightPass writes.
+        uint64_t SkyIrradiance;
+        uint64_t Padding;
     };
 
     // One see-through instance, drawn on its own: these are sorted by distance, which a shared draw

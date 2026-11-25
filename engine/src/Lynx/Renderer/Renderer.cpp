@@ -33,6 +33,7 @@
 #include "RenderFormats.h"
 #include "Passes/AtmospherePass.h"
 #include "Passes/DepthRangePass.h"
+#include "Passes/SkyLightPass.h"
 #include "Passes/SkyPass.h"
 #include "Passes/ShadowPass.h"
 #include "Lynx/Engine.h"
@@ -138,6 +139,10 @@ namespace Lynx
         std::array<GpuTexture, static_cast<size_t>(AtmosphereTable::Count)> AtmosphereTables;
         std::array<TextureSlot, static_cast<size_t>(AtmosphereTable::Count)> AtmosphereTableSlots;
         uint32_t AtmosphereSamplerIndex = 0;
+
+        // The light of the sky on surfaces, nine numbers per colour, which a compute shader writes
+        // every frame and the scene constants point to.
+        GpuBuffer SkyIrradiance;
 
         // Picking: the pixel that was asked for, the buffer its entity ID is copied into, the frame the copy
         // was recorded in, and an answer that needed no copy.
@@ -248,6 +253,7 @@ namespace Lynx
         ReleaseSwapchainImages();
         m_Frame->ParticleInstances = {};
         m_Frame->PickReadback = {};
+        m_Frame->SkyIrradiance = {};
         m_Frame->SceneConstants = {};
         m_Frame->Uploads.reset();
         m_Frame->PendingScreenshots.clear();
@@ -321,6 +327,7 @@ namespace Lynx
         // turns both into the output. What is not part of the scene is drawn on top of the output, so that
         // post-processing does not touch it: the grid and debug lines, still hidden by the scene's depth, then the UI.
         m_Graph->Add("Atmosphere", std::make_unique<AtmospherePass>());
+        m_Graph->Add("SkyLight", std::make_unique<SkyLightPass>());
         m_Graph->Add("CullMeshes", std::make_unique<CullPass>(CullPhase::Early));
         for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
             m_Graph->Add("Shadow" + std::to_string(cascade), std::make_unique<ShadowPass>(cascade));
@@ -736,6 +743,7 @@ namespace Lynx
         atmosphereTables.w = m_Frame->AtmosphereSamplerIndex;
         sceneData.Atmosphere = ToAtmosphereData(m_AtmosphereSettings, cameraPosition.y, atmosphereTables);
         m_CurrentFrameData.Atmosphere = m_AtmosphereSettings;
+        sceneData.SkyIrradiance = m_Frame->SkyIrradiance.Address();
         sceneData.LightDirection = glm::vec4(lightDir, lightIntensity);
         sceneData.LightColor = glm::vec4(lightColor, 1.0f);
         m_Frame->Uploads->Upload(m_Frame->SceneConstants.Handle(), 0, std::as_bytes(std::span<const SceneData>(&sceneData, 1)));
@@ -1107,6 +1115,16 @@ namespace Lynx
             m_Frame->AtmosphereTables[table] = GpuTexture(*m_Context, desc);
             m_Frame->AtmosphereTableSlots[table] = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->AtmosphereTables[table].View()));
         }
+
+        // No light from the sky until the first frame has worked it out, or if its shader is broken.
+        constexpr size_t irradianceCount = 9;
+        const std::array<glm::vec4, irradianceCount> noLight{};
+        GpuBufferDesc irradianceDesc;
+        irradianceDesc.Size = sizeof(noLight);
+        irradianceDesc.Usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        irradianceDesc.Name = "SkyIrradiance";
+        m_Frame->SkyIrradiance = GpuBuffer(*m_Context, irradianceDesc);
+        m_Frame->Uploads->Upload(m_Frame->SkyIrradiance.Handle(), 0, std::as_bytes(std::span(noLight)));
 
         // Read between their pixels, and never beyond their edges: the two ends of a table mean opposite things.
         m_Frame->AtmosphereSamplerIndex = m_Frame->Shared->SamplerIndex(

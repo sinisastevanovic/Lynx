@@ -375,3 +375,39 @@ public float3 groundLight(float3 direction)
         return float3(0.0, 0.0, 0.0);
     return scene.atmosphere.groundAlbedo.rgb / pi * sunlightOnGround() * saturate(towardsSun().y);
 }
+
+// The light of the sky and the planet's ground on a surface is kept as nine numbers per colour, which
+// SkyLight.slang works out once per frame. Each belongs to one of nine simple shapes on the sphere
+// (the first spherical harmonics): one that is the same everywhere, three that follow an axis, and
+// five that follow products of two axes. The light for a way of facing is the nine numbers times
+// what the nine shapes are in that direction, summed up.
+public static const uint skyIrradianceCount = 9;
+
+public void skyIrradianceBasis(float3 direction, out float basis[skyIrradianceCount])
+{
+    basis[0] = 0.282095;
+    basis[1] = 0.488603 * direction.y;
+    basis[2] = 0.488603 * direction.z;
+    basis[3] = 0.488603 * direction.x;
+    basis[4] = 1.092548 * direction.x * direction.y;
+    basis[5] = 1.092548 * direction.y * direction.z;
+    basis[6] = 0.315392 * (3.0 * direction.z * direction.z - 1.0);
+    basis[7] = 1.092548 * direction.x * direction.z;
+    basis[8] = 0.546274 * (direction.x * direction.x - direction.y * direction.y);
+}
+
+// All the light that the sky and the planet's ground send onto a surface that faces along the normal.
+// The sun's own light is not part of it. Nothing stands in its way here: a surface under a roof gets
+// as much as one in the open, until ambient occlusion takes that away.
+public float3 skyIrradiance(float3 normal)
+{
+    float basis[skyIrradianceCount];
+    skyIrradianceBasis(normal, basis);
+
+    float3 light = float3(0.0, 0.0, 0.0);
+    for (uint index = 0; index < skyIrradianceCount; ++index)
+        light += scene.skyIrradiance[index].rgb * basis[index];
+
+    // Nine numbers overshoot a little where the light changes quickly, which can dip below nothing.
+    return max(light, float3(0.0, 0.0, 0.0));
+}

@@ -1,5 +1,5 @@
 // How a mesh with a standard material is lit: one sun with a soft shadow in cascades, a metallic-roughness surface
-// (the Cook-Torrance model with the GGX distribution) and a little constant light from everywhere.
+// (the Cook-Torrance model with the GGX distribution) and the light of the sky.
 // Standard.slang and StandardEditor.slang are the two programs made from it.
 module StandardShading;
 
@@ -394,7 +394,9 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
 
     // The sun as it arrives through the air: dimmer and redder the lower it stands.
     float3 sunLight = (diffuseShare * albedo / pi + specular) * sunlightOnGround() * nDotL * visibility;
-    float3 ambient = float3(0.03, 0.03, 0.03) * albedo;
+    // The light of the sky, from every direction the surface faces, comes back out in the surface's
+    // colour. A metal has no such colour: it only mirrors, and what it mirrors of the sky is not drawn yet.
+    float3 ambient = albedo * (1.0 - metallic) / pi * skyIrradiance(normal);
 
     if (isLightingOnly)
         emissive = float3(0.0, 0.0, 0.0);
