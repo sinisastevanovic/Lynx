@@ -60,6 +60,9 @@ struct TemporalConstants
     float boxGamma;
     float sharpness;
     float depthTolerance;
+
+    // Resolving: how much the frame counts where the history is read halfway between pixels.
+    float betweenPixelsShare;
 };
 [vk::push_constant] ConstantBuffer<TemporalConstants> constants;
 
@@ -235,8 +238,14 @@ void resolve(int2 pixel)
 
     // Every frame so far counts the same, until the frame counts as little as it ever should.
     // Without a history the frame is all there is.
+    //
+    // A history that is read between pixels comes out a little blurred, and the blur adds up from
+    // frame to frame. The further between pixels it is read, the more the frame counts, which keeps
+    // what moves sharp at the price of rougher edges while it moves (Yang and others, 2009).
+    float2 betweenPixels = abs(frac(historyUv * size) - 0.5) * 2.0;
+    float leastShare = lerp(constants.currentWeight, max(constants.currentWeight, constants.betweenPixelsShare), max(betweenPixels.x, betweenPixels.y));
     float frames = hasHistory ? history.a : 0.0;
-    float currentShare = hasHistory ? max(1.0 / (frames + 1.0), constants.currentWeight) : 1.0;
+    float currentShare = hasHistory ? max(1.0 / (frames + 1.0), leastShare) : 1.0;
 
     // Mixed as the eye will see them: a very bright sample counts less, or a single one would
     // flicker through the average of many (Karis, 2013).

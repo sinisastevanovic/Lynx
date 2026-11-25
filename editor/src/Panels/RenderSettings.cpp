@@ -93,6 +93,13 @@ namespace Lynx
                     ImGui::SliderFloat("History sharpness", &temporal.Sharpness, 0.0f, 1.0f);
                     ImGui::SetItemTooltip("How sharply the history is read between pixels. 0.5 is the usual curve.");
 
+                    ImGui::SliderFloat("Share between pixels", &temporal.BetweenPixelsShare, 0.0f, 1.0f);
+                    ImGui::SetItemTooltip("How much a frame counts where the history is read halfway between pixels.
+Higher keeps what moves sharper and its edges rougher. 0 makes no difference.");
+
+                    ImGui::Checkbox("Steady textures", &temporal.SteadyTextures);
+                    ImGui::SetItemTooltip("Reads colour textures where a pixel would be without the jitter, so their patterns stand still.");
+
                     ImGui::SliderFloat("Depth tolerance", &temporal.DepthTolerance, 0.0f, 1.0f);
                     ImGui::SetItemTooltip("By which share the depth of the history may differ before it counts as another surface.");
                 }

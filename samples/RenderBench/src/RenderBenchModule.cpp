@@ -47,6 +47,8 @@ public:
         temporal.BoxGamma = static_cast<float>(settings.Parameter("TaaBoxGamma", temporal.BoxGamma));
         temporal.Sharpness = static_cast<float>(settings.Parameter("TaaSharpness", temporal.Sharpness));
         temporal.DepthTolerance = static_cast<float>(settings.Parameter("TaaDepthTolerance", temporal.DepthTolerance));
+        temporal.BetweenPixelsShare = static_cast<float>(settings.Parameter("TaaBetweenPixelsShare", temporal.BetweenPixelsShare));
+        temporal.SteadyTextures = settings.Parameter("TaaSteadyTextures", temporal.SteadyTextures ? 1.0 : 0.0) > 0.0;
         if (settings.Parameter("FXAA", 1.0) <= 0.0)
             engine.GetRenderer().SetFXAAEnabled(false);
 

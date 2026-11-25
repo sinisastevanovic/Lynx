@@ -95,10 +95,27 @@ public struct SceneConstants
 
     // How far viewProjection shifts the picture in this frame, in texture coordinates. Zero without jitter.
     public float2 jitter;
+
+    // The same in pixels, for reading colour textures where the pixel would be without the shift, see
+    // steadyUv. Zero if textures are read where the shifted pixel is.
+    public float2 textureJitter;
+    public uint64_t padding;
 };
 
 // The binding number has to match SharedBindings.h.
 [vk::binding(0, 0)] public ConstantBuffer<SceneConstants> scene;
+
+// Texture coordinates for a colour that should not take part in the camera's jitter: where the pixel
+// would read without the shift. The pattern of a texture then stands still from frame to frame, so
+// anti-aliasing over time has nothing to blur inside a surface, while its edges are still smoothed.
+// The texture's own smaller sizes keep it from glittering. Only for use in a fragment shader.
+public float2 steadyUv(float2 uv)
+{
+    // Without a shift the coordinates stay exactly as they are, whatever their slopes are.
+    if (scene.textureJitter.x == 0.0 && scene.textureJitter.y == 0.0)
+        return uv;
+    return uv + ddx(uv) * scene.textureJitter.x + ddy(uv) * scene.textureJitter.y;
+}
 
 // How far a point moved on screen since the last frame, in texture coordinates: where it is minus where
 // it was. Both are given as x, y and w of the point's position in clip space, this frame's from

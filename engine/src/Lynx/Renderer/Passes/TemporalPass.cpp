@@ -51,6 +51,10 @@ namespace Lynx
             float BoxGamma;
             float Sharpness;
             float DepthTolerance;
+            float BetweenPixelsShare;
+
+            // The shader's size is a multiple of eight bytes, for the pair of numbers it starts with.
+            uint32_t Padding;
         };
 
         // The view of the pass's working that a view mode asks for, as Temporal.slang numbers them.
@@ -242,6 +246,7 @@ namespace Lynx
         push.BoxGamma = std::max(settings.BoxGamma, 0.0f);
         push.Sharpness = std::clamp(settings.Sharpness, 0.0f, 1.0f);
         push.DepthTolerance = std::max(settings.DepthTolerance, 0.0f);
+        push.BetweenPixelsShare = std::clamp(settings.BetweenPixelsShare, 0.0f, 1.0f);
 
         if (m_WasAccumulating)
         {

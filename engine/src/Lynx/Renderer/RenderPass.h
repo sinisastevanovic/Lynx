@@ -210,6 +210,10 @@ namespace Lynx
 
         // How far the view projection shifts the picture in this frame, in texture coordinates.
         glm::vec2 Jitter;
+
+        // The same in pixels if colour textures are read without the shift, zero otherwise.
+        glm::vec2 TextureJitter;
+        uint64_t Padding;
     };
 
     // One see-through instance, drawn on its own: these are sorted by distance, which a shared draw
@@ -274,6 +278,17 @@ namespace Lynx
         // By which share the depth of the history may differ from the pixel's before the history
         // counts as another surface and is dropped.
         float DepthTolerance = 0.1f;
+
+        // How much a frame counts where the history has to be read halfway between pixels, which
+        // blurs it a little every frame. Where it is read on a pixel, the frame counts as little as
+        // HistoryTime says. Zero for no difference between the two. Measured on the Motion and Trees
+        // benchmarks against pictures with 64 samples a pixel: without it, a view that moves keeps 60
+        // to 86 % of its fine detail, with 0.5 it keeps 94 to 101 % and is nearer to those pictures.
+        float BetweenPixelsShare = 0.5f;
+
+        // Reads the colour textures of surfaces where a pixel would be without the jitter, so that
+        // their patterns stand still and only edges and lighting take part in the anti-aliasing.
+        bool SteadyTextures = true;
 
         // Adds up the frames of a view that stands still into their average, see TemporalPass. With
         // jitter, that is the picture with JitterLength samples a pixel: what anti-aliasing is measured against.

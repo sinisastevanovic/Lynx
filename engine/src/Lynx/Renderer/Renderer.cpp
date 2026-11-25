@@ -795,6 +795,7 @@ namespace Lynx
         sceneData.ViewProjectionMatrix = jittered;
         sceneData.UnjitteredViewProjectionMatrix = unjittered;
         sceneData.Jitter = jitterInPixels / sceneSize;
+        sceneData.TextureJitter = m_TemporalSettings.SteadyTextures ? jitterInPixels : glm::vec2(0.0f);
         sceneData.CameraPosition = glm::vec4(cameraPosition, 1.0f);
 
         // How far something moved on screen is worked out from where the last frame's camera saw it.
