@@ -1,18 +1,20 @@
 #include "TerrainSerializer.h"
 
+#include "Lynx/Asset/Terrain.h"
+
 #include <nlohmann/json.hpp>
 #include <stb_image.h>
-#include <stb_image_write.h>
 
+#include <cctype>
 #include <cmath>
-#include <cstring>
+#include <format>
 #include <fstream>
 
 namespace Lynx
 {
     namespace
     {
-        constexpr size_t BytesPerWeight = 4;
+        constexpr size_t BytesPerWeight = TerrainLayerCount;
 
         bool EndsWith(const std::filesystem::path& path, const char* extension)
         {
@@ -22,43 +24,59 @@ namespace Lynx
             return actual == extension;
         }
 
-        // A raw file is nothing but the numbers, so its size has to be that of a square.
-        bool ReadRawHeights(const std::filesystem::path& path, TerrainSource& terrain)
+        // The folder a terrain's tiles are kept in, next to its text file.
+        std::filesystem::path TileFolder(const std::filesystem::path& filePath)
         {
-            std::ifstream file(path, std::ios::binary | std::ios::ate);
-            if (!file)
-                return false;
+            return filePath.parent_path() / (filePath.stem().string() + ".tiles");
+        }
 
-            const uint64_t byteCount = static_cast<uint64_t>(file.tellg());
-            const uint64_t count = byteCount / sizeof(uint16_t);
-            const uint32_t resolution = static_cast<uint32_t>(std::llround(std::sqrt(static_cast<double>(count))));
-            if (byteCount % sizeof(uint16_t) != 0 || static_cast<uint64_t>(resolution) * resolution != count)
-            {
-                LX_CORE_ERROR("{0} does not hold a square of 16-bit heights.", path.string());
-                return false;
-            }
+        std::filesystem::path TileFile(const std::filesystem::path& folder, const char* what, uint32_t x, uint32_t z, const char* ending)
+        {
+            return folder / std::format("{}_{}_{}.{}", what, x, z, ending);
+        }
 
-            terrain.Resolution = resolution;
-            terrain.Heights.resize(count);
-            file.seekg(0);
-            file.read(reinterpret_cast<char*>(terrain.Heights.data()), static_cast<std::streamsize>(byteCount));
+        template<typename Number>
+        bool WriteNumbers(const std::filesystem::path& path, const std::vector<Number>& numbers)
+        {
+            std::ofstream file(path, std::ios::binary);
+            file.write(reinterpret_cast<const char*>(numbers.data()), static_cast<std::streamsize>(numbers.size() * sizeof(Number)));
             return static_cast<bool>(file);
         }
 
-        bool ReadPngHeights(const std::filesystem::path& path, TerrainSource& terrain)
+        // Reads a file that has to hold exactly this many numbers.
+        template<typename Number>
+        bool ReadNumbers(const std::filesystem::path& path, size_t count, std::vector<Number>& numbers)
+        {
+            std::ifstream file(path, std::ios::binary | std::ios::ate);
+            if (!file || static_cast<uint64_t>(file.tellg()) != count * sizeof(Number))
+                return false;
+
+            numbers.resize(count);
+            file.seekg(0);
+            file.read(reinterpret_cast<char*>(numbers.data()), static_cast<std::streamsize>(count * sizeof(Number)));
+            return static_cast<bool>(file);
+        }
+    }
+
+    bool TerrainSerializer::ReadHeights(const std::filesystem::path& path, uint32_t& outResolution, std::vector<uint16_t>& outHeights)
+    {
+        if (EndsWith(path, ".png"))
         {
             int width = 0;
             int height = 0;
             int channels = 0;
             stbi_us* pixels = stbi_load_16(path.string().c_str(), &width, &height, &channels, 1);
             if (!pixels)
+            {
+                LX_CORE_ERROR("Could not read heights from {0}", path.string());
                 return false;
+            }
 
             const bool isSquare = width == height && width > 0;
             if (isSquare)
             {
-                terrain.Resolution = static_cast<uint32_t>(width);
-                terrain.Heights.assign(pixels, pixels + static_cast<size_t>(width) * height);
+                outResolution = static_cast<uint32_t>(width);
+                outHeights.assign(pixels, pixels + static_cast<size_t>(width) * height);
             }
             else
             {
@@ -68,53 +86,63 @@ namespace Lynx
             return isSquare;
         }
 
-        bool ReadWeights(const std::filesystem::path& path, TerrainSource& terrain)
+        // A raw file is nothing but the numbers, so its size has to be that of a square.
+        std::error_code error;
+        const uint64_t byteCount = std::filesystem::file_size(path, error);
+        const uint64_t count = byteCount / sizeof(uint16_t);
+        const uint32_t resolution = static_cast<uint32_t>(std::llround(std::sqrt(static_cast<double>(count))));
+        if (error || byteCount % sizeof(uint16_t) != 0 || static_cast<uint64_t>(resolution) * resolution != count || !ReadNumbers(path, count, outHeights))
         {
-            int width = 0;
-            int height = 0;
-            int channels = 0;
-            stbi_uc* pixels = stbi_load(path.string().c_str(), &width, &height, &channels, static_cast<int>(BytesPerWeight));
-            if (!pixels)
-                return false;
-
-            const bool isSquare = width == height && width > 0;
-            if (isSquare)
-            {
-                terrain.WeightResolution = static_cast<uint32_t>(width);
-                terrain.Weights.assign(pixels, pixels + static_cast<size_t>(width) * height * BytesPerWeight);
-            }
-            else
-            {
-                LX_CORE_ERROR("{0} is {1} by {2}. A terrain's weights have to be square.", path.string(), width, height);
-            }
-            stbi_image_free(pixels);
-            return isSquare;
+            LX_CORE_ERROR("{0} does not hold a square of 16-bit heights.", path.string());
+            return false;
         }
+        outResolution = resolution;
+        return true;
+    }
+
+    bool TerrainSerializer::ReadWeights(const std::filesystem::path& path, uint32_t& outResolution, std::vector<uint8_t>& outWeights)
+    {
+        int width = 0;
+        int height = 0;
+        int channels = 0;
+        stbi_uc* pixels = stbi_load(path.string().c_str(), &width, &height, &channels, static_cast<int>(BytesPerWeight));
+        if (!pixels)
+        {
+            LX_CORE_ERROR("Could not read weights from {0}", path.string());
+            return false;
+        }
+
+        const bool isSquare = width == height && width > 0;
+        if (isSquare)
+        {
+            outResolution = static_cast<uint32_t>(width);
+            outWeights.assign(pixels, pixels + static_cast<size_t>(width) * height * BytesPerWeight);
+        }
+        else
+        {
+            LX_CORE_ERROR("{0} is {1} by {2}. A terrain's weights have to be square.", path.string(), width, height);
+        }
+        stbi_image_free(pixels);
+        return isSquare;
     }
 
     bool TerrainSerializer::Serialize(const std::filesystem::path& filePath, const TerrainSource& terrain)
     {
-        const std::string name = filePath.stem().string();
-        const std::string heightsName = name + ".heights.r16";
-        const std::string weightsName = name + ".weights.png";
-        const bool hasLayers = !terrain.Layers.empty() && !terrain.Weights.empty();
+        const std::filesystem::path folder = TileFolder(filePath);
+        std::error_code error;
+        std::filesystem::create_directories(folder, error);
+        const bool hasLayers = !terrain.Layers.empty() && terrain.WeightTileResolution > 0;
 
-        std::ofstream heights(filePath.parent_path() / heightsName, std::ios::binary);
-        heights.write(reinterpret_cast<const char*>(terrain.Heights.data()), static_cast<std::streamsize>(terrain.Heights.size() * sizeof(uint16_t)));
-        if (!heights)
+        for (uint32_t z = 0; z < terrain.TilesPerSide; ++z)
         {
-            LX_CORE_ERROR("Could not write the heights of terrain {0}", filePath.string());
-            return false;
-        }
-
-        if (hasLayers)
-        {
-            const int resolution = static_cast<int>(terrain.WeightResolution);
-            const std::string weightsPath = (filePath.parent_path() / weightsName).string();
-            if (stbi_write_png(weightsPath.c_str(), resolution, resolution, static_cast<int>(BytesPerWeight), terrain.Weights.data(), resolution * static_cast<int>(BytesPerWeight)) == 0)
+            for (uint32_t x = 0; x < terrain.TilesPerSide; ++x)
             {
-                LX_CORE_ERROR("Could not write the weights of terrain {0}", filePath.string());
-                return false;
+                const TerrainSource::Tile& tile = terrain.Tiles[static_cast<size_t>(z) * terrain.TilesPerSide + x];
+                if (!WriteNumbers(TileFile(folder, "heights", x, z, "r16"), tile.Heights) || (hasLayers && !WriteNumbers(TileFile(folder, "weights", x, z, "rgba"), tile.Weights)))
+                {
+                    LX_CORE_ERROR("Could not write the tiles of terrain {0}", filePath.string());
+                    return false;
+                }
             }
         }
 
@@ -122,10 +150,11 @@ namespace Lynx
         json["Size"] = terrain.Size;
         json["Lowest"] = terrain.Lowest;
         json["Highest"] = terrain.Highest;
-        json["Heights"] = heightsName;
+        json["TilesPerSide"] = terrain.TilesPerSide;
+        json["TileQuads"] = terrain.TileQuads;
         if (hasLayers)
         {
-            json["Weights"] = weightsName;
+            json["WeightTileResolution"] = terrain.WeightTileResolution;
             nlohmann::json& layers = json["Layers"] = nlohmann::json::array();
             for (const TerrainSource::Layer& layer : terrain.Layers)
                 layers.push_back({ { "Material", static_cast<uint64_t>(layer.Material) }, { "TileSize", layer.TileSize } });
@@ -165,24 +194,17 @@ namespace Lynx
         outTerrain.Size = json.value("Size", 0.0f);
         outTerrain.Lowest = json.value("Lowest", 0.0f);
         outTerrain.Highest = json.value("Highest", 0.0f);
-        const std::string heightsName = json.value("Heights", std::string());
-        if (outTerrain.Size <= 0.0f || heightsName.empty())
+        outTerrain.TilesPerSide = json.value("TilesPerSide", 0u);
+        outTerrain.TileQuads = json.value("TileQuads", 0u);
+        if (outTerrain.Size <= 0.0f || outTerrain.TilesPerSide == 0 || outTerrain.TileQuads == 0)
         {
-            LX_CORE_ERROR("Terrain {0} needs a size and its heights.", filePath.string());
-            return false;
-        }
-
-        const std::filesystem::path heightsPath = filePath.parent_path() / heightsName;
-        const bool hasHeights = EndsWith(heightsPath, ".png") ? ReadPngHeights(heightsPath, outTerrain) : ReadRawHeights(heightsPath, outTerrain);
-        if (!hasHeights)
-        {
-            LX_CORE_ERROR("Could not read the heights of terrain {0} from {1}", filePath.string(), heightsPath.string());
+            LX_CORE_ERROR("Terrain {0} needs a size and its tiles.", filePath.string());
             return false;
         }
 
         // Without layers, or without their weights, the terrain is drawn in its plain colours.
-        const std::string weightsName = json.value("Weights", std::string());
-        if (json.contains("Layers") && json["Layers"].is_array() && !weightsName.empty())
+        outTerrain.WeightTileResolution = json.value("WeightTileResolution", 0u);
+        if (json.contains("Layers") && json["Layers"].is_array() && outTerrain.WeightTileResolution > 0)
         {
             for (const nlohmann::json& layer : json["Layers"])
             {
@@ -190,11 +212,28 @@ namespace Lynx
                 read.Material = AssetHandle(layer.value("Material", uint64_t{ 0 }));
                 read.TileSize = layer.value("TileSize", read.TileSize);
             }
+        }
 
-            if (!ReadWeights(filePath.parent_path() / weightsName, outTerrain))
+        const std::filesystem::path folder = TileFolder(filePath);
+        const size_t heightTexels = static_cast<size_t>(outTerrain.TileQuads) + 1 + 2 * TerrainTileBorder;
+        const size_t weightTexels = static_cast<size_t>(outTerrain.WeightTileResolution) + 2 * TerrainTileBorder;
+        outTerrain.Tiles.resize(static_cast<size_t>(outTerrain.TilesPerSide) * outTerrain.TilesPerSide);
+        for (uint32_t z = 0; z < outTerrain.TilesPerSide; ++z)
+        {
+            for (uint32_t x = 0; x < outTerrain.TilesPerSide; ++x)
             {
-                LX_CORE_ERROR("Could not read the weights of terrain {0}. It keeps its plain colours.", filePath.string());
-                outTerrain.Layers.clear();
+                TerrainSource::Tile& tile = outTerrain.Tiles[static_cast<size_t>(z) * outTerrain.TilesPerSide + x];
+                if (!ReadNumbers(TileFile(folder, "heights", x, z, "r16"), heightTexels * heightTexels, tile.Heights))
+                {
+                    LX_CORE_ERROR("Terrain {0}: the heights of tile {1}, {2} are missing or of the wrong size.", filePath.string(), x, z);
+                    return false;
+                }
+
+                if (!outTerrain.Layers.empty() && !ReadNumbers(TileFile(folder, "weights", x, z, "rgba"), weightTexels * weightTexels * BytesPerWeight, tile.Weights))
+                {
+                    LX_CORE_ERROR("Terrain {0}: the weights of tile {1}, {2} are missing or of the wrong size. It keeps its plain colours.", filePath.string(), x, z);
+                    outTerrain.Layers.clear();
+                }
             }
         }
         return true;

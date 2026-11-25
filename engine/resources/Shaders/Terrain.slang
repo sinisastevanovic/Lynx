@@ -27,7 +27,8 @@ struct TerrainPatch
     uint levelAndTerrain;
 };
 
-// Has to match GpuTerrain in TerrainRenderer.cpp.
+// One tile of a terrain: a square of ground with pictures of its own. Has to match GpuTerrain in
+// TerrainRenderer.cpp.
 struct TerrainData
 {
     float3 origin;
@@ -36,6 +37,8 @@ struct TerrainData
     float heightRange;
     uint heightTexture;
     uint heightSampler;
+
+    // The heights a side of the tile, without the border of its picture.
     float resolution;
 
     // How far from the camera the smallest patches are drawn. Each larger level reaches twice as far.
@@ -47,7 +50,17 @@ struct TerrainData
     uint layerCount;
     uint4 layerMaterials;
     float4 layerTilesPerUnit;
+
+    // How many texels a side the pictures of heights and of weights have, borders included.
+    float heightTexels;
+    float weightTexels;
+    float2 padding;
 };
+
+// Around a tile's heights and weights lies this many rows of its neighbours', so that what is read
+// between two places comes out the same on either side of an edge between tiles.
+// Has to match TerrainTileBorder in Terrain.h.
+static const float tileBorder = 1.0;
 
 struct TerrainConstants
 {
@@ -141,8 +154,9 @@ Ground groundOf(StandardMaterial material, float2 place, float tiles, float2 per
 // The height of the terrain at a place counted from its corner, read from the given size of the heights.
 float heightAt(TerrainData terrain, float2 place, float size)
 {
-    // The first and the last height lie on the terrain's edges, in the middles of the first and last texel.
-    float2 uv = (place / terrain.size) * ((terrain.resolution - 1.0) / terrain.resolution) + 0.5 / terrain.resolution;
+    // The first and the last height lie on the tile's edges, in the middles of the texels that
+    // follow the border and come before it.
+    float2 uv = ((place / terrain.size) * (terrain.resolution - 1.0) + tileBorder + 0.5) / terrain.heightTexels;
     float stored = textures[NonUniformResourceIndex(terrain.heightTexture)].SampleLevel(samplers[terrain.heightSampler], uv, size).r;
     return terrain.lowest + stored * terrain.heightRange;
 }
@@ -213,7 +227,8 @@ float4 fragmentMain(TerrainVaryings input) : SV_Target
     else
     {
         // How much of each layer shows here. The weights of the layers there are add up to one.
-        float2 across = place / terrain.size;
+        // The weights lie between the tile's edges, a texel for each stretch of ground, after the border.
+        float2 across = ((place / terrain.size) * (terrain.weightTexels - 2.0 * tileBorder) + tileBorder) / terrain.weightTexels;
         float4 weights = textures[NonUniformResourceIndex(terrain.weightTexture)].Sample(samplers[terrain.heightSampler], across);
         float total = 0.0;
         for (uint layer = 0; layer < terrain.layerCount; ++layer)

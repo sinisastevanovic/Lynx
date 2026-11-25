@@ -495,8 +495,8 @@ void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution
 
     // One unit between heights. The handles are fixed, like those of the other things made here.
     const float size = static_cast<float>(resolution - 1);
-    auto terrain = std::make_shared<Terrain>(resolution, size, 0.0f, highest, std::move(heights));
-    terrain->SetLayers(layers, weightResolution, std::move(weights));
+    auto terrain = std::make_shared<Terrain>(resolution, size, 0.0f, highest, heights);
+    terrain->SetLayers(layers, weightResolution, weights);
 
     // For checking the terrain's file: saved, and the one that is drawn read back from what was saved.
     // The pictures have to come out as without this.

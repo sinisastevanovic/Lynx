@@ -31,7 +31,8 @@ namespace Lynx
             uint32_t LevelAndTerrain;
         };
 
-        // What the shader knows of a terrain. Has to match TerrainData in Terrain.slang.
+        // What the shader knows of one tile of a terrain: a square of ground with pictures of its own.
+        // Has to match TerrainData in Terrain.slang.
         struct GpuTerrain
         {
             glm::vec3 Origin;
@@ -40,6 +41,8 @@ namespace Lynx
             float HeightRange;
             uint32_t HeightTexture;
             uint32_t HeightSampler;
+
+            // The heights a side of the tile, without the border of its picture.
             float Resolution;
 
             // How far from the camera the smallest patches are drawn.
@@ -51,6 +54,11 @@ namespace Lynx
             uint32_t LayerCount;
             glm::uvec4 LayerMaterials;
             glm::vec4 LayerTilesPerUnit;
+
+            // How many texels a side the pictures of heights and of weights have, borders included.
+            float HeightTexels;
+            float WeightTexels;
+            float Padding[2];
         };
 
         template<typename Entry>
@@ -80,10 +88,14 @@ namespace Lynx
         }
     }
 
-    // What picking the patches of one terrain needs and gives.
+    // What picking the patches of one tile of a terrain needs and gives.
     struct TerrainRenderer::Selection
     {
         const Terrain* Asset = nullptr;
+        uint32_t TileX = 0;
+        uint32_t TileZ = 0;
+
+        // Where the tile's first corner lies in the world, and the tile's place in the list for the GPU.
         glm::vec3 Origin{ 0.0f };
         uint32_t TerrainIndex = 0;
         const Frustum* View = nullptr;
@@ -95,13 +107,13 @@ namespace Lynx
 
         float PatchSize(uint32_t level) const
         {
-            return Asset->GetSize() / static_cast<float>(Asset->GetPatchesPerSide(level));
+            return Asset->GetTileSize() / static_cast<float>(Asset->GetPatchesPerSide(level));
         }
 
         AABB BoxOf(uint32_t level, uint32_t x, uint32_t z) const
         {
             const float size = PatchSize(level);
-            const Terrain::HeightRange heights = Asset->GetHeightsOfPatch(level, x, z);
+            const Terrain::HeightRange heights = Asset->GetHeightsOfPatch(TileX, TileZ, level, x, z);
             const glm::vec3 corner = Origin + glm::vec3(static_cast<float>(x) * size, 0.0f, static_cast<float>(z) * size);
             return AABB(corner + glm::vec3(0.0f, heights.Lowest, 0.0f), corner + glm::vec3(size, heights.Highest, size));
         }
@@ -177,7 +189,15 @@ namespace Lynx
     TerrainViews TerrainRenderer::Prepare(std::span<const ExtractedTerrain> terrains, const Frustum& camera, std::span<const Frustum, ShadowCascadeCount> sun,
         const glm::vec3& cameraPosition)
     {
-        std::vector<const ExtractedTerrain*> drawn;
+        // Every tile of every terrain is a square of ground of its own to the GPU and to the picking of
+        // patches. Tiles of one terrain share everything but their pictures and where they lie.
+        struct DrawnTile
+        {
+            const Terrain* Asset = nullptr;
+            uint32_t TileX = 0;
+            uint32_t TileZ = 0;
+        };
+        std::vector<DrawnTile> drawn;
         std::vector<GpuTerrain> gpuTerrains;
         for (const ExtractedTerrain& terrain : terrains)
         {
@@ -185,27 +205,37 @@ namespace Lynx
                 continue;
 
             const Terrain& asset = *terrain.Asset;
-            GpuTerrain& gpu = gpuTerrains.emplace_back();
-            gpu.Origin = terrain.Origin;
-            gpu.Size = asset.GetSize();
-            gpu.Lowest = asset.GetLowest();
-            gpu.HeightRange = asset.GetHighest() - asset.GetLowest();
-            gpu.HeightTexture = asset.GetHeightTableIndex();
-            gpu.HeightSampler = asset.GetHeightSamplerIndex();
-            gpu.Resolution = static_cast<float>(asset.GetResolution());
-            gpu.FinestRange = asset.GetSize() / static_cast<float>(asset.GetPatchesPerSide(0)) * FinestRangeInPatches;
+            GpuTerrain shared{};
+            shared.Size = asset.GetTileSize();
+            shared.Lowest = asset.GetLowest();
+            shared.HeightRange = asset.GetHighest() - asset.GetLowest();
+            shared.HeightSampler = asset.GetHeightSamplerIndex();
+            shared.Resolution = static_cast<float>(asset.GetTileQuads() + 1);
+            shared.FinestRange = asset.GetTileSize() / static_cast<float>(asset.GetPatchesPerSide(0)) * FinestRangeInPatches;
+            shared.HeightTexels = static_cast<float>(asset.GetHeightTexels());
+            shared.WeightTexels = static_cast<float>(asset.GetWeightTexels());
 
             const std::span<const TerrainLayer> layers = asset.GetLayers();
-            gpu.WeightTexture = asset.GetWeightTableIndex();
-            gpu.LayerCount = static_cast<uint32_t>(layers.size());
-            gpu.LayerMaterials = glm::uvec4(0);
-            gpu.LayerTilesPerUnit = glm::vec4(0.0f);
+            shared.LayerCount = static_cast<uint32_t>(layers.size());
+            shared.LayerMaterials = glm::uvec4(0);
+            shared.LayerTilesPerUnit = glm::vec4(0.0f);
             for (uint32_t layer = 0; layer < layers.size(); ++layer)
             {
-                gpu.LayerMaterials[static_cast<glm::length_t>(layer)] = m_Materials.IndexOf(layers[layer].Material);
-                gpu.LayerTilesPerUnit[static_cast<glm::length_t>(layer)] = 1.0f / std::max(layers[layer].TileSize, 0.001f);
+                shared.LayerMaterials[static_cast<glm::length_t>(layer)] = m_Materials.IndexOf(layers[layer].Material);
+                shared.LayerTilesPerUnit[static_cast<glm::length_t>(layer)] = 1.0f / std::max(layers[layer].TileSize, 0.001f);
             }
-            drawn.push_back(&terrain);
+
+            for (uint32_t tileZ = 0; tileZ < asset.GetTilesPerSide(); ++tileZ)
+            {
+                for (uint32_t tileX = 0; tileX < asset.GetTilesPerSide(); ++tileX)
+                {
+                    GpuTerrain& gpu = gpuTerrains.emplace_back(shared);
+                    gpu.Origin = terrain.Origin + glm::vec3(static_cast<float>(tileX), 0.0f, static_cast<float>(tileZ)) * asset.GetTileSize();
+                    gpu.HeightTexture = asset.GetHeightTableIndex(tileX, tileZ);
+                    gpu.WeightTexture = asset.GetWeightTableIndex(tileX, tileZ);
+                    drawn.push_back({ &asset, tileX, tileZ });
+                }
+            }
         }
 
         TerrainViews views;
@@ -220,19 +250,21 @@ namespace Lynx
             std::array<std::vector<GpuPatch>, QuarterCount + 1> kinds;
             for (uint32_t index = 0; index < drawn.size(); ++index)
             {
-                const Terrain& asset = *drawn[index]->Asset;
+                const Terrain& asset = *drawn[index].Asset;
                 const uint32_t topLevel = asset.GetLevelCount() - 1;
 
                 Selection selection;
                 selection.Asset = &asset;
-                selection.Origin = drawn[index]->Origin;
+                selection.TileX = drawn[index].TileX;
+                selection.TileZ = drawn[index].TileZ;
+                selection.Origin = gpuTerrains[index].Origin;
                 selection.TerrainIndex = index;
                 selection.View = &view;
                 selection.Camera = cameraPosition;
                 selection.FinestRange = gpuTerrains[index].FinestRange;
                 selection.Kinds = &kinds;
 
-                // The largest patches are drawn however far away they are.
+                // The largest patch is the tile, and is drawn however far away it is.
                 const uint32_t perSide = asset.GetPatchesPerSide(topLevel);
                 for (uint32_t z = 0; z < perSide; ++z)
                 {

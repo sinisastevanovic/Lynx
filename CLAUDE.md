@@ -228,10 +228,16 @@ build\bin\Debug\LynxSandboxGame.exe
   and eight times larger, and the larger one takes over as a repeat of the smaller shrinks below 256 pixels on
   screen, or a repeating texture shows as a pattern and then as one flat colour. Slow noise also makes the
   ground a little lighter and darker in patches of tens of units. A terrain without layers is drawn in two plain
-  colours by slope. A terrain's file is `.lxterrain` (`Asset/Serialization/TerrainSerializer`): a small text
-  file with the size, the lowest and highest height and the layers, naming a picture of heights next to it (raw
-  16-bit numbers as `.r16`, or a 16-bit grey PNG) and a PNG of the weights. `Terrain::Save` writes one,
-  the asset manager loads them, and a benchmark with `TerrainThroughFile=1` draws its terrain from a saved file.
+  colours by slope. Inside, a terrain is cut into square tiles of 512 quads, each with its own pictures of
+  heights and weights, for loading a landscape piece by piece later (stage 6). To whoever uses it, it is one
+  asset with one list of layers, and all its tiles are loaded. The renderer treats every tile as a square of
+  ground of its own. A tile's pictures hold one row of its neighbours' around them, so the light and the layers
+  come out the same on both sides of an edge. A terrain's file is `.lxterrain`
+  (`Asset/Serialization/TerrainSerializer`): a small text file with the size, the lowest and highest height, the
+  tiling and the layers, and a folder `<name>.tiles` next to it with raw files per tile (`.r16` heights, `.rgba`
+  weights). `Terrain::Save` writes one, the asset manager loads them, and a benchmark with `TerrainThroughFile=1`
+  draws its terrain from a saved file. `TerrainSerializer::ReadHeights` reads a heightmap from a terrain tool
+  (raw `.r16`, or a 16-bit PNG) for making a terrain.
 - **Lit surfaces.** Everything that is lit calls `lightOn(surface, pixel)` in `StandardShading.slang` with a
   `LitSurface` (position, normals, colour, metalness, roughness): the sun, its shadow, the sky. The view modes
   are `shownInPlaceOfLight` and `inLightAlone` next to it. A new kind of surface, like terrain, fills in a
