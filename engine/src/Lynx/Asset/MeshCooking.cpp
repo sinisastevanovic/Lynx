@@ -101,10 +101,15 @@ namespace Lynx
         // With fewer separate pieces than this, a submesh is not foliage: taking pieces away would show.
         constexpr size_t FewestLeaves = 256;
 
-        // A piece this many times larger than the usual one is not a leaf but something leaves hang on,
-        // such as the stem of a twig. It is always drawn and never made larger: grown like a leaf, it
-        // stuck out of the crown as a spike many metres long.
+        // A piece up to this many times larger than the usual one is a leaf like any other. A larger one,
+        // such as the stem of a twig, is left as it is until the leaves have grown to be as large as it
+        // is, divided by this. Grown from the start like a leaf, a stem stuck out of the crown as a spike
+        // many metres long. Left alone for good, the stems kept a tree at a seventh of its triangles
+        // however far away it was.
         constexpr float LargestLeafInLeafSizes = 4.0f;
+
+        // Levels are stored in eighths, in one byte.
+        constexpr float LargestStoredLevel = 255.0f / 8.0f;
 
         // Mixes the bits of a number so that neighbouring numbers give unrelated results.
         uint32_t Hash(uint32_t value)
@@ -192,37 +197,41 @@ namespace Lynx
         for (size_t leaf = 0; leaf < leaves.size(); ++leaf)
             sizes[leaf] = leaves[leaf].Size();
         std::ranges::nth_element(sizes, sizes.begin() + sizes.size() / 2);
-        const float leafSize = sizes[sizes.size() / 2];
-        const auto isLeaf = [&](uint32_t piece) { return leaves[piece].Size() <= leafSize * LargestLeafInLeafSizes; };
+        const float leafSize = std::max(sizes[sizes.size() / 2], 0.000001f);
 
-        // What is always drawn comes first. The leaves follow in a random order that is the same every
-        // time the mesh is cooked. Any first part of it is spread evenly over the crown, which is what
-        // lets a level be "the first part of the list".
+        // From which level on a piece is thinned out and grown, and the last level it is drawn in.
+        // Leaves grow by the square root of two per level, so they have reached the size of a piece that
+        // is s times too large for a leaf after two times the logarithm of s levels. From then on the piece
+        // is kept in each further level with a chance of one half: with a random number r between 0 and 1,
+        // it is drawn for another log2(1 / r) levels. The number comes from the piece's place in the mesh,
+        // so every cook gives the same.
+        struct Lifetime
+        {
+            float FirstLevel = 0.0f;
+            float LastLevel = 0.0f;
+        };
+        std::vector<Lifetime> lifetimes(leaves.size());
+        for (uint32_t leaf = 0; leaf < leaves.size(); ++leaf)
+        {
+            const float timesTooLarge = leaves[leaf].Size() / (leafSize * LargestLeafInLeafSizes);
+            const float random = (static_cast<float>(Hash(leaf) >> 8) + 1.0f) / 16777216.0f;
+            lifetimes[leaf].FirstLevel = std::min(std::max(2.0f * std::log2(timesTooLarge), 0.0f), LargestStoredLevel);
+            lifetimes[leaf].LastLevel = std::min(lifetimes[leaf].FirstLevel + std::log2(1.0f / random), LargestStoredLevel);
+        }
+
+        // Those that are drawn longest come first. Level k then draws the first part of the list: every
+        // piece whose last level is k or later.
         std::vector<uint32_t> order(leaves.size());
         for (uint32_t index = 0; index < order.size(); ++index)
             order[index] = index;
-        const auto firstLeaf = std::ranges::stable_partition(order, [&](uint32_t piece) { return !isLeaf(piece); }).begin();
-        std::ranges::sort(firstLeaf, order.end(), [](uint32_t a, uint32_t b) { return std::pair(Hash(a), a) < std::pair(Hash(b), b); });
-        if (static_cast<size_t>(order.end() - firstLeaf) < FewestLeaves)
-            return {};
+        std::ranges::sort(order, [&](uint32_t a, uint32_t b) { return std::pair(-lifetimes[a].LastLevel, a) < std::pair(-lifetimes[b].LastLevel, b); });
 
         uint32_t trianglesSoFar = 0;
-        uint32_t alwaysDrawnTriangles = 0;
-        for (auto piece = order.begin(); piece != order.end(); ++piece)
+        for (const uint32_t leaf : order)
         {
-            if (piece == firstLeaf)
-                alwaysDrawnTriangles = trianglesSoFar;
-            leaves[*piece].FirstTriangle = trianglesSoFar;
-            trianglesSoFar += leaves[*piece].TriangleCount;
+            leaves[leaf].FirstTriangle = trianglesSoFar;
+            trianglesSoFar += leaves[leaf].TriangleCount;
         }
-        const float leafTriangles = static_cast<float>(triangleCount - alwaysDrawnTriangles);
-
-        // Where a piece ends in the list of leaves, from just above 0 to 1. Zero for what is always drawn.
-        const auto rankOf = [&](const LeafBounds& piece)
-        {
-            const uint32_t end = piece.FirstTriangle + piece.TriangleCount;
-            return end <= alwaysDrawnTriangles ? 0.0f : static_cast<float>(end - alwaysDrawnTriangles) / leafTriangles;
-        };
 
         // The triangles of a leaf stay in the order they had, which was good for the vertex cache.
         std::vector<uint32_t> ordered(indices.size());
@@ -246,12 +255,13 @@ namespace Lynx
         foliage.Leaves.resize(usedVertexCount);
         for (size_t triangle = 0; triangle < triangleCount; ++triangle)
         {
-            const LeafBounds& leaf = leaves[leafOfTriangle[triangle]];
+            const uint32_t leaf = leafOfTriangle[triangle];
             for (size_t corner = 0; corner < 3; ++corner)
             {
                 Leaf& ofVertex = foliage.Leaves[newPlace[indices[triangle * 3 + corner]]];
-                ofVertex.Centre = 0.5f * (leaf.Smallest + leaf.Largest);
-                ofVertex.Rank = rankOf(leaf);
+                ofVertex.Centre = 0.5f * (leaves[leaf].Smallest + leaves[leaf].Largest);
+                ofVertex.FirstLevel = lifetimes[leaf].FirstLevel;
+                ofVertex.LastLevel = lifetimes[leaf].LastLevel;
             }
         }
 
@@ -259,19 +269,17 @@ namespace Lynx
         indices = std::move(ordered);
         vertices = std::move(orderedVertices);
 
-        // Level k draws what is always drawn and the leaves that end within the first 1 / 2^k of their
-        // list, and draws those larger by the square root of 2^k. Its error is the size a leaf then has:
-        // a level may be drawn while that is small on screen.
+        // The error of a level is the size its leaves have grown to: a level may be drawn while that is
+        // small on screen.
         foliage.Lods.push_back({ 0, static_cast<uint32_t>(indices.size()), 0.0f });
         size_t nextLeaf = order.size();
         for (size_t level = 1; level < MeshLod::MaxCount; ++level)
         {
-            const float share = std::exp2(-static_cast<float>(level));
-            while (nextLeaf > 0 && rankOf(leaves[order[nextLeaf - 1]]) > share)
+            while (nextLeaf > 0 && lifetimes[order[nextLeaf - 1]].LastLevel < static_cast<float>(level))
                 --nextLeaf;
 
             const size_t keptTriangles = nextLeaf == 0 ? 0 : leaves[order[nextLeaf - 1]].FirstTriangle + leaves[order[nextLeaf - 1]].TriangleCount;
-            if (keptTriangles < alwaysDrawnTriangles + FewestTrianglesOfALod)
+            if (keptTriangles < FewestTrianglesOfALod)
                 break;
 
             foliage.Lods.push_back({ 0, static_cast<uint32_t>(keptTriangles * 3), foliage.LeafSize * std::sqrt(std::exp2(static_cast<float>(level))) });
@@ -290,12 +298,12 @@ namespace Lynx
         {
             const glm::vec3 fromCentre = (leaf.Centre - glm::vec3(boundingSphere)) / radius;
 
-            // The rank is rounded up, so that a leaf never counts as part of a level it does not fit in,
-            // and only what is always drawn has a rank of zero.
+            // The last level is rounded down, so that a leaf has shrunk away by the level that leaves it out.
             LeafVertex& out = packed.emplace_back();
             for (int axis = 0; axis < 3; ++axis)
                 out.Pivot[axis] = static_cast<int16_t>(meshopt_quantizeSnorm(fromCentre[axis], 16));
-            out.Rank = static_cast<uint16_t>(std::min(std::ceil(leaf.Rank * 65535.0f), 65535.0f));
+            out.LastLevel = static_cast<uint8_t>(std::floor(leaf.LastLevel * 8.0f));
+            out.FirstLevel = static_cast<uint8_t>(std::min(std::round(leaf.FirstLevel * 8.0f), static_cast<float>(out.LastLevel)));
         }
         return packed;
     }

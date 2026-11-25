@@ -14,7 +14,8 @@ namespace Lynx
         // 2: a material says whether it is two-sided.
         // 3: a submesh has levels of detail.
         // 4: foliage has levels of detail, and its vertices know their leaf.
-        constexpr uint32_t s_MeshVersion = 4;
+        // 5: large pieces of foliage are thinned out too, from a later level on.
+        constexpr uint32_t s_MeshVersion = 5;
         constexpr uint32_t s_MeshMagicNumber = 0x4d43584c; // "LXCM"
 
         // More than any mesh has. A damaged file that claims more is refused before memory is reserved for it.

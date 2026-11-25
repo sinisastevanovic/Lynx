@@ -46,10 +46,11 @@ namespace Lynx
         // its radius: three numbers from -1 to 1 in 16 bits each.
         int16_t Pivot[3];
 
-        // Where the leaf ends in the list of all leaves, from 1 to 65535 for the whole list.
-        // A level that draws less of the list than that does not draw the leaf.
-        // Zero for a vertex of something that is no leaf: it is always drawn and never made larger.
-        uint16_t Rank;
+        // The last level of detail the leaf is drawn in, and the level from which on it is made larger,
+        // both in eighths of a level. A leaf of the usual size grows from level 0 on. A larger piece is
+        // left as it is until the leaves around it have grown to its size, see BuildFoliageLods.
+        uint8_t LastLevel;
+        uint8_t FirstLevel;
     };
 
     struct Submesh

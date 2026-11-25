@@ -34,9 +34,9 @@ namespace Lynx
     {
         glm::vec3 Centre{ 0.0f };
 
-        // Where the leaf ends in the list of leaves, from just above 0 to 1.
-        // Zero for a piece too large to be a leaf, such as the stem of a twig: it is always drawn.
-        float Rank = 0.0f;
+        // The level of detail from which on the leaf is made larger, and the level it is last drawn in.
+        float FirstLevel = 0.0f;
+        float LastLevel = 0.0f;
     };
 
     struct Foliage
@@ -55,10 +55,15 @@ namespace Lynx
     // else, which are leaves, needles, twigs or blades of grass.
     //
     // A coarser level draws fewer leaves and draws them larger, so that the crown covers what it covered
-    // before ("Stochastic Pruning", Cook and Halstead, Pixar 2007). The leaves are put in a random order
-    // here, so a level is the first part of the list of triangles and costs nothing to store. Every level
-    // keeps half the leaves of the one before. A vertex shader grows the leaves that are left about
-    // their centres, which is why every vertex gets the centre of its leaf.
+    // before ("Stochastic Pruning", Cook and Halstead, Pixar 2007). Every level keeps half the leaves of
+    // the one before, chosen at random. The leaves are stored in the order of the last level they are
+    // drawn in, so a level is the first part of the list of triangles and costs nothing to store.
+    // A vertex shader grows the leaves that are left about their centres, which is why every vertex gets
+    // the centre of its leaf.
+    //
+    // Pieces are not all of one size: a twig has needles and a stem. A piece much larger than the usual
+    // leaf is left alone at first. It joins in at the level where the leaves have grown to its size, and
+    // from there on it is thinned out and grown like them. So nothing is drawn in every level for good.
     //
     // Reorders the triangles and the vertices.
     Foliage BuildFoliageLods(std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);

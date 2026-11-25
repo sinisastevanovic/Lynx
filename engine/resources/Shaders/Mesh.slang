@@ -11,9 +11,9 @@ public struct LeafVertex
     // its radius, as numbers from -32767 to 32767.
     public uint pivotXY;
 
-    // The same for z in the lower half. In the upper half, where the leaf ends in the list of all
-    // leaves, from 1 to 65535 for the whole list. Zero for what is no leaf and is always drawn as it is.
-    public uint pivotZAndRank;
+    // The same for z in the lower half. Above it, a byte each, in eighths of a level: the last level of
+    // detail the leaf is drawn in, and the level from which on it is made larger.
+    public uint pivotZAndLevels;
 };
 
 // One submesh of one mesh in the scene. The instances of the whole scene are in one buffer that stays
@@ -81,22 +81,21 @@ public float3 leafPosition(MeshInstance instance, float3 position, uint vertexIn
     if (level <= 0.0 || instance.leaves == nullptr)
         return position;
 
+    // A piece larger than a leaf is left as it is until the leaves have grown to its size.
     LeafVertex leaf = instance.leaves[int(vertexIndex) - instance.vertexOffset];
-    uint rank = leaf.pivotZAndRank >> 16;
-    if (rank == 0)
+    float lastLevel = float((leaf.pivotZAndLevels >> 16) & 0xFF) / 8.0;
+    float firstLevel = float(leaf.pivotZAndLevels >> 24) / 8.0;
+    if (level <= firstLevel)
         return position;
 
-    float3 fromCentre = float3(fromSnorm16(leaf.pivotXY), fromSnorm16(leaf.pivotXY >> 16), fromSnorm16(leaf.pivotZAndRank));
+    float3 fromCentre = float3(fromSnorm16(leaf.pivotXY), fromSnorm16(leaf.pivotXY >> 16), fromSnorm16(leaf.pivotZAndLevels));
     float3 pivot = instance.boundingSphere.xyz + fromCentre * instance.boundingSphere.w;
 
-    // Level k draws the first 1 / 2^k of the list, so a leaf that ends at a share s of the list is
-    // drawn up to level -log2(s).
-    float share = float(rank) / 65535.0;
-    float lastLevel = -log2(share);
-    float shrink = saturate((lastLevel - level) / max(min(lastLevel, leafFadeLevels), 0.0001));
+    // It shrinks away over the last half level it is drawn in, or over all of its levels if those are fewer.
+    float shrink = saturate((lastLevel - level) / max(min(lastLevel - firstLevel, leafFadeLevels), 0.0001));
 
     // Half the leaves at twice the area each: larger by the square root of two per level.
-    float grow = sqrt(exp2(level));
+    float grow = sqrt(exp2(level - firstLevel));
     return pivot + (position - pivot) * (grow * shrink);
 }
 
