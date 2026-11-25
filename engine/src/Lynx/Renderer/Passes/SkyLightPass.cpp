@@ -53,6 +53,9 @@ namespace Lynx
         // A reloaded shader replaces a pipeline that frames still on the GPU may be using.
         m_Vulkan->Context->Deletions().Retire([device = m_Vulkan->Device, old = m_Vulkan->Pipeline]() { device.destroyPipeline(old); });
         m_Vulkan->Pipeline = pipeline;
+
+        // The new shader may give another result.
+        m_Drawn.reset();
     }
 
     bool SkyLightPass::Declare(const RenderContext&, const RenderData& renderData, PassResources& resources)
@@ -62,15 +65,20 @@ namespace Lynx
         if (!m_Vulkan->Pipeline || !renderData.AtmosphereTables.front())
             return false;
 
+        // Still right from an earlier frame.
+        if (m_Drawn == SkyInputsOf(renderData))
+            return false;
+
         for (GpuTexture* table : renderData.AtmosphereTables)
             resources.Sample(table);
         resources.Computes = true;
         return true;
     }
 
-    void SkyLightPass::Execute(vk::CommandBuffer commands, RenderData&)
+    void SkyLightPass::Execute(vk::CommandBuffer commands, RenderData& renderData)
     {
         commands.bindPipeline(vk::PipelineBindPoint::eCompute, m_Vulkan->Pipeline);
         commands.dispatch(1, 1, 1);
+        m_Drawn = SkyInputsOf(renderData);
     }
 }

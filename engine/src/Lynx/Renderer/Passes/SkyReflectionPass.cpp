@@ -73,6 +73,9 @@ namespace Lynx
         // A reloaded shader replaces a pipeline that frames still on the GPU may be using.
         m_Vulkan->Context->Deletions().Retire([device = m_Vulkan->Device, old = m_Vulkan->Pipeline]() { device.destroyPipeline(old); });
         m_Vulkan->Pipeline = pipeline;
+
+        // The new shader may give another result.
+        m_Drawn.reset();
     }
 
     bool SkyReflectionPass::Declare(const RenderContext&, const RenderData& renderData, PassResources& resources)
@@ -80,6 +83,10 @@ namespace Lynx
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
 
         if (!m_Vulkan->Pipeline || !renderData.SkyReflection || !renderData.AtmosphereTables.front())
+            return false;
+
+        // Still right from an earlier frame.
+        if (m_Drawn == SkyInputsOf(renderData))
             return false;
 
         for (GpuTexture* table : renderData.AtmosphereTables)
@@ -120,5 +127,6 @@ namespace Lynx
         }
 
         picture.Transition(commands, vk::ImageLayout::eShaderReadOnlyOptimal);
+        m_Drawn = SkyInputsOf(renderData);
     }
 }

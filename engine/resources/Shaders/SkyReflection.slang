@@ -4,7 +4,7 @@
 // size that goes with its roughness (the first half of the split sum of "Real Shading in Unreal Engine 4",
 // Karis, 2013). See skyReflection in Atmosphere.slang for how directions map to the picture.
 //
-// The pass runs this once per size, every frame, because the sky changes with the sun.
+// The pass runs this once per size, in a frame in which the sky has changed.
 
 import Atmosphere;
 

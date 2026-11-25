@@ -4,7 +4,7 @@
 // from half the sky changes slowly with the direction, so nine numbers hold it almost exactly, and a
 // pixel gets its light from the sky with a handful of multiplications. See skyIrradiance in Atmosphere.slang.
 //
-// Runs once per frame as one group of threads. Each looks at the sky in a few directions, which the
+// Runs as one group of threads, in a frame in which the sky has changed. Each looks at the sky in a few directions, which the
 // sky view table answers, and the first adds up what all of them found. One thread doing all of it
 // alone took 0.2 ms, twenty times as long.
 
