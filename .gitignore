@@ -21,3 +21,8 @@ samples/RenderBench/assets/Models/fir_sapling_medium/
 samples/RenderBench/assets/Models/fir_tree_01/
 samples/RenderBench/assets/Models/pine_tree_01/
 samples/RenderBench/assets/Models/grass_medium_01/
+
+# Ground textures the same script downloads.
+samples/RenderBench/assets/Textures/forest_ground_04/
+samples/RenderBench/assets/Textures/rock_face_03/
+samples/RenderBench/assets/Textures/brown_mud_leaves_01/

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Downloads models from Poly Haven and makes them usable by the engine.
+    Downloads models and ground textures from Poly Haven and makes them usable by the engine.
 
 .DESCRIPTION
     A Poly Haven model comes as one glTF file that can hold several objects standing side by side:
@@ -16,20 +16,30 @@
     Bark and rock are closed surfaces whose inside is never seen, and drawing their far side costs a
     quarter to a third of the frame. So only materials with cut-outs stay two-sided.
 
+    A ground texture, for the layers of a terrain, is three pictures: the colour, the normal map, and
+    one that holds roughness in green and metalness in blue, which is how the engine's materials read
+    them. They go into a folder of their own next to the models' folder.
+
     Files that are already there with the right size are not downloaded again.
 
-    The models are not kept in the repository: they are large, and this script makes them again. So that
-    a benchmark still draws the same picture on every machine and next year, the hash of every file is
-    recorded in polyhaven-files.json next to the models, which is kept in the repository. A file that
-    comes out differently than recorded is reported. -Accept records the new files instead.
+    Neither models nor textures are kept in the repository: they are large, and this script makes them
+    again. So that a benchmark still draws the same picture on every machine and next year, the hash of
+    every file is recorded in a polyhaven-files.json next to them, which is kept in the repository.
+    A file that comes out differently than recorded is reported. -Accept records the new files instead.
 
 .EXAMPLE
-    tools/fetch-polyhaven.ps1 -Asset fir_sapling_medium, grass_medium_01
+    tools/fetch-polyhaven.ps1 -Asset fir_sapling_medium, grass_medium_01 -Texture rock_face_03
 #>
 param(
     [string[]]$Asset = @('fir_sapling_medium', 'fir_tree_01', 'pine_tree_01', 'grass_medium_01'),
+    [string[]]$Texture = @('forest_ground_04', 'rock_face_03', 'brown_mud_leaves_01'),
     [string]$Resolution = '2k',
     [string]$Destination = (Join-Path $PSScriptRoot '..\samples\RenderBench\assets\Models'),
+    [string]$TextureDestination = (Join-Path $PSScriptRoot '..\samples\RenderBench\assets\Textures'),
+
+    # Leave the models, or the textures, as they are.
+    [switch]$NoModels,
+    [switch]$NoTextures,
     [switch]$Accept
 )
 
@@ -37,16 +47,42 @@ $ErrorActionPreference = 'Stop'
 $api = 'https://api.polyhaven.com'
 $userAgent = 'model-fetch-script'
 
+# The hashes that were recorded for the files of a folder, by their names.
+function Read-Record([string]$Path)
+{
+    $known = @{}
+    if (Test-Path $Path)
+    {
+        foreach ($entry in (Get-Content -Raw $Path | ConvertFrom-Json).PSObject.Properties)
+        {
+            $known[$entry.Name] = $entry.Value
+        }
+    }
+    return $known
+}
+
+function Write-Record($Known, [string]$Path)
+{
+    if ($Known.Count -eq 0)
+    {
+        return
+    }
+
+    $sorted = [ordered]@{}
+    foreach ($name in ($Known.Keys | Sort-Object))
+    {
+        $sorted[$name] = $Known[$name]
+    }
+    New-Item -ItemType Directory -Force (Split-Path $Path) | Out-Null
+    [IO.File]::WriteAllText($Path, ($sorted | ConvertTo-Json), (New-Object Text.UTF8Encoding $false))
+}
+
+if ($NoModels) { $Asset = @() }
+if ($NoTextures) { $Texture = @() }
+
 $Destination = [IO.Path]::GetFullPath($Destination)
 $recordPath = Join-Path $Destination 'polyhaven-files.json'
-$record = @{}
-if (Test-Path $recordPath)
-{
-    foreach ($entry in (Get-Content -Raw $recordPath | ConvertFrom-Json).PSObject.Properties)
-    {
-        $record[$entry.Name] = $entry.Value
-    }
-}
+$record = Read-Record $recordPath
 $differing = 0
 
 Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
@@ -311,15 +347,32 @@ foreach ($id in $Asset)
     Test-Files $id $folder
 }
 
-$sorted = [ordered]@{}
-foreach ($name in ($record.Keys | Sort-Object))
+Write-Record $record $recordPath
+
+# The ground textures: the three pictures of each, as they are.
+$TextureDestination = [IO.Path]::GetFullPath($TextureDestination)
+$textureRecordPath = Join-Path $TextureDestination 'polyhaven-files.json'
+$record = Read-Record $textureRecordPath
+foreach ($id in $Texture)
 {
-    $sorted[$name] = $record[$name]
+    Write-Host $id
+    $folder = Join-Path $TextureDestination $id
+    $files = Invoke-RestMethod "$api/files/$id" -UserAgent $userAgent
+    foreach ($map in 'Diffuse', 'nor_gl', 'arm')
+    {
+        $download = $files.$map.$Resolution.jpg
+        if ($null -eq $download)
+        {
+            throw "$id has no $map picture at $Resolution."
+        }
+        Get-RemoteFile $download.url (Join-Path $folder (Split-Path $download.url -Leaf)) $download.size
+    }
+    Test-Files $id $folder
 }
-[IO.File]::WriteAllText($recordPath, ($sorted | ConvertTo-Json), (New-Object Text.UTF8Encoding $false))
+Write-Record $record $textureRecordPath
 
 if ($differing -gt 0)
 {
-    Write-Warning "$differing files differ from what was recorded. Poly Haven may have changed a model, and benchmark pictures may change with it. Run again with -Accept to record the new files."
+    Write-Warning "$differing files differ from what was recorded. Poly Haven may have changed a model or a texture, and benchmark pictures may change with it. Run again with -Accept to record the new files."
     exit 1
 }

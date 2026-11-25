@@ -278,7 +278,8 @@ build\bin\Debug\LynxSandboxGame.exe
   work shows in the "CPU" column and not in the frame. Results made before 21 November 2026 hold a frame time that
   reads too low for scenes bound by the GPU. Measure the "before" label right before the "after" one, the machine
   drifts over an hour. The Trees benchmark draws models that are not in the repository, 1.5 GB of them:
-  `tools/fetch-polyhaven.ps1` fetches them, once per machine.
+  `tools/fetch-polyhaven.ps1` fetches them, once per machine, and with them the three ground textures of the
+  Terrain benchmark, 37 MB (`-NoModels` fetches the textures alone).
 - The editor window: `tools/capture-window.ps1` saves a picture of it. Compare one from before with one from after.
 - F3, or `--profiler` on the command line, shows frame, CPU and GPU times on screen in the editor and in a game.
 - Serialization: re-save every scene and prefab with the old and the new code and compare the JSON.

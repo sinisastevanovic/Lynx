@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <string>
 
 namespace
 {
@@ -429,7 +430,7 @@ void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution
         }
     }
 
-    // Three kinds of ground: grass where it is flat and low, rock where it is steep, bare earth high up.
+    // Three kinds of ground: forest floor where it is flat and low, rock where it is steep, mud high up.
     // One byte per layer and place, at half the resolution of the heights.
     const uint32_t weightResolution = (resolution - 1) / 2;
     std::vector<uint8_t> weights(static_cast<size_t>(weightResolution) * weightResolution * TerrainLayerCount, 0);
@@ -459,27 +460,36 @@ void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution
         }
     }
 
-    // The rock wears one of Sponza's stone textures, repeated every 12 units, as a stand-in: the project
-    // has no ground textures yet. Grass and earth are plain colours.
-    const auto makeLayer = [&assetManager](const glm::vec3& colour, const char* texturePath, float tileSize, uint64_t handle)
+    // The ground of a forest, from Poly Haven: its floor, rock, and mud with leaves. Each is three pictures,
+    // the colour, the normal map, and one with roughness in green and metalness in blue.
+    const auto makeLayer = [&assetManager](const char* name, float tileSize, uint64_t handle)
     {
-        auto material = std::make_shared<Material>();
-        material->AlbedoColor = glm::vec4(colour, 1.0f);
-        material->Roughness = 0.9f;
-        if (texturePath)
+        const auto load = [&](const char* map) -> AssetHandle
         {
-            if (const std::shared_ptr<Texture> texture = assetManager.GetProjectAsset<Texture>(texturePath, AssetLoadMode::Blocking))
-                material->AlbedoTexture = texture->GetHandle();
-            else
-                LX_ERROR("RenderBench: cannot load {0}", texturePath);
-        }
+            const std::string path = std::string("Textures/") + name + "/" + name + "_" + map + "_2k.jpg";
+            if (const std::shared_ptr<Texture> texture = assetManager.GetProjectAsset<Texture>(path, AssetLoadMode::Blocking))
+                return texture->GetHandle();
+
+            LX_ERROR("RenderBench: cannot load {0}. The ground textures are fetched by tools/fetch-polyhaven.ps1.", path);
+            return AssetHandle::Null();
+        };
+
+        // The pictures hold the whole look, so the material's own numbers leave them as they are.
+        auto material = std::make_shared<Material>();
+        material->AlbedoColor = glm::vec4(1.0f);
+        material->Roughness = 1.0f;
+        material->Metallic = 1.0f;
+        material->AlbedoTexture = load("diff");
+        material->NormalMap = load("nor_gl");
+        material->MetallicRoughnessTexture = load("arm");
+        material->UseNormalMap = true;
         assetManager.AddRuntimeAsset(material, AssetHandle(handle));
         return TerrainLayer{ material, tileSize };
     };
     const TerrainLayer layers[] = {
-        makeLayer(glm::vec3(0.13f, 0.18f, 0.07f), nullptr, 4.0f, 7600000000000000002ull),
-        makeLayer(glm::vec3(0.75f, 0.72f, 0.68f), "Models/Sponza/7268504077753552595.jpg", 12.0f, 7600000000000000003ull),
-        makeLayer(glm::vec3(0.22f, 0.17f, 0.11f), nullptr, 4.0f, 7600000000000000004ull),
+        makeLayer("forest_ground_04", 4.0f, 7600000000000000002ull),
+        makeLayer("rock_face_03", 8.0f, 7600000000000000003ull),
+        makeLayer("brown_mud_leaves_01", 4.0f, 7600000000000000004ull),
     };
 
     // One unit between heights. The handles are fixed, like those of the other things made here.
