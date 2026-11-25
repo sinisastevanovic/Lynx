@@ -23,13 +23,13 @@ public struct StandardConstants
 };
 
 // Has to match ViewMode in ViewMode.h.
-static const uint viewLit = 0;
-static const uint viewWireframe = 1;
-static const uint viewUnlit = 2;
-static const uint viewLightingOnly = 3;
-static const uint viewNormals = 4;
-static const uint viewLevelOfDetail = 5;
-static const uint viewShadowCascades = 6;
+public static const uint viewLit = 0;
+public static const uint viewWireframe = 1;
+public static const uint viewUnlit = 2;
+public static const uint viewLightingOnly = 3;
+public static const uint viewNormals = 4;
+public static const uint viewLevelOfDetail = 5;
+public static const uint viewShadowCascades = 6;
 
 public struct StandardVertex
 {
@@ -377,6 +377,55 @@ public float3 lightOn(LitSurface surface, float2 pixel)
     return ambient + sunLight;
 }
 
+// The colour of the edges in the view that draws the triangles' edges.
+public float3 wireframeColour()
+{
+    return shownAsItIs(float3(0.8, 0.8, 0.8));
+}
+
+// The colour of a view that shows one thing about a surface in place of the lit picture: its own
+// colour, the way it faces, the level of detail it is drawn in, or the cascade its shadow comes from.
+// False for a view that shows light, which lightOn works out. Only the surface's position, normals and
+// colour have to be known here. Everything that is lit goes through here too, so every view mode
+// works for all of it alike.
+public bool shownInPlaceOfLight(uint viewMode, LitSurface surface, float level, float2 pixel, out float3 colour)
+{
+    colour = float3(0.0, 0.0, 0.0);
+    float3 toLight = normalize(-scene.lightDirection.xyz);
+
+    if (viewMode == viewUnlit)
+    {
+        colour = surface.albedo;
+        return true;
+    }
+    if (viewMode == viewNormals)
+    {
+        colour = shownAsItIs(surface.normal * 0.5 + 0.5);
+        return true;
+    }
+    if (viewMode == viewLevelOfDetail)
+    {
+        float facingTheSun = max(dot(surface.normal, toLight), 0.0);
+        colour = shownAsItIs(levelColour(level) * (0.35 + 0.65 * facingTheSun));
+        return true;
+    }
+    if (viewMode == viewShadowCascades)
+    {
+        float lit = max(dot(surface.normal, toLight), 0.0) * sunVisibility(surface.position, surface.faceNormal, pixel);
+        colour = shownAsItIs(cascadeColour(cascadePlaceOf(surface.position).cascade) * (0.35 + 0.65 * lit));
+        return true;
+    }
+    return false;
+}
+
+// The surface as the view of the light alone shows it: every surface the same grey, and not a metal.
+public LitSurface inLightAlone(LitSurface surface)
+{
+    surface.albedo = float3(0.5, 0.5, 0.5);
+    surface.metallic = 0.0;
+    return surface;
+}
+
 // isFrontFace is false for a pixel of a triangle that is seen from behind, which only a two-sided
 // material lets through.
 public float4 standardFragment(StandardConstants constants, StandardVaryings input, bool isFrontFace)
@@ -408,13 +457,9 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     if (!isFrontFace)
         normal = -normal;
 
-    float3 toEye = normalize(scene.cameraPosition.xyz - input.worldPosition);
-    float3 toLight = normalize(-scene.lightDirection.xyz);
-    float3 halfway = normalize(toEye + toLight);
-
     // The edges of the triangles are drawn whole and in one colour.
     if (constants.viewMode == viewWireframe)
-        return float4(shownAsItIs(float3(0.8, 0.8, 0.8)), 1.0);
+        return float4(wireframeColour(), 1.0);
 
     float4 albedoSample = sampleMaterialTexture(material.albedoTexture, material.materialSampler, input.uv);
     if (material.alphaCutoff >= 0.0 && constants.showCutOuts != 0)
@@ -424,30 +469,22 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     }
     float3 albedo = albedoSample.rgb * material.albedoColor.rgb;
 
+    LitSurface surface;
+    surface.position = input.worldPosition;
+    surface.normal = normal;
+    surface.faceNormal = faceNormal;
+    surface.albedo = albedo;
+
     // The views that show one thing about the surface instead of the lit picture.
-    if (constants.viewMode == viewUnlit)
-        return float4(albedo, 1.0);
-    if (constants.viewMode == viewNormals)
-        return float4(shownAsItIs(normal * 0.5 + 0.5), 1.0);
-    if (constants.viewMode == viewLevelOfDetail)
-    {
-        float facingTheSun = max(dot(normal, toLight), 0.0);
-        return float4(shownAsItIs(levelColour(input.level) * (0.35 + 0.65 * facingTheSun)), 1.0);
-    }
+    float3 shown;
+    if (shownInPlaceOfLight(constants.viewMode, surface, input.level, input.position.xy, shown))
+        return float4(shown, 1.0);
 
-    if (constants.viewMode == viewShadowCascades)
-    {
-        float lit = max(dot(normal, toLight), 0.0) * sunVisibility(input.worldPosition, faceNormal, input.position.xy);
-        return float4(shownAsItIs(cascadeColour(cascadePlaceOf(input.worldPosition).cascade) * (0.35 + 0.65 * lit)), 1.0);
-    }
-
-    // The light alone: every surface the same grey, not a metal, and not glowing.
+    // The light alone: not glowing either.
     bool isLightingOnly = constants.viewMode == viewLightingOnly;
-    if (isLightingOnly)
-        albedo = float3(0.5, 0.5, 0.5);
 
     float4 metallicRoughness = sampleMaterialTexture(material.metallicRoughnessTexture, material.materialSampler, input.uv);
-    float metallic = isLightingOnly ? 0.0 : metallicRoughness.b * material.metallic;
+    float metallic = metallicRoughness.b * material.metallic;
 
     // A roughness of zero is a perfect mirror, whose highlight is a single point of infinite brightness:
     // the formula below divides zero by zero there. No real surface is that smooth, so it is kept away from zero.
@@ -456,13 +493,10 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     float3 emissive = sampleMaterialTexture(material.emissiveTexture, material.materialSampler, input.uv).rgb
         * material.emissiveColorStrength.rgb * material.emissiveColorStrength.a;
 
-    LitSurface surface;
-    surface.position = input.worldPosition;
-    surface.normal = normal;
-    surface.faceNormal = faceNormal;
-    surface.albedo = albedo;
     surface.metallic = metallic;
     surface.roughness = roughness;
+    if (isLightingOnly)
+        surface = inLightAlone(surface);
     float3 light = lightOn(surface, input.position.xy);
 
     if (isLightingOnly)
