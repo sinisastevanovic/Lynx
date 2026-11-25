@@ -21,6 +21,7 @@
 # so only compare results made with the same number of runs.
 #
 # The pictures of all runs are compared to check that the benchmark renders the same frames every time.
+# A few pixels may differ by the smallest step of a colour, see Test-SamePicture.
 #
 # Results go to samples/RenderBench/temp/bench/<label>/<benchmark>/: result.json and the pictures.
 # The label defaults to the current commit, with "-dirty" appended when there are uncommitted changes.
@@ -72,6 +73,74 @@ if (-not $NoBuild) {
 if (-not (Test-Path $executable)) {
     "Not found: $executable"
     exit 1
+}
+
+# Two runs of the same code may differ in a few pixels by the smallest step a colour can take. The GPU
+# decides which instances are drawn, and the order it lists them in differs from run to run, so where two
+# surfaces share a pixel at the same depth, either may win. Measured on 25 November 2026: 2 pixels of
+# Grid and 47 of Trees, by 1 or 2 of 255. A change that breaks something moves thousands of pixels by far more.
+$mostDifferentPixels = 100
+$largestDifference = 2
+
+Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
+
+public static class RunPictures
+{
+    static byte[] Pixels(string path, out int width, out int height)
+    {
+        using (var bitmap = new Bitmap(path))
+        {
+            width = bitmap.Width;
+            height = bitmap.Height;
+            BitmapData data = bitmap.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            var pixels = new byte[width * height * 4];
+            Marshal.Copy(data.Scan0, pixels, 0, pixels.Length);
+            bitmap.UnlockBits(data);
+            return pixels;
+        }
+    }
+
+    // How many pixels of two pictures differ, and by how much at most in one channel. Pictures of
+    // different sizes differ in every pixel.
+    public static void Compare(string first, string second, out long differentPixels, out int largestDifference)
+    {
+        int width, height, otherWidth, otherHeight;
+        byte[] a = Pixels(first, out width, out height);
+        byte[] b = Pixels(second, out otherWidth, out otherHeight);
+        differentPixels = 0;
+        largestDifference = 0;
+        if (width != otherWidth || height != otherHeight)
+        {
+            differentPixels = (long)width * height;
+            largestDifference = 255;
+            return;
+        }
+
+        for (int pixel = 0; pixel < a.Length; pixel += 4)
+        {
+            int largest = 0;
+            for (int channel = 0; channel < 4; channel++)
+                largest = Math.Max(largest, Math.Abs(a[pixel + channel] - b[pixel + channel]));
+            if (largest > 0)
+            {
+                differentPixels++;
+                largestDifference = Math.Max(largestDifference, largest);
+            }
+        }
+    }
+}
+'@
+
+# True if two pictures are the same but for the few pixels described above.
+function Test-SamePicture($first, $second) {
+    [long]$differentPixels = 0
+    [int]$largest = 0
+    [RunPictures]::Compare($first, $second, [ref]$differentPixels, [ref]$largest)
+    return ($differentPixels -le $mostDifferentPixels) -and ($largest -le $largestDifference)
 }
 
 # The median of the smallest value each frame has in any run, for one column of the runs' frames.csv.
@@ -159,12 +228,18 @@ foreach ($benchName in $Bench) {
     $sorted = @($runResults | Sort-Object { $_.Result.FrameMs.Median })
     $chosen = $sorted[[int][math]::Floor(($sorted.Count - 1) / 2)]
 
-    # Identical pictures in every run show that the benchmark is repeatable.
+    # The same pictures in every run show that the benchmark is repeatable. Most are identical, which
+    # their hashes show at once. The rest are compared pixel by pixel, see Test-SamePicture.
     $picturesMatch = $true
     foreach ($picture in $chosen.Result.Screenshots) {
-        $hashes = @($runResults | ForEach-Object { (Get-FileHash (Join-Path $_.Directory $picture) -Algorithm SHA256).Hash } | Sort-Object -Unique)
-        if ($hashes.Count -ne 1) { $picturesMatch = $false }
-        Copy-Item (Join-Path $chosen.Directory $picture) (Join-Path $benchDirectory $picture)
+        $chosenPicture = Join-Path $chosen.Directory $picture
+        $chosenHash = (Get-FileHash $chosenPicture -Algorithm SHA256).Hash
+        foreach ($run in $runResults) {
+            $runPicture = Join-Path $run.Directory $picture
+            if ((Get-FileHash $runPicture -Algorithm SHA256).Hash -eq $chosenHash) { continue }
+            if (-not (Test-SamePicture $chosenPicture $runPicture)) { $picturesMatch = $false }
+        }
+        Copy-Item $chosenPicture (Join-Path $benchDirectory $picture)
     }
 
     # Combine the runs frame by frame, see the top of this file.
