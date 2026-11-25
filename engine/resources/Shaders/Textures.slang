@@ -18,6 +18,13 @@ module Textures;
 // A cube has indices of its own, apart from those of the flat textures.
 [vk::binding(4, 0)] public TextureCube cubeTextures[];
 
+// The pictures a compute shader can write into, pixel by pixel:
+//     writableTextures[index][pixel] = colour
+// They have indices of their own again. A pass names the pictures it writes (PassResources::Write),
+// and the same picture is read through the table of textures by the passes after it.
+// Whatever the picture's format, a shader writes four numbers and the GPU keeps those the format has.
+[vk::binding(5, 0)] [vk::image_format("unknown")] public RWTexture2D<float4> writableTextures[];
+
 // The direction that a place on one face of a cube stands for, for a pass that draws into the faces.
 // The faces are in Vulkan's order: +X, -X, +Y, -Y, +Z, -Z. uv runs from 0 to 1 across the face,
 // from its top left as the face is stored.

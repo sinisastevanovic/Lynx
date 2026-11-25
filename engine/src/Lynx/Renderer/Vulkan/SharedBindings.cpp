@@ -12,7 +12,7 @@ namespace Lynx
 {
     SharedBindings::SharedBindings(GraphicsContext& context, vk::Buffer sceneConstants)
         : m_Context(context), m_Device(context.Device()), m_FreeTextures(std::make_shared<std::vector<uint32_t>>()),
-          m_FreeCubeTextures(std::make_shared<std::vector<uint32_t>>())
+          m_FreeCubeTextures(std::make_shared<std::vector<uint32_t>>()), m_FreeWritableTextures(std::make_shared<std::vector<uint32_t>>())
     {
         const std::array bindings = {
             vk::DescriptorSetLayoutBinding(SceneBinding, vk::DescriptorType::eUniformBuffer, 1, ShaderStages),
@@ -20,6 +20,7 @@ namespace Lynx
             vk::DescriptorSetLayoutBinding(SamplerBinding, vk::DescriptorType::eSampler, MaxSamplers, ShaderStages),
             vk::DescriptorSetLayoutBinding(ComparisonSamplerBinding, vk::DescriptorType::eSampler, MaxComparisonSamplers, ShaderStages),
             vk::DescriptorSetLayoutBinding(CubeTextureBinding, vk::DescriptorType::eSampledImage, MaxCubeTextures, ShaderStages),
+            vk::DescriptorSetLayoutBinding(WritableTextureBinding, vk::DescriptorType::eStorageImage, MaxWritableTextures, ShaderStages),
         };
 
         // The tables are mostly empty, and entries are written while frames that use the set are being
@@ -27,7 +28,7 @@ namespace Lynx
         const vk::DescriptorBindingFlags tableFlags = vk::DescriptorBindingFlagBits::ePartiallyBound
             | vk::DescriptorBindingFlagBits::eUpdateAfterBind
             | vk::DescriptorBindingFlagBits::eUpdateUnusedWhilePending;
-        const std::array<vk::DescriptorBindingFlags, 5> bindingFlags = { vk::DescriptorBindingFlags(), tableFlags, tableFlags, tableFlags, tableFlags };
+        const std::array<vk::DescriptorBindingFlags, 6> bindingFlags = { vk::DescriptorBindingFlags(), tableFlags, tableFlags, tableFlags, tableFlags, tableFlags };
 
         const vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo(bindingFlags);
         vk::DescriptorSetLayoutCreateInfo layoutInfo(vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool, bindings);
@@ -41,6 +42,7 @@ namespace Lynx
             vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, 1),
             vk::DescriptorPoolSize(vk::DescriptorType::eSampledImage, MaxTextures + MaxCubeTextures),
             vk::DescriptorPoolSize(vk::DescriptorType::eSampler, MaxSamplers + MaxComparisonSamplers),
+            vk::DescriptorPoolSize(vk::DescriptorType::eStorageImage, MaxWritableTextures),
         };
         m_Pool = m_Device.createDescriptorPool(vk::DescriptorPoolCreateInfo(vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind, 1, poolSizes));
         m_Set = m_Device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo(m_Pool, m_SetLayout)).front();
@@ -110,6 +112,31 @@ namespace Lynx
         return index;
     }
 
+    uint32_t SharedBindings::AddWritableTexture(vk::ImageView view)
+    {
+        uint32_t index = 0;
+        if (!m_FreeWritableTextures->empty())
+        {
+            index = m_FreeWritableTextures->back();
+            m_FreeWritableTextures->pop_back();
+        }
+        else if (m_WritableTextureCount < MaxWritableTextures)
+        {
+            index = m_WritableTextureCount++;
+        }
+        else
+        {
+            // Index 0 is a valid picture if there is one at all, so the caller writes into the wrong one instead of crashing.
+            LX_CORE_ERROR("The table of writable textures is full ({0} textures).", MaxWritableTextures);
+            return 0;
+        }
+
+        // A picture that is written pixel by pixel is in the general layout while it is.
+        const vk::DescriptorImageInfo imageInfo({}, view, vk::ImageLayout::eGeneral);
+        m_Device.updateDescriptorSets(vk::WriteDescriptorSet(m_Set, WritableTextureBinding, index, vk::DescriptorType::eStorageImage, imageInfo), nullptr);
+        return index;
+    }
+
     void SharedBindings::ReleaseTexture(uint32_t index, TextureTable table)
     {
         // Only flat pictures have something kept per texture elsewhere.
@@ -118,7 +145,9 @@ namespace Lynx
 
         // A frame on the GPU may still sample through the index. Handing it out again right away
         // would show that frame the next texture.
-        m_Context.Deletions().Retire([free = table == TextureTable::Cube ? m_FreeCubeTextures : m_FreeTextures, index]() { free->push_back(index); });
+        const std::shared_ptr<std::vector<uint32_t>>& freeIndices = table == TextureTable::Cube ? m_FreeCubeTextures
+            : table == TextureTable::Writable ? m_FreeWritableTextures : m_FreeTextures;
+        m_Context.Deletions().Retire([free = freeIndices, index]() { free->push_back(index); });
     }
 
     uint32_t SharedBindings::SamplerIndex(vk::Sampler sampler)
@@ -174,6 +203,7 @@ namespace Lynx
                 && ((binding.Binding == SceneBinding && binding.Kind == ShaderBindingKind::UniformBuffer)
                     || (binding.Binding == TextureBinding && binding.Kind == ShaderBindingKind::SampledTexture)
                     || (binding.Binding == CubeTextureBinding && binding.Kind == ShaderBindingKind::SampledTexture)
+                    || (binding.Binding == WritableTextureBinding && binding.Kind == ShaderBindingKind::StorageTexture)
                     || (binding.Binding == SamplerBinding && binding.Kind == ShaderBindingKind::Sampler)
                     || (binding.Binding == ComparisonSamplerBinding && binding.Kind == ShaderBindingKind::Sampler));
             if (!known)

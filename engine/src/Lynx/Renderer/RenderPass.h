@@ -254,6 +254,10 @@ namespace Lynx
         // After this many frames the shifts repeat. They follow the Halton sequence of bases 2 and 3,
         // of which any run of frames covers a pixel evenly.
         uint32_t JitterLength = 8;
+
+        // Adds up the frames of a view that stands still into their average, see TemporalPass. With
+        // jitter, that is the picture with JitterLength samples a pixel: what anti-aliasing is measured against.
+        bool Accumulates = false;
     };
 
     struct BloomSettings
@@ -407,6 +411,11 @@ namespace Lynx
         uint32_t SceneMotionIndex = 0;
 
         BloomSettings Bloom;
+
+        // How the picture is put together from several frames, and whether the camera sees the scene
+        // exactly as in the last frame.
+        TemporalSettings Temporal;
+        bool ViewIsStill = false;
 
         // How the view that is being drawn is shown.
         ViewSettings Viewing;

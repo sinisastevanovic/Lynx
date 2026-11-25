@@ -41,6 +41,9 @@ public:
         TemporalSettings& temporal = engine.GetRenderer().GetTemporalSettings();
         temporal.Jitters = settings.Parameter("Jitter", temporal.Jitters ? 1.0 : 0.0) > 0.0;
         temporal.JitterLength = static_cast<uint32_t>(std::max(settings.Parameter("JitterLength", temporal.JitterLength), 1.0));
+        temporal.Accumulates = settings.Parameter("Accumulate", temporal.Accumulates ? 1.0 : 0.0) > 0.0;
+        if (settings.Parameter("FXAA", 1.0) <= 0.0)
+            engine.GetRenderer().SetFXAAEnabled(false);
 
         // What the view shows, for pictures of every view mode. See ViewMode for the numbers.
         ViewSettings& viewing = engine.GetSceneRenderer().GetViewSettings();

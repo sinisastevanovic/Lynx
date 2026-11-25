@@ -20,10 +20,16 @@ namespace Lynx
     struct PassResources
     {
         static constexpr uint32_t MaxSampled = 8;
+        static constexpr uint32_t MaxWritten = 4;
 
         // Textures the pass reads in its shaders.
         std::array<GpuTexture*, MaxSampled> Sampled{};
         uint32_t SampledCount = 0;
+
+        // Pictures a pass that computes writes into, pixel by pixel, through the table of writable
+        // pictures (SharedBindings::AddWritableTexture).
+        std::array<GpuTexture*, MaxWritten> Written{};
+        uint32_t WrittenCount = 0;
 
         // The texture the pass draws into. Null for a pass that draws depth only.
         GpuTexture* ColorTarget = nullptr;
@@ -54,6 +60,7 @@ namespace Lynx
         bool ClearsDepth = false;
 
         void Sample(GpuTexture* texture) { Sampled[SampledCount++] = texture; }
+        void Write(GpuTexture* texture) { Written[WrittenCount++] = texture; }
     };
 
     // A pass of the frame. It never changes the layout of a texture, never begins

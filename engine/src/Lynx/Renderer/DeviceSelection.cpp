@@ -61,6 +61,11 @@ namespace Lynx
             LX_FEATURE(Vulkan12, descriptorBindingPartiallyBound),
             LX_FEATURE(Vulkan12, descriptorBindingVariableDescriptorCount),
             LX_FEATURE(Vulkan12, descriptorBindingSampledImageUpdateAfterBind),
+            // A table of pictures that compute shaders write into, whatever the format of each.
+            LX_FEATURE(Vulkan12, descriptorBindingStorageImageUpdateAfterBind),
+            LX_FEATURE(Core.features, shaderStorageImageArrayDynamicIndexing),
+            LX_FEATURE(Core.features, shaderStorageImageWriteWithoutFormat),
+            LX_FEATURE(Core.features, shaderStorageImageReadWithoutFormat),
             LX_FEATURE(Vulkan12, descriptorBindingUpdateUnusedWhilePending),
             LX_FEATURE(Vulkan12, scalarBlockLayout),
             LX_FEATURE(Vulkan12, timelineSemaphore),

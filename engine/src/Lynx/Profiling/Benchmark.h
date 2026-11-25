@@ -60,6 +60,8 @@ namespace Lynx
         std::vector<uint32_t> ScreenshotFrames;
 
         // Free-form numbers for the game, for example how many objects to create.
+        // The benchmark itself reads one: "HoldFrames" draws every frame whose picture is saved that many
+        // more times first, with the game standing still. The timings of such a run mean nothing.
         std::map<std::string, double, std::less<>> Parameters;
 
         // Where the results are written. Absolute.
@@ -113,6 +115,9 @@ namespace Lynx
         Phase m_Phase = Phase::Warmup;
         uint32_t m_WarmupFramesDone = 0;
         uint32_t m_Frame = 0;
+
+        // How often the frame at hand has been drawn already, see "HoldFrames".
+        uint32_t m_FramesHeld = 0;
         bool m_Succeeded = false;
 
         // Kept, because looking it up by name in every frame costs measured time in a scene of 100,000 entities.

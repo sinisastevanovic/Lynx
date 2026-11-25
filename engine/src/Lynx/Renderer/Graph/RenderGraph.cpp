@@ -73,6 +73,8 @@ namespace Lynx
         const vk::CommandBuffer commands(ctx.Commands);
         for (uint32_t index = 0; index < resources.SampledCount; ++index)
             resources.Sampled[index]->Transition(commands, vk::ImageLayout::eShaderReadOnlyOptimal);
+        for (uint32_t index = 0; index < resources.WrittenCount; ++index)
+            resources.Written[index]->Transition(commands, vk::ImageLayout::eGeneral);
         if (resources.ColorTarget)
             resources.ColorTarget->Transition(commands, vk::ImageLayout::eColorAttachmentOptimal);
         if (resources.MotionTarget)

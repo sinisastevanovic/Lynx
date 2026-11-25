@@ -292,14 +292,26 @@ namespace Lynx
             {
                 PlaceCamera(scene, renderer, m_Frame);
 
-                if (std::ranges::find(m_Settings.ScreenshotFrames, m_Frame) != m_Settings.ScreenshotFrames.end())
-                    renderer.RequestScreenshot(m_Frame);
+                // A frame whose picture is saved can be held first: drawn again and again with the game
+                // standing still, for what needs several frames of the same view to show its result.
+                const bool isSaved = std::ranges::find(m_Settings.ScreenshotFrames, m_Frame) != m_Settings.ScreenshotFrames.end();
+                const auto framesToHold = static_cast<uint32_t>(std::max(m_Settings.Parameter("HoldFrames", 0.0), 0.0));
+                const float deltaTime = m_FramesHeld == 0 ? m_Settings.FixedDeltaTime : 0.0f;
                 KeepScreenshots(renderer.TakeScreenshots());
+                if (isSaved && m_FramesHeld < framesToHold)
+                {
+                    ++m_FramesHeld;
+                    return deltaTime;
+                }
 
+                if (isSaved)
+                    renderer.RequestScreenshot(m_Frame);
+
+                m_FramesHeld = 0;
                 ++m_Frame;
                 if (m_Frame == m_Settings.Frames)
                     m_Phase = Phase::Finish;
-                return m_Settings.FixedDeltaTime;
+                return deltaTime;
             }
 
             case Phase::Finish:

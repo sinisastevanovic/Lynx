@@ -37,6 +37,7 @@
 #include "Passes/SkyLightPass.h"
 #include "Passes/SkyPass.h"
 #include "Passes/SkyReflectionPass.h"
+#include "Passes/TemporalPass.h"
 #include "Passes/TerrainPass.h"
 #include "TerrainRenderer.h"
 #include "Passes/ShadowPass.h"
@@ -375,6 +376,7 @@ namespace Lynx
         m_Graph->Add("Terrain", std::make_unique<TerrainPass>(TerrainPassKind::Colour));
         m_Graph->Add("Forward", std::make_unique<ForwardPass>());
         m_Graph->Add("Particles", std::make_unique<ParticlePass>());
+        m_Graph->Add("Temporal", std::make_unique<TemporalPass>());
         m_Graph->Add("Exposure", std::make_unique<ExposurePass>());
         m_Graph->Add("Bloom", std::make_unique<BloomPass>());
         m_Graph->Add("Composite", std::make_unique<CompositePass>());
@@ -797,6 +799,8 @@ namespace Lynx
         // How far something moved on screen is worked out from where the last frame's camera saw it.
         // The first frame has none before it, and nothing moved.
         sceneData.PreviousViewProjectionMatrix = m_PreviousClipViewProjection.value_or(unjittered);
+        m_CurrentFrameData.ViewIsStill = m_PreviousClipViewProjection == unjittered;
+        m_CurrentFrameData.Temporal = m_TemporalSettings;
         m_PreviousClipViewProjection = unjittered;
 
         // The sun's shadow. Its maps keep the usual depth: the sun's view has no perspective, so the
@@ -931,7 +935,9 @@ namespace Lynx
         m_CurrentFrameData.Bloom = m_BloomSettings;
         if (ShowsRawColours(m_CurrentFrameData.Viewing.Mode))
             m_CurrentFrameData.Bloom.Enabled = false;
-        m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled;
+
+        // The average of many frames is what other anti-aliasing is measured against: nothing smooths it further.
+        m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled && !m_TemporalSettings.Accumulates;
 
         m_Graph->Execute(m_RenderContext, m_CurrentFrameData);
         m_GpuScene->CopyCommandsForCounters(m_Frame->Commands);

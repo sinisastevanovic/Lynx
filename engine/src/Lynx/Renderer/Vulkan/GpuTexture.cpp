@@ -53,6 +53,9 @@ namespace Lynx
                 case vk::ImageLayout::eShaderReadOnlyOptimal:
                     return { vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader,
                              vk::AccessFlagBits2::eShaderSampledRead };
+                case vk::ImageLayout::eGeneral:
+                    // Written pixel by pixel by a compute shader.
+                    return { vk::PipelineStageFlagBits2::eComputeShader, vk::AccessFlagBits2::eShaderStorageRead | vk::AccessFlagBits2::eShaderStorageWrite };
                 case vk::ImageLayout::eTransferSrcOptimal:
                     return { vk::PipelineStageFlagBits2::eAllTransfer, vk::AccessFlagBits2::eTransferRead };
                 case vk::ImageLayout::eTransferDstOptimal:

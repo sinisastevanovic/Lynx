@@ -12,7 +12,7 @@ namespace Lynx
     }
 
     TextureSlot::TextureSlot(SharedBindings& shared, uint32_t index, TextureTable table)
-        : m_Shared(&shared), m_Index(index), m_IsCube(table == TextureTable::Cube)
+        : m_Shared(&shared), m_Index(index), m_Table(table)
     {
     }
 
@@ -24,7 +24,7 @@ namespace Lynx
     TextureSlot::TextureSlot(TextureSlot&& other) noexcept
         : m_Shared(std::exchange(other.m_Shared, nullptr)),
           m_Index(std::exchange(other.m_Index, 0)),
-          m_IsCube(std::exchange(other.m_IsCube, false))
+          m_Table(std::exchange(other.m_Table, TextureTable::Flat))
     {
     }
 
@@ -35,7 +35,7 @@ namespace Lynx
             Release();
             m_Shared = std::exchange(other.m_Shared, nullptr);
             m_Index = std::exchange(other.m_Index, 0);
-            m_IsCube = std::exchange(other.m_IsCube, false);
+            m_Table = std::exchange(other.m_Table, TextureTable::Flat);
         }
         return *this;
     }
@@ -45,9 +45,9 @@ namespace Lynx
         if (!m_Shared)
             return;
 
-        m_Shared->ReleaseTexture(m_Index, m_IsCube ? TextureTable::Cube : TextureTable::Flat);
+        m_Shared->ReleaseTexture(m_Index, m_Table);
         m_Shared = nullptr;
         m_Index = 0;
-        m_IsCube = false;
+        m_Table = TextureTable::Flat;
     }
 }

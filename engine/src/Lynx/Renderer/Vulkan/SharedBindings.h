@@ -13,8 +13,9 @@ namespace Lynx
     class GraphicsContext;
     struct ShaderProgram;
 
-    // Which of the tables of textures a texture is in: that of flat pictures, or that of cubes.
-    enum class TextureTable : uint8_t { Flat, Cube };
+    // Which of the tables of textures a texture is in: that of flat pictures, that of cubes, or that
+    // of the pictures compute shaders write into.
+    enum class TextureTable : uint8_t { Flat, Cube, Writable };
 
     // What every shader can reach without a pass binding anything for it: the frame's camera and sun,
     // and tables with every texture, every cube and every sampler the renderer knows.
@@ -32,9 +33,11 @@ namespace Lynx
         static constexpr uint32_t SamplerBinding = 2;
         static constexpr uint32_t ComparisonSamplerBinding = 3;
         static constexpr uint32_t CubeTextureBinding = 4;
+        static constexpr uint32_t WritableTextureBinding = 5;
 
         static constexpr uint32_t MaxTextures = 16384;
         static constexpr uint32_t MaxCubeTextures = 256;
+        static constexpr uint32_t MaxWritableTextures = 64;
         static constexpr uint32_t MaxSamplers = 64;
         static constexpr uint32_t MaxComparisonSamplers = 8;
 
@@ -60,6 +63,12 @@ namespace Lynx
         // The same for a cube, which goes into a table of its own with its own indices: the shading
         // language tells a cube from a flat picture. The view has to be the cube's view of all its faces.
         uint32_t AddCubeTexture(vk::ImageView view);
+
+        // The same for a picture that compute shaders write into, pixel by pixel, which again has a table
+        // of its own. The texture has to be made for that use (vk::ImageUsageFlagBits::eStorage), and a
+        // pass that writes it says so (PassResources::Write). To be read by shaders it is added as a
+        // texture as well.
+        uint32_t AddWritableTexture(vk::ImageView view);
 
         // Gives an index back. It is handed out again only after the frames that may still use it are done.
         void ReleaseTexture(uint32_t index, TextureTable table = TextureTable::Flat);
@@ -107,8 +116,10 @@ namespace Lynx
         // which may return an index after this object is gone.
         std::shared_ptr<std::vector<uint32_t>> m_FreeTextures;
         std::shared_ptr<std::vector<uint32_t>> m_FreeCubeTextures;
+        std::shared_ptr<std::vector<uint32_t>> m_FreeWritableTextures;
         uint32_t m_TextureCount = 0;
         uint32_t m_CubeTextureCount = 0;
+        uint32_t m_WritableTextureCount = 0;
         std::vector<vk::ImageView> m_TextureViews;
         std::function<void(uint32_t)> m_ReleaseListener;
 
