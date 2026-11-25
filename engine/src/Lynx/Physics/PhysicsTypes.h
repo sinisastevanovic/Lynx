@@ -1,5 +1,6 @@
 #pragma once
 #include <variant>
+#include <vector>
 #include <glm/glm.hpp>
 #include <glm/detail/type_quat.hpp>
 
@@ -69,7 +70,16 @@ namespace Lynx
         std::vector<uint32_t> Indices;
     };
     
-    using CollisionShape = std::variant<BoxShape, SphereShape, CapsuleShape, CylinderShape, MeshShape>;
+    // A square of ground: SampleCount by SampleCount heights, row by row, Spacing units apart. The
+    // body's position is the corner of the first height. Only for static bodies.
+    struct HeightFieldShape
+    {
+        uint32_t SampleCount = 0;
+        float Spacing = 1.0f;
+        std::vector<float> Heights;
+    };
+
+    using CollisionShape = std::variant<BoxShape, SphereShape, CapsuleShape, CylinderShape, MeshShape, HeightFieldShape>;
     
     struct BodyDescriptor
     {

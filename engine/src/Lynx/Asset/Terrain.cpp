@@ -212,6 +212,32 @@ namespace Lynx
             m_LayerCount = 0;
     }
 
+    float Terrain::GetHeightAtPlace(float x, float z) const
+    {
+        if (m_Tiles.empty())
+            return m_Lowest;
+
+        const float last = static_cast<float>(GetResolution() - 1);
+        const float inStepsX = std::clamp(x / GetSpacing(), 0.0f, last);
+        const float inStepsZ = std::clamp(z / GetSpacing(), 0.0f, last);
+        const uint32_t quadX = std::min(static_cast<uint32_t>(inStepsX), GetResolution() - 2);
+        const uint32_t quadZ = std::min(static_cast<uint32_t>(inStepsZ), GetResolution() - 2);
+        const float alongX = inStepsX - static_cast<float>(quadX);
+        const float alongZ = inStepsZ - static_cast<float>(quadZ);
+
+        // A quad is two triangles, split from its first corner to the one opposite. Has to match the
+        // patch grid of TerrainRenderer, which matches the height field of the physics.
+        const float first = GetHeightAt(quadX, quadZ);
+        const float opposite = GetHeightAt(quadX + 1, quadZ + 1);
+        if (alongZ >= alongX)
+        {
+            const float alongZOnly = GetHeightAt(quadX, quadZ + 1);
+            return first + alongZ * (alongZOnly - first) + alongX * (opposite - alongZOnly);
+        }
+        const float alongXOnly = GetHeightAt(quadX + 1, quadZ);
+        return first + alongX * (alongXOnly - first) + alongZ * (opposite - alongXOnly);
+    }
+
     void Terrain::SetLayers(std::span<const TerrainLayer> layers)
     {
         m_LayerCount = 0;

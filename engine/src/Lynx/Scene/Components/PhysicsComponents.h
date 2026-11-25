@@ -73,6 +73,14 @@ namespace Lynx
         bool IsTrigger = false;
     };
     
+    // Makes the terrain of the same entity solid: things stand on its ground and rays hit it. Needs
+    // no rigid body. The ground collided with is the one that is drawn, see PhysicsSystem.
+    struct TerrainColliderComponent
+    {
+        float Friction = 0.7f;
+        float Restitution = 0.0f;
+    };
+
     struct CharacterControllerComponent
     {
         // Shape Settings

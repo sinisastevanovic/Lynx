@@ -5,6 +5,7 @@
 #include "GpuScene.h"
 #include "Renderer.h"
 #include "Lynx/Asset/StaticMesh.h"
+#include "Lynx/Asset/Terrain.h"
 #include "Lynx/Profiling/FrameProfiler.h"
 #include "Lynx/Scene/Components/Components.h"
 #include "Lynx/Scene/Components/PhysicsComponents.h"
@@ -350,7 +351,7 @@ namespace Lynx
         SyncMeshes(isEditor, physicsAlpha);
 
         if (m_Renderer.GetShowColliders())
-            DrawColliders();
+            DrawColliders(cameraPosition);
         m_Extracted.DebugLines = DebugRenderer::GetLines();
 
         m_Scene->GetParticleSystem()->Extract(*m_Scene, cameraPosition, m_Extracted.Particles);
@@ -362,7 +363,7 @@ namespace Lynx
         }
     }
 
-    void SceneRenderer::DrawColliders()
+    void SceneRenderer::DrawColliders(const glm::vec3& cameraPosition)
     {
         auto& registry = m_Scene->Reg();
         const glm::vec4 color = { 0.0f, 1.0f, 0.0f, 1.0f };
@@ -398,6 +399,38 @@ namespace Lynx
         {
             auto [transform, character] = characters.get<TransformComponent, CharacterControllerComponent>(entity);
             DebugRenderer::DrawCapsule(transform.GetTranslation(), character.CapsuleRadius, character.CapsuleHalfHeight, transform.GetRotation(), color);
+        }
+
+        // A terrain's collider is far too many triangles to draw: only those around the camera, which
+        // is where one looks whether the ground that is walked on is the ground that is seen.
+        constexpr int32_t quadsAround = 24;
+        const auto terrains = registry.view<TransformComponent, TerrainComponent, TerrainColliderComponent>();
+        for (auto entity : terrains)
+        {
+            auto [transform, terrain, collider] = terrains.get<TransformComponent, TerrainComponent, TerrainColliderComponent>(entity);
+            const std::shared_ptr<Terrain> asset = terrain.Terrain.Get();
+            if (!asset || asset->GetTilesPerSide() == 0)
+                continue;
+
+            const glm::vec3 origin(transform.GetWorldMatrix()[3]);
+            const float spacing = asset->GetSpacing();
+            const int32_t last = static_cast<int32_t>(asset->GetResolution()) - 1;
+            const int32_t middleX = static_cast<int32_t>((cameraPosition.x - origin.x) / spacing);
+            const int32_t middleZ = static_cast<int32_t>((cameraPosition.z - origin.z) / spacing);
+            const auto corner = [&](int32_t x, int32_t z)
+            {
+                return origin + glm::vec3(static_cast<float>(x) * spacing, asset->GetHeightAt(static_cast<uint32_t>(x), static_cast<uint32_t>(z)), static_cast<float>(z) * spacing);
+            };
+
+            for (int32_t z = std::max(middleZ - quadsAround, 0); z < std::min(middleZ + quadsAround, last); ++z)
+            {
+                for (int32_t x = std::max(middleX - quadsAround, 0); x < std::min(middleX + quadsAround, last); ++x)
+                {
+                    DebugRenderer::DrawLine(corner(x, z), corner(x + 1, z), color);
+                    DebugRenderer::DrawLine(corner(x, z), corner(x, z + 1), color);
+                    DebugRenderer::DrawLine(corner(x, z), corner(x + 1, z + 1), color);
+                }
+            }
         }
     }
 }

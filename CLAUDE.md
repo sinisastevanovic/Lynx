@@ -241,6 +241,15 @@ build\bin\Debug\LynxSandboxGame.exe
   In the editor, "Create Terrain..." in the asset browser makes one from a heightmap, and the terrain's
   properties panel sets its layers and reads a picture of weights (`Terrain::SetLayers`, with or without new weights).
   The asset browser hides `.tiles` folders. Sculpting and painting in the editor do not exist yet.
+- **Terrain physics.** A `TerrainColliderComponent` ("TerrainCollider") next to the terrain makes its ground solid, without a
+  rigid body. `PhysicsSystem::UpdateTerrainColliders` makes one static Jolt height field per tile from the heights
+  the tile is drawn from, and makes them again when the terrain is reloaded or its entity moved. The bodies are
+  kept in the system, not in the component. A quad is split from its first corner to the one opposite in all
+  three places: Jolt's height field, the patch grid of `TerrainRenderer`, and `Terrain::GetHeightAtPlace`, which
+  gives the ground's height anywhere. "Show colliders" draws the triangles around the camera. A benchmark with
+  `TerrainBalls=<count>` drops balls onto the terrain and shoots rays at it, and writes what it found to the log.
+  Bodies made after a scene started exist from the next physics step on, and physics stands still while a
+  benchmark warms up.
 - **Lit surfaces.** Everything that is lit calls `lightOn(surface, pixel)` in `StandardShading.slang` with a
   `LitSurface` (position, normals, colour, metalness, roughness): the sun, its shadow, the sky. The view modes
   are `shownInPlaceOfLight` and `inLightAlone` next to it. A new kind of surface, like terrain, fills in a

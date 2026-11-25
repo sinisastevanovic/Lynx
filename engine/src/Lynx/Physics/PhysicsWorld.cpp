@@ -14,6 +14,7 @@
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/CylinderShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/Shape/HeightFieldShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Character/CharacterVirtual.h>
@@ -403,9 +404,28 @@ namespace Lynx
                     ));
                 }*/
                 //return new JPH::MeshShape(triangles); // TODO:??
+            } else if constexpr (std::is_same_v<T, HeightFieldShape>) {
+                if (s.SampleCount < 2 || s.Heights.size() != static_cast<size_t>(s.SampleCount) * s.SampleCount)
+                    return nullptr;
+
+                JPH::HeightFieldShapeSettings settings(s.Heights.data(), JPH::Vec3::sZero(), JPH::Vec3(s.Spacing, 1.0f, s.Spacing), s.SampleCount);
+
+                // Jolt packs the heights. As many bits as keep them within half a centimetre, so that
+                // nothing stands visibly above or below the ground that is drawn.
+                settings.mBlockSize = 4;
+                settings.mBitsPerSample = settings.CalculateBitsPerSampleForError(0.005f);
+                const JPH::ShapeSettings::ShapeResult result = settings.Create();
+                if (result.HasError())
+                {
+                    LX_CORE_ERROR("Physics: a height field could not be made: {0}", result.GetError().c_str());
+                    return nullptr;
+                }
+                return result.Get();
             }
             return new JPH::SphereShape(0.5f);
         }, desc.Shape);
+        if (!shape)
+            return INVALID_BODY;
         
         // Determine object layer
         JPH::ObjectLayer objectLayer = desc.Layer;

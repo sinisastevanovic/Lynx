@@ -123,7 +123,9 @@ namespace Lynx
         : m_Context(context), m_Uploads(uploads), m_Materials(materials)
     {
         // The grid has one more vertex a side than quads, numbered row by row. Two triangles per quad,
-        // counter-clockwise seen from above.
+        // counter-clockwise seen from above, split from the quad's first corner to the one opposite:
+        // that is how Jolt's height field splits a quad, and what is walked on has to be what is seen.
+        // Terrain::GetHeightAtPlace follows the same split.
         constexpr uint32_t quads = TerrainQuadsPerPatch;
         constexpr uint32_t half = quads / 2;
         std::vector<uint16_t> indices;
@@ -137,7 +139,7 @@ namespace Lynx
                 for (uint32_t x = firstX; x < firstX + half; ++x)
                 {
                     const auto vertex = [](uint32_t vx, uint32_t vz) { return static_cast<uint16_t>(vz * (quads + 1) + vx); };
-                    indices.insert(indices.end(), { vertex(x, z), vertex(x, z + 1), vertex(x + 1, z), vertex(x + 1, z), vertex(x, z + 1), vertex(x + 1, z + 1) });
+                    indices.insert(indices.end(), { vertex(x, z), vertex(x, z + 1), vertex(x + 1, z + 1), vertex(x, z), vertex(x + 1, z + 1), vertex(x + 1, z) });
                 }
             }
         }

@@ -87,3 +87,24 @@ void CreateTrees(Scene& scene, AssetManager& assetManager, uint32_t count);
 // unit apart, around the middle of the scene. The same hills in every run.
 // throughFile saves the terrain and draws what is read back, to check the terrain's file.
 void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution, bool throughFile);
+
+// Checks that the terrain's ground is solid, and that it is the ground that is drawn. Gives the
+// terrain a collider, drops balls onto it, and after a few frames shoots rays down at it. Writes
+// to the log how far the rays' hits are off the terrain's own heights, and how the balls came to lie.
+class TerrainPhysicsCheck
+{
+public:
+    TerrainPhysicsCheck(Scene& scene, uint32_t balls);
+
+    void Update(Scene& scene, float deltaTime);
+
+private:
+    void ShootRays(Scene& scene) const;
+    void Report(Scene& scene) const;
+
+    // Frames in which game time went on. It stands still while a benchmark warms up, and physics with it.
+    uint32_t m_Frame = 0;
+
+    // The least a ball's middle was above the ground under it, over all balls and frames.
+    float m_LowestClearance = FLT_MAX;
+};

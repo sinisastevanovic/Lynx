@@ -43,7 +43,7 @@ namespace Lynx
 
     private:
         void Extract(const glm::mat4& view, const glm::mat4& projection, const glm::vec3& cameraPosition, float deltaTime, bool isEditor, float physicsAlpha);
-        void DrawColliders();
+        void DrawColliders(const glm::vec3& cameraPosition);
 
         // Following a scene: the renderer learns of mesh entities that come, go or change as it happens.
         void Follow(Scene& scene);

@@ -75,6 +75,9 @@ public:
         if (const uint32_t terrain = count("Terrain"))
             CreateTerrain(scene, assetManager, terrain, settings.Parameter("TerrainThroughFile", 0.0) > 0.0);
 
+        if (const uint32_t balls = count("TerrainBalls"))
+            m_TerrainPhysics.emplace(scene, balls);
+
         const uint32_t crowd = count("Crowd");
         const uint32_t blocksPerSide = count("BlocksPerSide");
         if (crowd == 0 && blocksPerSide == 0)
@@ -93,6 +96,8 @@ public:
         Engine& engine = Engine::Get();
         if (m_Crowd)
             m_Crowd->Update(*engine.GetActiveScene(), deltaTime);
+        if (m_TerrainPhysics)
+            m_TerrainPhysics->Update(*engine.GetActiveScene(), deltaTime);
 
         // Debug shapes last one frame, so they are drawn again in every frame. See bench/features.json.
         const Benchmark* benchmark = engine.GetBenchmark();
@@ -107,10 +112,12 @@ public:
     void OnShutdown() override
     {
         m_Crowd.reset();
+        m_TerrainPhysics.reset();
     }
 
 private:
     std::optional<Crowd> m_Crowd;
+    std::optional<TerrainPhysicsCheck> m_TerrainPhysics;
 };
 
 LX_GAME_MODULE(RenderBenchModule)

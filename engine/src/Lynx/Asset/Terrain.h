@@ -114,6 +114,13 @@ namespace Lynx
         // The height at a place of the whole terrain, counted in steps of the heights from the first corner.
         float GetHeightAt(uint32_t x, uint32_t z) const;
 
+        // The height of the ground at a place, in units from the first corner, on the triangles the
+        // ground is drawn with and collided with. Places beyond the terrain get the height of its edge.
+        float GetHeightAtPlace(float x, float z) const;
+
+        // How far two neighbouring heights are apart, in units.
+        float GetSpacing() const { return m_TilesPerSide > 0 ? m_Size / static_cast<float>(m_TilesPerSide * m_TileQuads) : 0.0f; }
+
         // Gives the terrain its ground. weights holds four bytes for each of resolution by resolution
         // places of the whole terrain, row by row like the heights. The resolution has to be a whole
         // number of times the number of tiles a side. Call on the main thread: the weights go to the

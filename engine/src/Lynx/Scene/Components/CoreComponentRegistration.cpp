@@ -137,6 +137,12 @@ namespace Lynx
             fields.Add("IsTrigger", &CapsuleColliderComponent::IsTrigger);
         });
 
+        registry.RegisterCoreComponent<TerrainColliderComponent>("TerrainCollider", [](FieldList<TerrainColliderComponent>& fields)
+        {
+            fields.Add("Friction", &TerrainColliderComponent::Friction).DragSpeed(0.01f).Range(0.0f, 2.0f);
+            fields.Add("Restitution", &TerrainColliderComponent::Restitution).DragSpeed(0.01f).Range(0.0f, 1.0f);
+        });
+
         registry.RegisterCoreComponent<CharacterControllerComponent>("CharacterController", [](FieldList<CharacterControllerComponent>& fields)
         {
             fields.Add("CapsuleRadius", &CharacterControllerComponent::CapsuleRadius).DragSpeed(0.1f);

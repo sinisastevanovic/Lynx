@@ -409,6 +409,9 @@ namespace Lynx
         }
         
         m_GameSystems.SceneStart(*this);
+
+        // Physics places what it makes by where things are in the world.
+        UpdateGlobalTransforms();
         m_PhysicsSystem.OnSceneStart(*this);
         
         UpdateGlobalTransforms();

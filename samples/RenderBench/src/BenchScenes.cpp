@@ -5,6 +5,8 @@
 #include <Lynx/Asset/Material.h>
 #include <Lynx/Asset/Terrain.h>
 #include <Lynx/Asset/Texture.h>
+#include <Lynx/Physics/PhysicsWorld.h>
+#include <Lynx/Scene/Components/PhysicsComponents.h>
 #include <Lynx/Scene/Components/TerrainComponent.h>
 
 #include <glm/gtc/constants.hpp>
@@ -518,4 +520,141 @@ void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution
     entity.GetComponent<TransformComponent>().SetTranslation(glm::vec3(-0.5f * size, 0.0f, -0.5f * size));
 
     LX_INFO("Created a terrain of {0} by {0} heights.", resolution);
+}
+
+namespace
+{
+    constexpr float BallRadius = 0.5f;
+    constexpr uint32_t RayFrame = 5;
+    constexpr uint32_t ReportFrame = 540;
+
+    // The scene's terrain, where its first corner lies, and its entity.
+    struct FoundTerrain
+    {
+        std::shared_ptr<Terrain> Asset;
+        glm::vec3 Origin{ 0.0f };
+        entt::entity Handle = entt::null;
+    };
+
+    FoundTerrain FindTerrain(Scene& scene)
+    {
+        const auto terrains = scene.Reg().view<TransformComponent, TerrainComponent>();
+        for (auto entity : terrains)
+        {
+            auto [transform, terrain] = terrains.get<TransformComponent, TerrainComponent>(entity);
+            return { terrain.Terrain.Get(), transform.GetTranslation(), entity };
+        }
+        return {};
+    }
+}
+
+TerrainPhysicsCheck::TerrainPhysicsCheck(Scene& scene, uint32_t balls)
+{
+    const FoundTerrain terrain = FindTerrain(scene);
+    if (!terrain.Asset)
+    {
+        LX_ERROR("RenderBench: TerrainBalls needs a terrain.");
+        return;
+    }
+    scene.Reg().emplace<TerrainColliderComponent>(terrain.Handle);
+
+    // A square of balls over the middle half of the terrain, a little above the ground, at places
+    // between the heights so that they land on slopes and edges alike.
+    const uint32_t perSide = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<float>(balls))));
+    const float size = terrain.Asset->GetSize();
+    for (uint32_t index = 0; index < balls; ++index)
+    {
+        const float x = size * (0.25f + 0.5f * (static_cast<float>(index % perSide) + 0.37f) / static_cast<float>(perSide));
+        const float z = size * (0.25f + 0.5f * (static_cast<float>(index / perSide) + 0.61f) / static_cast<float>(perSide));
+
+        Entity ball = scene.CreateEntity("Ball");
+        ball.SetTranslation(terrain.Origin + glm::vec3(x, terrain.Asset->GetHeightAtPlace(x, z) + 3.0f, z));
+        ball.AddComponent<SphereColliderComponent>().Radius = BallRadius;
+        ball.AddComponent<RigidBodyComponent>(BodyType::Dynamic);
+    }
+}
+
+void TerrainPhysicsCheck::Update(Scene& scene, float deltaTime)
+{
+    const FoundTerrain terrain = FindTerrain(scene);
+    if (!terrain.Asset)
+        return;
+
+    const auto balls = scene.Reg().view<TransformComponent, RigidBodyComponent, SphereColliderComponent>();
+    for (auto entity : balls)
+    {
+        const glm::vec3 place = balls.get<TransformComponent>(entity).GetTranslation() - terrain.Origin;
+        m_LowestClearance = std::min(m_LowestClearance, place.y - terrain.Asset->GetHeightAtPlace(place.x, place.z));
+    }
+
+    // The collider's bodies are made with the first step of the physics.
+    if (deltaTime <= 0.0f)
+        return;
+
+    ++m_Frame;
+    if (m_Frame == RayFrame)
+        ShootRays(scene);
+    if (m_Frame == ReportFrame)
+        Report(scene);
+}
+
+void TerrainPhysicsCheck::ShootRays(Scene& scene) const
+{
+    const FoundTerrain terrain = FindTerrain(scene);
+    PhysicsWorld* physics = scene.GetPhysicsWorld();
+    if (!physics)
+    {
+        LX_ERROR("RenderBench: no physics world to check the terrain with.");
+        return;
+    }
+
+    // Rays straight down at places all over the terrain, tile edges included. The balls are not
+    // in the way: a ray that hits one is left out.
+    constexpr uint32_t perSide = 64;
+    const float size = terrain.Asset->GetSize();
+    const float from = terrain.Asset->GetHighest() + 10.0f;
+    uint32_t hits = 0;
+    uint32_t misses = 0;
+    float farthestOff = 0.0f;
+    for (uint32_t index = 0; index < perSide * perSide; ++index)
+    {
+        // Every eighth ray runs along the edge between two tiles.
+        float x = size * (static_cast<float>(index % perSide) + 0.43f) / static_cast<float>(perSide);
+        const float z = size * (static_cast<float>(index / perSide) + 0.71f) / static_cast<float>(perSide);
+        if (index % 8 == 0)
+            x = std::round(x / terrain.Asset->GetTileSize()) * terrain.Asset->GetTileSize();
+        x = std::clamp(x, 0.01f, size - 0.01f);
+
+        const RaycastHit hit = physics->Raycast(terrain.Origin + glm::vec3(x, from, z), glm::vec3(0.0f, -1.0f, 0.0f), from - terrain.Asset->GetLowest() + 20.0f);
+        if (!hit.Hit)
+        {
+            ++misses;
+            continue;
+        }
+        if (hit.Entity != terrain.Handle)
+            continue;
+
+        ++hits;
+        farthestOff = std::max(farthestOff, std::abs(hit.Point.y - terrain.Origin.y - terrain.Asset->GetHeightAtPlace(x, z)));
+    }
+    LX_INFO("Terrain physics: {0} rays hit the ground, {1} fell through. The farthest hit is {2:.4f} units off the terrain's own height.", hits, misses, farthestOff);
+}
+
+void TerrainPhysicsCheck::Report(Scene& scene) const
+{
+    const FoundTerrain terrain = FindTerrain(scene);
+    uint32_t count = 0;
+    uint32_t lying = 0;
+    const auto balls = scene.Reg().view<TransformComponent, RigidBodyComponent, SphereColliderComponent>();
+    for (auto entity : balls)
+    {
+        const glm::vec3 place = balls.get<TransformComponent>(entity).GetTranslation() - terrain.Origin;
+        const float clearance = place.y - terrain.Asset->GetHeightAtPlace(place.x, place.z);
+
+        // A ball on a slope has its middle more than its radius above the ground straight under it.
+        ++count;
+        if (clearance < BallRadius * 2.0f)
+            ++lying;
+    }
+    LX_INFO("Terrain physics: {0} of {1} balls lie on the ground. The lowest a ball's middle ever was above the ground: {2:.3f} units, with a radius of {3}.", lying, count, m_LowestClearance, BallRadius);
 }

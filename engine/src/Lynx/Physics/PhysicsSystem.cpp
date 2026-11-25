@@ -2,8 +2,10 @@
 
 #include "PhysicsEvents.h"
 #include "PhysicsWorld.h"
+#include "Lynx/Asset/Terrain.h"
 #include "Lynx/Scene/Components/Components.h"
 #include "Lynx/Scene/Components/PhysicsComponents.h"
+#include "Lynx/Scene/Components/TerrainComponent.h"
 
 namespace Lynx
 {
@@ -39,6 +41,9 @@ namespace Lynx
         {
             CreateCharacterController(*m_Scene, entity);
         }
+
+        // The ground is there from the start, for rays shot before the first step.
+        UpdateTerrainColliders(scene);
     }
 
     void PhysicsSystem::OnShutdown(Scene& scene)
@@ -54,6 +59,8 @@ namespace Lynx
         registry.on_construct<CapsuleColliderComponent>().disconnect(this);
         registry.on_construct<MeshColliderComponent>().disconnect(this);
 
+        // The bodies themselves go with the physics world.
+        m_TerrainBodies.clear();
         m_Scene = nullptr;
     }
 
@@ -62,6 +69,7 @@ namespace Lynx
         auto& physics = scene.GetPhysicsWorldChecked();
 
         CreatePendingRigidBodies(scene);
+        UpdateTerrainColliders(scene);
 
         for (BodyId id : m_BodiesToDestroy)
         {
@@ -238,6 +246,94 @@ namespace Lynx
             }
 
             TryCreateRigidBody(scene, entity);
+        }
+    }
+
+    void PhysicsSystem::UpdateTerrainColliders(Scene& scene)
+    {
+        auto& registry = scene.Reg();
+        auto& physics = scene.GetPhysicsWorldChecked();
+
+        const auto destroy = [&physics](TerrainBodies& terrain)
+        {
+            for (BodyId body : terrain.Bodies)
+                physics.DestroyBody(body);
+            terrain.Bodies.clear();
+        };
+
+        // Nothing is listened for: the few terrains of a scene are looked at before every step, which
+        // also catches a terrain that was reloaded or moved.
+        for (auto it = m_TerrainBodies.begin(); it != m_TerrainBodies.end();)
+        {
+            if (registry.valid(it->first) && registry.all_of<TransformComponent, TerrainComponent, TerrainColliderComponent>(it->first))
+            {
+                ++it;
+                continue;
+            }
+            destroy(it->second);
+            it = m_TerrainBodies.erase(it);
+        }
+
+        const auto terrains = registry.view<TransformComponent, TerrainComponent, TerrainColliderComponent>();
+        for (auto entity : terrains)
+        {
+            auto [transform, terrain, collider] = terrains.get<TransformComponent, TerrainComponent, TerrainColliderComponent>(entity);
+            const std::shared_ptr<Terrain> asset = terrain.Terrain.Get();
+            TerrainBodies& made = m_TerrainBodies[entity];
+            if (!asset || asset->GetTilesPerSide() == 0)
+            {
+                destroy(made);
+                made = {};
+                continue;
+            }
+
+            // Like the renderer, physics takes the entity's position as the terrain's first corner
+            // and nothing else of its transform.
+            const glm::vec3 origin(transform.GetWorldMatrix()[3]);
+            const bool isCurrent = !made.Bodies.empty() && made.Terrain == asset->GetHandle() && made.Version == asset->GetVersion()
+                && made.Origin == origin && made.Friction == collider.Friction && made.Restitution == collider.Restitution;
+            if (isCurrent)
+                continue;
+
+            destroy(made);
+            made.Terrain = asset->GetHandle();
+            made.Version = asset->GetVersion();
+            made.Origin = origin;
+            made.Friction = collider.Friction;
+            made.Restitution = collider.Restitution;
+
+            // One height field per tile, from the heights the tile is drawn from. Neighbours share
+            // their row of heights along an edge, so the ground has no step there.
+            const uint32_t quads = asset->GetTileQuads();
+            const uint32_t samples = quads + 1;
+            for (uint32_t tileZ = 0; tileZ < asset->GetTilesPerSide(); ++tileZ)
+            {
+                for (uint32_t tileX = 0; tileX < asset->GetTilesPerSide(); ++tileX)
+                {
+                    HeightFieldShape shape;
+                    shape.SampleCount = samples;
+                    shape.Spacing = asset->GetSpacing();
+                    shape.Heights.resize(static_cast<size_t>(samples) * samples);
+                    for (uint32_t z = 0; z < samples; ++z)
+                    {
+                        for (uint32_t x = 0; x < samples; ++x)
+                            shape.Heights[static_cast<size_t>(z) * samples + x] = asset->GetHeightAt(tileX * quads + x, tileZ * quads + z);
+                    }
+
+                    BodyDescriptor desc;
+                    desc.Shape = std::move(shape);
+                    desc.Position = origin + glm::vec3(static_cast<float>(tileX), 0.0f, static_cast<float>(tileZ)) * asset->GetTileSize();
+                    desc.Type = BodyType::Static;
+                    desc.Layer = CollisionLayer::Static;
+                    desc.Friction = collider.Friction;
+                    desc.Restitution = collider.Restitution;
+                    desc.Entity = entity;
+
+                    const BodyId body = physics.CreateBody(desc);
+                    if (body != INVALID_BODY)
+                        made.Bodies.push_back(body);
+                }
+            }
         }
     }
 
