@@ -72,7 +72,7 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Assets.** Reading a file may happen on any thread. Creating GPU resources happens on the main thread only.
 - **Shutdown order matters.** Scenes go before the script engine, assets before the renderer. See `Engine::Shutdown`.
 - **Shaders.** Shaders are written in Slang (`.slang`) and compiled once into `temp\ShaderCache`. Mark entry points
-  with `[shader("vertex")]`. Shared code lives in modules (`Scene`, `Textures`, `Mesh`, `Material`, `StandardShading`) that a
+  with `[shader("vertex")]`. Shared code lives in modules (`Scene`, `Textures`, `Mesh`, `Material`, `Atmosphere`, `StandardShading`) that a
   shader imports. There is no GLSL any more.
 - **Passes.** Every pass of a frame is a `VulkanPass` in the render graph (`Renderer/Graph`). A pass declares what it
   reads and draws into, and records draws. The graph does layouts, begins rendering and binds the shared set.
@@ -169,6 +169,19 @@ build\bin\Debug\LynxSandboxGame.exe
   Every point is compared with the depth the surface has there, worked out from its normal without the normal
   map, or a wide disc would put a slanted surface into its own shadow. The width is kept between 1.5 and 12
   texels, so far cascades are softer than the sun makes them.
+- **Sky.** The sky is worked out from the air and the sun (`Renderer/Atmosphere.h`, `Atmosphere.slang`, after
+  Hillaire 2020), nothing is painted. Three small tables, which the renderer owns and `Passes/AtmospherePass`
+  fills: transmittance and multiple scattering once per `AtmosphereSettings`, the view of the sky from the camera
+  every frame. `Passes/SkyPass` draws the sky, the sun's disc and the planet's bare ground where the depth buffer
+  is empty, after the depth passes and before the forward pass. A view mode with raw colours has no sky.
+  The sun's light on surfaces goes through the same air (`sunlightOnGround`), so a low sun is dim and red by
+  itself. The shader works in kilometres with the camera above the planet's middle. Height zero of the scene is
+  the planet's ground. The atmosphere is part of the scene constants.
+- **Light from the sky.** `Passes/SkyLightPass` looks at the sky in 512 directions once per frame, in one group of compute
+  threads, and writes nine numbers per colour (spherical harmonics) into a buffer the scene constants point to.
+  `skyIrradiance(normal)` in `Atmosphere.slang` gives the light for a way of facing, which replaced the constant
+  3 %. Nothing blocks it yet: under a roof it is as bright as in the open, until ambient occlusion (step 3.11).
+  Metals get none, their reflection of the sky is not drawn yet.
 - **Occlusion.** The camera's view is culled in two phases (`CullPhase`), so what is hidden behind other things is
   not drawn. Early: what was seen in the last frame, kept as a flag per instance on the GPU. Its depth becomes the
   depth pyramid (`Passes/DepthPyramidPass`): the depth in ever smaller sizes, each pixel the farthest of those it
