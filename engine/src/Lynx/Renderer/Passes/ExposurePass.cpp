@@ -23,8 +23,10 @@ namespace Lynx
         constexpr uint32_t ThreadsPerSide = 8;
 
         // One pixel in this many across and down is looked at. A histogram needs a fair sample of the
-        // picture, not all of it: at 1920 by 1080 this still counts 130,000 places.
-        constexpr uint32_t PixelsPerPlace = 4;
+        // picture, not all of it: at 1920 by 1080 this still counts 32,000 places. With one in four,
+        // 130,000 places, the pass took 0.036 ms instead of 0.022: many of them add to the same bin
+        // at the same time and have to wait for each other.
+        constexpr uint32_t PixelsPerPlace = 8;
 
         // Has to match ExposureConstants in Exposure.slang.
         struct ExposurePushData
