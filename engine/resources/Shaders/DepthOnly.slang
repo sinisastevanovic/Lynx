@@ -7,9 +7,10 @@ import Material;
 // The same for every draw of the pass.
 struct DepthConstants
 {
-    // The instances of the scene, the places of those this frame draws, and the material table,
-    // which is read for cut-outs only.
+    // The instances of the scene and where they are, the places of those this frame draws, and the
+    // material table, which is read for cut-outs only.
     MeshInstance* instances;
+    MeshTransform* transforms;
     uint* visibleInstances;
     StandardMaterial* materials;
 };
@@ -35,7 +36,7 @@ VertexOutput vertexMain(VertexInput input, uint instanceIndex : SV_VulkanInstanc
     float3 position = leafPosition(instance, input.position, vertexIndex, drawnLevel(constants.visibleInstances, instanceIndex));
 
     VertexOutput output;
-    output.position = meshPosition(instance, position).clip;
+    output.position = meshPosition(meshModel(constants.transforms, constants.visibleInstances, instanceIndex), position).clip;
     output.uv = input.uv;
     output.material = instance.material;
     return output;

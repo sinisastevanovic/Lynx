@@ -45,6 +45,9 @@ public struct ExposureState
 public struct SceneConstants
 {
     public float4x4 viewProjection;
+
+    // The same of the frame before, which says where something was on screen then. See screenMotion.
+    public float4x4 previousViewProjection;
     public float4 cameraPosition;
 
     // The direction the light travels in. Its w is the intensity.
@@ -90,3 +93,12 @@ public struct SceneConstants
 
 // The binding number has to match SharedBindings.h.
 [vk::binding(0, 0)] public ConstantBuffer<SceneConstants> scene;
+
+// How far a point moved on screen since the last frame, in texture coordinates: where it is minus where
+// it was. Both are given as x, y and w of the point's position in clip space, this frame's from
+// scene.viewProjection and the last frame's from scene.previousViewProjection.
+// What is drawn in the same way in both frames comes out as exactly zero.
+public float2 screenMotion(float3 clip, float3 previousClip)
+{
+    return (clip.xy / clip.z - previousClip.xy / previousClip.z) * 0.5;
+}

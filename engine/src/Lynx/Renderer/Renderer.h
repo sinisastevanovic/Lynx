@@ -205,6 +205,9 @@ namespace Lynx
         LodSettings m_LodSettings;
         ShadowSettings m_ShadowSettings;
         ShadowFit m_ShadowFit;
+
+        // The camera's matrix as shaders got it in the last frame. Empty before the first frame.
+        std::optional<glm::mat4> m_PreviousClipViewProjection;
         std::unique_ptr<TerrainRenderer> m_Terrain;
 
         // The terrains of the scene that is being drawn. Valid only while it is.

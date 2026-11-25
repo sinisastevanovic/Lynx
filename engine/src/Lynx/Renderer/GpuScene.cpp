@@ -10,6 +10,7 @@
 #include <bit>
 #include <cassert>
 #include <cstring>
+#include <iterator>
 #include <span>
 #include <tuple>
 
@@ -122,19 +123,47 @@ namespace Lynx
         // The sphere around an instance in the world: the centre in xyz, the radius in w. The radius grows
         // by the largest of the three scales, which keeps the sphere around the mesh however unevenly
         // the instance is scaled. Cull.slang computes the same.
-        glm::vec4 WorldSphere(const GpuInstance& instance)
+        glm::vec4 WorldSphere(const InstanceTransform& transform, const glm::vec4& sphere)
         {
-            const glm::mat4& model = instance.Model;
-            const float scale = std::sqrt(std::max({ glm::dot(model[0], model[0]), glm::dot(model[1], model[1]), glm::dot(model[2], model[2]) }));
-            const glm::vec3 centre = glm::vec3(model * glm::vec4(glm::vec3(instance.BoundingSphere), 1.0f));
-            return glm::vec4(centre, instance.BoundingSphere.w * scale);
+            const glm::vec4* rows = transform.Rows;
+            const glm::vec3 axisX(rows[0].x, rows[1].x, rows[2].x);
+            const glm::vec3 axisY(rows[0].y, rows[1].y, rows[2].y);
+            const glm::vec3 axisZ(rows[0].z, rows[1].z, rows[2].z);
+            const float scale = std::sqrt(std::max({ glm::dot(axisX, axisX), glm::dot(axisY, axisY), glm::dot(axisZ, axisZ) }));
+
+            const glm::vec4 centre(glm::vec3(sphere), 1.0f);
+            return glm::vec4(glm::dot(rows[0], centre), glm::dot(rows[1], centre), glm::dot(rows[2], centre), sphere.w * scale);
+        }
+
+        // Writes the given places of a list to the buffer that holds the whole list. The places have to
+        // be in rising order.
+        //
+        // Places that lie close to each other are written with one copy, the ones between them included.
+        // A copy costs the GPU about a microsecond however small it is, measured with 20,000 of them,
+        // which is more than copying a few dozen entries that did not change.
+        template<typename T>
+        void UploadPlaces(UploadQueue& uploads, const GpuBuffer& buffer, std::span<const uint32_t> places, const std::vector<T>& all)
+        {
+            size_t runStart = 0;
+            for (size_t index = 1; index <= places.size(); ++index)
+            {
+                const bool runEnds = index == places.size() || places[index] > places[index - 1] + LargestGapInOneCopy;
+                if (!runEnds)
+                    continue;
+
+                const uint32_t first = places[runStart];
+                const uint32_t last = places[index - 1];
+                uploads.Upload(buffer.Handle(), first * sizeof(T), std::as_bytes(std::span<const T>(&all[first], last - first + 1)));
+                runStart = index;
+            }
         }
     }
 
     GpuScene::GpuScene(GraphicsContext& context, UploadQueue& uploads, MaterialTable& materials)
         : m_Context(context), m_Uploads(uploads), m_Materials(materials)
     {
-        static_assert(sizeof(GpuInstance) == 112);
+        static_assert(sizeof(GpuInstance) == 48);
+        static_assert(sizeof(InstanceTransform) == 48);
     }
 
     GpuScene::~GpuScene() = default;
@@ -142,8 +171,12 @@ namespace Lynx
     void GpuScene::Clear()
     {
         m_Instances.clear();
+        m_Transforms.clear();
         m_IndexInBatch.clear();
         m_Changed.clear();
+        m_Moved.clear();
+        m_MovedLastFrame.clear();
+        m_Placed.clear();
         m_FreeRuns.clear();
         m_Batches.clear();
         m_FreeBatches.clear();
@@ -184,7 +217,6 @@ namespace Lynx
 
             GpuInstance& instance = m_Instances[place];
             instance = {};
-            instance.Model = transform;
             instance.BoundingSphere = submesh.BoundingSphere;
             instance.FirstIndex = submesh.Geometry.FirstIndex();
             instance.IndexCount = submesh.IndexCount;
@@ -193,8 +225,10 @@ namespace Lynx
             instance.EntityId = entityId;
             instance.Batch = batchIndex;
             instance.LeafData = submesh.LeafData ? submesh.LeafData->Address() : 0;
+            m_Transforms[place] = InstanceTransform::From(transform);
 
             m_Changed.push_back(place);
+            m_Placed.push_back(place);
             ++place;
         }
 
@@ -238,10 +272,11 @@ namespace Lynx
 
     void GpuScene::SetTransform(Range range, const glm::mat4& transform)
     {
+        const InstanceTransform rows = InstanceTransform::From(transform);
         for (uint32_t place = range.First; place < range.First + range.Count; ++place)
         {
-            m_Instances[place].Model = transform;
-            m_Changed.push_back(place);
+            m_Transforms[place] = rows;
+            m_Moved.push_back(place);
         }
     }
 
@@ -259,6 +294,7 @@ namespace Lynx
         const uint32_t first = static_cast<uint32_t>(m_Instances.size());
         assert(m_Instances.size() + count <= MaxPlaces);
         m_Instances.resize(m_Instances.size() + count);
+        m_Transforms.resize(m_Instances.size());
         m_IndexInBatch.resize(m_Instances.size());
         return first;
     }
@@ -290,49 +326,66 @@ namespace Lynx
 
     void GpuScene::UploadChanges()
     {
+        // This frame's transforms go into the buffer that held those of the frame before the last.
+        GpuBuffer& transforms = m_TransformBuffers[m_Frame % 2];
+        GpuBuffer& previousTransforms = m_TransformBuffers[(m_Frame + 1) % 2];
+
         const uint64_t neededSize = m_Instances.size() * sizeof(GpuInstance);
         if (m_InstanceBuffer.Size() < neededSize)
         {
-            // A buffer of at least twice the size is filled with everything. Frames still on the GPU
-            // keep reading the old one, which lives on until they are done.
+            // Buffers of at least twice the size are filled with everything. Frames still on the GPU
+            // keep reading the old ones, which live on until they are done.
+            const size_t capacity = std::max(SmallestInstanceCapacity, std::bit_ceil(m_Instances.size()));
             GpuBufferDesc desc;
-            desc.Size = std::max(SmallestInstanceCapacity, std::bit_ceil(m_Instances.size())) * sizeof(GpuInstance);
+            desc.Size = capacity * sizeof(GpuInstance);
             desc.Usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
             desc.Name = "SceneInstances";
             m_InstanceBuffer = GpuBuffer(m_Context, desc);
             m_Uploads.Upload(m_InstanceBuffer.Handle(), 0, std::as_bytes(std::span<const GpuInstance>(m_Instances)));
 
-            // Nothing counts as seen in the last frame, so the first frame with the new buffer draws
-            // everything in the late phase. What was known is not carried over: buffers grow rarely.
-            const std::vector<uint32_t> nothingSeen(desc.Size / sizeof(GpuInstance), 0u);
+            // Both buffers of transforms get where everything is now. Where it was is not carried over,
+            // so nothing counts as having moved in this one frame: buffers grow rarely.
+            desc.Size = capacity * sizeof(InstanceTransform);
+            desc.Name = "InstanceTransforms";
+            for (GpuBuffer& buffer : m_TransformBuffers)
+            {
+                buffer = GpuBuffer(m_Context, desc);
+                m_Uploads.Upload(buffer.Handle(), 0, std::as_bytes(std::span<const InstanceTransform>(m_Transforms)));
+            }
+
+            // Nothing counts as seen in the last frame either, so the first frame with the new buffers
+            // draws everything in the late phase.
+            const std::vector<uint32_t> nothingSeen(capacity, 0u);
             desc.Size = nothingSeen.size() * sizeof(uint32_t);
             desc.Name = "InstanceVisibility";
             m_VisibilityBuffer = GpuBuffer(m_Context, desc);
             m_Uploads.Upload(m_VisibilityBuffer.Handle(), 0, std::as_bytes(std::span<const uint32_t>(nothingSeen)));
+
             m_Changed.clear();
+            m_Moved.clear();
+            m_MovedLastFrame.clear();
+            m_Placed.clear();
             return;
         }
 
-        if (m_Changed.empty())
-            return;
-
-        // Changed places that lie close to each other are written with one copy, the unchanged ones
-        // between them included. A copy costs the GPU about a microsecond however small it is, measured
-        // with 20,000 of them, which is more than copying a few dozen instances that did not change.
         std::ranges::sort(m_Changed);
-        size_t runStart = 0;
-        for (size_t index = 1; index <= m_Changed.size(); ++index)
-        {
-            const bool runEnds = index == m_Changed.size() || m_Changed[index] > m_Changed[index - 1] + LargestGapInOneCopy;
-            if (!runEnds)
-                continue;
-
-            const uint32_t first = m_Changed[runStart];
-            const uint32_t last = m_Changed[index - 1];
-            m_Uploads.Upload(m_InstanceBuffer.Handle(), first * sizeof(GpuInstance), std::as_bytes(std::span<const GpuInstance>(&m_Instances[first], last - first + 1)));
-            runStart = index;
-        }
+        UploadPlaces(m_Uploads, m_InstanceBuffer, m_Changed, m_Instances);
         m_Changed.clear();
+
+        // What moved in the last frame was written to the other buffer then, and this one still has
+        // where it was before that.
+        std::ranges::sort(m_Moved);
+        m_Moved.erase(std::ranges::unique(m_Moved).begin(), m_Moved.end());
+        m_MovedInEitherFrame.clear();
+        std::ranges::set_union(m_Moved, m_MovedLastFrame, std::back_inserter(m_MovedInEitherFrame));
+        UploadPlaces(m_Uploads, transforms, m_MovedInEitherFrame, m_Transforms);
+        std::swap(m_Moved, m_MovedLastFrame);
+        m_Moved.clear();
+
+        std::ranges::sort(m_Placed);
+        UploadPlaces(m_Uploads, transforms, m_Placed, m_Transforms);
+        UploadPlaces(m_Uploads, previousTransforms, m_Placed, m_Transforms);
+        m_Placed.clear();
     }
 
     GpuScene::Frame GpuScene::Prepare(const CullCamera& camera, std::span<const ShadowCascade, ShadowCascadeCount> sun, const ShadowSettings& shadows, const glm::vec3& cameraPosition, const LodSettings& lods)
@@ -521,6 +574,8 @@ namespace Lynx
         frame.Draws.Buffer = &m_CommandBuffer;
         frame.InstanceAddress = m_InstanceBuffer.Address();
         frame.VisibleAddress = m_VisibleBuffer.Address();
+        frame.TransformAddress = m_TransformBuffers[m_Frame % 2].Address();
+        frame.PreviousTransformAddress = m_TransformBuffers[(m_Frame + 1) % 2].Address();
         return frame;
     }
 
@@ -543,10 +598,10 @@ namespace Lynx
             seeThroughCount += batch.Places.size();
             for (const uint32_t place : batch.Places)
             {
-                const GpuInstance& instance = m_Instances[place];
-                const glm::vec4 sphere = WorldSphere(instance);
+                const InstanceTransform& transform = m_Transforms[place];
+                const glm::vec4 sphere = WorldSphere(transform, m_Instances[place].BoundingSphere);
                 if (camera.IsOnFrustum(glm::vec3(sphere), sphere.w))
-                    sorted.push_back({ glm::distance(cameraPosition, glm::vec3(instance.Model[3])), place });
+                    sorted.push_back({ glm::distance(cameraPosition, transform.Translation()), place });
             }
         }
 

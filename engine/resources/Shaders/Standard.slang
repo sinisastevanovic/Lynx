@@ -10,8 +10,18 @@ StandardVaryings vertexMain(StandardVertex input, uint instanceIndex : SV_Vulkan
     return standardVertex(constants, input, instanceIndex, vertexIndex);
 }
 
-[shader("fragment")]
-float4 fragmentMain(StandardVaryings input, bool isFrontFace : SV_IsFrontFace) : SV_Target
+// The targets in the order the render graph gives them to a pass: the colour, then the motion.
+struct FragmentOutput
 {
-    return standardFragment(constants, input, isFrontFace);
+    float4 color : SV_Target0;
+    float2 motion : SV_Target1;
+};
+
+[shader("fragment")]
+FragmentOutput fragmentMain(StandardVaryings input, bool isFrontFace : SV_IsFrontFace)
+{
+    FragmentOutput output;
+    output.color = standardFragment(constants, input, isFrontFace);
+    output.motion = standardMotion(input);
+    return output;
 }

@@ -30,10 +30,14 @@ namespace Lynx
 
         // Which cascade of the sun's shadow each surface is in, nearest first: red, green, blue, yellow.
         ShadowCascades,
+
+        // How far every pixel moved on screen since the last frame: grey for not at all, redder to the
+        // right, greener downwards. Shown by the composite pass, from the picture the scene passes wrote.
+        Motion,
     };
 
     // The modes by their numbers, as a list to choose from.
-    inline constexpr std::array<const char*, 7> ViewModeNames = { "Lit", "Wireframe", "Unlit", "Lighting only", "Normals", "Level of detail", "Shadow cascades" };
+    inline constexpr std::array<const char*, 8> ViewModeNames = { "Lit", "Wireframe", "Unlit", "Lighting only", "Normals", "Level of detail", "Shadow cascades", "Motion" };
 
     // True for a mode whose colours mean something as they are. They are shown without bloom and tone
     // mapping, which would change them.

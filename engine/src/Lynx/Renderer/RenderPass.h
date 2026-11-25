@@ -163,6 +163,9 @@ namespace Lynx
     struct SceneData
     {
         glm::mat4 ViewProjectionMatrix;
+
+        // The same of the frame before.
+        glm::mat4 PreviousViewProjectionMatrix;
         glm::vec4 CameraPosition;
         glm::vec4 LightDirection; // w is intensity
         glm::vec4 LightColor;
@@ -300,6 +303,10 @@ namespace Lynx
         uint64_t MeshInstanceAddress = 0;
         uint64_t VisibleInstanceAddress = 0;
 
+        // Where every instance is in the world, one InstanceTransform each, and where it was in the last frame.
+        uint64_t MeshTransformAddress = 0;
+        uint64_t PreviousMeshTransformAddress = 0;
+
         // The address shaders read the material table from, see MaterialTable.
         uint64_t MaterialAddress = 0;
 
@@ -357,6 +364,10 @@ namespace Lynx
         GpuTexture* SceneDepth = nullptr;
         GpuTexture* SceneEntityIds = nullptr;
 
+        // Next to the colour: how far every pixel moved on screen since the last frame, see RenderFormats.
+        // Written by the passes that draw what covers a pixel wholly: meshes, terrain and sky.
+        GpuTexture* SceneMotion = nullptr;
+
         // Where the finished picture goes: the window, or the editor's viewport picture.
         GpuTexture* Output = nullptr;
 
@@ -374,6 +385,9 @@ namespace Lynx
         // The bloom is a black picture unless the bloom pass has run in this frame.
         uint32_t SceneColorIndex = 0;
         uint32_t BloomTextureIndex = 0;
+
+        // Where the texture table has the picture of the scene's motion.
+        uint32_t SceneMotionIndex = 0;
 
         BloomSettings Bloom;
 

@@ -28,6 +28,10 @@ namespace Lynx
         // The texture the pass draws into. Null for a pass that draws depth only.
         GpuTexture* ColorTarget = nullptr;
 
+        // The picture of how far every pixel moved since the last frame, which the pass writes next to
+        // the colour. Null for none.
+        GpuTexture* MotionTarget = nullptr;
+
         // The picture of entity IDs the pass writes next to the colour. Null for none.
         GpuTexture* IdTarget = nullptr;
 

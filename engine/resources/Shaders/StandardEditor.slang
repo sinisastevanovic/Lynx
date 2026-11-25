@@ -6,10 +6,12 @@ import StandardShading;
 
 [vk::push_constant] ConstantBuffer<StandardConstants> constants;
 
+// The targets in the order the render graph gives them to a pass: the colour, the motion, then the IDs.
 struct FragmentOutput
 {
     float4 color : SV_Target0;
-    int entityId : SV_Target1;
+    float2 motion : SV_Target1;
+    int entityId : SV_Target2;
 };
 
 [shader("vertex")]
@@ -23,6 +25,7 @@ FragmentOutput fragmentMain(StandardVaryings input, bool isFrontFace : SV_IsFron
 {
     FragmentOutput output;
     output.color = standardFragment(constants, input, isFrontFace);
+    output.motion = standardMotion(input);
     output.entityId = input.entityId;
     return output;
 }

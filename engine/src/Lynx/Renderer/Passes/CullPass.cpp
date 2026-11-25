@@ -16,6 +16,7 @@ namespace Lynx
         struct CullPushData
         {
             uint64_t Instances;
+            uint64_t Transforms;
             uint64_t VisibleInstances;
             uint64_t Commands;
             uint64_t Batches;
@@ -99,6 +100,7 @@ namespace Lynx
     {
         CullPushData push{};
         push.Instances = renderData.MeshInstanceAddress;
+        push.Transforms = renderData.MeshTransformAddress;
         push.VisibleInstances = renderData.VisibleInstanceAddress;
         push.Commands = renderData.Culling.CommandAddress;
         push.Batches = renderData.Culling.BatchAddress;

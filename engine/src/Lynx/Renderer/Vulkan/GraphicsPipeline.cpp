@@ -81,13 +81,21 @@ namespace Lynx
         depthStencil.depthWriteEnable = desc.DepthWrite;
         depthStencil.depthCompareOp = desc.DepthCompare;
 
-        // The colour target first, then the ID target, each only if the pass has it.
+        // The colour target first, then the motion target, then the ID target, each only if the pass has it.
         std::vector<vk::Format> colorFormats;
         std::vector<vk::PipelineColorBlendAttachmentState> blendAttachments;
         if (desc.ColorFormat != vk::Format::eUndefined)
         {
             colorFormats.push_back(desc.ColorFormat);
             blendAttachments.push_back(BlendState(desc.Blend));
+        }
+        if (desc.MotionFormat != vk::Format::eUndefined)
+        {
+            vk::PipelineColorBlendAttachmentState motion = BlendState(BlendMode::Opaque);
+            if (desc.Blend != BlendMode::Opaque)
+                motion.colorWriteMask = {};
+            colorFormats.push_back(desc.MotionFormat);
+            blendAttachments.push_back(motion);
         }
         if (desc.IdFormat != vk::Format::eUndefined)
         {

@@ -21,13 +21,27 @@ namespace Lynx
     class StaticMesh;
     class UploadQueue;
 
+    // Where an instance is in the world: the first three rows of its matrix. The fourth is always 0, 0, 0, 1.
+    // Has to match MeshTransform in Mesh.slang.
+    struct InstanceTransform
+    {
+        glm::vec4 Rows[3];
+
+        static InstanceTransform From(const glm::mat4& matrix)
+        {
+            const glm::mat4 rows = glm::transpose(matrix);
+            return { { rows[0], rows[1], rows[2] } };
+        }
+
+        glm::vec3 Translation() const { return { Rows[0].w, Rows[1].w, Rows[2].w }; }
+    };
+
     // One submesh of one mesh in the scene, as shaders read it. Has to match MeshInstance in Mesh.slang.
     // Besides what a vertex shader needs, it holds what culling on the GPU needs: the sphere around it
-    // and the batch whose draw commands it is drawn with.
+    // and the batch whose draw commands it is drawn with. Where it is in the world is kept apart, see
+    // InstanceTransform: that is all that changes when it moves.
     struct GpuInstance
     {
-        glm::mat4 Model;
-
         // In the mesh's own space: the centre in xyz, the radius in w.
         glm::vec4 BoundingSphere;
 
@@ -99,6 +113,11 @@ namespace Lynx
             // The addresses shaders read the instances from, and the list of the places of those that are drawn.
             uint64_t InstanceAddress = 0;
             uint64_t VisibleAddress = 0;
+
+            // Where every instance is in the world, one InstanceTransform per place, and where it was
+            // in the frame before.
+            uint64_t TransformAddress = 0;
+            uint64_t PreviousTransformAddress = 0;
 
             uint64_t InstancesTested = 0;
 
@@ -202,6 +221,21 @@ namespace Lynx
         // What the instance buffer holds, kept to fill a larger buffer from.
         std::vector<GpuInstance> m_Instances;
         GpuBuffer m_InstanceBuffer;
+
+        // Where every instance is, per place, and the same on the GPU, twice: one buffer holds this
+        // frame's transforms and the other the last frame's, and they change roles every frame. So an
+        // instance that moves costs one transform a frame, and what did not move costs nothing.
+        std::vector<InstanceTransform> m_Transforms;
+        std::array<GpuBuffer, 2> m_TransformBuffers;
+
+        // Places whose instance moved, in this frame and in the last. The buffer for this frame was
+        // last written two frames ago, so it is brought up to date with both.
+        std::vector<uint32_t> m_Moved;
+        std::vector<uint32_t> m_MovedLastFrame;
+        std::vector<uint32_t> m_MovedInEitherFrame;
+
+        // Places that got a new instance. It did not move to where it is, so both buffers get its transform.
+        std::vector<uint32_t> m_Placed;
 
         // Per place, whether the camera saw its instance in the last frame. Only the GPU reads and writes it.
         GpuBuffer m_VisibilityBuffer;

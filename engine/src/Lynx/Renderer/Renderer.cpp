@@ -126,6 +126,7 @@ namespace Lynx
         // Where the texture table has the scene's HDR picture and the black default texture.
         TextureSlot SceneColorSlot;
         TextureSlot SceneDepthSlot;
+        TextureSlot SceneMotionSlot;
 
         // The finished scene picture, which the editor shows in a panel through ImGui.
         TextureSlot SceneOutputSlot;
@@ -227,6 +228,7 @@ namespace Lynx
         GpuTexture SceneDepth;
         GpuTexture SceneOutput;
         GpuTexture SceneEntityIds;
+        GpuTexture SceneMotion;
     };
 
     Renderer::Renderer(GLFWwindow* window, FrameProfiler& profiler, AssetManager& assets, bool initIdTarget)
@@ -284,6 +286,7 @@ namespace Lynx
         m_Materials.reset();
         m_Frame->SceneColorSlot = TextureSlot();
         m_Frame->SceneDepthSlot = TextureSlot();
+        m_Frame->SceneMotionSlot = TextureSlot();
         m_Frame->SceneOutputSlot = TextureSlot();
         m_Frame->ShadowMapSlots = {};
         m_Frame->AtmosphereTableSlots = {};
@@ -304,6 +307,7 @@ namespace Lynx
         m_Frame->SceneDepth = {};
         m_Frame->SceneOutput = {};
         m_Frame->SceneEntityIds = {};
+        m_Frame->SceneMotion = {};
         m_Frame->ShadowMaps = {};
         m_Frame->AtmosphereTables = {};
         m_Frame->SkyReflection = {};
@@ -589,6 +593,7 @@ namespace Lynx
         create(m_Frame->SceneColor, RenderFormats::SceneColor, colorUsage, "SceneColor");
         create(m_Frame->SceneDepth, RenderFormats::SceneDepth, depthUsage, "SceneDepth");
         create(m_Frame->SceneOutput, RenderFormats::Output, colorUsage, "SceneOutput");
+        create(m_Frame->SceneMotion, RenderFormats::SceneMotion, colorUsage, "SceneMotion");
         if (m_ShouldCreateIDTarget)
             create(m_Frame->SceneEntityIds, RenderFormats::EntityIds, colorUsage, "SceneEntityIds");
 
@@ -597,6 +602,7 @@ namespace Lynx
 
         // The depth pyramid is built from the depth.
         m_Frame->SceneDepthSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SceneDepth.View()));
+        m_Frame->SceneMotionSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SceneMotion.View()));
         m_Frame->SceneOutputSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SceneOutput.View()));
     }
 
@@ -618,6 +624,8 @@ namespace Lynx
             m_CurrentFrameData.TransparentDraws = meshes.TransparentDraws;
             m_CurrentFrameData.MeshInstanceAddress = meshes.InstanceAddress;
             m_CurrentFrameData.VisibleInstanceAddress = meshes.VisibleAddress;
+            m_CurrentFrameData.MeshTransformAddress = meshes.TransformAddress;
+            m_CurrentFrameData.PreviousMeshTransformAddress = meshes.PreviousTransformAddress;
             m_CurrentFrameData.IndexCount += static_cast<uint32_t>(meshes.TrianglesDrawn * 3);
 
             // Which patches of terrain the camera sees, and how finely each is drawn.
@@ -717,6 +725,7 @@ namespace Lynx
         m_CurrentFrameData.SceneColor = &m_Frame->SceneColor;
         m_CurrentFrameData.SceneDepth = &m_Frame->SceneDepth;
         m_CurrentFrameData.SceneEntityIds = m_Frame->SceneEntityIds ? &m_Frame->SceneEntityIds : nullptr;
+        m_CurrentFrameData.SceneMotion = &m_Frame->SceneMotion;
 
         // Negating the second row turns the Y of every position a shader computes with the matrix.
         const auto toVulkanClip = [](glm::mat4 matrix)
@@ -752,6 +761,11 @@ namespace Lynx
 
         SceneData sceneData{};
         sceneData.ViewProjectionMatrix = m_CurrentFrameData.ClipViewProjection;
+
+        // How far something moved on screen is worked out from where the last frame's camera saw it.
+        // The first frame has none before it, and nothing moved.
+        sceneData.PreviousViewProjectionMatrix = m_PreviousClipViewProjection.value_or(m_CurrentFrameData.ClipViewProjection);
+        m_PreviousClipViewProjection = m_CurrentFrameData.ClipViewProjection;
         sceneData.CameraPosition = glm::vec4(cameraPosition, 1.0f);
 
         // The sun's shadow. Its maps keep the usual depth: the sun's view has no perspective, so the
@@ -811,6 +825,9 @@ namespace Lynx
         }
         m_Frame->SceneColor.ClearColor(commands, vk::ClearColorValue(0.05f, 0.05f, 0.05f, 1.0f));
         m_Frame->SceneDepth.ClearDepth(commands, 0.0f);
+
+        // Where no pass writes how a pixel moved, it did not: a view without a sky, for one.
+        m_Frame->SceneMotion.ClearColor(commands, vk::ClearColorValue(0.0f, 0.0f, 0.0f, 0.0f));
         if (m_Frame->SceneEntityIds)
             m_Frame->SceneEntityIds.ClearColor(commands, vk::ClearColorValue(std::array<int32_t, 4>{ -1, 0, 0, 0 }));
     }
@@ -875,6 +892,7 @@ namespace Lynx
         m_CurrentFrameData.Output = m_ShouldCreateIDTarget ? &m_Frame->SceneOutput : &m_Swapchain->Image();
         m_CurrentFrameData.SceneColorIndex = m_Frame->SceneColorSlot.Index();
         m_CurrentFrameData.SceneDepthIndex = m_Frame->SceneDepthSlot.Index();
+        m_CurrentFrameData.SceneMotionIndex = m_Frame->SceneMotionSlot.Index();
         m_CurrentFrameData.DepthPyramid = {};
         m_CurrentFrameData.SeenDepthRange.reset();
         m_CurrentFrameData.HasSkyView = false;

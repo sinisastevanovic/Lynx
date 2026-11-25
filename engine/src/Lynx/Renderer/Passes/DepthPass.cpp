@@ -16,6 +16,7 @@ namespace Lynx
         struct DepthPushData
         {
             uint64_t Instances;
+            uint64_t Transforms;
             uint64_t VisibleInstances;
             uint64_t Materials;
         };
@@ -121,6 +122,7 @@ namespace Lynx
 
         DepthPushData push{};
         push.Instances = renderData.MeshInstanceAddress;
+        push.Transforms = renderData.MeshTransformAddress;
         push.VisibleInstances = renderData.VisibleInstanceAddress;
         push.Materials = renderData.MaterialAddress;
         m_Vulkan->Shared->Push(commands, push);

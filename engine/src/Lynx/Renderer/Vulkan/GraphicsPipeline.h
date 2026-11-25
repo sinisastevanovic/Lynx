@@ -62,7 +62,12 @@ namespace Lynx
         // Undefined for a pass that draws depth only.
         vk::Format ColorFormat = vk::Format::eUndefined;
 
-        // A second target that receives whole numbers and is never blended: the entity IDs the editor picks by.
+        // A further target for how far every pixel moved on screen since the last frame. It is written
+        // only by a pipeline that does not blend: what is see-through leaves the motion of what is behind it.
+        // Undefined for none.
+        vk::Format MotionFormat = vk::Format::eUndefined;
+
+        // A further target that receives whole numbers and is never blended: the entity IDs the editor picks by.
         // Undefined for none.
         vk::Format IdFormat = vk::Format::eUndefined;
 

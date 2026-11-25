@@ -17,11 +17,9 @@ namespace Lynx
         {
             glm::mat4 LightViewProjection;
             uint64_t Instances;
+            uint64_t Transforms;
             uint64_t VisibleInstances;
             uint64_t Materials;
-
-            // The matrix makes the shader's size a multiple of 16 bytes.
-            uint64_t Padding;
         };
     }
 
@@ -136,6 +134,7 @@ namespace Lynx
         ShadowPushData push{};
         push.LightViewProjection = renderData.ClipCascadeViewProjection[m_Cascade];
         push.Instances = renderData.MeshInstanceAddress;
+        push.Transforms = renderData.MeshTransformAddress;
         push.VisibleInstances = renderData.VisibleInstanceAddress;
         push.Materials = renderData.MaterialAddress;
         m_Vulkan->Shared->Push(commands, push);

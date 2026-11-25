@@ -16,6 +16,8 @@ namespace Lynx
         struct StandardPushData
         {
             uint64_t Instances;
+            uint64_t Transforms;
+            uint64_t PreviousTransforms;
             uint64_t VisibleInstances;
             uint64_t Materials;
             ViewMode Mode;
@@ -85,6 +87,7 @@ namespace Lynx
         desc.VertexStride = sizeof(PackedVertex);
         desc.DynamicCullMode = true;
         desc.ColorFormat = RenderFormats::SceneColor;
+        desc.MotionFormat = RenderFormats::SceneMotion;
         if (m_WritesEntityIds)
             desc.IdFormat = RenderFormats::EntityIds;
         desc.DepthFormat = RenderFormats::SceneDepth;
@@ -134,6 +137,7 @@ namespace Lynx
             return false;
 
         resources.ColorTarget = renderData.SceneColor;
+        resources.MotionTarget = renderData.SceneMotion;
         if (m_WritesEntityIds)
             resources.IdTarget = renderData.SceneEntityIds;
         resources.DepthTarget = renderData.SceneDepth;
@@ -160,6 +164,8 @@ namespace Lynx
         // Push constants stay set across pipelines too, because all pipelines share one layout.
         StandardPushData push{};
         push.Instances = renderData.MeshInstanceAddress;
+        push.Transforms = renderData.MeshTransformAddress;
+        push.PreviousTransforms = renderData.PreviousMeshTransformAddress;
         push.VisibleInstances = renderData.VisibleInstanceAddress;
         push.Materials = renderData.MaterialAddress;
         push.Mode = renderData.Viewing.Mode;

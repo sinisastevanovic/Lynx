@@ -21,6 +21,8 @@ namespace Lynx
             uint32_t BloomTexture;
             uint32_t LinearSampler;
             int ToneMapped;
+            uint32_t MotionTexture;
+            int ShowsMotion;
         };
 
     }
@@ -90,6 +92,8 @@ namespace Lynx
 
         // The bloom needs no mention: the pass that made it left it ready for reading.
         resources.Sample(renderData.SceneColor);
+        if (renderData.Viewing.Mode == ViewMode::Motion)
+            resources.Sample(renderData.SceneMotion);
         resources.ColorTarget = renderData.Output;
 
         // The triangle covers every pixel.
@@ -108,6 +112,8 @@ namespace Lynx
         push.BloomTexture = renderData.BloomTextureIndex;
         push.LinearSampler = m_LinearSampler;
         push.ToneMapped = ShowsRawColours(renderData.Viewing.Mode) ? 0 : 1;
+        push.MotionTexture = renderData.SceneMotionIndex;
+        push.ShowsMotion = renderData.Viewing.Mode == ViewMode::Motion ? 1 : 0;
         m_Vulkan->Shared->Push(commands, push);
 
         commands.draw(3, 1, 0, 0);

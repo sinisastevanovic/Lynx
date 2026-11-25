@@ -62,6 +62,7 @@ namespace Lynx
         desc.Program = program.get();
         desc.Layout = m_Vulkan->Shared->PipelineLayout();
         desc.ColorFormat = RenderFormats::SceneColor;
+        desc.MotionFormat = RenderFormats::SceneMotion;
         desc.DepthFormat = RenderFormats::SceneDepth;
         desc.DepthTest = true;
         desc.DepthWrite = false;
@@ -84,6 +85,7 @@ namespace Lynx
             return false;
 
         resources.ColorTarget = renderData.SceneColor;
+        resources.MotionTarget = renderData.SceneMotion;
         resources.DepthTarget = renderData.SceneDepth;
         for (GpuTexture* table : renderData.AtmosphereTables)
             resources.Sample(table);

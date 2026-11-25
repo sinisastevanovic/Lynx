@@ -12,8 +12,11 @@ import Atmosphere;
 // The same for every draw of the pass. What differs between draws comes from the instance and its material.
 public struct StandardConstants
 {
-    // The instances of the scene, the places of those this frame draws, and the material table.
+    // The instances of the scene, where they are and where they were in the last frame, the places of
+    // those this frame draws, and the material table.
     public MeshInstance* instances;
+    public MeshTransform* transforms;
+    public MeshTransform* previousTransforms;
     public uint* visibleInstances;
     public StandardMaterial* materials;
 
@@ -49,6 +52,10 @@ public struct StandardVaryings
     public float3 normal : NORMAL;
     public float4 tangent : TANGENT;
 
+    // Where the surface is on screen, and where it was in the last frame: x, y and w in clip space.
+    public float3 clip : CLIP;
+    public float3 previousClip : PREVIOUSCLIP;
+
     public nointerpolation int entityId : ENTITYID;
     public nointerpolation uint material : MATERIAL;
 
@@ -61,14 +68,22 @@ public StandardVaryings standardVertex(StandardConstants constants, StandardVert
     MeshInstance instance = meshInstance(constants.instances, constants.visibleInstances, instanceIndex);
     float level = drawnLevel(constants.visibleInstances, instanceIndex);
     float3 inMesh = leafPosition(instance, input.position, vertexIndex, level);
-    MeshPosition position = meshPosition(instance, inMesh);
+    float4x4 model = meshModel(constants.transforms, constants.visibleInstances, instanceIndex);
+    MeshPosition position = meshPosition(model, inMesh);
+
+    // Where the same vertex was a frame ago. Foliage is taken at the level it has now: a leaf that
+    // grows or shrinks with the level does not count as moving.
+    float4x4 previousModel = meshModel(constants.previousTransforms, constants.visibleInstances, instanceIndex);
+    float4 previousClip = mul(scene.previousViewProjection, mul(previousModel, float4(inMesh, 1.0)));
 
     StandardVaryings output;
     output.position = position.clip;
     output.uv = input.uv;
     output.worldPosition = position.world.xyz;
-    output.normal = normalize(meshNormal(instance, input.normal));
-    output.tangent = float4(normalize(meshDirection(instance, input.tangent.xyz)), input.tangent.w);
+    output.normal = normalize(meshNormal(model, input.normal));
+    output.tangent = float4(normalize(meshDirection(model, input.tangent.xyz)), input.tangent.w);
+    output.clip = position.clip.xyw;
+    output.previousClip = previousClip.xyw;
     output.entityId = instance.entityId;
     output.material = instance.material;
     output.level = level;
@@ -424,6 +439,12 @@ public LitSurface inLightAlone(LitSurface surface)
     surface.albedo = float3(0.5, 0.5, 0.5);
     surface.metallic = 0.0;
     return surface;
+}
+
+// How far the pixel's surface moved on screen since the last frame, see screenMotion.
+public float2 standardMotion(StandardVaryings input)
+{
+    return screenMotion(input.clip, input.previousClip);
 }
 
 // isFrontFace is false for a pixel of a triangle that is seen from behind, which only a two-sided

@@ -16,12 +16,18 @@ public struct LeafVertex
     public uint pivotZAndLevels;
 };
 
+// Where an instance is in the world: the first three rows of its matrix. The fourth is always 0, 0, 0, 1.
+// Kept apart from the rest of the instance, because it is what changes when something moves, and kept
+// twice: in a buffer for this frame and in one for the frame before. Has to match InstanceTransform in GpuScene.h.
+public struct MeshTransform
+{
+    public float4 rows[3];
+};
+
 // One submesh of one mesh in the scene. The instances of the whole scene are in one buffer that stays
 // on the GPU from frame to frame. Has to match GpuInstance in GpuScene.h.
 public struct MeshInstance
 {
-    public float4x4 model;
-
     // A sphere around the submesh in the mesh's own space: the centre in xyz, the radius in w.
     public float4 boundingSphere;
 
@@ -51,6 +57,19 @@ public struct MeshInstance
 public MeshInstance meshInstance(MeshInstance* instances, uint* visibleInstances, uint drawnIndex)
 {
     return instances[visibleInstances[drawnIndex] & 0x00FFFFFF];
+}
+
+// The matrix that takes a mesh into the world.
+public float4x4 meshModel(MeshTransform transform)
+{
+    return float4x4(transform.rows[0], transform.rows[1], transform.rows[2], float4(0.0, 0.0, 0.0, 1.0));
+}
+
+// The same for the instance a vertex belongs to. Given last frame's transforms, it says where the
+// instance was then.
+public float4x4 meshModel(MeshTransform* transforms, uint* visibleInstances, uint drawnIndex)
+{
+    return meshModel(transforms[visibleInstances[drawnIndex] & 0x00FFFFFF]);
 }
 
 // The level of detail an instance is drawn in. Whole levels for most meshes. Foliage is drawn in
@@ -111,18 +130,18 @@ public struct MeshPosition
 
 // The depth pass and the forward pass both go through here, so that they arrive at exactly the same
 // position: the forward pass draws only where the depth equals what the depth pass wrote.
-public MeshPosition meshPosition(MeshInstance instance, float3 position)
+public MeshPosition meshPosition(float4x4 model, float3 position)
 {
     MeshPosition result;
-    result.world = mul(instance.model, float4(position, 1.0));
+    result.world = mul(model, float4(position, 1.0));
     result.clip = mul(scene.viewProjection, result.world);
     return result;
 }
 
 // A direction along the surface, such as a tangent, turned and scaled with the instance. Not normalised.
-public float3 meshDirection(MeshInstance instance, float3 direction)
+public float3 meshDirection(float4x4 model, float3 direction)
 {
-    return mul((float3x3)instance.model, direction);
+    return mul((float3x3)model, direction);
 }
 
 // A normal of the mesh in the world. Not normalised.
@@ -130,11 +149,11 @@ public float3 meshDirection(MeshInstance instance, float3 direction)
 // A normal cannot be transformed like a direction along the surface: on an object that is stretched
 // along one axis, it would lean the wrong way. What keeps it at a right angle to the surface is the
 // matrix of cross products of the model's axes, which costs three cross products instead of a full inverse.
-public float3 meshNormal(MeshInstance instance, float3 normal)
+public float3 meshNormal(float4x4 model, float3 normal)
 {
-    float3 axisX = meshDirection(instance, float3(1.0, 0.0, 0.0));
-    float3 axisY = meshDirection(instance, float3(0.0, 1.0, 0.0));
-    float3 axisZ = meshDirection(instance, float3(0.0, 0.0, 1.0));
+    float3 axisX = meshDirection(model, float3(1.0, 0.0, 0.0));
+    float3 axisY = meshDirection(model, float3(0.0, 1.0, 0.0));
+    float3 axisZ = meshDirection(model, float3(0.0, 0.0, 1.0));
 
     float3 transformed = cross(axisY, axisZ) * normal.x + cross(axisZ, axisX) * normal.y + cross(axisX, axisY) * normal.z;
 

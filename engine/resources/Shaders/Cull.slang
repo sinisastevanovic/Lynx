@@ -109,6 +109,7 @@ static const uint phaseLate = 1;
 struct CullConstants
 {
     MeshInstance* instances;
+    MeshTransform* transforms;
     uint* visibleInstances;
     DrawCommand* commands;
     BatchLods* batches;
@@ -290,11 +291,12 @@ void computeMain(uint3 thread : SV_DispatchThreadID)
     // The sphere around the instance in the world. Its radius grows by the largest of the three scales,
     // which keeps it around the mesh however unevenly the instance is scaled.
     MeshInstance instance = constants.instances[place];
-    float3 axisX = meshDirection(instance, float3(1.0, 0.0, 0.0));
-    float3 axisY = meshDirection(instance, float3(0.0, 1.0, 0.0));
-    float3 axisZ = meshDirection(instance, float3(0.0, 0.0, 1.0));
+    float4x4 model = meshModel(constants.transforms[place]);
+    float3 axisX = meshDirection(model, float3(1.0, 0.0, 0.0));
+    float3 axisY = meshDirection(model, float3(0.0, 1.0, 0.0));
+    float3 axisZ = meshDirection(model, float3(0.0, 0.0, 1.0));
     float scale = sqrt(max(dot(axisX, axisX), max(dot(axisY, axisY), dot(axisZ, axisZ))));
-    float3 centre = mul(instance.model, float4(instance.boundingSphere.xyz, 1.0)).xyz;
+    float3 centre = mul(model, float4(instance.boundingSphere.xyz, 1.0)).xyz;
     float radius = instance.boundingSphere.w * scale;
 
     // The distance from the camera to the point of the instance that is nearest to it.

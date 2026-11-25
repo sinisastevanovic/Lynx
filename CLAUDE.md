@@ -109,6 +109,17 @@ build\bin\Debug\LynxSandboxGame.exe
   entities that came, went or got another mesh or material (EnTT signals), entities that moved
   (`Scene::GetMovedEntities`), meshes that were reloaded. What it keeps per entity is a component of its own in the scene's registry (`MeshInstances`), which is
   never saved. A frame draws a list of places in the instance buffer, which culling writes.
+  Where an instance is in the world is not part of it: transforms are 3 by 4 matrices in two buffers of their
+  own (`InstanceTransform`, `MeshTransform` in `Mesh.slang`), one for this frame and one for the last, which
+  change roles every frame. A moved instance costs one transform of 48 bytes a frame, and a shader builds
+  the matrix with `meshModel`.
+- **Motion.** Next to the colour, the scene passes write how far every pixel moved on screen since the last
+  frame, in texture coordinates, where it is minus where it was (`RenderData::SceneMotion`, two half floats,
+  `screenMotion` in `Scene.slang`). Meshes take it from last frame's transform and last frame's camera
+  (`scene.previousViewProjection`), terrain and sky from the camera alone. A pass that writes it sets
+  `PassResources::MotionTarget` and its pipeline `MotionFormat`. A fragment shader's outputs are numbered
+  colour, motion, entity IDs. A pipeline that blends leaves the motion alone. Nothing reads it yet but the
+  view mode "Motion", until TAA (step 3.10). What stands still has a motion of exactly zero.
 - **Mesh draws.** Meshes that are not see-through are drawn from a buffer of draw commands, one per submesh with all
   its instances that are seen (`RenderData::MeshDraws`). A pass draws a whole range of them with one call
   (`DrawMeshes`). Depth and shadow use a pipeline without a fragment shader for opaque materials and a second one
@@ -145,12 +156,12 @@ build\bin\Debug\LynxSandboxGame.exe
   how large a leaf may be on screen. An entry of the list of drawn instances holds the place in 24 bits and the
   level above them. A surface with cut-outs of few pieces, like a sail, keeps its one level.
 - **View modes.** A view of a scene can show one thing about the picture instead of the picture (`ViewMode` in
-  `Renderer/ViewMode.h`: wireframe, unlit, lighting only, normals, level of detail, shadow cascades) and draw cut-outs whole
+  `Renderer/ViewMode.h`: wireframe, unlit, lighting only, normals, level of detail, shadow cascades, motion) and draw cut-outs whole
   (`ViewSettings::ShowCutOuts`). The settings belong to the view and travel with it (`ExtractedScene::Viewing`),
   so two views can show a scene differently. `SceneRenderer::GetViewSettings` holds those of the main view, the
   viewport panel has the dropdown, and a benchmark takes `ViewMode=<number>` and `ShowCutOuts=0`
   (and `SunElevation=<degrees>` for a low sun). The forward
-  shader does the modes, modes with raw colours skip bloom and tone mapping (`ShowsRawColours`). A new mode is a
+  shader does the modes, but the motion, which the composite pass shows from the motion picture. Modes with raw colours skip bloom and tone mapping (`ShowsRawColours`). A new mode is a
   new enum value, its name, and a branch in `StandardShading.slang`.
 - **Shadows.** The sun's shadow is in four maps of 2048 texels, the cascades (`Renderer/ShadowCascades`), each
   for a stretch of what the camera sees. `FitShadowCascades` fits each to the sphere around its stretch and moves

@@ -9,6 +9,10 @@ namespace Lynx::RenderFormats
     // The scene before post-processing, with brightness above 1.
     constexpr vk::Format SceneColor = vk::Format::eR16G16B16A16Sfloat;
     constexpr vk::Format SceneDepth = vk::Format::eD32Sfloat;
+
+    // Next to the colour of the scene: for every pixel, how far what it shows moved on screen since the
+    // last frame, in texture coordinates. Half floats tell a hundredth of a pixel apart at any picture size.
+    constexpr vk::Format SceneMotion = vk::Format::eR16G16Sfloat;
     constexpr vk::Format ShadowMap = vk::Format::eD32Sfloat;
 
     // The scene's depth in ever smaller sizes, which culling reads. A depth format cannot be drawn into

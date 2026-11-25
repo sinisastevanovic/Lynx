@@ -84,6 +84,10 @@ struct TerrainVaryings
 {
     float4 position : SV_Position;
     float3 worldPosition : WORLDPOSITION;
+
+    // Where the ground is on screen, and where it was in the last frame: x, y and w in clip space.
+    float3 clip : CLIP;
+    float3 previousClip : PREVIOUSCLIP;
     nointerpolation uint terrain : TERRAIN;
     nointerpolation float level : LEVEL;
 };
@@ -182,16 +186,22 @@ TerrainVaryings vertexMain(uint vertexIndex : SV_VulkanVertexID, uint patchIndex
     place = patch.origin + (inGrid - toCoarser * morph) * patch.size;
     world = terrain.origin + float3(place.x, heightAt(terrain, place, 0.0), place.y);
 
+    // Ground stays where it is, so it moves on screen by the camera alone. That a vertex slides
+    // between two levels as the camera travels is left out: it slides along the ground.
+    float4 clip = mul(scene.viewProjection, float4(world, 1.0));
+
     TerrainVaryings output;
-    output.position = constants.isSeenBySun != 0 ? mul(constants.sunViewProjection, float4(world, 1.0)) : mul(scene.viewProjection, float4(world, 1.0));
+    output.position = constants.isSeenBySun != 0 ? mul(constants.sunViewProjection, float4(world, 1.0)) : clip;
     output.worldPosition = world;
+    output.clip = clip.xyw;
+    output.previousClip = mul(scene.previousViewProjection, float4(world, 1.0)).xyw;
     output.terrain = terrainIndex;
     output.level = float(level);
     return output;
 }
 
-[shader("fragment")]
-float4 fragmentMain(TerrainVaryings input) : SV_Target
+// The colour of the ground at a pixel.
+float4 terrainColour(TerrainVaryings input)
 {
     if (constants.viewMode == viewWireframe)
         return float4(wireframeColour(), 1.0);
@@ -314,4 +324,20 @@ float4 fragmentMain(TerrainVaryings input) : SV_Target
     if (constants.viewMode == viewLightingOnly)
         surface = inLightAlone(surface);
     return float4(lightOn(surface, input.position.xy), 1.0);
+}
+
+// The targets in the order the render graph gives them to a pass: the colour, then the motion.
+struct FragmentOutput
+{
+    float4 colour : SV_Target0;
+    float2 motion : SV_Target1;
+};
+
+[shader("fragment")]
+FragmentOutput fragmentMain(TerrainVaryings input)
+{
+    FragmentOutput output;
+    output.colour = terrainColour(input);
+    output.motion = screenMotion(input.clip, input.previousClip);
+    return output;
 }

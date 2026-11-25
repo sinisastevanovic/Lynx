@@ -41,9 +41,24 @@ VertexOutput vertexMain(uint vertexIndex : SV_VertexID)
     return output;
 }
 
+// The targets in the order the render graph gives them to a pass: the colour, then the motion.
+struct FragmentOutput
+{
+    float4 colour : SV_Target0;
+    float2 motion : SV_Target1;
+};
+
 [shader("fragment")]
-float4 fragmentMain(VertexOutput input) : SV_Target
+FragmentOutput fragmentMain(VertexOutput input)
 {
     float3 direction = normalize(input.farPoint - input.nearPoint);
-    return float4(skyLight(direction) + groundLight(direction) + sunDisc(direction, scene.shadowSoftening), 1.0);
+
+    // The sky is infinitely far away: it moves on screen as the camera turns, and not as it travels.
+    float4 clip = mul(scene.viewProjection, float4(direction, 0.0));
+    float4 previousClip = mul(scene.previousViewProjection, float4(direction, 0.0));
+
+    FragmentOutput output;
+    output.colour = float4(skyLight(direction) + groundLight(direction) + sunDisc(direction, scene.shadowSoftening), 1.0);
+    output.motion = screenMotion(clip.xyw, previousClip.xyw);
+    return output;
 }

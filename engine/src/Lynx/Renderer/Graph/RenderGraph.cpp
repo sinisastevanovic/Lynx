@@ -75,6 +75,8 @@ namespace Lynx
             resources.Sampled[index]->Transition(commands, vk::ImageLayout::eShaderReadOnlyOptimal);
         if (resources.ColorTarget)
             resources.ColorTarget->Transition(commands, vk::ImageLayout::eColorAttachmentOptimal);
+        if (resources.MotionTarget)
+            resources.MotionTarget->Transition(commands, vk::ImageLayout::eColorAttachmentOptimal);
         if (resources.IdTarget)
             resources.IdTarget->Transition(commands, vk::ImageLayout::eColorAttachmentOptimal);
         if (resources.DepthTarget)
@@ -115,6 +117,8 @@ namespace Lynx
         RenderingTargets targets;
         if (resources.ColorTarget)
             targets.Color = resources.ColorTarget->View();
+        if (resources.MotionTarget)
+            targets.Motion = resources.MotionTarget->View();
         if (resources.IdTarget)
             targets.Ids = resources.IdTarget->View();
         if (resources.DepthTarget)

@@ -101,6 +101,7 @@ namespace Lynx
         {
             // Only where the depth pass has drawn this very ground: nothing is shaded that ends up hidden.
             desc.ColorFormat = RenderFormats::SceneColor;
+            desc.MotionFormat = RenderFormats::SceneMotion;
             desc.DepthWrite = false;
             desc.DepthCompare = vk::CompareOp::eEqual;
 
@@ -151,6 +152,7 @@ namespace Lynx
         {
             // The same light as the meshes get: the sun's shadow, and the sky.
             resources.ColorTarget = renderData.SceneColor;
+            resources.MotionTarget = renderData.SceneMotion;
             for (GpuTexture* shadowMap : renderData.ShadowMaps)
                 resources.Sample(shadowMap);
             if (GpuTexture* transmittance = renderData.AtmosphereTables[static_cast<size_t>(AtmosphereTable::Transmittance)])

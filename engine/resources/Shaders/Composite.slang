@@ -16,6 +16,11 @@ struct CompositeConstants
 
     // Zero for a view whose colours mean something as they are: they are shown without tone mapping.
     int toneMapped;
+
+    // Where the texture table has the picture of how far every pixel moved since the last frame,
+    // and one to show that picture in place of the scene.
+    uint motionTexture;
+    int showsMotion;
 };
 [vk::push_constant] ConstantBuffer<CompositeConstants> constants;
 
@@ -64,6 +69,16 @@ float forScreen(float linear)
 float3 forScreen(float3 linear)
 {
     return float3(forScreen(linear.r), forScreen(linear.g), forScreen(linear.b));
+}
+
+// A move of this many pixels in a frame is shown in the fullest colour.
+static const float motionShownInFull = 8.0;
+
+// How far a pixel moved since the last frame, as a colour: grey for not at all, redder for a move to
+// the right and greener for a move down, less of each for the other way.
+float3 motionColour(float2 pixels)
+{
+    return float3(saturate(0.5 + 0.5 * pixels / motionShownInFull), 0.5);
 }
 
 static const float fxaaSpanMax = 8.0;
@@ -120,6 +135,13 @@ float4 fragmentMain(VertexOutput input) : SV_Target
     uint width, height;
     textures[constants.sceneTexture].GetDimensions(width, height);
     float2 texelSize = 1.0 / float2(width, height);
+
+    // The motion is kept in texture coordinates. Its colour goes to the screen as it is.
+    if (constants.showsMotion == 1)
+    {
+        float2 motion = textures[constants.motionTexture].Sample(samplers[constants.linearSampler], sceneUV).rg;
+        return float4(motionColour(motion * float2(width, height)), 1.0);
+    }
 
     float3 sceneColor;
     if (constants.fxaaEnabled == 1)
