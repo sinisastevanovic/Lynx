@@ -154,6 +154,21 @@ build\bin\Debug\LynxSandboxGame.exe
   before shows all of its shadow, or if it is smaller than `ShadowSettings::SmallestCasterInTexels` of the map,
   and draws it no finer than the map can show. Without those three, shadows cost 10 to 80 % of a frame.
   The scene constants hold what shaders need of the cascades. `ShadowSettings::Distance` is how far shadows reach.
+- **Fitted cascades.** The cascades are shared out over the stretch of the view that holds something, not over
+  everything up to the shadow distance (`ShadowSettings::FitsToView`). `Passes/DepthRangePass` finds the nearest
+  and farthest depth of the finished depth buffer with a compute shader, and the CPU reads them three frames later
+  (`RenderData::SeenDepthRange`, a `ViewDepthRange`, for anything that wants to know). `ShadowFit` turns that into
+  the stretch to fit to: its ends move in steps of a quarter doubling and only give way after two steps, because a
+  cascade that changes size shows every shadow edge differently. All cascades but the last share the stretch out
+  by ratio. The last always reaches from the camera to the shadow distance, so what comes into view before the
+  measurement catches up still has a shadow. Finer near cascades draw more: small scenes pay up to 0.2 ms for it.
+- **Soft shadows.** The edge of a shadow is sharp at its caster and widens with the distance from it, by
+  `ShadowSettings::SunAngle` (`cascadeVisibility` in `StandardShading.slang`, percentage-closer soft shadows).
+  Eight reads of four depths each find how far away the caster is, sixteen comparisons over a disc of that width
+  give the shadow. The disc is turned by a different angle per pixel, which shows as fine grain until TAA exists.
+  Every point is compared with the depth the surface has there, worked out from its normal without the normal
+  map, or a wide disc would put a slanted surface into its own shadow. The width is kept between 1.5 and 12
+  texels, so far cascades are softer than the sun makes them.
 - **Occlusion.** The camera's view is culled in two phases (`CullPhase`), so what is hidden behind other things is
   not drawn. Early: what was seen in the last frame, kept as a flag per instance on the GPU. Its depth becomes the
   depth pyramid (`Passes/DepthPyramidPass`): the depth in ever smaller sizes, each pixel the farthest of those it
