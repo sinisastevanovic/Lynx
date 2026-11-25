@@ -356,7 +356,10 @@ namespace Lynx
         m_Graph->Add("SkyReflection", std::make_unique<SkyReflectionPass>());
         m_Graph->Add("CullMeshes", std::make_unique<CullPass>(CullPhase::Early));
         for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
+        {
             m_Graph->Add("Shadow" + std::to_string(cascade), std::make_unique<ShadowPass>(cascade));
+            m_Graph->Add("TerrainShadow" + std::to_string(cascade), std::make_unique<TerrainPass>(TerrainPassKind::Shadow, cascade));
+        }
         m_Graph->Add("Depth", std::make_unique<DepthPass>(CullPhase::Early));
         m_Graph->Add("TerrainDepth", std::make_unique<TerrainPass>(TerrainPassKind::Depth));
         m_Graph->Add("DepthPyramid", std::make_unique<DepthPyramidPass>());
@@ -618,10 +621,20 @@ namespace Lynx
             m_CurrentFrameData.IndexCount += static_cast<uint32_t>(meshes.TrianglesDrawn * 3);
 
             // Which patches of terrain the camera sees, and how finely each is drawn.
-            m_CurrentFrameData.Terrain = m_Terrain->Prepare(m_SceneTerrains, camera.Planes, m_CurrentFrameData.CameraPosition);
-            m_CurrentFrameData.IndexCount += static_cast<uint32_t>(m_CurrentFrameData.Terrain.TriangleCount * 3);
-            m_Profiler.SetCounter("TerrainPatches", static_cast<double>(m_CurrentFrameData.Terrain.PatchCount));
-            m_Profiler.SetCounter("TerrainTriangles", static_cast<double>(m_CurrentFrameData.Terrain.TriangleCount));
+            // The sun sees it too, once per cascade of its shadow.
+            std::array<Frustum, ShadowCascadeCount> seenBySun;
+            for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
+                seenBySun[cascade].FromViewProjection(m_CurrentFrameData.Cascades[cascade].ViewProjection);
+
+            m_CurrentFrameData.Terrain = m_Terrain->Prepare(m_SceneTerrains, camera.Planes, seenBySun, m_CurrentFrameData.CameraPosition);
+            const TerrainViews& terrain = m_CurrentFrameData.Terrain;
+            uint64_t shadowTriangles = 0;
+            for (const TerrainDraws& cascade : terrain.Sun)
+                shadowTriangles += cascade.TriangleCount;
+            m_CurrentFrameData.IndexCount += static_cast<uint32_t>(terrain.Camera.TriangleCount * 3);
+            m_Profiler.SetCounter("TerrainPatches", static_cast<double>(terrain.Camera.PatchCount));
+            m_Profiler.SetCounter("TerrainTriangles", static_cast<double>(terrain.Camera.TriangleCount));
+            m_Profiler.SetCounter("TerrainShadowTriangles", static_cast<double>(shadowTriangles));
 
             // An instance is one submesh of one mesh in the scene. The camera's view and the sun's are
             // counted apart, and a triangle counts once per view, however many passes draw it.

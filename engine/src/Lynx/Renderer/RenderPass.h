@@ -274,6 +274,15 @@ namespace Lynx
         uint64_t TriangleCount = 0;
     };
 
+    // The terrain of a frame for every view it is drawn from: the camera's, and the sun's of each cascade
+    // of its shadow. All of them are drawn as finely as the camera's distance asks for, so the shadow
+    // of the ground has the shape of the ground that is seen.
+    struct TerrainViews
+    {
+        TerrainDraws Camera;
+        std::array<TerrainDraws, ShadowCascadeCount> Sun;
+    };
+
     struct RenderData
     {
         // In the order they are drawn, the farthest first. Valid only while the frame is drawn.
@@ -336,7 +345,7 @@ namespace Lynx
         GpuTexture* SkyReflection = nullptr;
 
         // The terrain of the frame.
-        TerrainDraws Terrain;
+        TerrainViews Terrain;
 
         // How the brightness of the picture is chosen, and the time since the last frame in seconds,
         // which the automatic exposure follows.

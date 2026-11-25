@@ -148,7 +148,8 @@ build\bin\Debug\LynxSandboxGame.exe
   `Renderer/ViewMode.h`: wireframe, unlit, lighting only, normals, level of detail, shadow cascades) and draw cut-outs whole
   (`ViewSettings::ShowCutOuts`). The settings belong to the view and travel with it (`ExtractedScene::Viewing`),
   so two views can show a scene differently. `SceneRenderer::GetViewSettings` holds those of the main view, the
-  viewport panel has the dropdown, and a benchmark takes `ViewMode=<number>` and `ShowCutOuts=0`. The forward
+  viewport panel has the dropdown, and a benchmark takes `ViewMode=<number>` and `ShowCutOuts=0`
+  (and `SunElevation=<degrees>` for a low sun). The forward
   shader does the modes, modes with raw colours skip bloom and tone mapping (`ShowsRawColours`). A new mode is a
   new enum value, its name, and a branch in `StandardShading.slang`.
 - **Shadows.** The sun's shadow is in four maps of 2048 texels, the cascades (`Renderer/ShadowCascades`), each
@@ -216,8 +217,11 @@ build\bin\Debug\LynxSandboxGame.exe
   coarser grid near the end of its level's distance, so levels meet without gaps or jumps. A patch that is
   only partly near enough for the finer level is drawn as quarters. `Passes/TerrainPass` draws the depth with
   the early depth pass, so ground hides things in the late culling, and the colour before the forward pass.
-  The resolution has to be 32 times a power of two, plus one. Terrain does not cast shadows yet and has one
-  stand-in colour by slope: cascades, ground layers and loading from a file are the rest of step 3.7.
+  The resolution has to be 32 times a power of two, plus one. Terrain casts shadows: the patches are picked
+  once more per cascade, with the sun's view but as fine as the camera's distance asks for, so the shadow has
+  the shape of the ground that is seen, and "TerrainShadow0" to "3" draw them after the meshes' shadow passes.
+  Filling four maps with ground costs about 0.1 ms. The colour is a stand-in by slope: ground layers and
+  loading from a file are the rest of step 3.7.
 - **Lit surfaces.** Everything that is lit calls `lightOn(surface, pixel)` in `StandardShading.slang` with a
   `LitSurface` (position, normals, colour, metalness, roughness): the sun, its shadow, the sky. The view modes
   are `shownInPlaceOfLight` and `inLightAlone` next to it. A new kind of surface, like terrain, fills in a

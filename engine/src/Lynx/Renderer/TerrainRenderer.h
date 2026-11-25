@@ -25,15 +25,18 @@ namespace Lynx
     // the next coarser level as it nears the end of its distance, so nothing jumps where levels meet
     // and no gaps open between them.
     //
-    // The patches of a frame go to the GPU as a list, and are drawn with one draw call per kind:
-    // whole patches, and each of the four quarters.
+    // The patches of a frame go to the GPU as one list for all views, and a view draws its part of
+    // it with one draw call per kind: whole patches, and each of the four quarters.
     class TerrainRenderer
     {
     public:
         TerrainRenderer(GraphicsContext& context, UploadQueue& uploads);
 
-        // Picks the patches for a camera and queues them for upload. frustum is what the camera sees.
-        TerrainDraws Prepare(std::span<const ExtractedTerrain> terrains, const Frustum& frustum, const glm::vec3& cameraPosition);
+        // Picks the patches for the camera and for the sun's view of every cascade, and queues them for
+        // upload. camera and sun are what each of them sees. The distance to the camera decides how fine
+        // a patch is in every view: the ground's shadow is then cast by the ground as it is seen.
+        TerrainViews Prepare(std::span<const ExtractedTerrain> terrains, const Frustum& camera, std::span<const Frustum, ShadowCascadeCount> sun,
+            const glm::vec3& cameraPosition);
 
     private:
         struct Selection;

@@ -167,36 +167,17 @@ namespace Lynx
         }
     }
 
-    TerrainDraws TerrainRenderer::Prepare(std::span<const ExtractedTerrain> terrains, const Frustum& frustum, const glm::vec3& cameraPosition)
+    TerrainViews TerrainRenderer::Prepare(std::span<const ExtractedTerrain> terrains, const Frustum& camera, std::span<const Frustum, ShadowCascadeCount> sun,
+        const glm::vec3& cameraPosition)
     {
-        std::array<std::vector<GpuPatch>, QuarterCount + 1> kinds;
+        std::vector<const ExtractedTerrain*> drawn;
         std::vector<GpuTerrain> gpuTerrains;
-
         for (const ExtractedTerrain& terrain : terrains)
         {
             if (!terrain.Asset || !terrain.Asset->IsOnGpu())
                 continue;
 
             const Terrain& asset = *terrain.Asset;
-            const uint32_t topLevel = asset.GetLevelCount() - 1;
-
-            Selection selection;
-            selection.Asset = &asset;
-            selection.Origin = terrain.Origin;
-            selection.TerrainIndex = static_cast<uint32_t>(gpuTerrains.size());
-            selection.View = &frustum;
-            selection.Camera = cameraPosition;
-            selection.FinestRange = selection.PatchSize(0) * FinestRangeInPatches;
-            selection.Kinds = &kinds;
-
-            // The largest patches are drawn however far away they are.
-            const uint32_t perSide = asset.GetPatchesPerSide(topLevel);
-            for (uint32_t z = 0; z < perSide; ++z)
-            {
-                for (uint32_t x = 0; x < perSide; ++x)
-                    Select(selection, topLevel, x, z);
-            }
-
             GpuTerrain& gpu = gpuTerrains.emplace_back();
             gpu.Origin = terrain.Origin;
             gpu.Size = asset.GetSize();
@@ -205,32 +186,77 @@ namespace Lynx
             gpu.HeightTexture = asset.GetHeightTableIndex();
             gpu.HeightSampler = asset.GetHeightSamplerIndex();
             gpu.Resolution = static_cast<float>(asset.GetResolution());
-            gpu.FinestRange = selection.FinestRange;
+            gpu.FinestRange = asset.GetSize() / static_cast<float>(asset.GetPatchesPerSide(0)) * FinestRangeInPatches;
+            drawn.push_back(&terrain);
         }
 
-        // One list of all patches, kind after kind, so that a kind is one run of it and one draw call.
-        TerrainDraws draws;
+        TerrainViews views;
+        if (drawn.empty())
+            return views;
+
+        // One list of the patches of all views. Within a view kind follows kind, so that a kind is one
+        // run of the list and one draw call.
         std::vector<GpuPatch> patches;
-        for (size_t kind = 0; kind < kinds.size(); ++kind)
+        const auto pick = [&](const Frustum& view)
         {
-            TerrainDraws::Run& run = draws.Runs[kind];
-            run.FirstIndex = kind == 0 ? 0 : static_cast<uint32_t>(kind - 1) * m_IndicesPerQuarter;
-            run.IndexCount = kind == 0 ? m_IndicesPerQuarter * QuarterCount : m_IndicesPerQuarter;
-            run.FirstPatch = static_cast<uint32_t>(patches.size());
-            run.PatchCount = static_cast<uint32_t>(kinds[kind].size());
-            patches.insert(patches.end(), kinds[kind].begin(), kinds[kind].end());
+            std::array<std::vector<GpuPatch>, QuarterCount + 1> kinds;
+            for (uint32_t index = 0; index < drawn.size(); ++index)
+            {
+                const Terrain& asset = *drawn[index]->Asset;
+                const uint32_t topLevel = asset.GetLevelCount() - 1;
 
-            draws.PatchCount += run.PatchCount;
-            draws.TriangleCount += static_cast<uint64_t>(run.PatchCount) * (run.IndexCount / 3);
-        }
-        if (patches.empty())
+                Selection selection;
+                selection.Asset = &asset;
+                selection.Origin = drawn[index]->Origin;
+                selection.TerrainIndex = index;
+                selection.View = &view;
+                selection.Camera = cameraPosition;
+                selection.FinestRange = gpuTerrains[index].FinestRange;
+                selection.Kinds = &kinds;
+
+                // The largest patches are drawn however far away they are.
+                const uint32_t perSide = asset.GetPatchesPerSide(topLevel);
+                for (uint32_t z = 0; z < perSide; ++z)
+                {
+                    for (uint32_t x = 0; x < perSide; ++x)
+                        Select(selection, topLevel, x, z);
+                }
+            }
+
+            TerrainDraws draws;
+            for (size_t kind = 0; kind < kinds.size(); ++kind)
+            {
+                TerrainDraws::Run& run = draws.Runs[kind];
+                run.FirstIndex = kind == 0 ? 0 : static_cast<uint32_t>(kind - 1) * m_IndicesPerQuarter;
+                run.IndexCount = kind == 0 ? m_IndicesPerQuarter * QuarterCount : m_IndicesPerQuarter;
+                run.FirstPatch = static_cast<uint32_t>(patches.size());
+                run.PatchCount = static_cast<uint32_t>(kinds[kind].size());
+                patches.insert(patches.end(), kinds[kind].begin(), kinds[kind].end());
+
+                draws.PatchCount += run.PatchCount;
+                draws.TriangleCount += static_cast<uint64_t>(run.PatchCount) * (run.IndexCount / 3);
+            }
             return draws;
+        };
+
+        views.Camera = pick(camera);
+        for (size_t cascade = 0; cascade < sun.size(); ++cascade)
+            views.Sun[cascade] = pick(sun[cascade]);
+        if (patches.empty())
+            return views;
 
         UploadList<GpuPatch>(m_Context, m_Uploads, m_Patches, patches, "TerrainPatches");
         UploadList<GpuTerrain>(m_Context, m_Uploads, m_Terrains, gpuTerrains, "Terrains");
-        draws.Indices = &m_Indices;
-        draws.PatchAddress = m_Patches.Address();
-        draws.TerrainAddress = m_Terrains.Address();
-        return draws;
+
+        const auto finish = [this](TerrainDraws& draws)
+        {
+            draws.Indices = &m_Indices;
+            draws.PatchAddress = m_Patches.Address();
+            draws.TerrainAddress = m_Terrains.Address();
+        };
+        finish(views.Camera);
+        for (TerrainDraws& draws : views.Sun)
+            finish(draws);
+        return views;
     }
 }

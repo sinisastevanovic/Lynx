@@ -1,6 +1,6 @@
 // Draws the patches of a terrain: the same small grid of triangles for every patch, stretched over the
 // patch and lifted to the terrain's heights. See TerrainRenderer for which patches a frame draws.
-// The depth pass uses the vertex shader alone, the colour pass both.
+// The depth pass and the shadow pass use the vertex shader alone, the colour pass both.
 
 import Scene;
 import Textures;
@@ -44,12 +44,18 @@ struct TerrainData
 
 struct TerrainConstants
 {
+    // From the world to what the sun sees of a cascade, for the pass that draws into its shadow map.
+    float4x4 sunViewProjection;
+
     TerrainPatch* patches;
     TerrainData* terrains;
 
     // What the view shows, one of the view modes of StandardShading.
     uint viewMode;
-    uint padding;
+
+    // Not zero for the pass that draws into a shadow map. The patches are as fine as the camera's
+    // distance asks for either way.
+    uint isSeenBySun;
 };
 [vk::push_constant] ConstantBuffer<TerrainConstants> constants;
 
@@ -92,7 +98,7 @@ TerrainVaryings vertexMain(uint vertexIndex : SV_VulkanVertexID, uint patchIndex
     world = terrain.origin + float3(place.x, heightAt(terrain, place, 0.0), place.y);
 
     TerrainVaryings output;
-    output.position = mul(scene.viewProjection, float4(world, 1.0));
+    output.position = constants.isSeenBySun != 0 ? mul(constants.sunViewProjection, float4(world, 1.0)) : mul(scene.viewProjection, float4(world, 1.0));
     output.worldPosition = world;
     output.terrain = terrainIndex;
     output.level = float(level);

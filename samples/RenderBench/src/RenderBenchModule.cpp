@@ -4,6 +4,9 @@
 
 #include "BenchScenes.h"
 
+#include <glm/gtx/quaternion.hpp>
+
+#include <cmath>
 #include <optional>
 
 class RenderBenchModule : public IGameModule
@@ -43,6 +46,22 @@ public:
 
         Scene& scene = *engine.GetActiveScene();
         AssetManager& assetManager = engine.GetAssetManager();
+
+        // How high the sun stands, in degrees above the horizon, for pictures of a low sun and long
+        // shadows. Its compass bearing stays as the scene has it.
+        if (const double elevation = settings.Parameter("SunElevation", -1.0); elevation >= 0.0)
+        {
+            const auto suns = scene.Reg().view<TransformComponent, DirectionalLightComponent>();
+            for (const auto entity : suns)
+            {
+                TransformComponent& transform = suns.get<TransformComponent>(entity);
+                const glm::vec3 shining = glm::rotate(transform.GetRotation(), glm::vec3(0.0f, 0.0f, -1.0f));
+                const glm::vec2 bearing = glm::length(glm::vec2(shining.x, shining.z)) > 0.0001f ? glm::normalize(glm::vec2(shining.x, shining.z)) : glm::vec2(1.0f, 0.0f);
+                const float angle = glm::radians(static_cast<float>(elevation));
+                const glm::vec3 wanted(bearing.x * std::cos(angle), -std::sin(angle), bearing.y * std::cos(angle));
+                transform.SetRotation(glm::rotation(glm::vec3(0.0f, 0.0f, -1.0f), wanted));
+            }
+        }
 
         if (const uint32_t instances = count("Instances"))
             CreateInstanceGrid(scene, assetManager, instances);

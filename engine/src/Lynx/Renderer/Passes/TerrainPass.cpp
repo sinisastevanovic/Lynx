@@ -14,10 +14,14 @@ namespace Lynx
         // Has to match TerrainConstants in Terrain.slang.
         struct TerrainPushData
         {
+            glm::mat4 SunViewProjection;
             uint64_t Patches;
             uint64_t Terrains;
             ViewMode Mode;
-            uint32_t Padding;
+            uint32_t IsSeenBySun;
+
+            // The matrix makes the shader's size a multiple of 16 bytes.
+            uint64_t Padding;
         };
     }
 
@@ -42,8 +46,8 @@ namespace Lynx
         }
     };
 
-    TerrainPass::TerrainPass(TerrainPassKind kind)
-        : m_Kind(kind)
+    TerrainPass::TerrainPass(TerrainPassKind kind, uint32_t cascade)
+        : m_Kind(kind), m_Cascade(cascade)
     {
     }
 
@@ -84,6 +88,17 @@ namespace Lynx
             desc.DepthWrite = true;
             desc.UseFragmentStage = false;
         }
+        else if (m_Kind == TerrainPassKind::Shadow)
+        {
+            // As the meshes are drawn into a shadow map, see ShadowPass: the usual depth, and pushed
+            // away from the sun a little so that lit ground does not shadow itself.
+            desc.DepthFormat = RenderFormats::ShadowMap;
+            desc.DepthWrite = true;
+            desc.DepthCompare = vk::CompareOp::eLess;
+            desc.DepthBias = 1.0f;
+            desc.DepthBiasSlope = 2.0f;
+            desc.UseFragmentStage = false;
+        }
         else
         {
             // Only where the depth pass has drawn this very ground: nothing is shaded that ends up hidden.
@@ -122,8 +137,16 @@ namespace Lynx
     {
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
 
-        if (!m_Vulkan->Pipeline || renderData.Terrain.PatchCount == 0)
+        const TerrainDraws& terrain = m_Kind == TerrainPassKind::Shadow ? renderData.Terrain.Sun[m_Cascade] : renderData.Terrain.Camera;
+        if (!m_Vulkan->Pipeline || terrain.PatchCount == 0)
             return false;
+
+        // The shadow pass of the meshes has cleared the map and drawn into it before.
+        if (m_Kind == TerrainPassKind::Shadow)
+        {
+            resources.DepthTarget = renderData.ShadowMaps[m_Cascade];
+            return resources.DepthTarget != nullptr;
+        }
 
         resources.DepthTarget = renderData.SceneDepth;
         if (m_Kind == TerrainPassKind::Colour)
@@ -142,7 +165,8 @@ namespace Lynx
 
     void TerrainPass::Execute(vk::CommandBuffer commands, RenderData& renderData)
     {
-        const TerrainDraws& terrain = renderData.Terrain;
+        const bool isShadow = m_Kind == TerrainPassKind::Shadow;
+        const TerrainDraws& terrain = isShadow ? renderData.Terrain.Sun[m_Cascade] : renderData.Terrain.Camera;
         const bool isWireframe = m_Kind == TerrainPassKind::Colour && renderData.Viewing.Mode == ViewMode::Wireframe;
 
         commands.bindPipeline(vk::PipelineBindPoint::eGraphics, isWireframe ? m_Vulkan->WireframePipeline : m_Vulkan->Pipeline);
@@ -152,6 +176,9 @@ namespace Lynx
         push.Patches = terrain.PatchAddress;
         push.Terrains = terrain.TerrainAddress;
         push.Mode = renderData.Viewing.Mode;
+        push.IsSeenBySun = isShadow ? 1 : 0;
+        if (isShadow)
+            push.SunViewProjection = renderData.ClipCascadeViewProjection[m_Cascade];
         m_Vulkan->Shared->Push(commands, push);
 
         for (const TerrainDraws::Run& run : terrain.Runs)
