@@ -204,6 +204,16 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Depth.** The scene's depth is reversed: 1 at the near plane, towards 0 at infinity, compared with "greater"
   and cleared to 0. Drawing has no far plane, the camera's own is only used for culling. The shadow map
   keeps the usual depth (0 near, "less").
+- **Exposure.** How bright the picture is made is one number the light of the scene is multiplied by.
+  `Passes/ExposurePass` (`Exposure.slang`) counts how bright the scene's picture is into a histogram, one pixel
+  in eight each way, and moves the exposure towards the one that shows the middle 80 % of it as a middle grey,
+  faster towards darker than towards brighter. The exposure never leaves the GPU: it lives in a small buffer the
+  scene constants point to (`scene.exposure`), and bloom and the composite pass multiply by it, so bloom comes
+  after exposure. The settings are `ExposureSettings` in `Scene/Exposure.h`, itself the component "Exposure":
+  automatic or fixed, compensation in stops, limits and speeds. A benchmark's frames have a fixed length, so its
+  exposure is the same in every run. Views with raw colours have none. The tone curve is the fitted ACES curve
+  with the factor of 0.6 it was fitted for, and the picture goes to the screen through the sRGB curve
+  (`forScreen` in `Composite.slang`, undone by `shownAsItIs` for the view modes).
 - **Cube textures.** `GpuTextureDesc::IsCube` makes six square faces that a shader reads by a direction
   (`cubeTextures[index]` in `Textures.slang`). Cubes have a table of their own in the shared bindings, with
   their own indices: `SharedBindings::AddCubeTexture`, and a `TextureSlot` made with `TextureTable::Cube`.
