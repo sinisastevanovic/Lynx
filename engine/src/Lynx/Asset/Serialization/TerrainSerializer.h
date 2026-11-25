@@ -48,7 +48,7 @@ namespace Lynx
     // its textures covers.
     //
     // A terrain comes into being from pictures made elsewhere: ReadHeights and ReadWeights read those.
-    class TerrainSerializer
+    class LX_API TerrainSerializer
     {
     public:
         static bool Serialize(const std::filesystem::path& filePath, const TerrainSource& terrain);

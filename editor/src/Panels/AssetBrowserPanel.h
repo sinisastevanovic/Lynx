@@ -45,6 +45,14 @@ namespace Lynx
         std::filesystem::path m_DeletePath;
         bool m_IsDeleting = false;
 
+        // Making a terrain from a heightmap: what the dialog holds while it is open.
+        bool m_ShowTerrainModal = false;
+        char m_TerrainHeightmapPath[512] = "";
+        float m_TerrainSize = 2048.0f;
+        float m_TerrainLowest = 0.0f;
+        float m_TerrainHighest = 250.0f;
+        std::string m_TerrainError;
+
         bool m_ShowFontModal = false;
         std::filesystem::path m_FontImportPath;
         float m_ImportPixelRange = 3.0f;

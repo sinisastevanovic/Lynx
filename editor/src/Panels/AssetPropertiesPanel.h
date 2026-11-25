@@ -3,6 +3,9 @@
 #include "Lynx/Asset/Material.h"
 #include "Lynx/Asset/TextureSpecification.h"
 
+#include <array>
+#include <string>
+
 namespace Lynx
 {
     class Texture;
@@ -19,6 +22,7 @@ namespace Lynx
         void DrawTextureProperties();
         void DrawMaterialProperties();
         void DrawSpriteProperties();
+        void DrawTerrainProperties();
 
     private:
         AssetHandle m_SelectedAssetHandle = AssetHandle::Null();
@@ -26,6 +30,13 @@ namespace Lynx
 
         TextureSpecification m_EditingSpec;
         bool m_IsDirty = false;
+
+        // A terrain's layers while they are edited: the material and the repeat of each, and a picture
+        // of weights to read when the changes are applied.
+        std::array<AssetHandle, 4> m_TerrainLayerMaterials;
+        std::array<float, 4> m_TerrainLayerTileSizes{ 4.0f, 4.0f, 4.0f, 4.0f };
+        char m_TerrainWeightsPath[512] = "";
+        std::string m_TerrainError;
     };
 }
 

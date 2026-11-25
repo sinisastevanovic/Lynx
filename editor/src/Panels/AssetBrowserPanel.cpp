@@ -9,6 +9,9 @@
 #include "Lynx/Asset/Sprite.h"
 #include "Lynx/Asset/Serialization/MaterialSerializer.h"
 #include "Lynx/Asset/Serialization/SpriteSerializer.h"
+#include "Lynx/Asset/Serialization/TerrainSerializer.h"
+#include "Lynx/Asset/Terrain.h"
+#include "../Utils/PlatformUtils.h"
 
 namespace Lynx
 {
@@ -77,6 +80,11 @@ namespace Lynx
                     auto sprite = std::make_shared<Sprite>();
                     SpriteSerializer::Serialize(Utils::GetNewAssetFilePath(m_CurrentDirectory, "NewSprite", ".lxsprite"), sprite);
                 }
+                if (ImGui::MenuItem("Create Terrain..."))
+                {
+                    m_ShowTerrainModal = true;
+                    m_TerrainError.clear();
+                }
 
                 ImGui::EndPopup();
             }
@@ -85,6 +93,10 @@ namespace Lynx
             {
                 const auto& path = directoryEntry.path();
                 bool isDirectory = directoryEntry.is_directory();
+
+                // The folder a terrain keeps its tiles in belongs to the terrain, not to the user.
+                if (isDirectory && path.extension() == ".tiles")
+                    continue;
                 bool isFontFile = path.extension() == ".ttf" || path.extension() == ".otf" || path.extension() == ".TTF" || path.extension() == ".OTF";
                 if (!isDirectory && !AssetUtils::IsAssetExtensionSupported(path) && !isFontFile)
                     continue;
@@ -318,6 +330,67 @@ namespace Lynx
                 ImGui::PopID();
             }
             ImGui::EndTable();
+        }
+
+        if (m_ShowTerrainModal)
+        {
+            ImGui::OpenPopup("Create Terrain");
+            m_ShowTerrainModal = false;
+        }
+
+        if (ImGui::BeginPopupModal("Create Terrain", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextWrapped("Makes a terrain from a heightmap as terrain tools export it: a square of 16-bit heights, raw (.r16, .raw) or as a 16-bit grey PNG.");
+            ImGui::Separator();
+
+            ImGui::InputText("Heightmap", m_TerrainHeightmapPath, sizeof(m_TerrainHeightmapPath));
+            ImGui::SameLine();
+            if (ImGui::Button("Browse..."))
+            {
+                const std::string chosen = FileDialogs::OpenFile("Heightmap (*.r16;*.raw;*.png)\0*.r16;*.raw;*.png\0");
+                if (!chosen.empty())
+                    strcpy_s(m_TerrainHeightmapPath, chosen.c_str());
+            }
+
+            ImGui::InputFloat("Size (units a side)", &m_TerrainSize);
+            ImGui::InputFloat("Lowest height", &m_TerrainLowest);
+            ImGui::SetItemTooltip("The height that the smallest number of the heightmap stands for.");
+            ImGui::InputFloat("Highest height", &m_TerrainHighest);
+            ImGui::SetItemTooltip("The height that the largest number of the heightmap stands for.");
+
+            if (!m_TerrainError.empty())
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_TerrainError.c_str());
+
+            ImGui::Separator();
+            if (ImGui::Button("Create", ImVec2(120, 0)))
+            {
+                uint32_t resolution = 0;
+                std::vector<uint16_t> heights;
+                if (m_TerrainSize <= 0.0f || m_TerrainHighest <= m_TerrainLowest)
+                {
+                    m_TerrainError = "The size has to be above zero, and the highest height above the lowest.";
+                }
+                else if (!TerrainSerializer::ReadHeights(m_TerrainHeightmapPath, resolution, heights))
+                {
+                    m_TerrainError = "The heightmap could not be read. See the log.";
+                }
+                else
+                {
+                    // Made as it would be in code, then written out: its file is what the project keeps.
+                    const Terrain terrain(resolution, m_TerrainSize, m_TerrainLowest, m_TerrainHighest, heights);
+                    if (terrain.GetTilesPerSide() == 0)
+                        m_TerrainError = "The heightmap is too small for a terrain: it needs at least 33 heights a side.";
+                    else if (!terrain.Save(Utils::GetNewAssetFilePath(m_CurrentDirectory, "NewTerrain", ".lxterrain")))
+                        m_TerrainError = "The terrain could not be written. See the log.";
+                    else
+                        ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::SetItemDefaultFocus();
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
         }
 
         if (m_ShowFontModal)

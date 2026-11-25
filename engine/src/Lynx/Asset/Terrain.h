@@ -120,6 +120,10 @@ namespace Lynx
         // GPU at once.
         void SetLayers(std::span<const TerrainLayer> layers, uint32_t resolution, std::span<const uint8_t> weights);
 
+        // Changes the layers and keeps the weights. A terrain that has no weights yet gets ones in
+        // which the first layer shows everywhere. No layers at all gives the plain colours back.
+        void SetLayers(std::span<const TerrainLayer> layers);
+
         // The layers that have a material, in order.
         std::span<const TerrainLayer> GetLayers() const { return std::span<const TerrainLayer>(m_Layers.data(), m_LayerCount); }
 
@@ -136,6 +140,10 @@ namespace Lynx
 
         bool LoadSourceData() override;
         bool CreateRenderResources() override;
+
+    protected:
+        // Reads the terrain from its file again, on the main thread.
+        bool Reload() override;
 
     private:
         // The lowest and highest stored height of a patch.

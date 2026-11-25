@@ -238,6 +238,9 @@ build\bin\Debug\LynxSandboxGame.exe
   weights). `Terrain::Save` writes one, the asset manager loads them, and a benchmark with `TerrainThroughFile=1`
   draws its terrain from a saved file. `TerrainSerializer::ReadHeights` reads a heightmap from a terrain tool
   (raw `.r16`, or a 16-bit PNG) for making a terrain.
+  In the editor, "Create Terrain..." in the asset browser makes one from a heightmap, and the terrain's
+  properties panel sets its layers and reads a picture of weights (`Terrain::SetLayers`, with or without new weights).
+  The asset browser hides `.tiles` folders. Sculpting and painting in the editor do not exist yet.
 - **Lit surfaces.** Everything that is lit calls `lightOn(surface, pixel)` in `StandardShading.slang` with a
   `LitSurface` (position, normals, colour, metalness, roughness): the sun, its shadow, the sky. The view modes
   are `shownInPlaceOfLight` and `inLightAlone` next to it. A new kind of surface, like terrain, fills in a

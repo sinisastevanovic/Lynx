@@ -6,6 +6,9 @@
 #include "Lynx/Asset/Sprite.h"
 #include "Lynx/Asset/Serialization/MaterialSerializer.h"
 #include "Lynx/Asset/Serialization/SpriteSerializer.h"
+#include "Lynx/Asset/Serialization/TerrainSerializer.h"
+#include "Lynx/Asset/Terrain.h"
+#include "../Utils/PlatformUtils.h"
 #include "Lynx/ImGui/LXUI.h"
 
 namespace Lynx
@@ -28,11 +31,108 @@ namespace Lynx
                 DrawMaterialProperties(); break;
             case AssetType::Sprite:
                 DrawSpriteProperties(); break;
+            case AssetType::Terrain:
+                DrawTerrainProperties(); break;
             default:
                 ImGui::Text("Properties not available for this asset type.");
         }
 
         ImGui::End();
+    }
+
+    void AssetPropertiesPanel::DrawTerrainProperties()
+    {
+        auto terrain = std::static_pointer_cast<Terrain>(m_SelectedAsset);
+        ImGui::Text("Terrain");
+        ImGui::Separator();
+
+        ImGui::Text("%u heights a side, %.0f units a side", terrain->GetResolution(), terrain->GetSize());
+        ImGui::Text("%u by %u tiles of %u quads", terrain->GetTilesPerSide(), terrain->GetTilesPerSide(), terrain->GetTileQuads());
+        ImGui::Text("Heights from %.1f to %.1f", terrain->GetLowest(), terrain->GetHighest());
+        ImGui::Separator();
+
+        ImGui::TextWrapped("Up to four kinds of ground. A layer without a material ends the list.");
+        LXUI::BeginPropertyGrid();
+        for (size_t layer = 0; layer < m_TerrainLayerMaterials.size(); ++layer)
+        {
+            const std::string number = std::to_string(layer + 1);
+            if (LXUI::DrawAssetReference("Layer " + number + " Material", m_TerrainLayerMaterials[layer], { AssetType::Material }))
+                m_IsDirty = true;
+            if (LXUI::DrawDragFloat("Layer " + number + " Repeat (units)", m_TerrainLayerTileSizes[layer], 0.1f, 0.1f, 1000.0f, 4.0f))
+                m_IsDirty = true;
+        }
+        LXUI::EndPropertyGrid();
+
+        ImGui::Separator();
+        ImGui::TextWrapped("The weights say how much of each layer shows where: a square picture, red for layer 1, green for 2, blue for 3, alpha for 4. Terrain tools export it as a splat map. Leave empty to keep the weights the terrain has.");
+        if (ImGui::InputText("Weights", m_TerrainWeightsPath, sizeof(m_TerrainWeightsPath)))
+            m_IsDirty = true;
+        ImGui::SameLine();
+        if (ImGui::Button("Browse..."))
+        {
+            const std::string chosen = FileDialogs::OpenFile("Picture (*.png;*.tga;*.jpg)\0*.png;*.tga;*.jpg\0");
+            if (!chosen.empty())
+            {
+                strcpy_s(m_TerrainWeightsPath, chosen.c_str());
+                m_IsDirty = true;
+            }
+        }
+
+        if (!m_TerrainError.empty())
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_TerrainError.c_str());
+
+        ImGui::Separator();
+        ImGui::BeginDisabled(!m_IsDirty);
+        if (ImGui::Button("Apply Changes"))
+        {
+            AssetManager& assets = Engine::Get().GetAssetManager();
+            std::vector<TerrainLayer> layers;
+            for (size_t layer = 0; layer < m_TerrainLayerMaterials.size(); ++layer)
+            {
+                std::shared_ptr<Material> material = m_TerrainLayerMaterials[layer].IsValid() ? assets.GetAsset<Material>(m_TerrainLayerMaterials[layer], AssetLoadMode::Blocking) : nullptr;
+                if (!material)
+                    break;
+                layers.push_back({ std::move(material), m_TerrainLayerTileSizes[layer] });
+            }
+
+            m_TerrainError.clear();
+            if (m_TerrainWeightsPath[0] != '\0' && !layers.empty())
+            {
+                uint32_t resolution = 0;
+                std::vector<uint8_t> weights;
+                if (!TerrainSerializer::ReadWeights(m_TerrainWeightsPath, resolution, weights))
+                    m_TerrainError = "The weights could not be read. See the log.";
+                else if (resolution % terrain->GetTilesPerSide() != 0)
+                    m_TerrainError = "The weights' resolution has to be a whole number of times the terrain's " + std::to_string(terrain->GetTilesPerSide()) + " tiles a side.";
+                else
+                    terrain->SetLayers(layers, resolution, weights);
+            }
+            else
+            {
+                terrain->SetLayers(layers);
+            }
+
+            if (m_TerrainError.empty())
+            {
+                if (terrain->Save(terrain->GetFilePath()))
+                {
+                    m_TerrainWeightsPath[0] = '\0';
+                    m_IsDirty = false;
+                }
+                else
+                {
+                    m_TerrainError = "The terrain could not be written. See the log.";
+                }
+            }
+        }
+        ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        if (ImGui::Button("Revert"))
+        {
+            Engine::Get().GetAssetManager().ReloadAsset(m_SelectedAssetHandle);
+            OnSelectedAssetChanged(m_SelectedAssetHandle);
+        }
     }
 
     void AssetPropertiesPanel::DrawTextureProperties()
@@ -253,5 +353,20 @@ namespace Lynx
         m_SelectedAsset = Engine::Get().GetAssetManager().GetAsset<Asset>(handle);
         if (m_SelectedAsset && m_SelectedAsset->GetType() == AssetType::Texture)
             m_EditingSpec = std::static_pointer_cast<Texture>(m_SelectedAsset)->GetSpecification();
+
+        if (m_SelectedAsset && m_SelectedAsset->GetType() == AssetType::Terrain)
+        {
+            m_TerrainLayerMaterials.fill(AssetHandle::Null());
+            m_TerrainLayerTileSizes.fill(4.0f);
+            m_TerrainWeightsPath[0] = '\0';
+            m_TerrainError.clear();
+
+            const std::span<const TerrainLayer> layers = std::static_pointer_cast<Terrain>(m_SelectedAsset)->GetLayers();
+            for (size_t layer = 0; layer < layers.size(); ++layer)
+            {
+                m_TerrainLayerMaterials[layer] = layers[layer].Material->GetHandle();
+                m_TerrainLayerTileSizes[layer] = layers[layer].TileSize;
+            }
+        }
     }
 }

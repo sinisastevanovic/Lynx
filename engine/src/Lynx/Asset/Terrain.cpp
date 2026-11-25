@@ -212,6 +212,50 @@ namespace Lynx
             m_LayerCount = 0;
     }
 
+    void Terrain::SetLayers(std::span<const TerrainLayer> layers)
+    {
+        m_LayerCount = 0;
+        for (const TerrainLayer& layer : layers.first(std::min(layers.size(), TerrainLayerCount)))
+        {
+            if (!layer.Material)
+                break;
+            m_Layers[m_LayerCount++] = layer;
+        }
+        IncrementVersion();
+        if (m_LayerCount == 0 || m_Tiles.empty())
+            return;
+
+        // No weights yet: a few places per tile are enough to say "the first layer, everywhere".
+        const auto hasWeights = [this](const Tile& tile) { return tile.Weights.size() == static_cast<size_t>(GetWeightTexels()) * GetWeightTexels() * BytesPerWeight; };
+        if (m_WeightTileResolution == 0 || !std::ranges::all_of(m_Tiles, hasWeights))
+        {
+            m_WeightTileResolution = 8;
+            const size_t texels = GetWeightTexels();
+            for (Tile& tile : m_Tiles)
+            {
+                tile.Weights.assign(texels * texels * BytesPerWeight, 0);
+                for (size_t place = 0; place < texels * texels; ++place)
+                    tile.Weights[place * BytesPerWeight] = 255;
+                tile.WeightSlot.reset();
+                tile.WeightMap.reset();
+            }
+        }
+
+        const bool isUploaded = std::ranges::all_of(m_Tiles, [](const Tile& tile) { return tile.WeightMap != nullptr; });
+        if (!isUploaded && !UploadWeights())
+            m_LayerCount = 0;
+    }
+
+    bool Terrain::Reload()
+    {
+        if (m_FilePath.empty())
+            return true;
+
+        m_LayerCount = 0;
+        m_IsOnGpu = false;
+        return LoadSourceData() && CreateRenderResources();
+    }
+
     bool Terrain::UploadWeights()
     {
         // Smaller sizes for ground far away, like any texture.
