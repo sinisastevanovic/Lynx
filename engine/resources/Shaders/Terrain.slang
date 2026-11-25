@@ -75,6 +75,69 @@ struct TerrainVaryings
     nointerpolation float level : LEVEL;
 };
 
+// A texture that repeats every few units shows its repeats as a pattern once many of them fit into
+// the view, and from far enough it is one flat colour. So a layer is read at two sizes: as it is close
+// by, and this many times larger far away, where the larger one shows the texture's shapes again.
+static const float farRepeat = 8.0;
+
+// The larger size takes over as a repeat of the smaller one shrinks on screen, between these two
+// widths in pixels. By pixels and not by distance, so that it holds for any picture size and lens.
+static const float pixelsOfANearRepeat = 256.0;
+static const float pixelsOfAFarRepeat = 64.0;
+
+// And the ground's colour varies a little over tens of units, as real ground does with damp, growth
+// and wear. Without it even the larger repeat is an even carpet from a hilltop.
+static const float patchSize = 70.0;
+static const float patchStrength = 0.22;
+
+// A number from 0 to 1 for a place on a grid, the same every time.
+float numberAtCorner(float2 corner)
+{
+    return frac(sin(dot(corner, float2(127.1, 311.7))) * 43758.5453);
+}
+
+// The numbers of the grid, smoothly blended between its corners.
+float smoothNoise(float2 place)
+{
+    float2 cell = floor(place);
+    float2 within = frac(place);
+    float2 eased = within * within * (3.0 - 2.0 * within);
+    return lerp(
+        lerp(numberAtCorner(cell), numberAtCorner(cell + float2(1.0, 0.0)), eased.x),
+        lerp(numberAtCorner(cell + float2(0.0, 1.0)), numberAtCorner(cell + float2(1.0, 1.0)), eased.x),
+        eased.y);
+}
+
+// What a layer of ground is like at a place.
+struct Ground
+{
+    float3 colour;
+
+    // The tilt of its surface as its normal map stores it.
+    float3 tilt;
+    float metallic;
+    float roughness;
+};
+
+// Reads a layer's textures at one size. perPixel is how far the place moves from one pixel to the
+// next, across and down: the GPU cannot work that out inside a branch or a loop that leaves things out.
+Ground groundOf(StandardMaterial material, float2 place, float tiles, float2 perPixelAcross, float2 perPixelDown)
+{
+    SamplerState layerSampler = samplers[NonUniformResourceIndex(material.materialSampler)];
+    float2 uv = place * tiles;
+    float2 across = perPixelAcross * tiles;
+    float2 down = perPixelDown * tiles;
+
+    float4 metallicRoughness = textures[NonUniformResourceIndex(material.metallicRoughnessTexture)].SampleGrad(layerSampler, uv, across, down);
+
+    Ground ground;
+    ground.colour = textures[NonUniformResourceIndex(material.albedoTexture)].SampleGrad(layerSampler, uv, across, down).rgb * material.albedoColor.rgb;
+    ground.tilt = textures[NonUniformResourceIndex(material.normalTexture)].SampleGrad(layerSampler, uv, across, down).rgb * 2.0 - 1.0;
+    ground.metallic = metallicRoughness.b * material.metallic;
+    ground.roughness = metallicRoughness.g * material.roughness;
+    return ground;
+}
+
 // The height of the terrain at a place counted from its corner, read from the given size of the heights.
 float heightAt(TerrainData terrain, float2 place, float size)
 {
@@ -179,18 +242,43 @@ float4 fragmentMain(TerrainVaryings input) : SV_Target
 
             StandardMaterial material = constants.materials[terrain.layerMaterials[layer]];
             float tiles = terrain.layerTilesPerUnit[layer];
-            float2 uv = input.worldPosition.xz * tiles;
-            SamplerState layerSampler = samplers[NonUniformResourceIndex(material.materialSampler)];
 
-            float3 colour = textures[NonUniformResourceIndex(material.albedoTexture)].SampleGrad(layerSampler, uv, perPixelAcross * tiles, perPixelDown * tiles).rgb;
-            float3 mapped = textures[NonUniformResourceIndex(material.normalTexture)].SampleGrad(layerSampler, uv, perPixelAcross * tiles, perPixelDown * tiles).rgb;
-            float4 metallicRoughness = textures[NonUniformResourceIndex(material.metallicRoughnessTexture)].SampleGrad(layerSampler, uv, perPixelAcross * tiles, perPixelDown * tiles);
+            // How much of the larger size shows, by how wide a repeat of the smaller one is on screen.
+            // Where only one of the two shows, only that one is read.
+            float pixelsOfARepeat = 1.0 / max(tiles * pixelInWorld, 0.000001);
+            float towardsFar = saturate((pixelsOfANearRepeat - pixelsOfARepeat) / (pixelsOfANearRepeat - pixelsOfAFarRepeat));
 
-            albedo += share * colour * material.albedoColor.rgb;
-            tilt += share * (mapped * 2.0 - 1.0);
-            metallic += share * metallicRoughness.b * material.metallic;
-            roughness += share * metallicRoughness.g * material.roughness;
+            Ground ground;
+            ground.colour = float3(0.0, 0.0, 0.0);
+            ground.tilt = float3(0.0, 0.0, 0.0);
+            ground.metallic = 0.0;
+            ground.roughness = 0.0;
+            if (towardsFar < 1.0)
+            {
+                Ground near = groundOf(material, input.worldPosition.xz, tiles, perPixelAcross, perPixelDown);
+                ground.colour += near.colour * (1.0 - towardsFar);
+                ground.tilt += near.tilt * (1.0 - towardsFar);
+                ground.metallic += near.metallic * (1.0 - towardsFar);
+                ground.roughness += near.roughness * (1.0 - towardsFar);
+            }
+            if (towardsFar > 0.0)
+            {
+                Ground far = groundOf(material, input.worldPosition.xz, tiles / farRepeat, perPixelAcross, perPixelDown);
+                ground.colour += far.colour * towardsFar;
+                ground.tilt += far.tilt * towardsFar;
+                ground.metallic += far.metallic * towardsFar;
+                ground.roughness += far.roughness * towardsFar;
+            }
+
+            albedo += share * ground.colour;
+            tilt += share * ground.tilt;
+            metallic += share * ground.metallic;
+            roughness += share * ground.roughness;
         }
+
+        // Patches of a little lighter and a little darker ground, in two sizes laid over each other.
+        float patches = 0.65 * smoothNoise(input.worldPosition.xz / patchSize) + 0.35 * smoothNoise(input.worldPosition.xz / (patchSize * 0.31) + 19.7);
+        albedo *= 1.0 + patchStrength * (patches * 2.0 - 1.0);
 
         // The layers' normal maps tilt the ground's normal. A texture's u runs along the world's x and
         // its v along z, so those two, laid onto the ground, are the directions the map is stored in.

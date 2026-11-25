@@ -224,7 +224,10 @@ build\bin\Debug\LynxSandboxGame.exe
   (`TerrainLayer`: a material asset and how many units one repeat of its textures covers) and a picture of
   weights, four bytes per place, that says how much of each shows where (`Terrain::SetLayers`). The layers'
   materials are entries of the material table, and the shader mixes colour, normal map, metalness and roughness
-  by the weights, reading the textures by the place in the world. A terrain without layers is drawn in two plain
+  by the weights, reading the textures by the place in the world. A layer is read at two sizes, as it is
+  and eight times larger, and the larger one takes over as a repeat of the smaller shrinks below 256 pixels on
+  screen, or a repeating texture shows as a pattern and then as one flat colour. Slow noise also makes the
+  ground a little lighter and darker in patches of tens of units. A terrain without layers is drawn in two plain
   colours by slope. Loading a terrain from a file is the rest of step 3.7.
 - **Lit surfaces.** Everything that is lit calls `lightOn(surface, pixel)` in `StandardShading.slang` with a
   `LitSurface` (position, normals, colour, metalness, roughness): the sun, its shadow, the sky. The view modes
