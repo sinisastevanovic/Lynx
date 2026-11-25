@@ -137,8 +137,11 @@ build\bin\Debug\LynxSandboxGame.exe
   per submesh that an instance carries the address of). A coarser level draws half the leaves, and the vertex
   shaders grow the rest about their centres so the crown covers the same area (`leafPosition` in `Mesh.slang`).
   The level of foliage is picked in sixteenths and a leaf shrinks away before it is dropped, so nothing pops.
-  A piece more than four times the usual leaf size, like a twig's stem, is left as it is until the leaves have
-  grown to its size, and thinned out like them from there on. `LodSettings::LeafPixels` says
+  A piece more than four times the usual leaf size, like a twig's stem, is kept until the leaves have
+  grown to its size, and thinned out like them from there on. A piece is not grown as a whole: every vertex
+  knows the level from which it moves outwards, which is when the usual leaf has grown out to where the vertex
+  already is. Grown about its middle, a piece longer than a leaf stuck out of the crown as a spike.
+  `LodSettings::LeafPixels` says
   how large a leaf may be on screen. An entry of the list of drawn instances holds the place in 24 bits and the
   level above them. A surface with cut-outs of few pieces, like a sail, keeps its one level.
 - **View modes.** A view of a scene can show one thing about the picture instead of the picture (`ViewMode` in

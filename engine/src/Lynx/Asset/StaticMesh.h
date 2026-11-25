@@ -46,9 +46,10 @@ namespace Lynx
         // its radius: three numbers from -1 to 1 in 16 bits each.
         int16_t Pivot[3];
 
-        // The last level of detail the leaf is drawn in, and the level from which on it is made larger,
-        // both in eighths of a level. A leaf of the usual size grows from level 0 on. A larger piece is
-        // left as it is until the leaves around it have grown to its size, see BuildFoliageLods.
+        // The last level of detail the leaf is drawn in, and the level from which on this vertex moves
+        // away from the leaf's centre, both in eighths of a level. A vertex of a leaf of the usual size
+        // moves from level 0 on. One that lies farther out, on a longer piece, stays until the leaves
+        // around it have grown out to it, see BuildFoliageLods.
         uint8_t LastLevel;
         uint8_t FirstLevel;
     };

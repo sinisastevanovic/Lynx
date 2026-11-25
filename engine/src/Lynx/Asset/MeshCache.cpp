@@ -15,7 +15,8 @@ namespace Lynx
         // 3: a submesh has levels of detail.
         // 4: foliage has levels of detail, and its vertices know their leaf.
         // 5: large pieces of foliage are thinned out too, from a later level on.
-        constexpr uint32_t s_MeshVersion = 5;
+        // 6: a vertex of foliage knows from which level on it moves, not its whole piece.
+        constexpr uint32_t s_MeshVersion = 6;
         constexpr uint32_t s_MeshMagicNumber = 0x4d43584c; // "LXCM"
 
         // More than any mesh has. A damaged file that claims more is refused before memory is reserved for it.

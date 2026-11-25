@@ -81,21 +81,21 @@ public float3 leafPosition(MeshInstance instance, float3 position, uint vertexIn
     if (level <= 0.0 || instance.leaves == nullptr)
         return position;
 
-    // A piece larger than a leaf is left as it is until the leaves have grown to its size.
     LeafVertex leaf = instance.leaves[int(vertexIndex) - instance.vertexOffset];
     float lastLevel = float((leaf.pivotZAndLevels >> 16) & 0xFF) / 8.0;
     float firstLevel = float(leaf.pivotZAndLevels >> 24) / 8.0;
-    if (level <= firstLevel)
-        return position;
 
     float3 fromCentre = float3(fromSnorm16(leaf.pivotXY), fromSnorm16(leaf.pivotXY >> 16), fromSnorm16(leaf.pivotZAndLevels));
     float3 pivot = instance.boundingSphere.xyz + fromCentre * instance.boundingSphere.w;
 
-    // It shrinks away over the last half level it is drawn in, or over all of its levels if those are fewer.
-    float shrink = saturate((lastLevel - level) / max(min(lastLevel - firstLevel, leafFadeLevels), 0.0001));
+    // The leaf shrinks away over the last half level it is drawn in, or over all of its levels if those are fewer.
+    float shrink = saturate((lastLevel - level) / max(min(lastLevel, leafFadeLevels), 0.0001));
 
-    // Half the leaves at twice the area each: larger by the square root of two per level.
-    float grow = sqrt(exp2(level - firstLevel));
+    // Half the leaves at twice the area each: larger by the square root of two per level. A vertex that
+    // lies farther from the centre of its piece than a leaf reaches only joins in at its own first level,
+    // when the leaves have grown out to it. A piece longer than a leaf would otherwise stick out of
+    // the crown as a spike.
+    float grow = sqrt(exp2(max(level - firstLevel, 0.0)));
     return pivot + (position - pivot) * (grow * shrink);
 }
 

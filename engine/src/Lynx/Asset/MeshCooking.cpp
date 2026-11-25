@@ -101,11 +101,10 @@ namespace Lynx
         // With fewer separate pieces than this, a submesh is not foliage: taking pieces away would show.
         constexpr size_t FewestLeaves = 256;
 
-        // A piece up to this many times larger than the usual one is a leaf like any other. A larger one,
-        // such as the stem of a twig, is left as it is until the leaves have grown to be as large as it
-        // is, divided by this. Grown from the start like a leaf, a stem stuck out of the crown as a spike
-        // many metres long. Left alone for good, the stems kept a tree at a seventh of its triangles
-        // however far away it was.
+        // A piece up to this many times larger than the usual one is thinned out like any other leaf
+        // from the first level on. A larger one, such as the stem of a twig, is kept until the leaves
+        // have grown to be as large as it is, divided by this. Left alone for good, the stems kept a
+        // tree at a seventh of its triangles however far away it was.
         constexpr float LargestLeafInLeafSizes = 4.0f;
 
         // Levels are stored in eighths, in one byte.
@@ -258,10 +257,21 @@ namespace Lynx
             const uint32_t leaf = leafOfTriangle[triangle];
             for (size_t corner = 0; corner < 3; ++corner)
             {
-                Leaf& ofVertex = foliage.Leaves[newPlace[indices[triangle * 3 + corner]]];
+                const uint32_t vertex = indices[triangle * 3 + corner];
+                Leaf& ofVertex = foliage.Leaves[newPlace[vertex]];
                 ofVertex.Centre = 0.5f * (leaves[leaf].Smallest + leaves[leaf].Largest);
-                ofVertex.FirstLevel = lifetimes[leaf].FirstLevel;
                 ofVertex.LastLevel = lifetimes[leaf].LastLevel;
+
+                // From which level on the vertex moves away from the centre of its piece. A piece is
+                // not grown as a whole: grown about its middle, a piece longer than the usual leaf,
+                // a stem or a long needle, reaches that many times farther out than the leaves around
+                // it and sticks out of the crown as a spike. So a vertex stays where it is until the
+                // usual leaf has grown out to where the vertex already is, and moves with it from
+                // there. Nothing then reaches beyond the leaves, and a long piece turns rounder as it grows.
+                // The usual leaf reaches half its size from its centre and grows by the square root of
+                // two per level, so it gets r times as far after two times the logarithm of r levels.
+                const float timesBeyondALeaf = glm::length(positions[vertex] - ofVertex.Centre) / (0.5f * leafSize);
+                ofVertex.FirstLevel = std::min(std::max(2.0f * std::log2(std::max(timesBeyondALeaf, 0.000001f)), 0.0f), LargestStoredLevel);
             }
         }
 
@@ -303,7 +313,7 @@ namespace Lynx
             for (int axis = 0; axis < 3; ++axis)
                 out.Pivot[axis] = static_cast<int16_t>(meshopt_quantizeSnorm(fromCentre[axis], 16));
             out.LastLevel = static_cast<uint8_t>(std::floor(leaf.LastLevel * 8.0f));
-            out.FirstLevel = static_cast<uint8_t>(std::min(std::round(leaf.FirstLevel * 8.0f), static_cast<float>(out.LastLevel)));
+            out.FirstLevel = static_cast<uint8_t>(std::round(leaf.FirstLevel * 8.0f));
         }
         return packed;
     }

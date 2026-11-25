@@ -34,7 +34,8 @@ namespace Lynx
     {
         glm::vec3 Centre{ 0.0f };
 
-        // The level of detail from which on the leaf is made larger, and the level it is last drawn in.
+        // The level of detail from which on the vertex moves away from the centre, and the level the
+        // leaf is last drawn in.
         float FirstLevel = 0.0f;
         float LastLevel = 0.0f;
     };
