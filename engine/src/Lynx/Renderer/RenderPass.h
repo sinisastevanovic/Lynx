@@ -3,6 +3,7 @@
 
 #include <array>
 #include <filesystem>
+#include <optional>
 #include <span>
 
 #include "DebugRenderer.h"
@@ -274,6 +275,10 @@ namespace Lynx
 
         // Built from the depth of what the early phase drew, for the late phase of culling.
         DepthPyramidInfo DepthPyramid;
+
+        // Which stretch of its view the camera found something in a few frames ago, see DepthRangePass.
+        // Nothing while that is not known: in the first frames, without a perspective, facing only sky.
+        std::optional<ViewDepthRange> SeenDepthRange;
 
         // Where the texture table has the scene's HDR picture, and the bloom to add to it.
         // The bloom is a black picture unless the bloom pass has run in this frame.

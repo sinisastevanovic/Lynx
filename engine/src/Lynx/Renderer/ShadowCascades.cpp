@@ -7,8 +7,79 @@
 
 namespace Lynx
 {
+    namespace
+    {
+        // The ends of the fitted stretch move in steps of the fourth root of two: 19 % of the distance.
+        constexpr float StepsPerDoubling = 4.0f;
+
+        // What is seen has to be this many steps away from an end before the end gives way, so that
+        // something that wavers about a step does not move it back and forth.
+        constexpr float StepsBeforeGivingWay = 2.0f;
+
+        // Where each cascade's stretch of the view ends.
+        using SliceEnds = std::array<float, ShadowCascadeCount>;
+
+        // From the near plane to the shadow distance, by ShadowSettings::SplitWeight.
+        SliceEnds ShareOutEverything(float nearPlane, float farPlane, bool isPerspective, float splitWeight)
+        {
+            SliceEnds ends;
+            for (uint32_t index = 0; index < ShadowCascadeCount; ++index)
+            {
+                // Between sharing the distance out evenly and making every cascade as many times deeper than the last.
+                const float share = static_cast<float>(index + 1) / static_cast<float>(ShadowCascadeCount);
+                const float evenly = nearPlane + (farPlane - nearPlane) * share;
+                const float byRatio = isPerspective ? nearPlane * std::pow(farPlane / nearPlane, share) : evenly;
+                ends[index] = glm::mix(evenly, byRatio, splitWeight);
+            }
+            return ends;
+        }
+
+        // Over the stretch that holds something. Its near end is no longer the near plane, centimetres
+        // from the camera, so every cascade can be as many times deeper than the last without the first
+        // ones being wasted on those centimetres.
+        SliceEnds ShareOutWhatIsSeen(ViewDepthRange seen, float farPlane)
+        {
+            constexpr float fittedCount = static_cast<float>(ShadowCascadeCount - 1);
+
+            // Where the last cascade would begin if the whole distance were shared out. The others never
+            // reach beyond that, so a view that holds things all the way gets the usual four cascades.
+            const float nearest = std::min(seen.Nearest, 0.5f * farPlane);
+            const float lastBegins = nearest * std::pow(farPlane / nearest, fittedCount / static_cast<float>(ShadowCascadeCount));
+            const float farthest = std::clamp(seen.Farthest, 1.25f * nearest, lastBegins);
+
+            SliceEnds ends;
+            for (uint32_t index = 0; index + 1 < ShadowCascadeCount; ++index)
+                ends[index] = nearest * std::pow(farthest / nearest, static_cast<float>(index + 1) / fittedCount);
+            ends.back() = farPlane;
+            return ends;
+        }
+    }
+
+    std::optional<ViewDepthRange> ShadowFit::Update(const std::optional<ViewDepthRange>& seen, const ShadowSettings& settings)
+    {
+        if (!settings.FitsToView || !seen)
+        {
+            m_NearestStep.reset();
+            m_FarthestStep.reset();
+            return std::nullopt;
+        }
+
+        const float lowest = std::max(settings.NearestFit, 0.01f);
+        const float nearest = std::log2(std::max(seen->Nearest, lowest)) * StepsPerDoubling;
+        const float farthest = std::log2(std::max(seen->Farthest, lowest)) * StepsPerDoubling;
+
+        // An end moves outwards at once, so that the stretch holds all that is seen, and inwards only
+        // when what is seen has left it well behind.
+        if (!m_NearestStep || nearest < static_cast<float>(*m_NearestStep) || nearest >= static_cast<float>(*m_NearestStep) + StepsBeforeGivingWay)
+            m_NearestStep = static_cast<int32_t>(std::floor(nearest));
+        if (!m_FarthestStep || farthest > static_cast<float>(*m_FarthestStep) || farthest <= static_cast<float>(*m_FarthestStep) - StepsBeforeGivingWay)
+            m_FarthestStep = static_cast<int32_t>(std::ceil(farthest));
+
+        return ViewDepthRange{ std::exp2(static_cast<float>(*m_NearestStep) / StepsPerDoubling), std::exp2(static_cast<float>(*m_FarthestStep) / StepsPerDoubling) };
+    }
+
     std::array<ShadowCascade, ShadowCascadeCount> FitShadowCascades(const glm::mat4& view, const glm::mat4& projection,
-        const glm::vec3& sunDirection, const ShadowSettings& settings)
+        const glm::vec3& sunDirection, const ShadowSettings& settings, const std::optional<ViewDepthRange>& fitTo)
     {
         // How wide the view is at a distance of one, in x and y. An orthographic view is as wide everywhere.
         const bool isPerspective = projection[2][3] != 0.0f;
@@ -26,15 +97,18 @@ namespace Lynx
         const glm::vec3 up = std::abs(direction.y) > 0.99f ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
         const glm::mat4 sunView = glm::lookAt(glm::vec3(0.0f), direction, up);
 
+        const bool isFitted = fitTo && isPerspective && fitTo->Nearest > nearPlane;
+        const SliceEnds sliceEnds = isFitted ? ShareOutWhatIsSeen(*fitTo, farPlane) : ShareOutEverything(nearPlane, farPlane, isPerspective, settings.SplitWeight);
+
         std::array<ShadowCascade, ShadowCascadeCount> cascades;
         float sliceNear = nearPlane;
         for (uint32_t index = 0; index < ShadowCascadeCount; ++index)
         {
-            // Between sharing the distance out evenly and making every cascade as many times deeper than the last.
-            const float share = static_cast<float>(index + 1) / static_cast<float>(ShadowCascadeCount);
-            const float evenly = nearPlane + (farPlane - nearPlane) * share;
-            const float byRatio = isPerspective ? nearPlane * std::pow(farPlane / nearPlane, share) : evenly;
-            const float sliceFar = glm::mix(evenly, byRatio, settings.SplitWeight);
+            const float sliceFar = sliceEnds[index];
+
+            // When fitted, the last cascade is there for everything the others miss, from the camera on.
+            if (isFitted && index + 1 == ShadowCascadeCount)
+                sliceNear = nearPlane;
 
             // The smallest sphere around the stretch of the view from sliceNear to sliceFar. Its centre
             // lies on the line the camera looks along.

@@ -39,8 +39,12 @@ namespace Lynx
                 ShadowSettings& shadows = renderer.GetShadowSettings();
                 ImGui::DragFloat("Distance", &shadows.Distance, 1.0f, 10.0f, 5000.0f);
                 ImGui::SetItemTooltip("How far from the camera the sun's shadow is drawn.");
+                ImGui::Checkbox("Fit to what is seen", &shadows.FitsToView);
+                ImGui::SetItemTooltip("Shares the cascades out over the stretch of the view that holds something,\ninstead of over everything from the camera to the distance.");
+                ImGui::BeginDisabled(shadows.FitsToView);
                 ImGui::SliderFloat("Detail near the camera", &shadows.SplitWeight, 0.0f, 1.0f);
-                ImGui::SetItemTooltip("How the distance is shared out among the four cascades.\nHigher gives the near ones more of the detail.");
+                ImGui::SetItemTooltip("How the distance is shared out among the four cascades while they are not fitted.\nHigher gives the near ones more of the detail.");
+                ImGui::EndDisabled();
                 ImGui::DragFloat("Smallest caster in texels", &shadows.SmallestCasterInTexels, 0.1f, 0.0f, 64.0f);
                 ImGui::SetItemTooltip("Things smaller than this many texels of a cascade's map cast no shadow into it.\nSmall things then lose their shadow some way off, which is where most of the cost of far shadows lies.");
             }

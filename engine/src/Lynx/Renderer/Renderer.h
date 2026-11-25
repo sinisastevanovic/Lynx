@@ -201,6 +201,7 @@ namespace Lynx
         BloomSettings m_BloomSettings;
         LodSettings m_LodSettings;
         ShadowSettings m_ShadowSettings;
+        ShadowFit m_ShadowFit;
 
         RenderContext m_RenderContext;
         RenderData m_CurrentFrameData;

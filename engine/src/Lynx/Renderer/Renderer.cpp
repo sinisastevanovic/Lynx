@@ -31,6 +31,7 @@
 #include "Passes/BloomPass.h"
 #include "Passes/GridPass.h"
 #include "RenderFormats.h"
+#include "Passes/DepthRangePass.h"
 #include "Passes/ShadowPass.h"
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
@@ -311,6 +312,8 @@ namespace Lynx
         m_Graph->Add("DepthPyramid", std::make_unique<DepthPyramidPass>());
         m_Graph->Add("CullOccluded", std::make_unique<CullPass>(CullPhase::Late));
         m_Graph->Add("DepthLate", std::make_unique<DepthPass>(CullPhase::Late));
+        // Only the fitting of the shadow's cascades asks how far the scene reaches.
+        m_Graph->Add("DepthRange", std::make_unique<DepthRangePass>(), [this]() { return m_ShadowSettings.FitsToView; });
         m_Graph->Add("Forward", std::make_unique<ForwardPass>());
         m_Graph->Add("Particles", std::make_unique<ParticlePass>());
         m_Graph->Add("Bloom", std::make_unique<BloomPass>());
@@ -684,7 +687,9 @@ namespace Lynx
         // From clip space, where x and y run from -1 to 1, to texture coordinates from 0 to 1. Both start
         // at the top left, so nothing is turned around.
         const glm::mat4 clipToTexture = glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 1.0f));
-        m_CurrentFrameData.Cascades = FitShadowCascades(view, projection, lightDir, m_ShadowSettings);
+        // What the camera saw is still that of the last frame here, which is as new as it gets.
+        const std::optional<ViewDepthRange> fitTo = m_ShadowFit.Update(m_CurrentFrameData.SeenDepthRange, m_ShadowSettings);
+        m_CurrentFrameData.Cascades = FitShadowCascades(view, projection, lightDir, m_ShadowSettings, fitTo);
         for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
         {
             m_CurrentFrameData.ClipCascadeViewProjection[cascade] = toVulkanClip(m_CurrentFrameData.Cascades[cascade].ViewProjection);
@@ -763,6 +768,7 @@ namespace Lynx
         m_CurrentFrameData.SceneColorIndex = m_Frame->SceneColorSlot.Index();
         m_CurrentFrameData.SceneDepthIndex = m_Frame->SceneDepthSlot.Index();
         m_CurrentFrameData.DepthPyramid = {};
+        m_CurrentFrameData.SeenDepthRange.reset();
         m_CurrentFrameData.BloomTextureIndex = m_Frame->BlackTextureIndex;
         m_CurrentFrameData.Bloom = m_BloomSettings;
         if (ShowsRawColours(m_CurrentFrameData.Viewing.Mode))

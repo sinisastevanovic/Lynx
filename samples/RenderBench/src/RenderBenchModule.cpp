@@ -33,6 +33,7 @@ public:
         ShadowSettings& shadows = engine.GetRenderer().GetShadowSettings();
         shadows.Distance = static_cast<float>(settings.Parameter("ShadowDistance", shadows.Distance));
         shadows.SmallestCasterInTexels = static_cast<float>(settings.Parameter("ShadowSmallestCaster", shadows.SmallestCasterInTexels));
+        shadows.FitsToView = settings.Parameter("ShadowFit", shadows.FitsToView ? 1.0 : 0.0) > 0.0;
 
         // What the view shows, for pictures of every view mode. See ViewMode for the numbers.
         ViewSettings& viewing = engine.GetSceneRenderer().GetViewSettings();
