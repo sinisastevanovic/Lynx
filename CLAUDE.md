@@ -136,6 +136,8 @@ build\bin\Debug\LynxSandboxGame.exe
   3.10 of Renderer V2 and `docs/High-Quality TAA Implementation Brief.md`. So far it averages the frames of a
   view that stands still (`TemporalSettings::Accumulates`): with jitter, the picture with as many samples a
   pixel as the jitter is long, which the resolve will be measured against. FXAA is off for that picture.
+  `Renderer::ResetHistory` says that the next frame shows something else than the last (another scene, a
+  camera that jumped): call it, or what is put together from several frames smears across the change.
 - **Mesh draws.** Meshes that are not see-through are drawn from a buffer of draw commands, one per submesh with all
   its instances that are seen (`RenderData::MeshDraws`). A pass draws a whole range of them with one call
   (`DrawMeshes`). Depth and shadow use a pipeline without a fragment shader for opaque materials and a second one
@@ -325,7 +327,10 @@ build\bin\Debug\LynxSandboxGame.exe
   and Trees differ in a few pixels from run to run, which is known and not explained).
   A benchmark takes `Jitter=1`, `JitterLength=<frames>`, `Accumulate=1`, `FXAA=0`, and `HoldFrames=<count>`,
   which draws every saved frame that many more times with the game standing still before its picture is taken:
-  `-Set Jitter=1,JitterLength=64,Accumulate=1,HoldFrames=63` gives pictures with 64 samples a pixel. The timings compared
+  `-Set Jitter=1,JitterLength=64,Accumulate=1,HoldFrames=63` gives pictures with 64 samples a pixel.
+  The Motion benchmark is the scene anti-aliasing over time is judged on: Sponza, a sideways move of well
+  under a pixel a frame, a nearly still stretch and a faster turn, with a box that keeps crossing the hall,
+  bars of a pixel's width and wires thinner than a pixel (`MotionProps` in the benchmark's code). The timings compared
   are "clean": each benchmark runs five times and every frame counts with its fastest run, which removes the GPU time
   the Windows compositor takes at every display refresh. Clean GPU times repeat within about 1.3 %.
   "Frame" is the slower of two times, and "Bound by" says which: what the CPU needs for a frame without waiting for
