@@ -145,7 +145,7 @@ namespace Lynx
         // every frame and the scene constants point to.
         GpuBuffer SkyIrradiance;
 
-        // The picture shiny surfaces mirror the sky from, where the texture table has it, and where
+        // The cube shiny surfaces mirror the sky from, where the table of cubes has it, and where
         // the sampler table has the sampler it is read with.
         GpuTexture SkyReflection;
         TextureSlot SkyReflectionSlot;
@@ -1146,9 +1146,10 @@ namespace Lynx
         reflectionDesc.Usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
         reflectionDesc.MipLevels = SkyReflectionMips;
         reflectionDesc.ViewPerMip = true;
+        reflectionDesc.IsCube = true;
         reflectionDesc.Name = "SkyReflection";
         m_Frame->SkyReflection = GpuTexture(*m_Context, reflectionDesc);
-        m_Frame->SkyReflectionSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SkyReflection.View()));
+        m_Frame->SkyReflectionSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddCubeTexture(m_Frame->SkyReflection.View()), TextureTable::Cube);
 
         // Read between its pixels and between its sizes, for a roughness between two of them.
         m_Frame->SkyReflectionSamplerIndex = m_Frame->Shared->SamplerIndex(

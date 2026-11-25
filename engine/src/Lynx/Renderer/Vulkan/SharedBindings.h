@@ -13,8 +13,11 @@ namespace Lynx
     class GraphicsContext;
     struct ShaderProgram;
 
+    // Which of the tables of textures a texture is in: that of flat pictures, or that of cubes.
+    enum class TextureTable : uint8_t { Flat, Cube };
+
     // What every shader can reach without a pass binding anything for it: the frame's camera and sun,
-    // and two tables with every texture and every sampler the renderer knows.
+    // and tables with every texture, every cube and every sampler the renderer knows.
     //
     // It is one descriptor set and one pipeline layout for all passes. A shader picks a texture by its
     // index in the table, which it gets through its push constants or from the data of what it draws.
@@ -28,8 +31,10 @@ namespace Lynx
         static constexpr uint32_t TextureBinding = 1;
         static constexpr uint32_t SamplerBinding = 2;
         static constexpr uint32_t ComparisonSamplerBinding = 3;
+        static constexpr uint32_t CubeTextureBinding = 4;
 
         static constexpr uint32_t MaxTextures = 16384;
+        static constexpr uint32_t MaxCubeTextures = 256;
         static constexpr uint32_t MaxSamplers = 64;
         static constexpr uint32_t MaxComparisonSamplers = 8;
 
@@ -52,8 +57,12 @@ namespace Lynx
         // index is released, and the texture is expected in the layout for reading whenever a shader samples it.
         uint32_t AddTexture(vk::ImageView view);
 
+        // The same for a cube, which goes into a table of its own with its own indices: the shading
+        // language tells a cube from a flat picture. The view has to be the cube's view of all its faces.
+        uint32_t AddCubeTexture(vk::ImageView view);
+
         // Gives an index back. It is handed out again only after the frames that may still use it are done.
-        void ReleaseTexture(uint32_t index);
+        void ReleaseTexture(uint32_t index, TextureTable table = TextureTable::Flat);
 
         // The view that was added under an index.
         vk::ImageView TextureView(uint32_t index) const { return m_TextureViews[index]; }
@@ -97,7 +106,9 @@ namespace Lynx
         // Indices that were released and can be handed out again. Shared with the deletion queue,
         // which may return an index after this object is gone.
         std::shared_ptr<std::vector<uint32_t>> m_FreeTextures;
+        std::shared_ptr<std::vector<uint32_t>> m_FreeCubeTextures;
         uint32_t m_TextureCount = 0;
+        uint32_t m_CubeTextureCount = 0;
         std::vector<vk::ImageView> m_TextureViews;
         std::function<void(uint32_t)> m_ReleaseListener;
 

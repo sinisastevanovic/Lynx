@@ -11,13 +11,15 @@
 namespace Lynx
 {
     SharedBindings::SharedBindings(GraphicsContext& context, vk::Buffer sceneConstants)
-        : m_Context(context), m_Device(context.Device()), m_FreeTextures(std::make_shared<std::vector<uint32_t>>())
+        : m_Context(context), m_Device(context.Device()), m_FreeTextures(std::make_shared<std::vector<uint32_t>>()),
+          m_FreeCubeTextures(std::make_shared<std::vector<uint32_t>>())
     {
         const std::array bindings = {
             vk::DescriptorSetLayoutBinding(SceneBinding, vk::DescriptorType::eUniformBuffer, 1, ShaderStages),
             vk::DescriptorSetLayoutBinding(TextureBinding, vk::DescriptorType::eSampledImage, MaxTextures, ShaderStages),
             vk::DescriptorSetLayoutBinding(SamplerBinding, vk::DescriptorType::eSampler, MaxSamplers, ShaderStages),
             vk::DescriptorSetLayoutBinding(ComparisonSamplerBinding, vk::DescriptorType::eSampler, MaxComparisonSamplers, ShaderStages),
+            vk::DescriptorSetLayoutBinding(CubeTextureBinding, vk::DescriptorType::eSampledImage, MaxCubeTextures, ShaderStages),
         };
 
         // The tables are mostly empty, and entries are written while frames that use the set are being
@@ -25,7 +27,7 @@ namespace Lynx
         const vk::DescriptorBindingFlags tableFlags = vk::DescriptorBindingFlagBits::ePartiallyBound
             | vk::DescriptorBindingFlagBits::eUpdateAfterBind
             | vk::DescriptorBindingFlagBits::eUpdateUnusedWhilePending;
-        const std::array<vk::DescriptorBindingFlags, 4> bindingFlags = { vk::DescriptorBindingFlags(), tableFlags, tableFlags, tableFlags };
+        const std::array<vk::DescriptorBindingFlags, 5> bindingFlags = { vk::DescriptorBindingFlags(), tableFlags, tableFlags, tableFlags, tableFlags };
 
         const vk::DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo(bindingFlags);
         vk::DescriptorSetLayoutCreateInfo layoutInfo(vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool, bindings);
@@ -37,7 +39,7 @@ namespace Lynx
 
         const std::array poolSizes = {
             vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, 1),
-            vk::DescriptorPoolSize(vk::DescriptorType::eSampledImage, MaxTextures),
+            vk::DescriptorPoolSize(vk::DescriptorType::eSampledImage, MaxTextures + MaxCubeTextures),
             vk::DescriptorPoolSize(vk::DescriptorType::eSampler, MaxSamplers + MaxComparisonSamplers),
         };
         m_Pool = m_Device.createDescriptorPool(vk::DescriptorPoolCreateInfo(vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind, 1, poolSizes));
@@ -84,14 +86,39 @@ namespace Lynx
         return index;
     }
 
-    void SharedBindings::ReleaseTexture(uint32_t index)
+    uint32_t SharedBindings::AddCubeTexture(vk::ImageView view)
     {
-        if (m_ReleaseListener)
+        uint32_t index = 0;
+        if (!m_FreeCubeTextures->empty())
+        {
+            index = m_FreeCubeTextures->back();
+            m_FreeCubeTextures->pop_back();
+        }
+        else if (m_CubeTextureCount < MaxCubeTextures)
+        {
+            index = m_CubeTextureCount++;
+        }
+        else
+        {
+            // Index 0 is a valid cube if there is one at all, so the caller draws with the wrong one instead of crashing.
+            LX_CORE_ERROR("The table of cube textures is full ({0} cubes).", MaxCubeTextures);
+            return 0;
+        }
+
+        const vk::DescriptorImageInfo imageInfo({}, view, vk::ImageLayout::eShaderReadOnlyOptimal);
+        m_Device.updateDescriptorSets(vk::WriteDescriptorSet(m_Set, CubeTextureBinding, index, vk::DescriptorType::eSampledImage, imageInfo), nullptr);
+        return index;
+    }
+
+    void SharedBindings::ReleaseTexture(uint32_t index, TextureTable table)
+    {
+        // Only flat pictures have something kept per texture elsewhere.
+        if (table == TextureTable::Flat && m_ReleaseListener)
             m_ReleaseListener(index);
 
         // A frame on the GPU may still sample through the index. Handing it out again right away
         // would show that frame the next texture.
-        m_Context.Deletions().Retire([freeTextures = m_FreeTextures, index]() { freeTextures->push_back(index); });
+        m_Context.Deletions().Retire([free = table == TextureTable::Cube ? m_FreeCubeTextures : m_FreeTextures, index]() { free->push_back(index); });
     }
 
     uint32_t SharedBindings::SamplerIndex(vk::Sampler sampler)
@@ -146,6 +173,7 @@ namespace Lynx
             const bool known = binding.Set == 0
                 && ((binding.Binding == SceneBinding && binding.Kind == ShaderBindingKind::UniformBuffer)
                     || (binding.Binding == TextureBinding && binding.Kind == ShaderBindingKind::SampledTexture)
+                    || (binding.Binding == CubeTextureBinding && binding.Kind == ShaderBindingKind::SampledTexture)
                     || (binding.Binding == SamplerBinding && binding.Kind == ShaderBindingKind::Sampler)
                     || (binding.Binding == ComparisonSamplerBinding && binding.Kind == ShaderBindingKind::Sampler));
             if (!known)

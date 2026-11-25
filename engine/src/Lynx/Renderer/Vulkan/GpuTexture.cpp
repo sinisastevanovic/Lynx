@@ -72,9 +72,11 @@ namespace Lynx
         imageInfo.format = desc.Format;
         imageInfo.extent = vk::Extent3D(desc.Width, desc.Height, 1);
         imageInfo.mipLevels = desc.MipLevels;
-        imageInfo.arrayLayers = 1;
+        imageInfo.arrayLayers = LayerCount();
         imageInfo.samples = vk::SampleCountFlagBits::e1;
         imageInfo.usage = desc.Usage;
+        if (desc.IsCube)
+            imageInfo.flags |= vk::ImageCreateFlagBits::eCubeCompatible;
 
         // A view in another format than the picture's has to be allowed when the picture is made. Naming
         // the formats lets the driver keep the optimisations it would drop for "any format".
@@ -83,7 +85,7 @@ namespace Lynx
         if (desc.SrgbView && viewFormats[1] != vk::Format::eUndefined)
         {
             viewFormatList.setViewFormats(viewFormats);
-            imageInfo.flags = vk::ImageCreateFlagBits::eMutableFormat;
+            imageInfo.flags |= vk::ImageCreateFlagBits::eMutableFormat;
             imageInfo.pNext = &viewFormatList;
         }
 
@@ -122,9 +124,9 @@ namespace Lynx
     {
         vk::ImageViewCreateInfo viewInfo;
         viewInfo.image = m_Image;
-        viewInfo.viewType = vk::ImageViewType::e2D;
+        viewInfo.viewType = m_Desc.IsCube ? vk::ImageViewType::eCube : vk::ImageViewType::e2D;
         viewInfo.format = m_Desc.Format;
-        viewInfo.subresourceRange = vk::ImageSubresourceRange(AspectOf(m_Desc.Format), 0, m_Desc.MipLevels, 0, 1);
+        viewInfo.subresourceRange = vk::ImageSubresourceRange(AspectOf(m_Desc.Format), 0, m_Desc.MipLevels, 0, LayerCount());
         if (m_Desc.ReadAsGrey)
             viewInfo.components = vk::ComponentMapping(vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eOne);
         m_View = context.Device().createImageView(viewInfo);
@@ -138,14 +140,21 @@ namespace Lynx
 
         if (m_Desc.ViewPerMip)
         {
-            // These are drawn into, which a view that rearranges channels does not allow.
+            // These are drawn into, which a view that rearranges channels does not allow, and one flat
+            // picture at a time: the faces of a cube each get their own.
             viewInfo.components = vk::ComponentMapping();
-            m_MipViews.reserve(m_Desc.MipLevels);
+            viewInfo.viewType = vk::ImageViewType::e2D;
+            viewInfo.subresourceRange.levelCount = 1;
+            viewInfo.subresourceRange.layerCount = 1;
+            m_MipViews.reserve(m_Desc.MipLevels * LayerCount());
             for (uint32_t mip = 0; mip < m_Desc.MipLevels; ++mip)
             {
-                viewInfo.subresourceRange.baseMipLevel = mip;
-                viewInfo.subresourceRange.levelCount = 1;
-                m_MipViews.push_back(context.Device().createImageView(viewInfo));
+                for (uint32_t layer = 0; layer < LayerCount(); ++layer)
+                {
+                    viewInfo.subresourceRange.baseMipLevel = mip;
+                    viewInfo.subresourceRange.baseArrayLayer = layer;
+                    m_MipViews.push_back(context.Device().createImageView(viewInfo));
+                }
             }
         }
     }
@@ -202,7 +211,7 @@ namespace Lynx
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = m_Image;
-        barrier.subresourceRange = vk::ImageSubresourceRange(AspectOf(m_Desc.Format), 0, m_Desc.MipLevels, 0, 1);
+        barrier.subresourceRange = vk::ImageSubresourceRange(AspectOf(m_Desc.Format), 0, m_Desc.MipLevels, 0, LayerCount());
 
         vk::DependencyInfo dependency;
         dependency.imageMemoryBarrierCount = 1;
@@ -215,13 +224,13 @@ namespace Lynx
     void GpuTexture::ClearColor(vk::CommandBuffer commands, const vk::ClearColorValue& color)
     {
         Transition(commands, vk::ImageLayout::eTransferDstOptimal);
-        commands.clearColorImage(m_Image, vk::ImageLayout::eTransferDstOptimal, color, vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, m_Desc.MipLevels, 0, 1));
+        commands.clearColorImage(m_Image, vk::ImageLayout::eTransferDstOptimal, color, vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, m_Desc.MipLevels, 0, LayerCount()));
     }
 
     void GpuTexture::ClearDepth(vk::CommandBuffer commands, float depth)
     {
         Transition(commands, vk::ImageLayout::eTransferDstOptimal);
-        commands.clearDepthStencilImage(m_Image, vk::ImageLayout::eTransferDstOptimal, vk::ClearDepthStencilValue(depth, 0), vk::ImageSubresourceRange(AspectOf(m_Desc.Format), 0, m_Desc.MipLevels, 0, 1));
+        commands.clearDepthStencilImage(m_Image, vk::ImageLayout::eTransferDstOptimal, vk::ClearDepthStencilValue(depth, 0), vk::ImageSubresourceRange(AspectOf(m_Desc.Format), 0, m_Desc.MipLevels, 0, LayerCount()));
     }
 
     void GpuTexture::Release()

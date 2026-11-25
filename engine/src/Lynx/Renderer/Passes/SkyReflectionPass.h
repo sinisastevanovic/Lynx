@@ -6,10 +6,10 @@
 
 namespace Lynx
 {
-    // Draws the picture shiny surfaces mirror the sky from: the sky in every direction, in several
+    // Draws the cube shiny surfaces mirror the sky from: the sky in every direction, in several
     // sizes, each blurred for a rougher surface than the one before (SkyReflection.slang). Only in a
     // frame in which the sky has changed, after the atmosphere pass, whose sky view it reads.
-    // The renderer owns the picture.
+    // The renderer owns the cube.
     class SkyReflectionPass : public VulkanPass
     {
     public:

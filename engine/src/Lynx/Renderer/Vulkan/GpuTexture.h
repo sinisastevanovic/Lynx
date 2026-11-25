@@ -12,6 +12,8 @@ namespace Lynx
 {
     class GraphicsContext;
 
+    constexpr uint32_t CubeFaceCount = 6;
+
     struct GpuTextureDesc
     {
         uint32_t Width = 0;
@@ -21,7 +23,14 @@ namespace Lynx
         uint32_t MipLevels = 1;
 
         // Also make a view of every mip level on its own, for a texture whose levels are drawn into one by one.
+        // For a cube: of every face of every level.
         bool ViewPerMip = false;
+
+        // A cube: six square pictures that a shader reads by a direction instead of by a place, the
+        // faces of a cube around the reader. In Vulkan's order: +X, -X, +Y, -Y, +Z, -Z. The width is the
+        // length of an edge, and the height has to equal it. Shaders reach it through the table of
+        // cubes, see SharedBindings::AddCubeTexture.
+        bool IsCube = false;
 
         // Also make a view that reads the stored bytes as sRGB, so that a shader gets linear light from a
         // picture painted for the screen. Ignored for a format that has no sRGB form.
@@ -36,7 +45,7 @@ namespace Lynx
         const char* Name = "";
     };
 
-    // A two-dimensional picture on the GPU, with a view of all of it. Owns both: when the object goes away,
+    // A two-dimensional picture on the GPU, or the six of a cube, with a view of all of it. Owns both: when the object goes away,
     // they are released a few frames later, once no frame on the GPU can still be using them.
     //
     // A picture is in one layout at a time, which says what it may be used for: drawn into, read by a shader,
@@ -67,8 +76,14 @@ namespace Lynx
         vk::ImageView SrgbView() const { return m_SrgbView; }
         const GpuTextureDesc& Desc() const { return m_Desc; }
 
-        // Only for a texture made with ViewPerMip.
+        // Only for a texture made with ViewPerMip, and not for a cube.
         vk::ImageView MipView(uint32_t mip) const { return m_MipViews[mip]; }
+
+        // One face of one mip level of a cube made with ViewPerMip, as a flat picture to draw into.
+        vk::ImageView FaceView(uint32_t face, uint32_t mip) const { return m_MipViews[mip * CubeFaceCount + face]; }
+
+        // How many pictures the texture is made of: six for a cube, one otherwise.
+        uint32_t LayerCount() const { return m_Desc.IsCube ? CubeFaceCount : 1; }
 
         vk::ImageLayout Layout() const { return m_Layout; }
 

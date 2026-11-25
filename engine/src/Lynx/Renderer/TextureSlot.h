@@ -5,16 +5,19 @@
 namespace Lynx
 {
     class SharedBindings;
+    enum class TextureTable : uint8_t;
 
-    // The place of one texture in the texture table that all shaders read from. Owns the place: when the
+    // The place of one texture in a texture table that all shaders read from: that of flat pictures, or that of cubes. Owns the place: when the
     // object goes away, the index is given back once the frames that may still use it are done.
     // The texture itself outlives those frames on its own, see GpuTexture.
     class TextureSlot
     {
     public:
         TextureSlot() = default;
-        // Takes over an index the caller got from SharedBindings::AddTexture.
+        // Takes over an index the caller got from SharedBindings::AddTexture, or from AddCubeTexture
+        // if the table named is that of cubes.
         TextureSlot(SharedBindings& shared, uint32_t index);
+        TextureSlot(SharedBindings& shared, uint32_t index, TextureTable table);
         ~TextureSlot();
 
         TextureSlot(TextureSlot&& other) noexcept;
@@ -33,5 +36,6 @@ namespace Lynx
     private:
         SharedBindings* m_Shared = nullptr;
         uint32_t m_Index = 0;
+        bool m_IsCube = false;
     };
 }

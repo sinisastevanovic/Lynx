@@ -1,12 +1,13 @@
-// Fills the picture shiny surfaces mirror the sky from: the sky and the planet's ground in every
+// Fills the cube shiny surfaces mirror the sky from: the sky and the planet's ground in every
 // direction, in several sizes. The largest is the sky as it is, for a perfect mirror. Each smaller one
 // is the sky blurred the way a rougher surface blurs what it mirrors, so a pixel only has to read the
 // size that goes with its roughness (the first half of the split sum of "Real Shading in Unreal Engine 4",
-// Karis, 2013). See skyReflection in Atmosphere.slang for how directions map to the picture.
+// Karis, 2013). See skyReflection in Atmosphere.slang.
 //
-// The pass runs this once per size, in a frame in which the sky has changed.
+// The pass runs this once per face of every size, in a frame in which the sky has changed.
 
 import Atmosphere;
+import Textures;
 
 static const float pi = 3.14159265359;
 
@@ -15,14 +16,17 @@ struct ReflectionConstants
     // The roughness this size is blurred for, from 0 to 1.
     float roughness;
 
-    // The width and height of this size in pixels.
+    // The length of an edge of this size in pixels.
     float size;
+
+    // The face of the cube that is drawn, in Vulkan's order.
+    uint face;
+
+    // How many directions a pixel looks in. The same ones for every pixel, so too few would show as
+    // a pattern, not as noise. A slight blur spreads them over little of the sky and needs fewer.
+    uint sampleCount;
 };
 [vk::push_constant] ConstantBuffer<ReflectionConstants> constants;
-
-// How many directions a pixel of a blurred size looks in. The same ones for every pixel, so too few
-// would show as a pattern, not as noise. The sky is smooth but for the glare around the sun.
-static const uint sampleCount = 64;
 
 // One triangle that covers the target, made from the vertex index alone.
 [shader("vertex")]
@@ -46,13 +50,13 @@ float2 pointInSquare(uint index)
     bits = ((bits & 0x33333333u) << 2) | ((bits & 0xCCCCCCCCu) >> 2);
     bits = ((bits & 0x0F0F0F0Fu) << 4) | ((bits & 0xF0F0F0F0u) >> 4);
     bits = ((bits & 0x00FF00FFu) << 8) | ((bits & 0xFF00FF00u) >> 8);
-    return float2((float(index) + 0.5) / float(sampleCount), float(bits) * 2.3283064365386963e-10);
+    return float2((float(index) + 0.5) / float(constants.sampleCount), float(bits) * 2.3283064365386963e-10);
 }
 
 [shader("fragment")]
 float4 fragmentMain(float4 position : SV_Position) : SV_Target
 {
-    float3 mirrored = skyReflectionDirection(position.xy / constants.size);
+    float3 mirrored = cubeDirection(constants.face, position.xy / constants.size);
     if (constants.roughness <= 0.0)
         return float4(lightFrom(mirrored), 1.0);
 
@@ -67,7 +71,7 @@ float4 fragmentMain(float4 position : SV_Position) : SV_Target
     float spread = constants.roughness * constants.roughness;
     float3 light = float3(0.0, 0.0, 0.0);
     float weight = 0.0;
-    for (uint index = 0; index < sampleCount; ++index)
+    for (uint index = 0; index < constants.sampleCount; ++index)
     {
         float2 point = pointInSquare(index);
         float around = 2.0 * pi * point.x;

@@ -19,7 +19,18 @@ namespace Lynx
         {
             float Roughness;
             float Size;
+            uint32_t Face;
+            uint32_t SampleCount;
         };
+
+        // How many directions a pixel of a size looks in, by how far its roughness spreads them over
+        // the sky. The largest sizes have the most pixels and the least spread.
+        uint32_t SampleCountFor(float roughness)
+        {
+            if (roughness <= 0.0f)
+                return 1;
+            return roughness < 0.3f ? 16 : (roughness < 0.5f ? 32 : 64);
+        }
     }
 
     struct SkyReflectionPass::VulkanObjects
@@ -92,7 +103,7 @@ namespace Lynx
         for (GpuTexture* table : renderData.AtmosphereTables)
             resources.Sample(table);
 
-        // Every size of the picture is drawn into on its own.
+        // Every face of every size of the cube is drawn into on its own.
         resources.OwnTargets = true;
         return true;
     }
@@ -110,20 +121,26 @@ namespace Lynx
         {
             const uint32_t size = std::max(1u, picture.Desc().Width >> mip);
 
-            // Every pixel is drawn, so what the size held does not matter.
-            RenderingTargets targets;
-            targets.Color = picture.MipView(mip);
-            targets.Extent = vk::Extent2D(size, size);
-            targets.ColorLoad = vk::AttachmentLoadOp::eDontCare;
-            BeginRendering(commands, targets);
-
             // The sizes share the roughness out evenly, from a mirror to fully rough.
             ReflectionPushData push;
             push.Roughness = mipCount > 1 ? static_cast<float>(mip) / static_cast<float>(mipCount - 1) : 0.0f;
             push.Size = static_cast<float>(size);
-            m_Vulkan->Shared->Push(commands, push);
-            commands.draw(3, 1, 0, 0);
-            commands.endRendering();
+            push.SampleCount = SampleCountFor(push.Roughness);
+
+            for (uint32_t face = 0; face < CubeFaceCount; ++face)
+            {
+                // Every pixel is drawn, so what the face held does not matter.
+                RenderingTargets targets;
+                targets.Color = picture.FaceView(face, mip);
+                targets.Extent = vk::Extent2D(size, size);
+                targets.ColorLoad = vk::AttachmentLoadOp::eDontCare;
+                BeginRendering(commands, targets);
+
+                push.Face = face;
+                m_Vulkan->Shared->Push(commands, push);
+                commands.draw(3, 1, 0, 0);
+                commands.endRendering();
+            }
         }
 
         picture.Transition(commands, vk::ImageLayout::eShaderReadOnlyOptimal);
