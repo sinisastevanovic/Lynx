@@ -38,6 +38,19 @@ namespace Lynx
         return !block.HasPendingData && block.FlushedInFrame + DeletionQueue::FramesToKeep <= m_Frame;
     }
 
+    namespace
+    {
+        // Where the next piece of data may start in a staging block, after one that ends at the given
+        // place: on a multiple of 16 bytes. Pixels have to start on a multiple of the size of a texel,
+        // and no format the engine uses has texels larger than that. Without it, a texture of 16-bit
+        // texels with an odd number of them left the next texture of four-byte texels two bytes off.
+        constexpr uint64_t NextPlace(uint64_t end)
+        {
+            constexpr uint64_t alignment = 16;
+            return (end + alignment - 1) / alignment * alignment;
+        }
+    }
+
     UploadQueue::StagingBlock& UploadQueue::BlockWithRoomFor(uint64_t size)
     {
         for (StagingBlock& block : m_Blocks)
@@ -75,7 +88,7 @@ namespace Lynx
         std::memcpy(static_cast<std::byte*>(block.Buffer.Data()) + block.Used, data.data(), data.size());
 
         m_Copies.push_back({ block.Buffer.Handle(), destination, vk::BufferCopy(block.Used, destinationOffset, data.size()) });
-        block.Used += data.size();
+        block.Used = NextPlace(block.Used + data.size());
         block.HasPendingData = true;
     }
 
@@ -94,7 +107,7 @@ namespace Lynx
         copy.Extent = vk::Extent2D(texture.Desc().Width, texture.Desc().Height);
         copy.MipLevels = texture.Desc().MipLevels;
 
-        block.Used += pixels.size();
+        block.Used = NextPlace(block.Used + pixels.size());
         block.HasPendingData = true;
     }
 
