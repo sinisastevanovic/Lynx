@@ -212,7 +212,7 @@ build\bin\Debug\LynxSandboxGame.exe
   into a scene by a `TerrainComponent`, whose entity's position is the terrain's first corner. It is drawn as
   patches (continuous distance-dependent level of detail, Strugar 2010): `Renderer/TerrainRenderer` walks a tree
   of square patches on the CPU every frame and picks small ones near the camera and large ones far away, a few
-  dozen in all. Every patch is the same grid of 32 by 32 quads with no vertex data: `Terrain.slang` works a
+  dozen in all. Ground is drawn however far away it is: the camera's far plane leaves no patch out (`Frustum::WithoutFarPlane`). Every patch is the same grid of 32 by 32 quads with no vertex data: `Terrain.slang` works a
   vertex's place out from its index, reads its height from the height map, and slides it towards the next
   coarser grid near the end of its level's distance, so levels meet without gaps or jumps. A patch that is
   only partly near enough for the finer level is drawn as quarters. `Passes/TerrainPass` draws the depth with
