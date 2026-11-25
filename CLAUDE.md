@@ -133,9 +133,21 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Temporal pass.** `Passes/TemporalPass` (`Temporal.slang`) runs after everything of the scene is drawn and
   before exposure, bloom and the composite pass, which then work with its result (it points
   `RenderData::SceneColor` at its own picture). It is where anti-aliasing over time is being built, see step
-  3.10 of Renderer V2 and `docs/High-Quality TAA Implementation Brief.md`. So far it averages the frames of a
-  view that stands still (`TemporalSettings::Accumulates`): with jitter, the picture with as many samples a
-  pixel as the jitter is long, which the resolve will be measured against. FXAA is off for that picture.
+  3.10 of Renderer V2 and `docs/High-Quality TAA Implementation Brief.md`.
+  With `TemporalSettings::Resolves` (off by default, "Temporal anti-aliasing" in the render settings panel) it
+  is the anti-aliasing: a pixel takes the motion of the nearest thing around it, reads the history there with
+  the Catmull-Rom curve, pulls it into the box of the colours around the pixel (in YCoCg, rounded as Karis
+  does, `BoxGamma` for variance clipping), and mixes it with the frame, weighted by brightness after exposure.
+  The history's alpha counts the frames it is made of, and `HistoryTime` sets the least a frame counts.
+  The history is dropped off screen and where the depths around the pixel now and around its place then
+  have nothing in common: single depths cannot be compared, the jitter moves every edge. The pass keeps
+  last frame's depth itself. It is right at rest and still too soft in motion (step 3.10c).
+  The view modes "TAA: ..." show the share of the frame, where the history was dropped and how far it was
+  pulled in: the pass draws them into a picture that the composite pass shows in place of the scene
+  (`RenderData::ShownInstead`). The grid and debug lines are drawn after it, without the jitter.
+  With `TemporalSettings::Accumulates` it averages the frames of a view that stands still instead: with
+  jitter, the picture with as many samples a pixel as the jitter is long, which the resolve is measured
+  against. FXAA is off while either is on.
   `Renderer::ResetHistory` says that the next frame shows something else than the last (another scene, a
   camera that jumped): call it, or what is put together from several frames smears across the change.
 - **Mesh draws.** Meshes that are not see-through are drawn from a buffer of draw commands, one per submesh with all
@@ -174,7 +186,7 @@ build\bin\Debug\LynxSandboxGame.exe
   how large a leaf may be on screen. An entry of the list of drawn instances holds the place in 24 bits and the
   level above them. A surface with cut-outs of few pieces, like a sail, keeps its one level.
 - **View modes.** A view of a scene can show one thing about the picture instead of the picture (`ViewMode` in
-  `Renderer/ViewMode.h`: wireframe, unlit, lighting only, normals, level of detail, shadow cascades, motion) and draw cut-outs whole
+  `Renderer/ViewMode.h`: wireframe, unlit, lighting only, normals, level of detail, shadow cascades, motion, three of the TAA) and draw cut-outs whole
   (`ViewSettings::ShowCutOuts`). The settings belong to the view and travel with it (`ExtractedScene::Viewing`),
   so two views can show a scene differently. `SceneRenderer::GetViewSettings` holds those of the main view, the
   viewport panel has the dropdown, and a benchmark takes `ViewMode=<number>` and `ShowCutOuts=0`
@@ -325,7 +337,8 @@ build\bin\Debug\LynxSandboxGame.exe
   and pictures under the label. Run it before and after a change, then `tools/bench-compare.ps1 -Before <a> -After <b>`.
   Pictures are identical between runs of the same code, so any difference comes from the change (Grid, Dense
   and Trees differ in a few pixels from run to run, which is known and not explained).
-  A benchmark takes `Jitter=1`, `JitterLength=<frames>`, `Accumulate=1`, `FXAA=0`, and `HoldFrames=<count>`,
+  A benchmark takes `TAA=1` (with `TaaHistoryTime`, `TaaBoxGamma`, `TaaSharpness`, `TaaDepthTolerance`),
+  `Jitter=1`, `JitterLength=<frames>`, `Accumulate=1`, `FXAA=0`, and `HoldFrames=<count>`,
   which draws every saved frame that many more times with the game standing still before its picture is taken:
   `-Set Jitter=1,JitterLength=64,Accumulate=1,HoldFrames=63` gives pictures with 64 samples a pixel.
   The Motion benchmark is the scene anti-aliasing over time is judged on: Sponza, a sideways move of well
