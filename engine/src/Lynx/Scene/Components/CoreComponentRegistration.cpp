@@ -12,6 +12,7 @@
 #include "Lynx/TypeRegistry.h"
 #include "Lynx/Asset/Script.h"
 #include "Lynx/Scene/Atmosphere.h"
+#include "Lynx/Scene/Exposure.h"
 #include "Lynx/Scene/Entity.h"
 #include "Lynx/Scene/Scene.h"
 #include "Lynx/UI/Core/UIElement.h"
@@ -78,6 +79,18 @@ namespace Lynx
             fields.Add("MieAnisotropy", &AtmosphereSettings::MieAnisotropy).Label("Haze Forward Scattering").DragSpeed(0.01f).Range(0.0f, 0.99f);
             fields.Add("OzoneAbsorption", &AtmosphereSettings::OzoneAbsorption).Label("Ozone Absorption").DragSpeed(0.01f);
             fields.Add("GroundAlbedo", &AtmosphereSettings::GroundAlbedo).Label("Ground Colour").AsColor();
+        });
+
+        // How the brightness of the scene's picture is chosen. The settings themselves are the component.
+        registry.RegisterCoreComponent<ExposureSettings>("Exposure", [](FieldList<ExposureSettings>& fields)
+        {
+            fields.Add("IsAutomatic", &ExposureSettings::IsAutomatic).Label("Automatic");
+            fields.Add("Fixed", &ExposureSettings::Fixed).Label("Fixed Exposure").DragSpeed(0.01f).Range(0.0f, 1000.0f);
+            fields.Add("Compensation", &ExposureSettings::Compensation).Label("Compensation (stops)").DragSpeed(0.05f).Range(-10.0f, 10.0f);
+            fields.Add("Lowest", &ExposureSettings::Lowest).Label("Lowest Exposure").DragSpeed(0.01f).Range(0.0001f, 1000.0f);
+            fields.Add("Highest", &ExposureSettings::Highest).Label("Highest Exposure").DragSpeed(0.05f).Range(0.0001f, 1000.0f);
+            fields.Add("SpeedTowardsDarker", &ExposureSettings::SpeedTowardsDarker).Label("Speed Towards Darker").DragSpeed(0.05f).Range(0.0f, 100.0f);
+            fields.Add("SpeedTowardsBrighter", &ExposureSettings::SpeedTowardsBrighter).Label("Speed Towards Brighter").DragSpeed(0.05f).Range(0.0f, 100.0f);
         });
 
         registry.RegisterCoreComponent<RigidBodyComponent>("RigidBody", [](FieldList<RigidBodyComponent>& fields)

@@ -40,6 +40,9 @@ namespace Lynx
         // The air above the scene. The Earth's unless the scene says otherwise.
         AtmosphereSettings Atmosphere;
 
+        // How the brightness of the picture is chosen.
+        ExposureSettings Exposure;
+
         // An editor view also gets the grid.
         bool IsEditorView = false;
 

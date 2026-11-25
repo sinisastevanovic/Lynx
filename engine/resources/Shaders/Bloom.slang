@@ -2,6 +2,7 @@
 // keep only what is brighter than the threshold, shrink a picture to half its size, and enlarge one to twice its size.
 // The pass runs it once per step, each time from one size of the bloom picture into the next.
 
+import Scene;
 import Textures;
 
 static const int modePrefilter = 0;
@@ -135,7 +136,11 @@ float3 prefilter(float3 color)
 float4 fragmentMain(VertexOutput input) : SV_Target
 {
     if (constants.mode == modePrefilter)
-        return float4(prefilter(sampleSourceSteady(input.uv)), 1.0);
+    {
+        // What glows is decided by how bright a thing is in the picture, not in the scene: the same
+        // lamp glows in a dark room and does not in daylight. So the exposure comes first.
+        return float4(prefilter(sampleSourceSteady(input.uv) * scene.exposure[0].exposure), 1.0);
+    }
 
     if (constants.mode == modeDownsample)
         return float4(downsample(input.uv), 1.0);

@@ -1,5 +1,7 @@
-// Turns the finished HDR picture into what the window shows: anti-aliasing, bloom, tone mapping and gamma.
+// Turns the finished HDR picture into what the window shows: anti-aliasing, exposure, bloom, tone mapping
+// and the curve a screen expects.
 
+import Scene;
 import Textures;
 
 struct CompositeConstants
@@ -38,14 +40,30 @@ float3 sampleScene(float2 uv)
     return textures[constants.sceneTexture].Sample(samplers[constants.linearSampler], uv).rgb;
 }
 
+// Squeezes brightness without limit into what a screen can show: almost unchanged in the dark and the
+// middle, ever flatter towards white (the curve fitted to the ACES film look, Narkowicz, 2015).
+// The fit is made for a picture that is exposed 0.6 times: with that, a middle grey stays a middle grey.
 float3 acesToneMapping(float3 color)
 {
+    color *= 0.6;
     const float a = 2.51;
     const float b = 0.03;
     const float c = 2.43;
     const float d = 0.59;
     const float e = 0.14;
     return clamp((color * (a * color + b)) / (color * (c * color + d) + e), 0.0, 1.0);
+}
+
+// From linear light to what a screen expects: the sRGB curve, which is a straight line near black
+// and close to a power of 1/2.4 above it.
+float forScreen(float linear)
+{
+    return linear <= 0.0031308 ? linear * 12.92 : 1.055 * pow(linear, 1.0 / 2.4) - 0.055;
+}
+
+float3 forScreen(float3 linear)
+{
+    return float3(forScreen(linear.r), forScreen(linear.g), forScreen(linear.b));
 }
 
 static const float fxaaSpanMax = 8.0;
@@ -109,10 +127,14 @@ float4 fragmentMain(VertexOutput input) : SV_Target
     else
         sceneColor = sampleScene(sceneUV);
 
+    // The light of the scene becomes the brightness of the picture. The bloom was made from the
+    // exposed picture already. Raw colours are shown as they are.
+    if (constants.toneMapped == 1)
+        sceneColor *= scene.exposure[0].exposure;
+
     float3 bloomColor = textures[constants.bloomTexture].Sample(samplers[constants.linearSampler], input.uv).rgb;
     sceneColor += bloomColor * constants.bloomIntensity;
 
     float3 mapped = constants.toneMapped == 1 ? acesToneMapping(sceneColor) : saturate(sceneColor);
-    mapped = pow(mapped, float3(1.0 / 2.2));
-    return float4(mapped, 1.0);
+    return float4(forScreen(mapped), 1.0);
 }

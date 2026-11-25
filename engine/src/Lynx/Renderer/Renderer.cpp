@@ -33,6 +33,7 @@
 #include "RenderFormats.h"
 #include "Passes/AtmospherePass.h"
 #include "Passes/DepthRangePass.h"
+#include "Passes/ExposurePass.h"
 #include "Passes/SkyLightPass.h"
 #include "Passes/SkyPass.h"
 #include "Passes/SkyReflectionPass.h"
@@ -144,6 +145,10 @@ namespace Lynx
         // The light of the sky on surfaces, nine numbers per colour, which a compute shader writes
         // every frame and the scene constants point to.
         GpuBuffer SkyIrradiance;
+
+        // How bright the picture is made: one ExposureState, which a compute shader keeps up to date
+        // from frame to frame and the scene constants point to.
+        GpuBuffer Exposure;
 
         // The cube shiny surfaces mirror the sky from, where the table of cubes has it, and where
         // the sampler table has the sampler it is read with.
@@ -265,6 +270,7 @@ namespace Lynx
         m_Frame->ParticleInstances = {};
         m_Frame->PickReadback = {};
         m_Frame->SkyIrradiance = {};
+        m_Frame->Exposure = {};
         m_Frame->SceneConstants = {};
         m_Frame->Uploads.reset();
         m_Frame->PendingScreenshots.clear();
@@ -354,6 +360,7 @@ namespace Lynx
         m_Graph->Add("Sky", std::make_unique<SkyPass>());
         m_Graph->Add("Forward", std::make_unique<ForwardPass>());
         m_Graph->Add("Particles", std::make_unique<ParticlePass>());
+        m_Graph->Add("Exposure", std::make_unique<ExposurePass>());
         m_Graph->Add("Bloom", std::make_unique<BloomPass>());
         m_Graph->Add("Composite", std::make_unique<CompositePass>());
         if (m_ShouldCreateIDTarget)
@@ -757,6 +764,7 @@ namespace Lynx
         atmosphereTables.w = m_Frame->AtmosphereSamplerIndex;
         sceneData.Atmosphere = ToAtmosphereData(m_CurrentFrameData.Atmosphere, cameraPosition.y, atmosphereTables);
         sceneData.SkyIrradiance = m_Frame->SkyIrradiance.Address();
+        sceneData.Exposure = m_Frame->Exposure.Address();
         sceneData.SkyReflection = m_Frame->SkyReflectionSlot.Index();
         sceneData.SkyReflectionSampler = m_Frame->SkyReflectionSamplerIndex;
         m_CurrentFrameData.SkyReflection = &m_Frame->SkyReflection;
@@ -785,6 +793,8 @@ namespace Lynx
         m_CurrentFrameData.Viewing = scene.Viewing;
         m_CurrentFrameData.Atmosphere = scene.Atmosphere;
         m_CurrentFrameData.SunAngularSize = scene.SunAngularSize;
+        m_CurrentFrameData.Exposure = scene.Exposure;
+        m_CurrentFrameData.DeltaTime = scene.DeltaTime;
         BeginScene(scene.View, scene.Projection, scene.CameraPosition, scene.SunDirection, scene.SunColor, scene.SunIntensity, scene.DeltaTime, scene.IsEditorView);
 
         for (const ExtractedParticles& particles : scene.Particles)
@@ -1153,6 +1163,15 @@ namespace Lynx
         irradianceDesc.Name = "SkyIrradiance";
         m_Frame->SkyIrradiance = GpuBuffer(*m_Context, irradianceDesc);
         m_Frame->Uploads->Upload(m_Frame->SkyIrradiance.Handle(), 0, std::as_bytes(std::span(noLight)));
+
+        // The light of the scene is shown as it is until the first frame has chosen an exposure.
+        const ExposureState unexposed;
+        GpuBufferDesc exposureDesc;
+        exposureDesc.Size = sizeof(ExposureState);
+        exposureDesc.Usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        exposureDesc.Name = "Exposure";
+        m_Frame->Exposure = GpuBuffer(*m_Context, exposureDesc);
+        m_Frame->Uploads->Upload(m_Frame->Exposure.Handle(), 0, std::as_bytes(std::span<const ExposureState>(&unexposed, 1)));
 
         GpuTextureDesc reflectionDesc;
         reflectionDesc.Width = SkyReflectionSize;

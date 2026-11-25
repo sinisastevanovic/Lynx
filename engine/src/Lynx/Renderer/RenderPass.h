@@ -11,6 +11,7 @@
 #include "ShadowCascades.h"
 #include "ViewMode.h"
 #include "Lynx/Asset/StaticMesh.h"
+#include "Lynx/Scene/Exposure.h"
 #include "Lynx/Asset/TextureSpecification.h"
 
 struct VkCommandBuffer_T;
@@ -152,6 +153,13 @@ namespace Lynx
     };
 
     // What every shader knows about the frame. Has to match SceneConstants in Scene.slang.
+    // How bright the picture is made, as it lives on the GPU. Has to match ExposureState in Scene.slang.
+    struct ExposureState
+    {
+        float Exposure = 1.0f;
+        uint32_t IsAdapted = 0;
+    };
+
     struct SceneData
     {
         glm::mat4 ViewProjectionMatrix;
@@ -191,6 +199,10 @@ namespace Lynx
         // table the sampler it is read with.
         uint32_t SkyReflection;
         uint32_t SkyReflectionSampler;
+
+        // The address of an ExposureState: how bright the picture is made, which ExposurePass keeps up to date.
+        uint64_t Exposure;
+        uint64_t Padding;
     };
 
     // One see-through instance, drawn on its own: these are sorted by distance, which a shared draw
@@ -297,6 +309,11 @@ namespace Lynx
 
         // The cube shiny surfaces mirror the sky from, see SkyReflectionPass.
         GpuTexture* SkyReflection = nullptr;
+
+        // How the brightness of the picture is chosen, and the time since the last frame in seconds,
+        // which the automatic exposure follows.
+        ExposureSettings Exposure;
+        float DeltaTime = 0.0f;
 
         // Where the scene passes draw: the HDR picture, its depth and, in the editor, the entity ID of every pixel.
         GpuTexture* SceneColor = nullptr;

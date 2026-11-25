@@ -328,6 +328,15 @@ namespace Lynx
             break;
         }
 
+        // And for the exposure.
+        m_Extracted.Exposure = defaults.Exposure;
+        const auto exposures = registry.view<ExposureSettings>(entt::exclude<DisabledComponent>);
+        for (auto entity : exposures)
+        {
+            m_Extracted.Exposure = exposures.get<ExposureSettings>(entity);
+            break;
+        }
+
         SyncMeshes(isEditor, physicsAlpha);
 
         if (m_Renderer.GetShowColliders())

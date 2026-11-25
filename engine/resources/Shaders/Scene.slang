@@ -30,6 +30,17 @@ public struct AtmosphereConstants
     public uint4 tables;
 };
 
+// How bright the picture is made. ExposurePass keeps it up to date, see Exposure.slang.
+// Has to match ExposureState in RenderPass.h.
+public struct ExposureState
+{
+    // What the light of the scene is multiplied by before it becomes colours on the screen.
+    public float exposure;
+
+    // Zero until the automatic exposure has been set once, from where on it only moves gradually.
+    public uint isAdapted;
+};
+
 // Has to match SceneData in RenderPass.h.
 public struct SceneConstants
 {
@@ -71,6 +82,10 @@ public struct SceneConstants
     // the sampler it is read with. See skyReflection in Atmosphere.slang.
     public uint skyReflection;
     public uint skyReflectionSampler;
+
+    // How bright the picture is made, for the shaders that finish it.
+    public ExposureState* exposure;
+    public uint64_t padding;
 };
 
 // The binding number has to match SharedBindings.h.

@@ -78,9 +78,15 @@ public StandardVaryings standardVertex(StandardConstants constants, StandardVert
 // A colour that is meant to reach the screen as it is, for the views that show one thing about a surface.
 // Such a view is shown without tone mapping, but the picture is still brought from linear light to what a
 // screen expects, which this undoes beforehand.
+float fromScreen(float shown)
+{
+    return shown <= 0.04045 ? shown / 12.92 : pow((shown + 0.055) / 1.055, 2.4);
+}
+
 float3 shownAsItIs(float3 colour)
 {
-    return pow(colour, float3(2.2, 2.2, 2.2));
+    colour = saturate(colour);
+    return float3(fromScreen(colour.r), fromScreen(colour.g), fromScreen(colour.b));
 }
 
 // A colour for a level of detail: green for the finest, through yellow to red for the eighth and beyond.
