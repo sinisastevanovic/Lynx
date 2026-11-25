@@ -120,6 +120,22 @@ build\bin\Debug\LynxSandboxGame.exe
   `PassResources::MotionTarget` and its pipeline `MotionFormat`. A fragment shader's outputs are numbered
   colour, motion, entity IDs. A pipeline that blends leaves the motion alone. Nothing reads it yet but the
   view mode "Motion", until TAA (step 3.10). What stands still has a motion of exactly zero.
+- **Jitter.** With `TemporalSettings::Jitters` (`Renderer::GetTemporalSettings`, off by default) the camera is
+  shifted by a part of a pixel, differently in every frame, along the Halton sequence of bases 2 and 3, by a
+  count of frames so that runs repeat. `scene.viewProjection` holds the shift, so everything drawn with it is
+  shifted. `scene.unjitteredViewProjection` and `scene.previousViewProjection` do not, and motion is worked
+  out with those two alone. `scene.jitter` is the shift in texture coordinates.
+- **Pictures written by compute.** A compute shader writes a picture pixel by pixel through a table of its
+  own, `writableTextures[index][pixel] = colour` in `Textures.slang`. The texture is made with the storage
+  usage and added with `SharedBindings::AddWritableTexture` (a `TextureSlot` with `TextureTable::Writable`),
+  and the pass names it with `PassResources::Write`, which brings it into the general layout. To be read
+  afterwards it is in the table of textures as well.
+- **Temporal pass.** `Passes/TemporalPass` (`Temporal.slang`) runs after everything of the scene is drawn and
+  before exposure, bloom and the composite pass, which then work with its result (it points
+  `RenderData::SceneColor` at its own picture). It is where anti-aliasing over time is being built, see step
+  3.10 of Renderer V2 and `docs/High-Quality TAA Implementation Brief.md`. So far it averages the frames of a
+  view that stands still (`TemporalSettings::Accumulates`): with jitter, the picture with as many samples a
+  pixel as the jitter is long, which the resolve will be measured against. FXAA is off for that picture.
 - **Mesh draws.** Meshes that are not see-through are drawn from a buffer of draw commands, one per submesh with all
   its instances that are seen (`RenderData::MeshDraws`). A pass draws a whole range of them with one call
   (`DrawMeshes`). Depth and shadow use a pipeline without a fragment shader for opaque materials and a second one
@@ -305,7 +321,11 @@ build\bin\Debug\LynxSandboxGame.exe
 - Build, then run the editor and the game and read `temp\engine.log` for `[error]`, `[critical]` and `VUID` lines.
 - Rendering and speed: `tools/bench.ps1 -Label <name>` runs the RenderBench benchmarks in Release and stores timings
   and pictures under the label. Run it before and after a change, then `tools/bench-compare.ps1 -Before <a> -After <b>`.
-  Pictures are identical between runs of the same code, so any difference comes from the change. The timings compared
+  Pictures are identical between runs of the same code, so any difference comes from the change (Grid, Dense
+  and Trees differ in a few pixels from run to run, which is known and not explained).
+  A benchmark takes `Jitter=1`, `JitterLength=<frames>`, `Accumulate=1`, `FXAA=0`, and `HoldFrames=<count>`,
+  which draws every saved frame that many more times with the game standing still before its picture is taken:
+  `-Set Jitter=1,JitterLength=64,Accumulate=1,HoldFrames=63` gives pictures with 64 samples a pixel. The timings compared
   are "clean": each benchmark runs five times and every frame counts with its fastest run, which removes the GPU time
   the Windows compositor takes at every display refresh. Clean GPU times repeat within about 1.3 %.
   "Frame" is the slower of two times, and "Bound by" says which: what the CPU needs for a frame without waiting for
