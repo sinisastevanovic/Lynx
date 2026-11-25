@@ -4,29 +4,39 @@
 // from half the sky changes slowly with the direction, so nine numbers hold it almost exactly, and a
 // pixel gets its light from the sky with a handful of multiplications. See skyIrradiance in Atmosphere.slang.
 //
-// Runs once per frame as a single thread: it looks at the sky in a few hundred directions, which the
-// sky view table answers.
+// Runs once per frame as one group of threads. Each looks at the sky in a few directions, which the
+// sky view table answers, and the first adds up what all of them found. One thread doing all of it
+// alone took 0.2 ms, twenty times as long.
 
 import Atmosphere;
 import Scene;
 
 static const float pi = 3.14159265359;
 
-// Evenly spread over the sphere. The sky has no detail finer than nine numbers can keep, the sun's
-// disc is not part of it, so a few hundred are plenty.
-static const uint directionCount = 512;
+// Has to match the numthreads below.
+static const uint threadCount = 64;
+
+// Evenly spread over the sphere, in all 512. The sky has no detail finer than nine numbers can keep,
+// and the sun's disc is not part of it, so that is plenty.
+static const uint directionsPerThread = 8;
+static const uint directionCount = threadCount * directionsPerThread;
+
+// What each thread found, where the first can read it.
+static groupshared float3 found[threadCount * skyIrradianceCount];
 
 [shader("compute")]
-[numthreads(1, 1, 1)]
-void computeMain()
+[numthreads(64, 1, 1)]
+void computeMain(uint3 thread : SV_GroupThreadID)
 {
     float3 sum[skyIrradianceCount];
     for (uint index = 0; index < skyIrradianceCount; ++index)
         sum[index] = float3(0.0, 0.0, 0.0);
 
-    for (uint point = 0; point < directionCount; ++point)
+    for (uint step = 0; step < directionsPerThread; ++step)
     {
-        // A spiral from the top of the sphere to the bottom, turned on by the golden angle at every step.
+        // A spiral from the top of the sphere to the bottom, turned on by the golden angle at every
+        // point. The threads take every 64th point each, so each of them sees all of the sphere.
+        uint point = step * threadCount + thread.x;
         float upwards = 1.0 - 2.0 * (float(point) + 0.5) / float(directionCount);
         float sideways = sqrt(saturate(1.0 - upwards * upwards));
         float around = float(point) * 2.39996323;
@@ -40,11 +50,23 @@ void computeMain()
             sum[index] += light * basis[index];
     }
 
+    for (uint index = 0; index < skyIrradianceCount; ++index)
+        found[thread.x * skyIrradianceCount + index] = sum[index];
+
+    GroupMemoryBarrierWithGroupSync();
+    if (thread.x != 0)
+        return;
+
     // The light from each direction, as nine numbers, becomes the light a surface gathers over the
     // half of the sphere it faces by scaling the numbers: by pi for the first, two thirds of pi for
     // the next three, a quarter of pi for the last five.
     static const float gathered[skyIrradianceCount] = { pi, 2.0 * pi / 3.0, 2.0 * pi / 3.0, 2.0 * pi / 3.0, pi / 4.0, pi / 4.0, pi / 4.0, pi / 4.0, pi / 4.0 };
     float perDirection = 4.0 * pi / float(directionCount);
     for (uint index = 0; index < skyIrradianceCount; ++index)
-        scene.skyIrradiance[index] = float4(sum[index] * (perDirection * gathered[index]), 0.0);
+    {
+        float3 total = float3(0.0, 0.0, 0.0);
+        for (uint other = 0; other < threadCount; ++other)
+            total += found[other * skyIrradianceCount + index];
+        scene.skyIrradiance[index] = float4(total * (perDirection * gathered[index]), 0.0);
+    }
 }
