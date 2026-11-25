@@ -73,6 +73,29 @@ namespace Lynx
                 bool fxaa = renderer.GetFXAAEnabled();
                 if (ImGui::Checkbox("Enable FXAA", &fxaa))
                     renderer.SetFXAAEnabled(fxaa);
+
+                TemporalSettings& temporal = renderer.GetTemporalSettings();
+                ImGui::Checkbox("Temporal anti-aliasing", &temporal.Resolves);
+                ImGui::SetItemTooltip("Smooths the picture over several frames. Takes the place of FXAA while it is on.\nThe view modes that start with \"TAA\" show how it works a frame out.");
+                if (temporal.Resolves)
+                {
+                    int jitterLength = static_cast<int>(temporal.JitterLength);
+                    if (ImGui::SliderInt("Jitter length", &jitterLength, 1, 64))
+                        temporal.JitterLength = static_cast<uint32_t>(jitterLength);
+                    ImGui::SetItemTooltip("After this many frames the camera's shifts repeat.");
+
+                    ImGui::SliderFloat("History time", &temporal.HistoryTime, 0.02f, 1.0f, "%.2f s");
+                    ImGui::SetItemTooltip("How long what a pixel showed keeps counting. Longer is smoother and slower to follow a change.");
+
+                    ImGui::SliderFloat("Box width", &temporal.BoxGamma, 0.0f, 3.0f);
+                    ImGui::SetItemTooltip("How far the history may lie from the colours around a pixel, in standard deviations.\n0 allows all the colours around it: least flicker, longest trails.");
+
+                    ImGui::SliderFloat("History sharpness", &temporal.Sharpness, 0.0f, 1.0f);
+                    ImGui::SetItemTooltip("How sharply the history is read between pixels. 0.5 is the usual curve.");
+
+                    ImGui::SliderFloat("Depth tolerance", &temporal.DepthTolerance, 0.0f, 1.0f);
+                    ImGui::SetItemTooltip("By which share the depth of the history may differ before it counts as another surface.");
+                }
             }
         }
         ImGui::End();

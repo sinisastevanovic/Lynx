@@ -94,7 +94,7 @@ FragmentOutput fragmentMain(VertexOutput input)
         discard;
 
     // The depth of the point on the plane, not of the triangle, so that the scene hides the grid where it is in front.
-    float4 clipPosition = mul(scene.viewProjection, float4(worldPosition, 1.0));
+    float4 clipPosition = mul(scene.unjitteredViewProjection, float4(worldPosition, 1.0));
 
     FragmentOutput output;
     output.color = float4(color, alpha);

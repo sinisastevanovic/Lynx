@@ -42,6 +42,11 @@ public:
         temporal.Jitters = settings.Parameter("Jitter", temporal.Jitters ? 1.0 : 0.0) > 0.0;
         temporal.JitterLength = static_cast<uint32_t>(std::max(settings.Parameter("JitterLength", temporal.JitterLength), 1.0));
         temporal.Accumulates = settings.Parameter("Accumulate", temporal.Accumulates ? 1.0 : 0.0) > 0.0;
+        temporal.Resolves = settings.Parameter("TAA", temporal.Resolves ? 1.0 : 0.0) > 0.0;
+        temporal.HistoryTime = static_cast<float>(settings.Parameter("TaaHistoryTime", temporal.HistoryTime));
+        temporal.BoxGamma = static_cast<float>(settings.Parameter("TaaBoxGamma", temporal.BoxGamma));
+        temporal.Sharpness = static_cast<float>(settings.Parameter("TaaSharpness", temporal.Sharpness));
+        temporal.DepthTolerance = static_cast<float>(settings.Parameter("TaaDepthTolerance", temporal.DepthTolerance));
         if (settings.Parameter("FXAA", 1.0) <= 0.0)
             engine.GetRenderer().SetFXAAEnabled(false);
 

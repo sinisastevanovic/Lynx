@@ -255,6 +255,26 @@ namespace Lynx
         // of which any run of frames covers a pixel evenly.
         uint32_t JitterLength = 8;
 
+        // Anti-aliasing over time, see TemporalPass: every pixel mixes the frame with what the frames
+        // before left where its surface was. Jitters the camera whether Jitters is set or not.
+        bool Resolves = false;
+
+        // How long what a pixel showed keeps counting, in seconds: after this time, a frame's share
+        // has fallen to about a third. Longer is smoother and slower to follow a change.
+        float HistoryTime = 0.16f;
+
+        // How many standard deviations around the mean of a pixel's neighbours the history may lie.
+        // Zero allows all the colours the neighbours span, which flickers least. Smaller numbers
+        // leave less of a trail behind what moves and flicker more.
+        float BoxGamma = 0.0f;
+
+        // How sharply the history is read between pixels. 0.5 is the Catmull-Rom curve.
+        float Sharpness = 0.5f;
+
+        // By which share the depth of the history may differ from the pixel's before the history
+        // counts as another surface and is dropped.
+        float DepthTolerance = 0.1f;
+
         // Adds up the frames of a view that stands still into their average, see TemporalPass. With
         // jitter, that is the picture with JitterLength samples a pixel: what anti-aliasing is measured against.
         bool Accumulates = false;
@@ -355,6 +375,10 @@ namespace Lynx
         // It holds the frame's jitter: what is drawn with it, or found back through its inverse, is shifted.
         glm::mat4 ClipViewProjection;
 
+        // The same without the jitter, for what is drawn after the frames are put together and has to
+        // stand still: the grid, debug lines.
+        glm::mat4 UnjitteredClipViewProjection;
+
         // The cascades of the sun's shadow: what each covers, its matrix as shaders get it, and its map.
         std::array<ShadowCascade, ShadowCascadeCount> Cascades;
         std::array<glm::mat4, ShadowCascadeCount> ClipCascadeViewProjection;
@@ -416,6 +440,14 @@ namespace Lynx
         // exactly as in the last frame.
         TemporalSettings Temporal;
         bool ViewIsStill = false;
+
+        // True in a frame that shows something else than the last one: another scene, or a camera that
+        // jumped. What the frames before left behind is then of no use.
+        bool HistoryWasReset = false;
+
+        // A picture to show in place of the scene, as it is: a view of how a pass worked. Null for none.
+        GpuTexture* ShownInstead = nullptr;
+        uint32_t ShownInsteadIndex = 0;
 
         // How the view that is being drawn is shown.
         ViewSettings Viewing;

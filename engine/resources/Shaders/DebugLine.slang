@@ -19,7 +19,8 @@ VertexOutput vertexMain(VertexInput input)
 {
     VertexOutput output;
     output.color = input.color;
-    output.position = mul(scene.viewProjection, float4(input.position, 1.0));
+    // Lines are drawn over the finished picture, which the camera's jitter is no longer part of.
+    output.position = mul(scene.unjitteredViewProjection, float4(input.position, 1.0));
     return output;
 }
 

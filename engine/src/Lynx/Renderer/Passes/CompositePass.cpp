@@ -21,9 +21,13 @@ namespace Lynx
             uint32_t BloomTexture;
             uint32_t LinearSampler;
             int ToneMapped;
-            uint32_t MotionTexture;
-            int ShowsMotion;
+            uint32_t ShownInsteadTexture;
+            int ShownInstead;
         };
+
+        // Have to match Composite.slang.
+        constexpr int ShowsMotion = 1;
+        constexpr int ShowsAsItIs = 2;
 
     }
 
@@ -94,6 +98,8 @@ namespace Lynx
         resources.Sample(renderData.SceneColor);
         if (renderData.Viewing.Mode == ViewMode::Motion)
             resources.Sample(renderData.SceneMotion);
+        else if (renderData.ShownInstead)
+            resources.Sample(renderData.ShownInstead);
         resources.ColorTarget = renderData.Output;
 
         // The triangle covers every pixel.
@@ -112,8 +118,16 @@ namespace Lynx
         push.BloomTexture = renderData.BloomTextureIndex;
         push.LinearSampler = m_LinearSampler;
         push.ToneMapped = ShowsRawColours(renderData.Viewing.Mode) ? 0 : 1;
-        push.MotionTexture = renderData.SceneMotionIndex;
-        push.ShowsMotion = renderData.Viewing.Mode == ViewMode::Motion ? 1 : 0;
+        if (renderData.Viewing.Mode == ViewMode::Motion)
+        {
+            push.ShownInsteadTexture = renderData.SceneMotionIndex;
+            push.ShownInstead = ShowsMotion;
+        }
+        else if (renderData.ShownInstead)
+        {
+            push.ShownInsteadTexture = renderData.ShownInsteadIndex;
+            push.ShownInstead = ShowsAsItIs;
+        }
         m_Vulkan->Shared->Push(commands, push);
 
         commands.draw(3, 1, 0, 0);

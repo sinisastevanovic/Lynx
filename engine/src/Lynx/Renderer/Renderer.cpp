@@ -772,7 +772,7 @@ namespace Lynx
             return result;
         };
         glm::vec2 jitterInPixels(0.0f);
-        if (m_TemporalSettings.Jitters)
+        if (m_TemporalSettings.Jitters || m_TemporalSettings.Resolves)
         {
             const uint64_t step = m_JitterFrame++ % std::max(m_TemporalSettings.JitterLength, 1u) + 1;
             jitterInPixels = glm::vec2(halton(step, 2), halton(step, 3)) - 0.5f;
@@ -789,6 +789,7 @@ namespace Lynx
             jittered[column][1] += jitterInClip.y * unjittered[column][3];
         }
         m_CurrentFrameData.ClipViewProjection = jittered;
+        m_CurrentFrameData.UnjitteredClipViewProjection = unjittered;
 
         SceneData sceneData{};
         sceneData.ViewProjectionMatrix = jittered;
@@ -800,6 +801,7 @@ namespace Lynx
         // The first frame has none before it, and nothing moved.
         sceneData.PreviousViewProjectionMatrix = m_PreviousClipViewProjection.value_or(unjittered);
         m_CurrentFrameData.ViewIsStill = m_PreviousClipViewProjection == unjittered;
+        m_CurrentFrameData.HistoryWasReset = !m_PreviousClipViewProjection.has_value();
         m_CurrentFrameData.Temporal = m_TemporalSettings;
         m_PreviousClipViewProjection = unjittered;
 
@@ -936,8 +938,10 @@ namespace Lynx
         if (ShowsRawColours(m_CurrentFrameData.Viewing.Mode))
             m_CurrentFrameData.Bloom.Enabled = false;
 
-        // The average of many frames is what other anti-aliasing is measured against: nothing smooths it further.
-        m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled && !m_TemporalSettings.Accumulates;
+        // The average of many frames is what other anti-aliasing is measured against: nothing smooths it
+        // further. And anti-aliasing over time takes the place of FXAA.
+        m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled && !m_TemporalSettings.Accumulates && !m_TemporalSettings.Resolves;
+        m_CurrentFrameData.ShownInstead = nullptr;
 
         m_Graph->Execute(m_RenderContext, m_CurrentFrameData);
         m_GpuScene->CopyCommandsForCounters(m_Frame->Commands);

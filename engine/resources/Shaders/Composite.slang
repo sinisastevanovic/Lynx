@@ -17,12 +17,16 @@ struct CompositeConstants
     // Zero for a view whose colours mean something as they are: they are shown without tone mapping.
     int toneMapped;
 
-    // Where the texture table has the picture of how far every pixel moved since the last frame,
-    // and one to show that picture in place of the scene.
-    uint motionTexture;
-    int showsMotion;
+    // A picture to show in place of the scene, by its place in the texture table, and what it is:
+    // nothing, the picture of how far every pixel moved since the last frame, or colours to show as they are.
+    uint shownInsteadTexture;
+    int shownInstead;
 };
 [vk::push_constant] ConstantBuffer<CompositeConstants> constants;
+
+// Have to match CompositePass.cpp.
+static const int showsMotion = 1;
+static const int showsAsItIs = 2;
 
 struct VertexOutput
 {
@@ -137,11 +141,13 @@ float4 fragmentMain(VertexOutput input) : SV_Target
     float2 texelSize = 1.0 / float2(width, height);
 
     // The motion is kept in texture coordinates. Its colour goes to the screen as it is.
-    if (constants.showsMotion == 1)
+    if (constants.shownInstead == showsMotion)
     {
-        float2 motion = textures[constants.motionTexture].Sample(samplers[constants.linearSampler], sceneUV).rg;
+        float2 motion = textures[constants.shownInsteadTexture].Sample(samplers[constants.linearSampler], sceneUV).rg;
         return float4(motionColour(motion * float2(width, height)), 1.0);
     }
+    if (constants.shownInstead == showsAsItIs)
+        return float4(textures[constants.shownInsteadTexture].Sample(samplers[constants.linearSampler], sceneUV).rgb, 1.0);
 
     float3 sceneColor;
     if (constants.fxaaEnabled == 1)

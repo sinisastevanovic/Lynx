@@ -3,19 +3,33 @@
 #include "Lynx/Asset/Shader.h"
 #include "Lynx/Renderer/GraphicsContext.h"
 #include "Lynx/Renderer/RenderFormats.h"
+#include "Lynx/Renderer/SamplerCache.h"
 #include "Lynx/Renderer/TextureSlot.h"
 #include "Lynx/Renderer/Vulkan/ComputePipeline.h"
 #include "Lynx/Renderer/Vulkan/GpuTexture.h"
 #include "Lynx/Renderer/Vulkan/SharedBindings.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace Lynx
 {
     namespace
     {
-        // Has to match Temporal.slang: the threads of a group a side.
+        // Have to match Temporal.slang: the threads of a group a side, the two ways of working, and
+        // the views of the pass's working.
         constexpr uint32_t ThreadsPerSide = 8;
+        constexpr uint32_t ModeAccumulate = 0;
+        constexpr uint32_t ModeResolve = 1;
+        constexpr uint32_t ViewNone = 0;
+
+        // A frame counts for at least this much, however long the history is meant to last: below it,
+        // the half floats of the history no longer take in what a frame adds.
+        constexpr float LeastShareOfAFrame = 0.02f;
+
+        // What stands in for the time since the last frame while the game stands still.
+        constexpr float UsualFrameTime = 1.0f / 60.0f;
 
         // Has to match TemporalConstants in Temporal.slang.
         struct TemporalPushData
@@ -24,9 +38,54 @@ namespace Lynx
             uint32_t SceneTexture;
             uint32_t HistoryTexture;
             uint32_t OutputTexture;
+            uint32_t MotionTexture;
+            uint32_t DepthTexture;
+            uint32_t PreviousDepthTexture;
+            uint32_t DepthOutput;
+            uint32_t DebugOutput;
+            uint32_t LinearSampler;
+            uint32_t Mode;
+            uint32_t View;
+            uint32_t HasHistory;
             float CurrentWeight;
+            float BoxGamma;
+            float Sharpness;
+            float DepthTolerance;
         };
+
+        // The view of the pass's working that a view mode asks for, as Temporal.slang numbers them.
+        uint32_t ViewOf(ViewMode mode)
+        {
+            switch (mode)
+            {
+                case ViewMode::TemporalBlend: return 1;
+                case ViewMode::TemporalRejected: return 2;
+                case ViewMode::TemporalClipped: return 3;
+                default: return ViewNone;
+            }
+        }
     }
+
+    // A picture the pass writes with compute and that shaders read afterwards.
+    struct TemporalPicture
+    {
+        GpuTexture Texture;
+        TextureSlot ReadSlot;
+        TextureSlot WriteSlot;
+
+        void Create(GraphicsContext& context, SharedBindings& shared, uint32_t width, uint32_t height, vk::Format format, const char* name)
+        {
+            GpuTextureDesc desc;
+            desc.Width = width;
+            desc.Height = height;
+            desc.Format = format;
+            desc.Usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled;
+            desc.Name = name;
+            Texture = GpuTexture(context, desc);
+            ReadSlot = TextureSlot(shared, shared.AddTexture(Texture.View()));
+            WriteSlot = TextureSlot(shared, shared.AddWritableTexture(Texture.View()), TextureTable::Writable);
+        }
+    };
 
     struct TemporalPass::VulkanObjects
     {
@@ -34,12 +93,15 @@ namespace Lynx
         SharedBindings* Shared = nullptr;
         vk::Device Device;
         vk::Pipeline Pipeline;
+        uint32_t LinearSampler = 0;
 
-        // The result of this frame and of the last, which change roles every frame. Each has a place
-        // in the table shaders read from and one in the table compute shaders write into.
-        std::array<GpuTexture, 2> History;
-        std::array<TextureSlot, 2> ReadSlots;
-        std::array<TextureSlot, 2> WriteSlots;
+        // The result of this frame and of the last, with the number of frames it is made of in its
+        // alpha, and the same for the depth of every pixel.
+        std::array<TemporalPicture, 2> History;
+        std::array<TemporalPicture, 2> Depth;
+
+        // What a view of the pass's working is drawn into.
+        TemporalPicture View;
 
         // The renderer waits for the GPU before it destroys its passes, so nothing here is still in use.
         ~VulkanObjects()
@@ -58,6 +120,13 @@ namespace Lynx
         m_Vulkan->Context = ctx.Graphics;
         m_Vulkan->Shared = ctx.Shared;
         m_Vulkan->Device = ctx.Graphics->Device();
+
+        // The history is read between its pixels, and never past the picture's edge.
+        SamplerSettings sampler;
+        sampler.WrapMode = TextureWrap::Clamp;
+        sampler.FilterMode = TextureFilter::Bilinear;
+        sampler.UseAnisotropy = false;
+        m_Vulkan->LinearSampler = ctx.Shared->SamplerIndex(SamplerCache::Get()->GetSampler(sampler));
 
         m_PipelineState.SetShader("Shaders/Temporal.slang");
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
@@ -82,70 +151,124 @@ namespace Lynx
         m_Vulkan->Pipeline = pipeline;
     }
 
+    void TemporalPass::CreatePictures(uint32_t width, uint32_t height)
+    {
+        GraphicsContext& context = *m_Vulkan->Context;
+        SharedBindings& shared = *m_Vulkan->Shared;
+        for (uint32_t index = 0; index < 2; ++index)
+        {
+            m_Vulkan->History[index].Create(context, shared, width, height, RenderFormats::SceneColor, "TemporalHistory");
+            m_Vulkan->Depth[index].Create(context, shared, width, height, RenderFormats::DepthPyramid, "TemporalDepth");
+        }
+        m_Vulkan->View.Create(context, shared, width, height, vk::Format::eR8G8B8A8Unorm, "TemporalView");
+    }
+
     bool TemporalPass::Declare(const RenderContext&, const RenderData& renderData, PassResources& resources)
     {
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
 
-        if (!m_Vulkan->Pipeline || !renderData.SceneColor || !renderData.Temporal.Accumulates)
+        const TemporalSettings& settings = renderData.Temporal;
+        if (!m_Vulkan->Pipeline || !renderData.SceneColor || (!settings.Accumulates && !settings.Resolves))
         {
-            m_Accumulated = 0;
+            m_FramesKept = 0;
             return false;
         }
 
-        // The two pictures are as large as the scene's, and made anew when that changes.
+        // Accumulating wins: it is asked for on purpose, to look at or to measure with.
+        const bool isAccumulating = settings.Accumulates;
+        if (isAccumulating != m_WasAccumulating)
+            m_FramesKept = 0;
+        m_WasAccumulating = isAccumulating;
+
+        // The pictures are as large as the scene's, and made anew when that changes.
         const GpuTextureDesc& scene = renderData.SceneColor->Desc();
-        const GpuTextureDesc& history = m_Vulkan->History[0].Desc();
-        if (!m_Vulkan->History[0] || history.Width != scene.Width || history.Height != scene.Height)
+        const GpuTextureDesc& kept = m_Vulkan->History[0].Texture.Desc();
+        if (!m_Vulkan->History[0].Texture || kept.Width != scene.Width || kept.Height != scene.Height)
         {
-            GpuTextureDesc desc;
-            desc.Width = scene.Width;
-            desc.Height = scene.Height;
-            desc.Format = RenderFormats::SceneColor;
-            desc.Usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled;
-            desc.Name = "TemporalHistory";
-            for (uint32_t index = 0; index < 2; ++index)
-            {
-                m_Vulkan->History[index] = GpuTexture(*m_Vulkan->Context, desc);
-                m_Vulkan->ReadSlots[index] = TextureSlot(*m_Vulkan->Shared, m_Vulkan->Shared->AddTexture(m_Vulkan->History[index].View()));
-                m_Vulkan->WriteSlots[index] = TextureSlot(*m_Vulkan->Shared,
-                    m_Vulkan->Shared->AddWritableTexture(m_Vulkan->History[index].View()), TextureTable::Writable);
-            }
-            m_Accumulated = 0;
+            CreatePictures(scene.Width, scene.Height);
+            m_FramesKept = 0;
         }
 
-        // An average of frames that show different things is no picture of anything.
-        if (!renderData.ViewIsStill)
-            m_Accumulated = 0;
+        // Nothing is taken over across a jump of the camera or a change of scene. And an average of
+        // frames that show different things is no picture of anything.
+        if (renderData.HistoryWasReset || (isAccumulating && !renderData.ViewIsStill))
+            m_FramesKept = 0;
 
+        m_HasHistory = m_FramesKept > 0;
+        m_View = isAccumulating ? ViewNone : ViewOf(renderData.Viewing.Mode);
         m_Target = 1 - m_Target;
+        const uint32_t last = 1 - m_Target;
+
         resources.Sample(renderData.SceneColor);
-        if (m_Accumulated > 0)
-            resources.Sample(&m_Vulkan->History[1 - m_Target]);
-        resources.Write(&m_Vulkan->History[m_Target]);
+        if (m_HasHistory)
+            resources.Sample(&m_Vulkan->History[last].Texture);
+        resources.Write(&m_Vulkan->History[m_Target].Texture);
+        if (!isAccumulating)
+        {
+            resources.Sample(renderData.SceneMotion);
+            resources.Sample(renderData.SceneDepth);
+            if (m_HasHistory)
+                resources.Sample(&m_Vulkan->Depth[last].Texture);
+            resources.Write(&m_Vulkan->Depth[m_Target].Texture);
+            if (m_View != ViewNone)
+                resources.Write(&m_Vulkan->View.Texture);
+        }
         resources.Computes = true;
         return true;
     }
 
     void TemporalPass::Execute(vk::CommandBuffer commands, RenderData& renderData)
     {
+        const TemporalSettings& settings = renderData.Temporal;
         const GpuTextureDesc& scene = renderData.SceneColor->Desc();
+        const uint32_t last = 1 - m_Target;
 
-        // Every frame counts the same in the average: the new one by its share of all of them so far.
-        // Without a picture to go on from, the frame's own is read in its place and counts in full.
+        // Without something of the last frame, the frame's own pictures are named in its place:
+        // the shader does not use what it reads there.
         TemporalPushData push{};
         push.Size = { scene.Width, scene.Height };
         push.SceneTexture = renderData.SceneColorIndex;
-        push.HistoryTexture = m_Accumulated > 0 ? m_Vulkan->ReadSlots[1 - m_Target].Index() : renderData.SceneColorIndex;
-        push.OutputTexture = m_Vulkan->WriteSlots[m_Target].Index();
-        push.CurrentWeight = 1.0f / static_cast<float>(m_Accumulated + 1);
+        push.HistoryTexture = m_HasHistory ? m_Vulkan->History[last].ReadSlot.Index() : renderData.SceneColorIndex;
+        push.OutputTexture = m_Vulkan->History[m_Target].WriteSlot.Index();
+        push.MotionTexture = renderData.SceneMotionIndex;
+        push.DepthTexture = renderData.SceneDepthIndex;
+        push.PreviousDepthTexture = m_HasHistory ? m_Vulkan->Depth[last].ReadSlot.Index() : renderData.SceneDepthIndex;
+        push.DepthOutput = m_Vulkan->Depth[m_Target].WriteSlot.Index();
+        push.DebugOutput = m_Vulkan->View.WriteSlot.Index();
+        push.LinearSampler = m_Vulkan->LinearSampler;
+        push.Mode = m_WasAccumulating ? ModeAccumulate : ModeResolve;
+        push.View = m_View;
+        push.HasHistory = m_HasHistory ? 1u : 0u;
+        push.BoxGamma = std::max(settings.BoxGamma, 0.0f);
+        push.Sharpness = std::clamp(settings.Sharpness, 0.0f, 1.0f);
+        push.DepthTolerance = std::max(settings.DepthTolerance, 0.0f);
+
+        if (m_WasAccumulating)
+        {
+            // Every frame counts the same in the average: the new one by its share of all of them so far.
+            push.CurrentWeight = 1.0f / static_cast<float>(m_FramesKept + 1);
+        }
+        else
+        {
+            // The least a frame counts is set by how long the history is meant to last, not by a number
+            // per frame: the picture then looks the same at any frame rate (Jimenez, 2016).
+            const float frameTime = renderData.DeltaTime > 0.0f ? renderData.DeltaTime : UsualFrameTime;
+            const float share = 1.0f - std::exp(-frameTime / std::max(settings.HistoryTime, 0.001f));
+            push.CurrentWeight = std::clamp(share, LeastShareOfAFrame, 1.0f);
+        }
 
         commands.bindPipeline(vk::PipelineBindPoint::eCompute, m_Vulkan->Pipeline);
         m_Vulkan->Shared->Push(commands, push);
         commands.dispatch(GroupCountFor(scene.Width, ThreadsPerSide), GroupCountFor(scene.Height, ThreadsPerSide), 1);
-        ++m_Accumulated;
+        ++m_FramesKept;
 
         // The passes after this one work with the result in place of the frame's own picture.
-        renderData.SceneColor = &m_Vulkan->History[m_Target];
-        renderData.SceneColorIndex = m_Vulkan->ReadSlots[m_Target].Index();
+        renderData.SceneColor = &m_Vulkan->History[m_Target].Texture;
+        renderData.SceneColorIndex = m_Vulkan->History[m_Target].ReadSlot.Index();
+        if (m_View != ViewNone)
+        {
+            renderData.ShownInstead = &m_Vulkan->View.Texture;
+            renderData.ShownInsteadIndex = m_Vulkan->View.ReadSlot.Index();
+        }
     }
 }

@@ -34,10 +34,21 @@ namespace Lynx
         // How far every pixel moved on screen since the last frame: grey for not at all, redder to the
         // right, greener downwards. Shown by the composite pass, from the picture the scene passes wrote.
         Motion,
+
+        // How anti-aliasing over time worked the frame out, see TemporalPass. How much the frame counts
+        // against the history: black for hardly at all, white for all there is.
+        TemporalBlend,
+
+        // Where the history was dropped: blue where it lies off the screen, red where it showed another surface.
+        TemporalRejected,
+
+        // How far the history was pulled to fit the colours around the pixel: what would have been a trail.
+        TemporalClipped,
     };
 
     // The modes by their numbers, as a list to choose from.
-    inline constexpr std::array<const char*, 8> ViewModeNames = { "Lit", "Wireframe", "Unlit", "Lighting only", "Normals", "Level of detail", "Shadow cascades", "Motion" };
+    inline constexpr std::array<const char*, 11> ViewModeNames = { "Lit", "Wireframe", "Unlit", "Lighting only", "Normals", "Level of detail", "Shadow cascades", "Motion",
+        "TAA: share of the frame", "TAA: history dropped", "TAA: history pulled in" };
 
     // True for a mode whose colours mean something as they are. They are shown without bloom and tone
     // mapping, which would change them.
