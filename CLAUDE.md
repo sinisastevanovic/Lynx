@@ -170,7 +170,9 @@ build\bin\Debug\LynxSandboxGame.exe
   map, or a wide disc would put a slanted surface into its own shadow. The width is kept between 1.5 and 12
   texels, so far cascades are softer than the sun makes them.
 - **Sky.** The sky is worked out from the air and the sun (`Renderer/Atmosphere.h`, `Atmosphere.slang`, after
-  Hillaire 2020), nothing is painted. Three small tables, which the renderer owns and `Passes/AtmospherePass`
+  Hillaire 2020), nothing is painted. The air is `AtmosphereSettings` in `Scene/Atmosphere.h`, which is itself
+  the component "SkyAtmosphere": the first enabled one in a scene counts, a scene without one has the Earth's,
+  and it reaches the renderer with the extracted scene. Three small tables, which the renderer owns and `Passes/AtmospherePass`
   fills: transmittance and multiple scattering once per `AtmosphereSettings`, the view of the sky from the camera
   every frame. `Passes/SkyPass` draws the sky, the sun's disc and the planet's bare ground where the depth buffer
   is empty, after the depth passes and before the forward pass. A view mode with raw colours has no sky.
@@ -180,9 +182,8 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Light from the sky.** `Passes/SkyLightPass` looks at the sky in 512 directions, in one group of compute
   threads, and writes nine numbers per colour (spherical harmonics) into a buffer the scene constants point to.
   `skyIrradiance(normal)` in `Atmosphere.slang` gives the light for a way of facing, which replaced the constant
-  3 %. `Passes/SkyReflectionPass` draws what shiny surfaces mirror of the sky: one square picture of every
-  direction (an octahedral map, so it fits the texture table), 64 texels wide, in five sizes, each blurred for a
-  rougher surface. `skyReflection(direction, roughness)` reads it, and `mirroredShare` in `StandardShading.slang`
+  3 %. `Passes/SkyReflectionPass` draws what shiny surfaces mirror of the sky: a cube of 64 texels an edge in
+  six sizes, each blurred for a rougher surface. `skyReflection(direction, roughness)` reads it, and `mirroredShare` in `StandardShading.slang`
   is the fitted curve for how much of it a surface mirrors. Both passes run only when the sun, the air or the
   camera's height (in steps of a quarter doubling) changed (`Passes/SkyInputs.h`). Nothing blocks either light
   yet: under a roof they are as bright as in the open, until ambient occlusion (step 3.11).
@@ -201,6 +202,11 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Depth.** The scene's depth is reversed: 1 at the near plane, towards 0 at infinity, compared with "greater"
   and cleared to 0. Drawing has no far plane, the camera's own is only used for culling. The shadow map
   keeps the usual depth (0 near, "less").
+- **Cube textures.** `GpuTextureDesc::IsCube` makes six square faces that a shader reads by a direction
+  (`cubeTextures[index]` in `Textures.slang`). Cubes have a table of their own in the shared bindings, with
+  their own indices: `SharedBindings::AddCubeTexture`, and a `TextureSlot` made with `TextureTable::Cube`.
+  With `ViewPerMip`, `FaceView(face, mip)` is one face of one size as a flat picture to draw into, and
+  `cubeDirection(face, uv)` gives the direction a pixel of it stands for. Cubes cannot be loaded from files yet.
 - **Texture colours.** Every RGBA8 texture is in the texture table twice. `Texture::GetColorTableIndex` reads it as
   sRGB and gives a shader linear light: use it for colours that are lit (albedo, emissive, particles).
   `GetTableIndex` gives the stored numbers: for normal maps, roughness, and pictures shown unlit (UI, ImGui).
