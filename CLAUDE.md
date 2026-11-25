@@ -177,11 +177,15 @@ build\bin\Debug\LynxSandboxGame.exe
   The sun's light on surfaces goes through the same air (`sunlightOnGround`), so a low sun is dim and red by
   itself. The shader works in kilometres with the camera above the planet's middle. Height zero of the scene is
   the planet's ground. The atmosphere is part of the scene constants.
-- **Light from the sky.** `Passes/SkyLightPass` looks at the sky in 512 directions once per frame, in one group of compute
+- **Light from the sky.** `Passes/SkyLightPass` looks at the sky in 512 directions, in one group of compute
   threads, and writes nine numbers per colour (spherical harmonics) into a buffer the scene constants point to.
   `skyIrradiance(normal)` in `Atmosphere.slang` gives the light for a way of facing, which replaced the constant
-  3 %. Nothing blocks it yet: under a roof it is as bright as in the open, until ambient occlusion (step 3.11).
-  Metals get none, their reflection of the sky is not drawn yet.
+  3 %. `Passes/SkyReflectionPass` draws what shiny surfaces mirror of the sky: one square picture of every
+  direction (an octahedral map, so it fits the texture table), 64 texels wide, in five sizes, each blurred for a
+  rougher surface. `skyReflection(direction, roughness)` reads it, and `mirroredShare` in `StandardShading.slang`
+  is the fitted curve for how much of it a surface mirrors. Both passes run only when the sun, the air or the
+  camera's height (in steps of a quarter doubling) changed (`Passes/SkyInputs.h`). Nothing blocks either light
+  yet: under a roof they are as bright as in the open, until ambient occlusion (step 3.11).
 - **Occlusion.** The camera's view is culled in two phases (`CullPhase`), so what is hidden behind other things is
   not drawn. Early: what was seen in the last frame, kept as a flag per instance on the GPU. Its depth becomes the
   depth pyramid (`Passes/DepthPyramidPass`): the depth in ever smaller sizes, each pixel the farthest of those it
