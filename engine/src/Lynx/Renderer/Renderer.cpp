@@ -37,6 +37,8 @@
 #include "Passes/SkyLightPass.h"
 #include "Passes/SkyPass.h"
 #include "Passes/SkyReflectionPass.h"
+#include "Passes/TerrainPass.h"
+#include "TerrainRenderer.h"
 #include "Passes/ShadowPass.h"
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
@@ -68,6 +70,7 @@ namespace Lynx
                 case TextureFormat::RG32F: return vk::Format::eR32G32Sfloat;
                 case TextureFormat::R32I:  return vk::Format::eR32Uint;
                 case TextureFormat::R8:    return vk::Format::eR8Unorm;
+                case TextureFormat::R16:   return vk::Format::eR16Unorm;
 
                 // Depth formats are for render targets, which are not made from pixels.
                 case TextureFormat::Depth32:
@@ -88,6 +91,7 @@ namespace Lynx
                 case TextureFormat::Depth32:        return 4;
                 case TextureFormat::Depth24Stencil8:return 4;
                 case TextureFormat::R8:             return 1;
+                case TextureFormat::R16:            return 2;
             }
             LX_CORE_WARN("Unknown Texture Format byte size, defaulting to 4");
             return 4;
@@ -276,6 +280,7 @@ namespace Lynx
         m_Frame->PendingScreenshots.clear();
         m_Graph.reset();
         m_GpuScene.reset();
+        m_Terrain.reset();
         m_Materials.reset();
         m_Frame->SceneColorSlot = TextureSlot();
         m_Frame->SceneDepthSlot = TextureSlot();
@@ -338,6 +343,7 @@ namespace Lynx
         defaults.Sampler = SamplerIndex(SamplerSettings());
         m_Materials = std::make_unique<MaterialTable>(*m_Context, *m_Frame->Uploads, m_Assets, defaults);
         m_GpuScene = std::make_unique<GpuScene>(*m_Context, *m_Frame->Uploads, *m_Materials);
+        m_Terrain = std::make_unique<TerrainRenderer>(*m_Context, *m_Frame->Uploads);
 
         // The frame, start to finish. Culling decides what the scene passes draw, so it comes first.
         // It has two phases: what the camera saw in the last frame is drawn into the depth buffer, and
@@ -352,12 +358,14 @@ namespace Lynx
         for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
             m_Graph->Add("Shadow" + std::to_string(cascade), std::make_unique<ShadowPass>(cascade));
         m_Graph->Add("Depth", std::make_unique<DepthPass>(CullPhase::Early));
+        m_Graph->Add("TerrainDepth", std::make_unique<TerrainPass>(TerrainPassKind::Depth));
         m_Graph->Add("DepthPyramid", std::make_unique<DepthPyramidPass>());
         m_Graph->Add("CullOccluded", std::make_unique<CullPass>(CullPhase::Late));
         m_Graph->Add("DepthLate", std::make_unique<DepthPass>(CullPhase::Late));
         // Only the fitting of the shadow's cascades asks how far the scene reaches.
         m_Graph->Add("DepthRange", std::make_unique<DepthRangePass>(), [this]() { return m_ShadowSettings.FitsToView; });
         m_Graph->Add("Sky", std::make_unique<SkyPass>());
+        m_Graph->Add("Terrain", std::make_unique<TerrainPass>(TerrainPassKind::Colour));
         m_Graph->Add("Forward", std::make_unique<ForwardPass>());
         m_Graph->Add("Particles", std::make_unique<ParticlePass>());
         m_Graph->Add("Exposure", std::make_unique<ExposurePass>());
@@ -609,6 +617,12 @@ namespace Lynx
             m_CurrentFrameData.VisibleInstanceAddress = meshes.VisibleAddress;
             m_CurrentFrameData.IndexCount += static_cast<uint32_t>(meshes.TrianglesDrawn * 3);
 
+            // Which patches of terrain the camera sees, and how finely each is drawn.
+            m_CurrentFrameData.Terrain = m_Terrain->Prepare(m_SceneTerrains, camera.Planes, m_CurrentFrameData.CameraPosition);
+            m_CurrentFrameData.IndexCount += static_cast<uint32_t>(m_CurrentFrameData.Terrain.TriangleCount * 3);
+            m_Profiler.SetCounter("TerrainPatches", static_cast<double>(m_CurrentFrameData.Terrain.PatchCount));
+            m_Profiler.SetCounter("TerrainTriangles", static_cast<double>(m_CurrentFrameData.Terrain.TriangleCount));
+
             // An instance is one submesh of one mesh in the scene. The camera's view and the sun's are
             // counted apart, and a triangle counts once per view, however many passes draw it.
             // What was drawn is decided on the GPU, so those numbers are of a frame a few frames back.
@@ -795,6 +809,7 @@ namespace Lynx
         m_CurrentFrameData.SunAngularSize = scene.SunAngularSize;
         m_CurrentFrameData.Exposure = scene.Exposure;
         m_CurrentFrameData.DeltaTime = scene.DeltaTime;
+        m_SceneTerrains = scene.Terrains;
         BeginScene(scene.View, scene.Projection, scene.CameraPosition, scene.SunDirection, scene.SunColor, scene.SunIntensity, scene.DeltaTime, scene.IsEditorView);
 
         for (const ExtractedParticles& particles : scene.Particles)
@@ -806,6 +821,8 @@ namespace Lynx
         EndScene();
 
         // The lists belong to the caller or last for one frame, and may be gone after this call.
+        m_SceneTerrains = {};
+        m_CurrentFrameData.Terrain = {};
         m_CurrentFrameData.DebugLines = {};
         m_CurrentFrameData.Canvases = {};
         m_CurrentFrameData.TransparentDraws = {};

@@ -48,6 +48,19 @@ namespace Lynx
                 plane /= glm::length(glm::vec3(plane));
         }
 
+        // False only if the box lies wholly behind one of the six planes: its corner farthest along a
+        // plane's normal is tested, which is behind the plane only if all of the box is.
+        bool IsOnFrustum(const AABB& box) const
+        {
+            for (const auto& plane : Planes)
+            {
+                const glm::vec3 farthest(plane.x >= 0.0f ? box.Max.x : box.Min.x, plane.y >= 0.0f ? box.Max.y : box.Min.y, plane.z >= 0.0f ? box.Max.z : box.Min.z);
+                if (glm::dot(glm::vec3(plane), farthest) + plane.w < 0.0f)
+                    return false;
+            }
+            return true;
+        }
+
         // False only if the sphere lies wholly behind one of the six planes.
         bool IsOnFrustum(const glm::vec3& centre, float radius) const
         {

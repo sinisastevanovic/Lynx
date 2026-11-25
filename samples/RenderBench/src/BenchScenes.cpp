@@ -2,11 +2,14 @@
 
 #include "Shapes.h"
 
+#include <Lynx/Asset/Terrain.h>
 #include <Lynx/Asset/Texture.h>
+#include <Lynx/Scene/Components/TerrainComponent.h>
 
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <iterator>
 
@@ -376,4 +379,63 @@ void CreateTrees(Scene& scene, AssetManager& assetManager, uint32_t count)
     }
 
     LX_INFO("Created a stand of {0} trees.", count);
+}
+
+namespace
+{
+    // A number from 0 to 1 for a place on a grid, the same in every run.
+    float NoiseAtCorner(int32_t x, int32_t z, uint32_t layer)
+    {
+        return static_cast<float>(Hash(static_cast<uint32_t>(x) * 0x9E3779B1u ^ Hash(static_cast<uint32_t>(z) + layer * 0x85EBCA6Bu)) >> 8) / 16777216.0f;
+    }
+
+    // The numbers of the grid, smoothly blended between its corners.
+    float SmoothNoise(float x, float z, uint32_t layer)
+    {
+        const float cellX = std::floor(x);
+        const float cellZ = std::floor(z);
+        const auto eased = [](float t) { return t * t * (3.0f - 2.0f * t); };
+        const float alongX = eased(x - cellX);
+        const float alongZ = eased(z - cellZ);
+        const int32_t ix = static_cast<int32_t>(cellX);
+        const int32_t iz = static_cast<int32_t>(cellZ);
+        return glm::mix(
+            glm::mix(NoiseAtCorner(ix, iz, layer), NoiseAtCorner(ix + 1, iz, layer), alongX),
+            glm::mix(NoiseAtCorner(ix, iz + 1, layer), NoiseAtCorner(ix + 1, iz + 1, layer), alongX),
+            alongZ);
+    }
+}
+
+void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution)
+{
+    // Hills from seven layers of noise, each twice as fine and half as high as the one before.
+    const float highest = 0.12f * static_cast<float>(resolution);
+    std::vector<uint16_t> heights(static_cast<size_t>(resolution) * resolution);
+    for (uint32_t z = 0; z < resolution; ++z)
+    {
+        for (uint32_t x = 0; x < resolution; ++x)
+        {
+            float height = 0.0f;
+            float share = 0.5f;
+            float cells = 4.0f / static_cast<float>(resolution);
+            for (uint32_t layer = 0; layer < 7; ++layer)
+            {
+                height += share * SmoothNoise(static_cast<float>(x) * cells, static_cast<float>(z) * cells, layer);
+                share *= 0.5f;
+                cells *= 2.0f;
+            }
+            heights[static_cast<size_t>(z) * resolution + x] = static_cast<uint16_t>(std::clamp(height, 0.0f, 1.0f) * 65535.0f);
+        }
+    }
+
+    // One unit between heights. The handle is fixed, like those of the other things made here.
+    const float size = static_cast<float>(resolution - 1);
+    auto terrain = std::make_shared<Terrain>(resolution, size, 0.0f, highest, std::move(heights));
+    assetManager.AddRuntimeAsset(terrain, AssetHandle(7600000000000000001ull));
+
+    Entity entity = scene.CreateEntity("Terrain");
+    entity.AddComponent<TerrainComponent>().Terrain = AssetRef<Terrain>(terrain);
+    entity.GetComponent<TransformComponent>().SetTranslation(glm::vec3(-0.5f * size, 0.0f, -0.5f * size));
+
+    LX_INFO("Created a terrain of {0} by {0} heights.", resolution);
 }

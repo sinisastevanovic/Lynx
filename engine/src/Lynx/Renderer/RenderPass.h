@@ -249,6 +249,31 @@ namespace Lynx
         bool Enabled = true;
     };
 
+    class GpuBuffer;
+
+    // The patches of terrain a frame draws, as TerrainRenderer picked them. A patch is one instance of
+    // the same small grid of triangles. Patches of a kind lie together in the list and are one draw call:
+    // whole patches first, then the four quarters, each with its own run of the grid's indices.
+    struct TerrainDraws
+    {
+        struct Run
+        {
+            uint32_t FirstIndex = 0;
+            uint32_t IndexCount = 0;
+            uint32_t FirstPatch = 0;
+            uint32_t PatchCount = 0;
+        };
+        std::array<Run, 5> Runs{};
+
+        // The grid's indices, and the addresses shaders read the patches and the terrains from.
+        const GpuBuffer* Indices = nullptr;
+        uint64_t PatchAddress = 0;
+        uint64_t TerrainAddress = 0;
+
+        uint32_t PatchCount = 0;
+        uint64_t TriangleCount = 0;
+    };
+
     struct RenderData
     {
         // In the order they are drawn, the farthest first. Valid only while the frame is drawn.
@@ -309,6 +334,9 @@ namespace Lynx
 
         // The cube shiny surfaces mirror the sky from, see SkyReflectionPass.
         GpuTexture* SkyReflection = nullptr;
+
+        // The terrain of the frame.
+        TerrainDraws Terrain;
 
         // How the brightness of the picture is chosen, and the time since the last frame in seconds,
         // which the automatic exposure follows.

@@ -207,6 +207,21 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Depth.** The scene's depth is reversed: 1 at the near plane, towards 0 at infinity, compared with "greater"
   and cleared to 0. Drawing has no far plane, the camera's own is only used for culling. The shadow map
   keeps the usual depth (0 near, "less").
+- **Terrain.** A terrain is a square of 16-bit heights (`Asset/Terrain`, made in code so far, no file yet), put
+  into a scene by a `TerrainComponent`, whose entity's position is the terrain's first corner. It is drawn as
+  patches (continuous distance-dependent level of detail, Strugar 2010): `Renderer/TerrainRenderer` walks a tree
+  of square patches on the CPU every frame and picks small ones near the camera and large ones far away, a few
+  dozen in all. Every patch is the same grid of 32 by 32 quads with no vertex data: `Terrain.slang` works a
+  vertex's place out from its index, reads its height from the height map, and slides it towards the next
+  coarser grid near the end of its level's distance, so levels meet without gaps or jumps. A patch that is
+  only partly near enough for the finer level is drawn as quarters. `Passes/TerrainPass` draws the depth with
+  the early depth pass, so ground hides things in the late culling, and the colour before the forward pass.
+  The resolution has to be 32 times a power of two, plus one. Terrain does not cast shadows yet and has one
+  stand-in colour by slope: cascades, ground layers and loading from a file are the rest of step 3.7.
+- **Lit surfaces.** Everything that is lit calls `lightOn(surface, pixel)` in `StandardShading.slang` with a
+  `LitSurface` (position, normals, colour, metalness, roughness): the sun, its shadow, the sky. The view modes
+  are `shownInPlaceOfLight` and `inLightAlone` next to it. A new kind of surface, like terrain, fills in a
+  `LitSurface` and gets the same light and every view mode.
 - **Exposure.** How bright the picture is made is one number the light of the scene is multiplied by.
   `Passes/ExposurePass` (`Exposure.slang`) counts how bright the scene's picture is into a histogram, one pixel
   in eight each way, and moves the exposure towards the one that shows the middle 80 % of it as a middle grey,

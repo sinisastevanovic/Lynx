@@ -194,6 +194,8 @@ namespace Lynx
             case AssetType::Prefab:
                 newAsset = std::make_shared<Prefab>(metadata.FilePath.string());
                 break;
+            // A terrain is made in code for now, see Terrain.h.
+            case AssetType::Terrain:
             case AssetType::None:
             case AssetType::SkeletalMesh:
             default: LX_CORE_ERROR("AssetType not supported yet ({0})!", static_cast<int>(metadata.Type)); return nullptr;

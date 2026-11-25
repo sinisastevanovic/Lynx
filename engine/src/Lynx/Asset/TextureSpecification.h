@@ -30,6 +30,10 @@ namespace Lynx
         R8,
         Depth32,            // Depth Buffer
         Depth24Stencil8,    // Depth Buffer + Stencil
+
+        // One whole number from 0 to 65535, read by shaders as 0 to 1: heights. Added at the end,
+        // because saved texture settings hold these values as numbers.
+        R16,
     };
 
     struct SamplerSettings

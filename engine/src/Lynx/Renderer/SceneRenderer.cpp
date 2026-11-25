@@ -8,6 +8,7 @@
 #include "Lynx/Profiling/FrameProfiler.h"
 #include "Lynx/Scene/Components/Components.h"
 #include "Lynx/Scene/Components/PhysicsComponents.h"
+#include "Lynx/Scene/Components/TerrainComponent.h"
 #include "Lynx/Scene/Components/UIComponents.h"
 #include "Lynx/Scene/Scene.h"
 
@@ -326,6 +327,15 @@ namespace Lynx
         {
             m_Extracted.Atmosphere = atmospheres.get<AtmosphereSettings>(entity);
             break;
+        }
+
+        // Every terrain, where its entity stands in the world.
+        const auto terrains = registry.view<TransformComponent, TerrainComponent>(entt::exclude<DisabledComponent>);
+        for (auto entity : terrains)
+        {
+            auto [transform, terrain] = terrains.get<TransformComponent, TerrainComponent>(entity);
+            if (std::shared_ptr<Terrain> asset = terrain.Terrain.Get())
+                m_Extracted.Terrains.push_back({ std::move(asset), glm::vec3(transform.GetWorldMatrix()[3]) });
         }
 
         // And for the exposure.

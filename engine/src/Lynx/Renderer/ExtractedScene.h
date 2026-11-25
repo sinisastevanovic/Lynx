@@ -20,6 +20,15 @@ namespace Lynx
         std::vector<ParticleInstanceData> Particles;
     };
 
+    class Terrain;
+
+    // A terrain of the scene and where its first corner lies.
+    struct ExtractedTerrain
+    {
+        std::shared_ptr<Terrain> Asset;
+        glm::vec3 Origin{ 0.0f };
+    };
+
     // What the renderer needs to draw one frame of a scene from one camera, copied out of the scene:
     // everything but the meshes. Those are too many to copy every frame. They stay on the GPU from frame
     // to frame, and only what changed about them is sent, see GpuScene.
@@ -52,6 +61,7 @@ namespace Lynx
         float DeltaTime = 0.0f;
 
         std::vector<ExtractedParticles> Particles;
+        std::vector<ExtractedTerrain> Terrains;
         std::vector<DebugLine> DebugLines;
 
         // In the order they are drawn, the last one on top.
@@ -61,6 +71,7 @@ namespace Lynx
         void Clear()
         {
             Particles.clear();
+            Terrains.clear();
             DebugLines.clear();
             Canvases.clear();
         }

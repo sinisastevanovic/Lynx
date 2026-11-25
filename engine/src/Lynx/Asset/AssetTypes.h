@@ -17,7 +17,8 @@ namespace Lynx
         Script,
         Sprite,
         Font,
-        Prefab
+        Prefab,
+        Terrain
     };
     
     namespace AssetUtils

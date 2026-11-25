@@ -22,6 +22,8 @@ namespace Lynx
     class AssetManager;
     class GpuBuffer;
     class GpuScene;
+    class TerrainRenderer;
+    struct ExtractedTerrain;
     class GpuTexture;
     class MaterialTable;
     class FrameProfiler;
@@ -203,6 +205,10 @@ namespace Lynx
         LodSettings m_LodSettings;
         ShadowSettings m_ShadowSettings;
         ShadowFit m_ShadowFit;
+        std::unique_ptr<TerrainRenderer> m_Terrain;
+
+        // The terrains of the scene that is being drawn. Valid only while it is.
+        std::span<const ExtractedTerrain> m_SceneTerrains;
 
         RenderContext m_RenderContext;
         RenderData m_CurrentFrameData;

@@ -6,6 +6,7 @@
 #include "NativeScriptComponent.h"
 #include "ParticleComponents.h"
 #include "PhysicsComponents.h"
+#include "TerrainComponent.h"
 #include "UIComponents.h"
 
 #include "Lynx/Engine.h"
@@ -79,6 +80,11 @@ namespace Lynx
             fields.Add("MieAnisotropy", &AtmosphereSettings::MieAnisotropy).Label("Haze Forward Scattering").DragSpeed(0.01f).Range(0.0f, 0.99f);
             fields.Add("OzoneAbsorption", &AtmosphereSettings::OzoneAbsorption).Label("Ozone Absorption").DragSpeed(0.01f);
             fields.Add("GroundAlbedo", &AtmosphereSettings::GroundAlbedo).Label("Ground Colour").AsColor();
+        });
+
+        registry.RegisterCoreComponent<TerrainComponent>("Terrain", [](FieldList<TerrainComponent>& fields)
+        {
+            fields.Add("Terrain", &TerrainComponent::Terrain);
         });
 
         // How the brightness of the scene's picture is chosen. The settings themselves are the component.

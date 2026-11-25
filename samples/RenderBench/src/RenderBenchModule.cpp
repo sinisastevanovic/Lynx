@@ -53,6 +53,9 @@ public:
         if (const uint32_t trees = count("Trees"))
             CreateTrees(scene, assetManager, trees);
 
+        if (const uint32_t terrain = count("Terrain"))
+            CreateTerrain(scene, assetManager, terrain);
+
         const uint32_t crowd = count("Crowd");
         const uint32_t blocksPerSide = count("BlocksPerSide");
         if (crowd == 0 && blocksPerSide == 0)
