@@ -135,16 +135,25 @@ build\bin\Debug\LynxSandboxGame.exe
   per submesh that an instance carries the address of). A coarser level draws half the leaves, and the vertex
   shaders grow the rest about their centres so the crown covers the same area (`leafPosition` in `Mesh.slang`).
   The level of foliage is picked in sixteenths and a leaf shrinks away before it is dropped, so nothing pops.
-  Pieces more than four times the usual leaf size are always drawn as they are. `LodSettings::LeafPixels` says
+  A piece more than four times the usual leaf size, like a twig's stem, is left as it is until the leaves have
+  grown to its size, and thinned out like them from there on. `LodSettings::LeafPixels` says
   how large a leaf may be on screen. An entry of the list of drawn instances holds the place in 24 bits and the
   level above them. A surface with cut-outs of few pieces, like a sail, keeps its one level.
 - **View modes.** A view of a scene can show one thing about the picture instead of the picture (`ViewMode` in
-  `Renderer/ViewMode.h`: wireframe, unlit, lighting only, normals, level of detail) and draw cut-outs whole
+  `Renderer/ViewMode.h`: wireframe, unlit, lighting only, normals, level of detail, shadow cascades) and draw cut-outs whole
   (`ViewSettings::ShowCutOuts`). The settings belong to the view and travel with it (`ExtractedScene::Viewing`),
   so two views can show a scene differently. `SceneRenderer::GetViewSettings` holds those of the main view, the
   viewport panel has the dropdown, and a benchmark takes `ViewMode=<number>` and `ShowCutOuts=0`. The forward
   shader does the modes, modes with raw colours skip bloom and tone mapping (`ShowsRawColours`). A new mode is a
   new enum value, its name, and a branch in `StandardShading.slang`.
+- **Shadows.** The sun's shadow is in four maps of 2048 texels, the cascades (`Renderer/ShadowCascades`), each
+  for a stretch of what the camera sees. `FitShadowCascades` fits each to the sphere around its stretch and moves
+  it in whole texels, so shadows do not crawl. One `ShadowPass` per cascade ("Shadow0" to "Shadow3"). A shader
+  takes a place's shadow from the first cascade whose map it lies in and mixes it with the next near the map's
+  edge (`sunVisibility` in `StandardShading.slang`). Culling leaves an instance out of a cascade if the cascade
+  before shows all of its shadow, or if it is smaller than `ShadowSettings::SmallestCasterInTexels` of the map,
+  and draws it no finer than the map can show. Without those three, shadows cost 10 to 80 % of a frame.
+  The scene constants hold what shaders need of the cascades. `ShadowSettings::Distance` is how far shadows reach.
 - **Occlusion.** The camera's view is culled in two phases (`CullPhase`), so what is hidden behind other things is
   not drawn. Early: what was seen in the last frame, kept as a flag per instance on the GPU. Its depth becomes the
   depth pyramid (`Passes/DepthPyramidPass`): the depth in ever smaller sizes, each pixel the farthest of those it
