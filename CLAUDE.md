@@ -32,7 +32,7 @@ the steps of the stage in work as they land. Stages 1 and 2 are complete. The no
 - `editor/src/` the editor: `EditorLayer`, `Panels/`, `Inspectors/`
 - `cmake/LynxGame.cmake` `lynx_add_game()`, which builds a game
 - `samples/RenderBench/` the project the renderer is measured with: benchmark scenes, and one file per benchmark in `bench/`.
-  Its code hands out asset IDs of its own, meshes from 7300000000000000000 and materials from 7400000000000000000:
+  Its code hands out asset IDs of its own, meshes from 7300000000000000000, materials from 7400000000000000000 and a terrain at 7600000000000000001:
   an asset file in that project must not use one of those.
 - `tools/` scripts for verifying changes
 
