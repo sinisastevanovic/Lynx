@@ -317,6 +317,15 @@ namespace Lynx
             break;
         }
 
+        // The same for the air: the first enabled one, or the Earth's.
+        m_Extracted.Atmosphere = defaults.Atmosphere;
+        const auto atmospheres = registry.view<AtmosphereSettings>(entt::exclude<DisabledComponent>);
+        for (auto entity : atmospheres)
+        {
+            m_Extracted.Atmosphere = atmospheres.get<AtmosphereSettings>(entity);
+            break;
+        }
+
         SyncMeshes(isEditor, physicsAlpha);
 
         if (m_Renderer.GetShowColliders())

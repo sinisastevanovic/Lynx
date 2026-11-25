@@ -34,6 +34,9 @@ namespace Lynx
         glm::vec3 SunColor{ 1.0f };
         float SunIntensity = 1.0f;
 
+        // The air above the scene. The Earth's unless the scene says otherwise.
+        AtmosphereSettings Atmosphere;
+
         // An editor view also gets the grid.
         bool IsEditorView = false;
 

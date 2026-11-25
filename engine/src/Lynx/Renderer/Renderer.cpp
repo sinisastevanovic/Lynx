@@ -751,8 +751,7 @@ namespace Lynx
             m_CurrentFrameData.AtmosphereTables[table] = &m_Frame->AtmosphereTables[table];
         }
         atmosphereTables.w = m_Frame->AtmosphereSamplerIndex;
-        sceneData.Atmosphere = ToAtmosphereData(m_AtmosphereSettings, cameraPosition.y, atmosphereTables);
-        m_CurrentFrameData.Atmosphere = m_AtmosphereSettings;
+        sceneData.Atmosphere = ToAtmosphereData(m_CurrentFrameData.Atmosphere, cameraPosition.y, atmosphereTables);
         sceneData.SkyIrradiance = m_Frame->SkyIrradiance.Address();
         sceneData.SkyReflection = m_Frame->SkyReflectionSlot.Index();
         sceneData.SkyReflectionSampler = m_Frame->SkyReflectionSamplerIndex;
@@ -772,6 +771,7 @@ namespace Lynx
     void Renderer::RenderScene(const ExtractedScene& scene)
     {
         m_CurrentFrameData.Viewing = scene.Viewing;
+        m_CurrentFrameData.Atmosphere = scene.Atmosphere;
         BeginScene(scene.View, scene.Projection, scene.CameraPosition, scene.SunDirection, scene.SunColor, scene.SunIntensity, scene.DeltaTime, scene.IsEditorView);
 
         for (const ExtractedParticles& particles : scene.Particles)

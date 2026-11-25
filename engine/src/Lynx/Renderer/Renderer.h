@@ -143,9 +143,6 @@ namespace Lynx
         BloomSettings& GetBloomSettings() { return m_BloomSettings; }
         const BloomSettings& GetBloomSettings() const { return m_BloomSettings; }
 
-        AtmosphereSettings& GetAtmosphereSettings() { return m_AtmosphereSettings; }
-        const AtmosphereSettings& GetAtmosphereSettings() const { return m_AtmosphereSettings; }
-
         ShadowSettings& GetShadowSettings() { return m_ShadowSettings; }
         const ShadowSettings& GetShadowSettings() const { return m_ShadowSettings; }
 
@@ -205,7 +202,6 @@ namespace Lynx
         BloomSettings m_BloomSettings;
         LodSettings m_LodSettings;
         ShadowSettings m_ShadowSettings;
-        AtmosphereSettings m_AtmosphereSettings;
         ShadowFit m_ShadowFit;
 
         RenderContext m_RenderContext;

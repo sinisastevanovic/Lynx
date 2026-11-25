@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Lynx/Scene/Atmosphere.h"
+
 #include <glm/glm.hpp>
 
 #include <array>
@@ -7,40 +9,6 @@
 
 namespace Lynx
 {
-    // The air above the ground, which colours the sky and the sun's light. The defaults are the Earth's,
-    // with the values of Bruneton and Hillaire. Lengths are in kilometres. How much light the air
-    // scatters or swallows is given per thousand kilometres of the way through it at ground level,
-    // which keeps the numbers readable.
-    struct AtmosphereSettings
-    {
-        float PlanetRadius = 6360.0f;
-
-        // How far above the ground the air ends.
-        float Height = 100.0f;
-
-        // The air's molecules scatter blue light most, which is the blue of the sky and the red of a
-        // low sun. They thin out with height: at RayleighHeight there are 1/e of them left.
-        glm::vec3 RayleighScattering{ 5.802f, 13.558f, 33.1f };
-        float RayleighHeight = 8.0f;
-
-        // Dust and droplets scatter all colours alike and mostly onwards, which is the white glare
-        // around the sun and the haze at the horizon. More of them makes a hazier day.
-        float MieScattering = 3.996f;
-        float MieAbsorption = 4.4f;
-        float MieHeight = 1.2f;
-
-        // How strongly dust scatters onwards, from 0 for evenly to nearly 1 for straight on.
-        float MieAnisotropy = 0.8f;
-
-        // Ozone swallows some green and red high up, which keeps the sky blue at dusk.
-        glm::vec3 OzoneAbsorption{ 0.650f, 1.881f, 0.085f };
-
-        // The colour of the ground as the air sees it from above: its light comes back into the sky.
-        glm::vec3 GroundAlbedo{ 0.3f };
-
-        bool operator==(const AtmosphereSettings&) const = default;
-    };
-
     // The pictures the sky is read from, see Atmosphere.slang. The sizes have to match the shader.
     enum class AtmosphereTable : uint32_t { Transmittance, MultiScattering, SkyView, Count };
 
@@ -78,15 +46,22 @@ namespace Lynx
         constexpr float perKilometre = 0.001f;
         constexpr float kilometresPerUnit = 0.001f;
 
+        // The settings can be typed in by hand. A planet or a layer of air of no size would divide by
+        // zero, and dust that scatters straight on is a single point of infinite brightness.
+        constexpr float smallest = 0.01f;
+        const float planet = glm::max(settings.PlanetRadius, 1.0f);
+        const float height = glm::max(settings.Height, 1.0f);
+
         // The camera stays above the ground: from below it there is no sky.
-        const float camera = settings.PlanetRadius + glm::max(cameraHeight, 1.0f) * kilometresPerUnit;
+        const float camera = planet + glm::max(cameraHeight, 1.0f) * kilometresPerUnit;
 
         AtmosphereData data;
-        data.Rayleigh = glm::vec4(settings.RayleighScattering * perKilometre, 1.0f / settings.RayleighHeight);
-        data.Mie = glm::vec4(settings.MieScattering * perKilometre, settings.MieAbsorption * perKilometre, 1.0f / settings.MieHeight, settings.MieAnisotropy);
-        data.Ozone = glm::vec4(settings.OzoneAbsorption * perKilometre, 0.0f);
-        data.GroundAlbedo = glm::vec4(settings.GroundAlbedo, 0.0f);
-        data.Radii = glm::vec4(settings.PlanetRadius, settings.PlanetRadius + settings.Height, glm::min(camera, settings.PlanetRadius + settings.Height - 0.001f), 0.0f);
+        data.Rayleigh = glm::vec4(glm::max(settings.RayleighScattering, 0.0f) * perKilometre, 1.0f / glm::max(settings.RayleighHeight, smallest));
+        data.Mie = glm::vec4(glm::max(settings.MieScattering, 0.0f) * perKilometre, glm::max(settings.MieAbsorption, 0.0f) * perKilometre,
+            1.0f / glm::max(settings.MieHeight, smallest), glm::clamp(settings.MieAnisotropy, 0.0f, 0.99f));
+        data.Ozone = glm::vec4(glm::max(settings.OzoneAbsorption, 0.0f) * perKilometre, 0.0f);
+        data.GroundAlbedo = glm::vec4(glm::clamp(settings.GroundAlbedo, 0.0f, 1.0f), 0.0f);
+        data.Radii = glm::vec4(planet, planet + height, glm::min(camera, planet + height - 0.001f), 0.0f);
         data.Tables = tables;
         return data;
     }

@@ -11,6 +11,7 @@
 #include "Lynx/Engine.h"
 #include "Lynx/TypeRegistry.h"
 #include "Lynx/Asset/Script.h"
+#include "Lynx/Scene/Atmosphere.h"
 #include "Lynx/Scene/Entity.h"
 #include "Lynx/Scene/Scene.h"
 #include "Lynx/UI/Core/UIElement.h"
@@ -61,6 +62,21 @@ namespace Lynx
             fields.Add("Color", &DirectionalLightComponent::Color).AsColor();
             fields.Add("Intensity", &DirectionalLightComponent::Intensity).DragSpeed(0.1f).Range(0.0f, 10000.0f);
             fields.Add("CastShadows", &DirectionalLightComponent::CastShadows);
+        });
+
+        // The air above the scene. The settings themselves are the component.
+        registry.RegisterCoreComponent<AtmosphereSettings>("SkyAtmosphere", [](FieldList<AtmosphereSettings>& fields)
+        {
+            fields.Add("PlanetRadius", &AtmosphereSettings::PlanetRadius).Label("Planet Radius (km)").DragSpeed(10.0f).Range(1.0f, 100000.0f);
+            fields.Add("Height", &AtmosphereSettings::Height).Label("Height (km)").DragSpeed(1.0f).Range(1.0f, 1000.0f);
+            fields.Add("RayleighScattering", &AtmosphereSettings::RayleighScattering).Label("Air Scattering").DragSpeed(0.1f);
+            fields.Add("RayleighHeight", &AtmosphereSettings::RayleighHeight).Label("Air Height (km)").DragSpeed(0.1f).Range(0.01f, 100.0f);
+            fields.Add("MieScattering", &AtmosphereSettings::MieScattering).Label("Haze Scattering").DragSpeed(0.1f).Range(0.0f, 1000.0f);
+            fields.Add("MieAbsorption", &AtmosphereSettings::MieAbsorption).Label("Haze Absorption").DragSpeed(0.1f).Range(0.0f, 1000.0f);
+            fields.Add("MieHeight", &AtmosphereSettings::MieHeight).Label("Haze Height (km)").DragSpeed(0.05f).Range(0.01f, 100.0f);
+            fields.Add("MieAnisotropy", &AtmosphereSettings::MieAnisotropy).Label("Haze Forward Scattering").DragSpeed(0.01f).Range(0.0f, 0.99f);
+            fields.Add("OzoneAbsorption", &AtmosphereSettings::OzoneAbsorption).Label("Ozone Absorption").DragSpeed(0.01f);
+            fields.Add("GroundAlbedo", &AtmosphereSettings::GroundAlbedo).Label("Ground Colour").AsColor();
         });
 
         registry.RegisterCoreComponent<RigidBodyComponent>("RigidBody", [](FieldList<RigidBodyComponent>& fields)
