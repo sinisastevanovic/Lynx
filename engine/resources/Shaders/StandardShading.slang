@@ -295,6 +295,19 @@ float3 fresnelSchlick(float cosTheta, float3 f0)
     return f0 + (1.0 - f0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
+// How much of the light that arrives from all around a surface it mirrors towards the eye, for a
+// surface that mirrors f0 of it head on. A fitted curve in place of a table to look up
+// (the second half of the split sum, after "Physically Based Shading on Mobile", Karis, 2014).
+float3 mirroredShare(float3 f0, float roughness, float nDotV)
+{
+    static const float4 c0 = float4(-1.0, -0.0275, -0.572, 0.022);
+    static const float4 c1 = float4(1.0, 0.0425, 1.04, -0.04);
+    float4 r = roughness * c0 + c1;
+    float a004 = min(r.x * r.x, exp2(-9.28 * nDotV)) * r.x + r.y;
+    float2 scaleAndBias = float2(-1.04, 1.04) * a004 + r.zw;
+    return f0 * scaleAndBias.x + scaleAndBias.y;
+}
+
 // isFrontFace is false for a pixel of a triangle that is seen from behind, which only a two-sided
 // material lets through.
 public float4 standardFragment(StandardConstants constants, StandardVaryings input, bool isFrontFace)
@@ -395,8 +408,22 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     // The sun as it arrives through the air: dimmer and redder the lower it stands.
     float3 sunLight = (diffuseShare * albedo / pi + specular) * sunlightOnGround() * nDotL * visibility;
     // The light of the sky, from every direction the surface faces, comes back out in the surface's
-    // colour. A metal has no such colour: it only mirrors, and what it mirrors of the sky is not drawn yet.
+    // colour. A metal has no such colour: it only mirrors.
     float3 ambient = albedo * (1.0 - metallic) / pi * skyIrradiance(normal);
+
+    // And what the surface mirrors of the sky: sharply if it is smooth, as a blur if it is rough.
+    // A rough surface mirrors most from a direction between the mirrored one and its normal, the
+    // rougher the nearer the normal. Looking the blur up along the mirrored direction instead would
+    // put the bright horizon onto every rough floor ("Moving Frostbite to Physically Based Rendering",
+    // Lagarde and de Rousiers, 2014).
+    float3 mirrored = reflect(-toEye, normal);
+    float spread = roughness * roughness;
+    float towardsMirrored = (1.0 - spread) * (sqrt(1.0 - spread) + spread);
+    float3 mostMirrored = normalize(lerp(normal, mirrored, towardsMirrored));
+
+    // A normal map can tilt the mirrored direction into the surface itself, where there is no sky to see.
+    float aboveSurface = saturate(1.0 + dot(mirrored, faceNormal));
+    ambient += skyReflection(mostMirrored, roughness) * mirroredShare(f0, roughness, max(dot(normal, toEye), 0.0)) * (aboveSurface * aboveSurface);
 
     if (isLightingOnly)
         emissive = float3(0.0, 0.0, 0.0);

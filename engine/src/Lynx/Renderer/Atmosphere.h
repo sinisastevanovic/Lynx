@@ -48,6 +48,11 @@ namespace Lynx
         glm::uvec2(256, 64), glm::uvec2(32, 32), glm::uvec2(192, 108)
     };
 
+    // The picture shiny surfaces mirror the sky from: square, with every size down to the one for a fully
+    // rough surface. The number of sizes has to match Atmosphere.slang.
+    constexpr uint32_t SkyReflectionSize = 64;
+    constexpr uint32_t SkyReflectionMips = 5;
+
     // The atmosphere as shaders get it, part of the scene constants: in kilometres and per kilometre.
     // Has to match AtmosphereConstants in Scene.slang.
     struct AtmosphereData

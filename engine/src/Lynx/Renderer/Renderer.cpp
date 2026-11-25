@@ -35,6 +35,7 @@
 #include "Passes/DepthRangePass.h"
 #include "Passes/SkyLightPass.h"
 #include "Passes/SkyPass.h"
+#include "Passes/SkyReflectionPass.h"
 #include "Passes/ShadowPass.h"
 #include "Lynx/Engine.h"
 #include "Lynx/Asset/Shader.h"
@@ -143,6 +144,12 @@ namespace Lynx
         // The light of the sky on surfaces, nine numbers per colour, which a compute shader writes
         // every frame and the scene constants point to.
         GpuBuffer SkyIrradiance;
+
+        // The picture shiny surfaces mirror the sky from, where the texture table has it, and where
+        // the sampler table has the sampler it is read with.
+        GpuTexture SkyReflection;
+        TextureSlot SkyReflectionSlot;
+        uint32_t SkyReflectionSamplerIndex = 0;
 
         // Picking: the pixel that was asked for, the buffer its entity ID is copied into, the frame the copy
         // was recorded in, and an answer that needed no copy.
@@ -265,6 +272,7 @@ namespace Lynx
         m_Frame->SceneOutputSlot = TextureSlot();
         m_Frame->ShadowMapSlots = {};
         m_Frame->AtmosphereTableSlots = {};
+        m_Frame->SkyReflectionSlot = TextureSlot();
         m_Frame->Shared.reset();
         m_RenderContext = RenderContext();
         m_CurrentFrameData = RenderData();
@@ -283,6 +291,7 @@ namespace Lynx
         m_Frame->SceneEntityIds = {};
         m_Frame->ShadowMaps = {};
         m_Frame->AtmosphereTables = {};
+        m_Frame->SkyReflection = {};
         m_Context->Device().destroySampler(m_Frame->ShadowSampler);
         m_Context->Device().destroySampler(m_Frame->ShadowDepthSampler);
         m_ImGui.reset();
@@ -328,6 +337,7 @@ namespace Lynx
         // post-processing does not touch it: the grid and debug lines, still hidden by the scene's depth, then the UI.
         m_Graph->Add("Atmosphere", std::make_unique<AtmospherePass>());
         m_Graph->Add("SkyLight", std::make_unique<SkyLightPass>());
+        m_Graph->Add("SkyReflection", std::make_unique<SkyReflectionPass>());
         m_Graph->Add("CullMeshes", std::make_unique<CullPass>(CullPhase::Early));
         for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
             m_Graph->Add("Shadow" + std::to_string(cascade), std::make_unique<ShadowPass>(cascade));
@@ -744,6 +754,9 @@ namespace Lynx
         sceneData.Atmosphere = ToAtmosphereData(m_AtmosphereSettings, cameraPosition.y, atmosphereTables);
         m_CurrentFrameData.Atmosphere = m_AtmosphereSettings;
         sceneData.SkyIrradiance = m_Frame->SkyIrradiance.Address();
+        sceneData.SkyReflection = m_Frame->SkyReflectionSlot.Index();
+        sceneData.SkyReflectionSampler = m_Frame->SkyReflectionSamplerIndex;
+        m_CurrentFrameData.SkyReflection = &m_Frame->SkyReflection;
         sceneData.LightDirection = glm::vec4(lightDir, lightIntensity);
         sceneData.LightColor = glm::vec4(lightColor, 1.0f);
         m_Frame->Uploads->Upload(m_Frame->SceneConstants.Handle(), 0, std::as_bytes(std::span<const SceneData>(&sceneData, 1)));
@@ -1125,6 +1138,21 @@ namespace Lynx
         irradianceDesc.Name = "SkyIrradiance";
         m_Frame->SkyIrradiance = GpuBuffer(*m_Context, irradianceDesc);
         m_Frame->Uploads->Upload(m_Frame->SkyIrradiance.Handle(), 0, std::as_bytes(std::span(noLight)));
+
+        GpuTextureDesc reflectionDesc;
+        reflectionDesc.Width = SkyReflectionSize;
+        reflectionDesc.Height = SkyReflectionSize;
+        reflectionDesc.Format = RenderFormats::AtmosphereTable;
+        reflectionDesc.Usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled;
+        reflectionDesc.MipLevels = SkyReflectionMips;
+        reflectionDesc.ViewPerMip = true;
+        reflectionDesc.Name = "SkyReflection";
+        m_Frame->SkyReflection = GpuTexture(*m_Context, reflectionDesc);
+        m_Frame->SkyReflectionSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SkyReflection.View()));
+
+        // Read between its pixels and between its sizes, for a roughness between two of them.
+        m_Frame->SkyReflectionSamplerIndex = m_Frame->Shared->SamplerIndex(
+            SamplerCache::Get()->GetSampler(SamplerSettings{ TextureWrap::Clamp, TextureFilter::Trilinear, false }));
 
         // Read between their pixels, and never beyond their edges: the two ends of a table mean opposite things.
         m_Frame->AtmosphereSamplerIndex = m_Frame->Shared->SamplerIndex(

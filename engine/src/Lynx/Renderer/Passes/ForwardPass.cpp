@@ -143,6 +143,8 @@ namespace Lynx
         // The colour of the sun's light comes from the atmosphere.
         if (GpuTexture* transmittance = renderData.AtmosphereTables[static_cast<size_t>(AtmosphereTable::Transmittance)])
             resources.Sample(transmittance);
+        if (renderData.SkyReflection)
+            resources.Sample(renderData.SkyReflection);
         return true;
     }
 

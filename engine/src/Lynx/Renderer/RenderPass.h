@@ -186,7 +186,11 @@ namespace Lynx
         // The address of the light of the sky on surfaces: nine numbers per colour, a vec4 each,
         // which SkyLightPass writes.
         uint64_t SkyIrradiance;
-        uint64_t Padding;
+
+        // Where the texture table has the picture shiny surfaces mirror the sky from, and the sampler
+        // table the sampler it is read with.
+        uint32_t SkyReflection;
+        uint32_t SkyReflectionSampler;
     };
 
     // One see-through instance, drawn on its own: these are sorted by distance, which a shared draw
@@ -282,6 +286,9 @@ namespace Lynx
         // The air above the scene, and the tables the sky is read from, in the order of AtmosphereTable.
         AtmosphereSettings Atmosphere;
         std::array<GpuTexture*, static_cast<size_t>(AtmosphereTable::Count)> AtmosphereTables{};
+
+        // The picture shiny surfaces mirror the sky from, see SkyReflectionPass.
+        GpuTexture* SkyReflection = nullptr;
 
         // Where the scene passes draw: the HDR picture, its depth and, in the editor, the entity ID of every pixel.
         GpuTexture* SceneColor = nullptr;

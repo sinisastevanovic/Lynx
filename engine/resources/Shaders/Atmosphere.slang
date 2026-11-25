@@ -411,3 +411,39 @@ public float3 skyIrradiance(float3 normal)
     // Nine numbers overshoot a little where the light changes quickly, which can dip below nothing.
     return max(light, float3(0.0, 0.0, 0.0));
 }
+
+// What shiny surfaces mirror of the sky is kept in one square picture of every direction, in several
+// sizes, which SkyReflection.slang fills. The sphere of directions is folded flat like this: upwards
+// lies in the middle of the square, the horizon on the diamond between the middles of its sides, and
+// straight down in its four corners (an octahedral map). The fold's seams lie below the horizon, where
+// the planet's ground is one colour, so they do not show.
+// Has to match SkyReflectionMips in Atmosphere.h.
+static const float skyReflectionMips = 5.0;
+
+public float3 skyReflectionDirection(float2 uv)
+{
+    float2 folded = uv * 2.0 - 1.0;
+    float3 direction = float3(folded.x, 1.0 - abs(folded.x) - abs(folded.y), folded.y);
+    float below = saturate(-direction.y);
+    direction.x += direction.x >= 0.0 ? -below : below;
+    direction.z += direction.z >= 0.0 ? -below : below;
+    return normalize(direction);
+}
+
+float2 skyReflectionUv(float3 direction)
+{
+    direction /= abs(direction.x) + abs(direction.y) + abs(direction.z);
+    float2 folded = direction.xz;
+    if (direction.y < 0.0)
+        folded = (1.0 - abs(direction.zx)) * float2(direction.x >= 0.0 ? 1.0 : -1.0, direction.z >= 0.0 ? 1.0 : -1.0);
+    return folded * 0.5 + 0.5;
+}
+
+// The light of the sky and the planet's ground as a surface of a roughness mirrors it from a direction:
+// sharp for a smooth surface, blurred for a rough one. The sun's disc is not in it, the sun has its
+// own highlight. Nothing stands in its way here either, see skyIrradiance.
+public float3 skyReflection(float3 direction, float roughness)
+{
+    float size = roughness * (skyReflectionMips - 1.0);
+    return textures[scene.skyReflection].SampleLevel(samplers[scene.skyReflectionSampler], skyReflectionUv(direction), size).rgb;
+}

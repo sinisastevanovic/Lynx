@@ -66,7 +66,11 @@ public struct SceneConstants
 
     // The light of the sky on surfaces, as nine numbers per colour. See skyIrradiance in Atmosphere.slang.
     public float4* skyIrradiance;
-    public uint64_t padding;
+
+    // Where the texture table has the picture shiny surfaces mirror the sky from, and the sampler table
+    // the sampler it is read with. See skyReflection in Atmosphere.slang.
+    public uint skyReflection;
+    public uint skyReflectionSampler;
 };
 
 // The binding number has to match SharedBindings.h.
