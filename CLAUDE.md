@@ -355,6 +355,18 @@ build\bin\Debug\LynxSandboxGame.exe
   their own indices: `SharedBindings::AddCubeTexture`, and a `TextureSlot` made with `TextureTable::Cube`.
   With `ViewPerMip`, `FaceView(face, mip)` is one face of one size as a flat picture to draw into, and
   `cubeDirection(face, uv)` gives the direction a pixel of it stands for. Cubes cannot be loaded from files yet.
+- **Texture settings.** What a texture holds is a setting of the texture asset, saved in its `.lxmeta`
+  (`TextureSpecification`: `Content`, `Compression`, `KeepsCoverage` with `CoverageCutoff`, `MaxSize`, `Shape`),
+  never taken from where it is used. A texture whose settings do not say (`TextureContent::Undecided`, also
+  every texture saved before version 3) is guessed at when it is first loaded, from its pixels and, where
+  they cannot tell, its file's name (`Asset/TextureGuess`): normal maps by their arrows of length one,
+  cut-outs by an alpha that is nearly all or nothing, packed roughness and metalness by names like `_arm`.
+  The asset manager saves the guess, and the asset properties panel changes it. Something that knows more
+  may say so before the first load, and only then: a model file for its pictures
+  (`AssetManager::SuggestTextureContent`, `SuggestTextureCoverage`), a font for its atlas
+  (`SuggestExactTexture`). Icons and other pictures of a UI are "User interface", which nothing can guess:
+  set it by hand. The settings do not change how a texture is drawn yet, the cooker that reads them is the
+  next part of the step "cooked textures" of Renderer V2. `Shape` is there for cubes, which cannot be loaded yet.
 - **Texture colours.** Every RGBA8 texture is in the texture table twice. `Texture::GetColorTableIndex` reads it as
   sRGB and gives a shader linear light: use it for colours that are lit (albedo, emissive, particles).
   `GetTableIndex` gives the stored numbers: for normal maps, roughness, and pictures shown unlit (UI, ImGui).

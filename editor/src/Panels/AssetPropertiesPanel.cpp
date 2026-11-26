@@ -147,6 +147,32 @@ namespace Lynx
         int currFormat = (int)m_EditingSpec.Format;
         
         ImGui::Text("Format: %s", formatStrings[currFormat].c_str());
+
+        // What the texture holds was guessed from the picture when it was first loaded. Undecided is
+        // left out of the choices, and stands for a texture that has not been loaded yet.
+        const std::vector<std::string> contentOptions(TextureContentNames.begin() + 1, TextureContentNames.end());
+        int currentContent = std::max(static_cast<int>(m_EditingSpec.Content) - 1, 0);
+        if (LXUI::DrawComboControl("Holds", currentContent, contentOptions))
+        {
+            m_EditingSpec.Content = static_cast<TextureContent>(currentContent + 1);
+            m_IsDirty = true;
+        }
+
+        const std::vector<std::string> compressionOptions(TextureCompressionNames.begin(), TextureCompressionNames.end());
+        int currentCompression = static_cast<int>(m_EditingSpec.Compression);
+        if (LXUI::DrawComboControl("Compression", currentCompression, compressionOptions))
+        {
+            m_EditingSpec.Compression = static_cast<TextureCompression>(currentCompression);
+            m_IsDirty = true;
+        }
+
+        if (LXUI::DrawCheckBox("Alpha Cuts Shapes Out", m_EditingSpec.KeepsCoverage)) m_IsDirty = true;
+        if (m_EditingSpec.KeepsCoverage)
+        {
+            if (LXUI::DrawDragFloat("Cut-Off To Keep", m_EditingSpec.CoverageCutoff, 0.01f, 0.01f, 0.99f, 0.5f))
+                m_IsDirty = true;
+        }
+
         if (LXUI::DrawCheckBox("Generate Mips", m_EditingSpec.GenerateMips)) m_IsDirty = true;
 
         std::vector<std::string> filterOptions = { "Bilinear", "Nearest", "Trilinear" };

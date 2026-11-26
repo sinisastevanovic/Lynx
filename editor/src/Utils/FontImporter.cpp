@@ -102,6 +102,10 @@ namespace Lynx
         specification->GenerateMips = false;
         specification->Format = TextureFormat::RGBA8; // TODO: Add RGB8!
         specification->SamplerSettings = { TextureWrap::Clamp, TextureFilter::Bilinear };
+
+        // The atlas holds distances, which have to stay exactly as they are.
+        specification->Content = TextureContent::Data;
+        specification->Compression = TextureCompression::None;
         AssetHandle textureAtlasHandle = Engine::Get().GetAssetRegistry().ImportAssetFromTemp(tempPath, texturePath, specification);
 
         nlohmann::json fontData;

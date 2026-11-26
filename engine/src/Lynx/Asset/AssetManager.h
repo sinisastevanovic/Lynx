@@ -74,6 +74,18 @@ namespace Lynx
 
         AssetHandle GetAssetHandle(const std::filesystem::path& path) const;
 
+        // Says what a texture holds on behalf of something that knows, such as a model file that
+        // names its normal map. It only counts while the texture's own settings are undecided:
+        // what is saved with a texture, by a guess or by hand, stays.
+        void SuggestTextureContent(AssetHandle texture, TextureContent content);
+
+        // The same for a texture whose alpha cuts shapes out at the given cut-off.
+        void SuggestTextureCoverage(AssetHandle texture, float cutoff);
+
+        // The same for a texture whose numbers have to stay exactly as they are in its file, such as
+        // the distances of a font's atlas: plain numbers, never compressed.
+        void SuggestExactTexture(AssetHandle texture);
+
         bool IsAssetLoaded(AssetHandle handle) const;
 
         // True while an asset is being read or waits for the main thread to finish it.
@@ -108,6 +120,7 @@ namespace Lynx
         // The second creates the GPU resources and has to run on the main thread.
         bool LoadSourceData(const std::shared_ptr<Asset>& asset);
         void FinishLoad(const std::shared_ptr<Asset>& asset);
+        void ChangeUndecidedTexture(AssetHandle texture, const std::function<void(TextureSpecification&)>& change);
         void FinishLoadOnMainThread(const std::shared_ptr<Asset>& asset);
 
         bool IsMainThread() const;

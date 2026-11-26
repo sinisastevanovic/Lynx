@@ -162,21 +162,38 @@ namespace Lynx
             material->AlphaCutoff = source.MaterialData.AlphaCutoff;
             material->TwoSided = source.MaterialData.TwoSided;
 
+            // A model file says what each of its pictures is, which is more than a picture says of
+            // itself. It is passed on as a first setting for textures that have none yet.
             auto& am = Engine::Get().GetAssetManager();
             if (!source.MaterialData.AlbedoPath.empty())
+            {
                 material->AlbedoTexture = am.GetAssetHandle(source.MaterialData.AlbedoPath);
+                if (material->Mode == AlphaMode::Mask)
+                    am.SuggestTextureCoverage(material->AlbedoTexture, material->AlphaCutoff);
+                else
+                    am.SuggestTextureContent(material->AlbedoTexture, TextureContent::Color);
+            }
             else if (auto def = am.GetDefaultTexture())
+            {
                 material->AlbedoTexture = def->GetHandle();
+            }
 
             if (!source.MaterialData.MetallicRoughnessPath.empty())
+            {
                 material->MetallicRoughnessTexture = am.GetAssetHandle(source.MaterialData.MetallicRoughnessPath);
+                am.SuggestTextureContent(material->MetallicRoughnessTexture, TextureContent::Data);
+            }
             if (!source.MaterialData.NormalPath.empty())
             {
                 material->NormalMap = am.GetAssetHandle(source.MaterialData.NormalPath);
                 material->UseNormalMap = true;
+                am.SuggestTextureContent(material->NormalMap, TextureContent::NormalMap);
             }
             if (!source.MaterialData.EmissivePath.empty())
+            {
                 material->EmissiveTexture = am.GetAssetHandle(source.MaterialData.EmissivePath);
+                am.SuggestTextureContent(material->EmissiveTexture, TextureContent::Color);
+            }
 
             Engine::Get().GetAssetManager().AddRuntimeAsset(material);
 

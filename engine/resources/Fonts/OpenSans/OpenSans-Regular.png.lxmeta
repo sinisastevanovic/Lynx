@@ -1,11 +1,16 @@
 {
     "Settings": {
+        "Compression": 1,
+        "Content": 3,
+        "CoverageCutoff": 0.5,
         "FilterMode": 0,
         "GenerateMips": false,
-        "IsSRGB": false,
+        "KeepsCoverage": false,
+        "MaxSize": 0,
+        "Shape": 0,
         "TextureFormat": 1,
         "UseAnisotropy": true,
-        "Version": 2,
+        "Version": 3,
         "WrapMode": 1
     },
     "Type": 1,

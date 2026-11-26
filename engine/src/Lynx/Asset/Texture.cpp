@@ -1,4 +1,5 @@
 #include "Texture.h"
+#include "TextureGuess.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -64,6 +65,16 @@ namespace Lynx
         m_Specification.Height = height;
         m_Specification.DebugName = m_FilePath;
         m_Specification.Format = channels == 1 ? TextureFormat::R8 : TextureFormat::RGBA8;
+
+        // Settings that do not say what the texture holds get a guess from the picture itself.
+        m_HasGuessedSettings = m_Specification.Content == TextureContent::Undecided;
+        if (m_HasGuessedSettings)
+        {
+            const size_t byteCount = static_cast<size_t>(width) * height * channels;
+            const TextureGuess guess = GuessTextureSettings(std::span<const uint8_t>(m_PixelData, byteCount), width, height, channels, m_FilePath);
+            m_Specification.Content = guess.Content;
+            m_Specification.KeepsCoverage = guess.KeepsCoverage;
+        }
 
         return true;
     }

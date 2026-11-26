@@ -66,6 +66,54 @@ namespace Lynx
         return LoadAsset(metadata, mode);
     }
 
+    void AssetManager::SuggestTextureContent(AssetHandle texture, TextureContent content)
+    {
+        ChangeUndecidedTexture(texture, [content](TextureSpecification& settings) { settings.Content = content; });
+    }
+
+    void AssetManager::SuggestTextureCoverage(AssetHandle texture, float cutoff)
+    {
+        ChangeUndecidedTexture(texture, [cutoff](TextureSpecification& settings)
+        {
+            settings.Content = TextureContent::Color;
+            settings.KeepsCoverage = true;
+            settings.CoverageCutoff = cutoff;
+        });
+    }
+
+    void AssetManager::SuggestExactTexture(AssetHandle texture)
+    {
+        ChangeUndecidedTexture(texture, [](TextureSpecification& settings)
+        {
+            settings.Content = TextureContent::Data;
+            settings.Compression = TextureCompression::None;
+        });
+    }
+
+    void AssetManager::ChangeUndecidedTexture(AssetHandle texture, const std::function<void(TextureSpecification&)>& change)
+    {
+        if (!texture.IsValid() || !m_AssetRegistry->Contains(texture))
+            return;
+
+        const AssetMetadata metadata = m_AssetRegistry->Get(texture);
+        if (metadata.Type != AssetType::Texture || !metadata.Specification)
+            return;
+
+        // A texture that is loaded, or being loaded, has its guess already or gets it any moment.
+        {
+            std::lock_guard<std::mutex> lock(m_AssetsMutex);
+            if (m_LoadedAssets.contains(texture))
+                return;
+        }
+
+        TextureSpecification settings = *std::static_pointer_cast<TextureSpecification>(metadata.Specification);
+        if (settings.Content != TextureContent::Undecided)
+            return;
+
+        change(settings);
+        m_AssetRegistry->UpdateMetadata(texture, std::make_shared<TextureSpecification>(settings));
+    }
+
     bool AssetManager::HasPendingLoads() const
     {
         std::lock_guard<std::mutex> lock(m_AssetsMutex);
@@ -133,6 +181,15 @@ namespace Lynx
             asset->SetState(AssetState::Error);
             LX_CORE_ERROR("Failed to upload asset to GPU: {0}", asset->GetFilePath());
             return;
+        }
+
+        // A guess at what a texture holds is saved with the texture: it is then made once, shows in
+        // the editor and stays as whoever knows better changes it.
+        if (asset->GetType() == AssetType::Texture)
+        {
+            const Texture& texture = static_cast<const Texture&>(*asset);
+            if (texture.HasGuessedSettings() && m_AssetRegistry->Contains(asset->GetHandle()))
+                m_AssetRegistry->UpdateMetadata(asset->GetHandle(), std::make_shared<TextureSpecification>(texture.GetSpecification()));
         }
 
         // A material that was built while its texture was still loading has to pick the texture up now.

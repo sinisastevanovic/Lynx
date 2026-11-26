@@ -47,6 +47,9 @@ namespace Lynx
         AssetHandle textureHandle = data["AtlasTexture"].get<AssetHandle>();
         if (textureHandle.IsValid())
         {
+            // The atlas holds distances to the outlines of the glyphs. An atlas imported before
+            // textures had settings would be taken for a colour and, compressed, give ragged text.
+            Engine::Get().GetAssetManager().SuggestExactTexture(textureHandle);
             m_AtlasTexture = Engine::Get().GetAssetManager().GetAsset<Texture>(textureHandle);
         }
 

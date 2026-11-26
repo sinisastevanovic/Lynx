@@ -43,6 +43,10 @@ namespace Lynx
         const TextureSpecification& GetSpecification() const { return m_Specification; }
         const SamplerSettings& GetSamplerSettings() const { return m_Specification.SamplerSettings; }
 
+        // True if loading had to guess what the texture holds, because its settings did not say.
+        // Whoever keeps the settings saves the guess then, so that it is made once and can be changed.
+        bool HasGuessedSettings() const { return m_HasGuessedSettings; }
+
         virtual bool LoadSourceData() override;
         virtual bool CreateRenderResources() override;
         virtual bool Reload() override;
@@ -55,6 +59,7 @@ namespace Lynx
         // Empty for a format without an sRGB form, such as a font's single channel.
         TextureSlot m_ColorTableSlot;
         uint32_t m_SamplerIndex = 0;
+        bool m_HasGuessedSettings = false;
 
         unsigned char* m_PixelData = nullptr;
     };
