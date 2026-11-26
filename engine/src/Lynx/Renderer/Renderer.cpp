@@ -965,6 +965,7 @@ namespace Lynx
         m_CurrentFrameData.SunAngularSize = scene.SunAngularSize;
         m_CurrentFrameData.Exposure = scene.Exposure;
         m_CurrentFrameData.DeltaTime = scene.DeltaTime;
+        m_CurrentFrameData.ExposureRestarts = std::exchange(m_ExposureRestarts, false);
         m_SceneTerrains = scene.Terrains;
         BeginScene(scene.View, scene.Projection, scene.CameraPosition, scene.SunDirection, scene.SunColor, scene.SunIntensity, scene.DeltaTime, scene.IsEditorView);
 

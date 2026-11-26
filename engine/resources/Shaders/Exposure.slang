@@ -52,7 +52,9 @@ struct ExposureConstants
     float highest;
     float speedTowardsDarker;
     float speedTowardsBrighter;
-    uint padding;
+
+    // Not zero if the exposure is to be set to what suits this picture, wherever it was.
+    uint restarts;
 };
 [vk::push_constant] ConstantBuffer<ExposureConstants> constants;
 
@@ -118,7 +120,7 @@ void adapt()
 
     // The first time there is nothing to come from.
     float current = scene.exposure[0].exposure;
-    if (scene.exposure[0].isAdapted == 0 || current <= 0.0)
+    if (scene.exposure[0].isAdapted == 0 || current <= 0.0 || constants.restarts != 0)
     {
         scene.exposure[0].exposure = wanted;
         scene.exposure[0].isAdapted = 1;

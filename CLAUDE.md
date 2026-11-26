@@ -371,7 +371,8 @@ build\bin\Debug\LynxSandboxGame.exe
   scene constants point to (`scene.exposure`), and bloom and the composite pass multiply by it, so bloom comes
   after exposure. The settings are `ExposureSettings` in `Scene/Exposure.h`, itself the component "Exposure":
   automatic or fixed, compensation in stops, limits and speeds. A benchmark's frames have a fixed length, so its
-  exposure is the same in every run. Views with raw colours have none. The tone curve is the fitted ACES curve
+  exposure is the same in every run: it starts over when measuring begins (`Renderer::RestartExposure`), because
+  time stands still during the warm-up and the exposure with it. Views with raw colours have none. The tone curve is the fitted ACES curve
   with the factor of 0.6 it was fitted for, and the picture goes to the screen through the sRGB curve
   (`forScreen` in `Composite.slang`, undone by `shownAsItIs` for the view modes).
 - **Cube textures.** `GpuTextureDesc::IsCube` makes six square faces that a shader reads by a direction

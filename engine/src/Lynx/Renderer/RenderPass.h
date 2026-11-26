@@ -540,6 +540,9 @@ namespace Lynx
         ExposureSettings Exposure;
         float DeltaTime = 0.0f;
 
+        // The automatic exposure does not come from where it was: it is set to what suits this frame.
+        bool ExposureRestarts = false;
+
         // Where the scene passes draw: the HDR picture, its depth and, in the editor, the entity ID of every pixel.
         GpuTexture* SceneColor = nullptr;
         GpuTexture* SceneDepth = nullptr;

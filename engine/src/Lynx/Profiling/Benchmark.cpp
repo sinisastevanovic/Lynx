@@ -284,6 +284,11 @@ namespace Lynx
                     LX_CORE_INFO("Benchmark '{0}': measuring {1} frames after {2} warm-up frames.", m_Settings.Name, m_Settings.Frames, m_WarmupFramesDone);
                     profiler.StartRecording();
                     m_Phase = Phase::Measure;
+
+                    // The automatic exposure stood still with the game, at what the very first frame
+                    // showed, which may have been a scene whose textures were still being loaded. How
+                    // many were there by then is a matter of timing, and showed in every picture.
+                    renderer.RestartExposure();
                 }
                 return 0.0f;
             }

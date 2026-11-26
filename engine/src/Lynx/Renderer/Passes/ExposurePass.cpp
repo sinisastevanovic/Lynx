@@ -43,7 +43,7 @@ namespace Lynx
             float Highest;
             float SpeedTowardsDarker;
             float SpeedTowardsBrighter;
-            uint32_t Padding;
+            uint32_t Restarts;
         };
     }
 
@@ -134,6 +134,7 @@ namespace Lynx
         push.Places = { std::max(1u, picture.Width / PixelsPerPlace), std::max(1u, picture.Height / PixelsPerPlace) };
         push.SceneTexture = renderData.SceneColorIndex;
         push.DeltaTime = renderData.DeltaTime;
+        push.Restarts = renderData.ExposureRestarts ? 1u : 0u;
         push.FixedExposure = settings.IsAutomatic ? -1.0f : std::max(settings.Fixed, 0.0f);
         push.Compensation = std::exp2(settings.Compensation);
         push.Lowest = std::max(settings.Lowest, 0.0001f);
