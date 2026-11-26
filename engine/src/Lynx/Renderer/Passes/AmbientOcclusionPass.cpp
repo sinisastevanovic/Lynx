@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <span>
 
 namespace Lynx
 {
@@ -45,6 +46,9 @@ namespace Lynx
         // and the number of frames its result is made of. Half floats, because a frame that counts
         // for a few hundredths changes a result by less than a step of eight bits.
         constexpr vk::Format ResultFormat = vk::Format::eR16G16B16A16Sfloat;
+
+        // The result while no history is kept: the occlusion alone, a sixteenth of the memory.
+        constexpr vk::Format ResultWithoutHistoryFormat = vk::Format::eR8Unorm;
 
         // What stands in for the time since the last frame while the game stands still.
         constexpr float UsualFrameTime = 1.0f / 60.0f;
@@ -179,8 +183,10 @@ namespace Lynx
         std::array<ResultPicture, 2> Results;
 
         // Which of the two this frame writes, and whether the other holds what the last frame left.
+        // While no history is kept there is only the first, in a smaller format.
         uint32_t Target = 0;
         bool HasHistory = false;
+        bool KeepsHistory = false;
 
         // Set by the first step in a frame that works the occlusion out, and taken back by a step
         // that cannot do its part: the steps after it then leave the frame without.
@@ -189,13 +195,15 @@ namespace Lynx
         ResultPicture& Result() { return Results[Target]; }
         ResultPicture& LastResult() { return Results[1 - Target]; }
 
-        void Ensure(GraphicsContext& context, SharedBindings& shared, uint32_t width, uint32_t height)
+        void Ensure(GraphicsContext& context, SharedBindings& shared, uint32_t width, uint32_t height, bool keepsHistory)
         {
             const GpuTexture& kept = Results[0].Texture;
-            if (kept && kept.Desc().Width == width && kept.Desc().Height == height)
+            if (kept && kept.Desc().Width == width && kept.Desc().Height == height && KeepsHistory == keepsHistory)
                 return;
 
             HasHistory = false;
+            KeepsHistory = keepsHistory;
+            Target = 0;
 
             GpuTextureDesc desc;
             desc.Width = width;
@@ -212,11 +220,12 @@ namespace Lynx
             }
 
             // The view of a single size leaves the picture's numbers where they are.
-            desc.Format = ResultFormat;
+            desc.Format = keepsHistory ? ResultFormat : ResultWithoutHistoryFormat;
             desc.ReadAsGrey = true;
             desc.ViewPerMip = true;
             desc.Name = "AmbientOcclusion";
-            for (ResultPicture& result : Results)
+            Results[1] = ResultPicture();
+            for (ResultPicture& result : std::span(Results).first(keepsHistory ? 2 : 1))
             {
                 result.Texture = GpuTexture(context, desc);
                 result.ReadAsGrey = TextureSlot(shared, shared.AddTexture(result.Texture.View()));
@@ -321,10 +330,12 @@ namespace Lynx
             }
 
             // Nothing is taken over across a jump of the camera or a change of scene either.
-            pictures.Ensure(*m_Vulkan->Context, *m_Vulkan->Shared, renderData.SceneDepth->Desc().Width, renderData.SceneDepth->Desc().Height);
+            const bool keepsHistory = renderData.AmbientOcclusion.HistoryTime > 0.0f;
+            pictures.Ensure(*m_Vulkan->Context, *m_Vulkan->Shared, renderData.SceneDepth->Desc().Width, renderData.SceneDepth->Desc().Height, keepsHistory);
             if (renderData.HistoryWasReset)
                 pictures.HasHistory = false;
-            pictures.Target = 1 - pictures.Target;
+            if (keepsHistory)
+                pictures.Target = 1 - pictures.Target;
         }
 
         // A step whose shader has not compiled leaves the frame without occlusion.
@@ -361,7 +372,7 @@ namespace Lynx
                     break;
                 }
                 resources.Sample(renderData.SceneDepth);
-                if (pictures.HasHistory && renderData.AmbientOcclusion.HistoryTime > 0.0f)
+                if (pictures.HasHistory)
                     resources.Sample(&pictures.LastResult().Texture);
                 resources.Write(&pictures.Result().Texture);
                 break;
@@ -435,9 +446,9 @@ namespace Lynx
             // Where a place of this frame was on screen in the last one: back into the world through
             // this frame's camera, and out again through the last frame's. A view at rest gets exactly
             // its own place back, which rounding on the way would not give it.
-            const bool keepsHistory = settings.HistoryTime > 0.0f;
-            const bool usesHistory = pictures.HasHistory && keepsHistory;
-            push.KeepsHistory = keepsHistory ? 1u : 0u;
+            // What the pictures were made for counts, not the setting: they are made when a frame begins.
+            const bool usesHistory = pictures.HasHistory;
+            push.KeepsHistory = pictures.KeepsHistory ? 1u : 0u;
             const glm::dmat4 toLastFrame = glm::dmat4(renderData.PreviousClipViewProjection) * glm::inverse(glm::dmat4(renderData.UnjitteredClipViewProjection));
             push.ToLastFrame = renderData.ViewIsStill ? glm::mat4(1.0f) : glm::mat4(toLastFrame);
             push.Jitter = renderData.Jitter;
@@ -453,7 +464,7 @@ namespace Lynx
             // The least a frame counts is set by how long the history is meant to last, as for
             // anti-aliasing over time, so the picture looks the same at any frame rate.
             const float frameTime = renderData.DeltaTime > 0.0f ? renderData.DeltaTime : UsualFrameTime;
-            push.LeastShare = usesHistory ? std::clamp(1.0f - std::exp(-frameTime / settings.HistoryTime), LeastShareOfAFrame, 1.0f) : 1.0f;
+            push.LeastShare = usesHistory ? std::clamp(1.0f - std::exp(-frameTime / std::max(settings.HistoryTime, 0.001f)), LeastShareOfAFrame, 1.0f) : 1.0f;
         }
         m_Vulkan->Shared->Push(commands, push);
         commands.dispatch(GroupCountFor(picture.Width, ThreadsPerSide), GroupCountFor(picture.Height, ThreadsPerSide), 1);
@@ -461,7 +472,7 @@ namespace Lynx
             return;
 
         // From here on the frame has its occlusion, and the next one something to go on from.
-        pictures.HasHistory = settings.HistoryTime > 0.0f;
+        pictures.HasHistory = pictures.KeepsHistory;
         renderData.SceneOcclusion = &pictures.Result().Texture;
         renderData.SceneOcclusionIndex = pictures.Result().ReadAsGrey.Index();
         if (renderData.Viewing.Mode == ViewMode::AmbientOcclusion)

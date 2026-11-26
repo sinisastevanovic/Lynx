@@ -277,7 +277,8 @@ build\bin\Debug\LynxSandboxGame.exe
   `AmbientOcclusionSettings::Radius`, half a unit: it darkens creases and the ground under things, not a
   hall under its roof. `Renderer::GetAmbientOcclusionSettings`, "Ambient Occlusion" in the render settings
   panel, the view mode "Ambient occlusion", and `AO=0`, `AoQuality=<0 to 3>`, `AoRadius`, `AoSmooth=<rounds, 0 to 3>`, `AoHistoryTime=<seconds>` in
-  a benchmark. At 1080p it costs 0.13 to 0.17 ms a frame at Medium, the default, and 33 MB.
+  a benchmark. At 1080p it costs 0.13 to 0.17 ms a frame at Medium, the default, and 33 MB. Without a
+  history it costs 0.03 ms and 31 MB less: the result is then one picture of a byte a pixel.
 - **Occlusion.** The camera's view is culled in two phases (`CullPhase`), so what is hidden behind other things is
   not drawn. Early: what was seen in the last frame, kept as a flag per instance on the GPU. Its depth becomes the
   depth pyramid (`Passes/DepthPyramidPass`): the depth in ever smaller sizes, each pixel the farthest of those it
