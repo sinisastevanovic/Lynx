@@ -441,6 +441,32 @@ public LitSurface inLightAlone(LitSurface surface)
     return surface;
 }
 
+// How much the way a surface faces differs across one pixel. Zero for a flat surface.
+// Only for use in a fragment shader, and outside of anything that only some pixels do.
+public float spreadOfNormal(float3 normal)
+{
+    float3 across = ddx(normal);
+    float3 down = ddy(normal);
+    return 0.25 * (dot(across, across) + dot(down, down));
+}
+
+// The roughness to light a surface with whose normal turns within the pixel by the given spread.
+//
+// A shiny surface that curves within a pixel, a small ball far away, mirrors the sun in a spot smaller
+// than the pixel. Whether the pixel's one sample hits that spot is chance, so the highlight sparkles
+// from pixel to pixel and from frame to frame. Lit as a rougher surface, by as much as its normals
+// spread, the pixel shows the highlight's average instead ("Improved Geometric Specular Antialiasing",
+// Tokuyoshi and Kaplanyan, 2019). The limit keeps a surface from turning dull.
+public float roughnessAcrossPixel(float roughness, float normalSpread)
+{
+    float widened = min(2.0 * normalSpread, 0.18);
+    if (widened <= 0.0)
+        return roughness;
+
+    float spread = roughness * roughness;
+    return sqrt(sqrt(saturate(spread * spread + widened)));
+}
+
 // How far the pixel's surface moved on screen since the last frame, see screenMotion.
 public float2 standardMotion(StandardVaryings input)
 {
@@ -456,6 +482,9 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     // The normal map tilts the surface's normal. It is stored relative to the surface, so it is
     // brought into the world with the surface's own three directions.
     float3 normal = normalize(input.normal);
+
+    // Asked for here, before anything that only some pixels do: it compares the pixel with its neighbours.
+    float normalSpread = spreadOfNormal(normal);
 
     // The surface as it faces without its normal map, which is how its shadow is looked up.
     float3 faceNormal = isFrontFace ? normal : -normal;
@@ -516,7 +545,7 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
 
     // A roughness of zero is a perfect mirror, whose highlight is a single point of infinite brightness:
     // the formula below divides zero by zero there. No real surface is that smooth, so it is kept away from zero.
-    float roughness = max(metallicRoughness.g * material.roughness, 0.045);
+    float roughness = roughnessAcrossPixel(max(metallicRoughness.g * material.roughness, 0.045), normalSpread);
 
     float3 emissive = sampleMaterialTexture(material.emissiveTexture, material.materialSampler, input.uv).rgb
         * material.emissiveColorStrength.rgb * material.emissiveColorStrength.a;
