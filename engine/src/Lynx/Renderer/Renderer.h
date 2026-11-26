@@ -169,10 +169,6 @@ namespace Lynx
         // together from several frames starts over.
         void ResetHistory() { m_PreviousClipViewProjection.reset(); }
 
-        // Makes the automatic exposure start over with the next frame: it is then set to what suits
-        // that frame's picture at once, as on the first frame ever, and follows gradually from there.
-        void RestartExposure() { m_ExposureRestarts = true; }
-
         TemporalSettings& GetTemporalSettings() { return m_TemporalSettings; }
         const TemporalSettings& GetTemporalSettings() const { return m_TemporalSettings; }
 
@@ -239,9 +235,6 @@ namespace Lynx
 
         // The camera's matrix as shaders got it in the last frame, without jitter. Empty before the first frame.
         std::optional<glm::mat4> m_PreviousClipViewProjection;
-
-        // Set by RestartExposure, for the next frame that is drawn.
-        bool m_ExposureRestarts = false;
 
         TemporalSettings m_TemporalSettings;
         AmbientOcclusionSettings m_AmbientOcclusionSettings;
