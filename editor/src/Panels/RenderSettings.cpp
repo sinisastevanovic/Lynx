@@ -96,6 +96,12 @@ namespace Lynx
                     ImGui::SliderFloat("Share between pixels", &temporal.BetweenPixelsShare, 0.0f, 1.0f);
                     ImGui::SetItemTooltip("How much a frame counts where the history is read halfway between pixels. Higher keeps what moves sharper and its edges rougher. 0 makes no difference.");
 
+                    ImGui::SliderFloat("History time when still", &temporal.StillHistoryTime, 0.02f, 2.0f, "%.2f s");
+                    ImGui::SetItemTooltip("The same for a pixel that stands still. Longer flickers less on thin things and follows a change of light later.");
+
+                    ImGui::SliderFloat("Box when still", &temporal.StillBoxScale, 1.0f, 8.0f);
+                    ImGui::SetItemTooltip("How many times wider the box of colours is for a pixel that stands still. Wider keeps thin things like needles from flickering.");
+
                     ImGui::Checkbox("Steady textures", &temporal.SteadyTextures);
                     ImGui::SetItemTooltip("Reads colour textures where a pixel would be without the jitter, so their patterns stand still.");
 

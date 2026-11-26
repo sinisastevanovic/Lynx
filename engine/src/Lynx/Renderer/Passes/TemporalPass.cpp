@@ -52,6 +52,8 @@ namespace Lynx
             float Sharpness;
             float DepthTolerance;
             float BetweenPixelsShare;
+            float StillBoxScale;
+            float StillWeight;
 
             // The shader's size is a multiple of eight bytes, for the pair of numbers it starts with.
             uint32_t Padding;
@@ -247,6 +249,7 @@ namespace Lynx
         push.Sharpness = std::clamp(settings.Sharpness, 0.0f, 1.0f);
         push.DepthTolerance = std::max(settings.DepthTolerance, 0.0f);
         push.BetweenPixelsShare = std::clamp(settings.BetweenPixelsShare, 0.0f, 1.0f);
+        push.StillBoxScale = std::max(settings.StillBoxScale, 1.0f);
 
         if (m_WasAccumulating)
         {
@@ -258,8 +261,12 @@ namespace Lynx
             // The least a frame counts is set by how long the history is meant to last, not by a number
             // per frame: the picture then looks the same at any frame rate (Jimenez, 2016).
             const float frameTime = renderData.DeltaTime > 0.0f ? renderData.DeltaTime : UsualFrameTime;
-            const float share = 1.0f - std::exp(-frameTime / std::max(settings.HistoryTime, 0.001f));
-            push.CurrentWeight = std::clamp(share, LeastShareOfAFrame, 1.0f);
+            const auto shareFor = [frameTime](float historyTime)
+            {
+                return std::clamp(1.0f - std::exp(-frameTime / std::max(historyTime, 0.001f)), LeastShareOfAFrame, 1.0f);
+            };
+            push.CurrentWeight = shareFor(settings.HistoryTime);
+            push.StillWeight = shareFor(std::max(settings.StillHistoryTime, settings.HistoryTime));
         }
 
         commands.bindPipeline(vk::PipelineBindPoint::eCompute, m_Vulkan->Pipeline);

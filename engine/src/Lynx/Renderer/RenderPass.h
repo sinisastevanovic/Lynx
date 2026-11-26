@@ -256,7 +256,8 @@ namespace Lynx
         bool Jitters = false;
 
         // After this many frames the shifts repeat. They follow the Halton sequence of bases 2 and 3,
-        // of which any run of frames covers a pixel evenly.
+        // of which any run of frames covers a pixel evenly. Measured for the resolve: 16 and 32 come
+        // nearer to a picture with 64 samples at rest, and 16 is farther from it than 8 in motion.
         uint32_t JitterLength = 8;
 
         // Anti-aliasing over time, see TemporalPass: every pixel mixes the frame with what the frames
@@ -285,6 +286,15 @@ namespace Lynx
         // benchmarks against pictures with 64 samples a pixel: without it, a view that moves keeps 60
         // to 86 % of its fine detail, with 0.5 it keeps 94 to 101 % and is nearer to those pictures.
         float BetweenPixelsShare = 0.5f;
+
+        // The same for a pixel that stands still, which can take longer. Longer flickers less on what
+        // is thinner than a pixel and follows a change of light later. Measured on the Trees benchmark
+        // held still: 0.5 s with a box four times as wide flickers a third as much as 0.16 s.
+        float StillHistoryTime = 0.5f;
+
+        // How many times wider the box of colours is for a pixel that stands still. Wider keeps what is
+        // thinner than a pixel from flickering, and lets a change of light through later. 1 for no difference.
+        float StillBoxScale = 4.0f;
 
         // Reads the colour textures of surfaces where a pixel would be without the jitter, so that
         // their patterns stand still and only edges and lighting take part in the anti-aliasing.

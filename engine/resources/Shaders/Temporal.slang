@@ -12,6 +12,10 @@
 import Scene;
 import Textures;
 
+// A pixel that moves this many pixels a frame or more is treated as moving: the box of colours has
+// its own width, and a frame counts as much as for everything that moves.
+static const float speedOfTheNarrowBox = 0.5;
+
 // Have to match TemporalPass.cpp.
 static const uint modeAccumulate = 0;
 static const uint modeResolve = 1;
@@ -63,6 +67,12 @@ struct TemporalConstants
 
     // Resolving: how much the frame counts where the history is read halfway between pixels.
     float betweenPixelsShare;
+
+    // Resolving: how many times wider the box of colours is for a pixel that stands still, and the
+    // least a frame counts there.
+    float stillBoxScale;
+    float stillWeight;
+    uint padding;
 };
 [vk::push_constant] ConstantBuffer<TemporalConstants> constants;
 
@@ -229,8 +239,16 @@ void resolve(int2 pixel)
 
     // The history is pulled into the box along the line to the box's middle, which keeps its hue
     // better than cutting each number off on its own.
+    //
+    // What is thinner than a pixel, a needle or a wire, is missing from the frame's colours whenever the
+    // jitter steps past it, and the box then pulls it out of the history: it flickers, standing still.
+    // The box is there to catch a history that shows something else, and for a pixel that did not
+    // move, with the same surface behind it as before, only the light can have changed. So such a
+    // pixel gets a wider box: thin things keep, and a change of light still gets through, later.
+    float moving = saturate(length(motion * size) / speedOfTheNarrowBox);
+    float widening = lerp(max(constants.stillBoxScale, 1.0), 1.0, moving);
     float3 middle = 0.5 * (boxHighest + boxLowest);
-    float3 reach = 0.5 * (boxHighest - boxLowest) + 0.00001;
+    float3 reach = 0.5 * (boxHighest - boxLowest) * widening + 0.00001;
     float3 fromMiddle = past - middle;
     float3 share = abs(fromMiddle / reach);
     float farthest = max(share.x, max(share.y, share.z));
@@ -242,8 +260,13 @@ void resolve(int2 pixel)
     // A history that is read between pixels comes out a little blurred, and the blur adds up from
     // frame to frame. The further between pixels it is read, the more the frame counts, which keeps
     // what moves sharp at the price of rougher edges while it moves (Yang and others, 2009).
+    //
+    // A pixel that stands still can take its time: the less a frame counts there, the more evenly the
+    // places of the jitter weigh in, and the less a needle that is hit in some frames and missed in
+    // others flickers.
     float2 betweenPixels = abs(frac(historyUv * size) - 0.5) * 2.0;
-    float leastShare = lerp(constants.currentWeight, max(constants.currentWeight, constants.betweenPixelsShare), max(betweenPixels.x, betweenPixels.y));
+    float leastMoving = lerp(constants.currentWeight, max(constants.currentWeight, constants.betweenPixelsShare), max(betweenPixels.x, betweenPixels.y));
+    float leastShare = lerp(min(constants.stillWeight, constants.currentWeight), leastMoving, moving);
     float frames = hasHistory ? history.a : 0.0;
     float currentShare = hasHistory ? max(1.0 / (frames + 1.0), leastShare) : 1.0;
 
@@ -254,7 +277,7 @@ void resolve(int2 pixel)
     float pastWeight = (1.0 - currentShare) / (1.0 + kept.x * exposure);
     float3 result = (current * currentWeight + kept * pastWeight) / (currentWeight + pastWeight);
 
-    float mostFrames = 1.0 / max(constants.currentWeight, 0.001);
+    float mostFrames = 1.0 / max(min(constants.stillWeight, constants.currentWeight), 0.001);
     writableTextures[constants.outputTexture][pixel] = float4(max(fromYCoCg(result), 0.0), min(frames + 1.0, mostFrames));
     writableTextures[constants.depthOutput][pixel] = float4(ownDepth, 0.0, 0.0, 0.0);
 
