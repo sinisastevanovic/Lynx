@@ -50,6 +50,7 @@ public:
         temporal.BetweenPixelsShare = static_cast<float>(settings.Parameter("TaaBetweenPixelsShare", temporal.BetweenPixelsShare));
         temporal.SteadyTextures = settings.Parameter("TaaSteadyTextures", temporal.SteadyTextures ? 1.0 : 0.0) > 0.0;
         temporal.StillBoxScale = static_cast<float>(settings.Parameter("TaaStillBoxScale", temporal.StillBoxScale));
+        temporal.VariesNoise = settings.Parameter("TaaVariesNoise", temporal.VariesNoise ? 1.0 : 0.0) > 0.0;
         temporal.StillHistoryTime = static_cast<float>(settings.Parameter("TaaStillHistoryTime", temporal.StillHistoryTime));
         if (settings.Parameter("FXAA", 1.0) <= 0.0)
             engine.GetRenderer().SetFXAAEnabled(false);

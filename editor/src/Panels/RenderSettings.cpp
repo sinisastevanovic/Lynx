@@ -102,6 +102,9 @@ namespace Lynx
                     ImGui::SliderFloat("Box when still", &temporal.StillBoxScale, 1.0f, 8.0f);
                     ImGui::SetItemTooltip("How many times wider the box of colours is for a pixel that stands still. Wider keeps thin things like needles from flickering.");
 
+                    ImGui::Checkbox("New shadow grain every frame", &temporal.VariesNoise);
+                    ImGui::SetItemTooltip("Draws the grain in the soft edge of a shadow anew in every frame, so that the frames average it away.");
+
                     ImGui::Checkbox("Steady textures", &temporal.SteadyTextures);
                     ImGui::SetItemTooltip("Reads colour textures where a pixel would be without the jitter, so their patterns stand still.");
 

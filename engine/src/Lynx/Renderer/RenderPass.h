@@ -213,7 +213,11 @@ namespace Lynx
 
         // The same in pixels if colour textures are read without the shift, zero otherwise.
         glm::vec2 TextureJitter;
-        uint64_t Padding;
+
+        // Added to a pixel's place before a number is drawn for it by chance. Changes per frame while
+        // anti-aliasing over time is on, zero otherwise.
+        float NoiseShift;
+        uint32_t Padding;
     };
 
     // One see-through instance, drawn on its own: these are sorted by distance, which a shared draw
@@ -295,6 +299,10 @@ namespace Lynx
         // How many times wider the box of colours is for a pixel that stands still. Wider keeps what is
         // thinner than a pixel from flickering, and lets a change of light through later. 1 for no difference.
         float StillBoxScale = 4.0f;
+
+        // Draws what is drawn by chance per pixel, the grain in the soft edge of a shadow, anew in every
+        // frame while Resolves or Accumulates is on, so that the frames average it away.
+        bool VariesNoise = true;
 
         // Reads the colour textures of surfaces where a pixel would be without the jitter, so that
         // their patterns stand still and only edges and lighting take part in the anti-aliasing.

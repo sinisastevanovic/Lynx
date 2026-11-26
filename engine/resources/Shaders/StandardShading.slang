@@ -265,7 +265,7 @@ float sunVisibility(float3 worldPosition, float3 normal, float2 pixel)
     if (place.cascade == shadowCascadeCount)
         return 1.0;
 
-    float turn = noiseOfPixel(pixel) * 2.0 * pi;
+    float turn = noiseOfPixel(pixel + scene.noiseShift) * 2.0 * pi;
     float visibility = cascadeVisibility(place.cascade, worldPosition, normal, turn);
 
     float intoBlend = (place.towardsEdge - (1.0 - shadowCascadeBlend)) / shadowCascadeBlend;

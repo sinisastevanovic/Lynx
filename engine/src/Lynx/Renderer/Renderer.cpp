@@ -796,6 +796,11 @@ namespace Lynx
         sceneData.UnjitteredViewProjectionMatrix = unjittered;
         sceneData.Jitter = jitterInPixels / sceneSize;
         sceneData.TextureJitter = m_TemporalSettings.SteadyTextures ? jitterInPixels : glm::vec2(0.0f);
+
+        // The shift that gives interleaved gradient noise a new pattern in each of 64 frames (Jimenez, 2014).
+        // The average of many frames is the picture to measure against, so it averages the grain too.
+        if ((m_TemporalSettings.Resolves || m_TemporalSettings.Accumulates) && m_TemporalSettings.VariesNoise)
+            sceneData.NoiseShift = 5.588238f * static_cast<float>(m_JitterFrame % 64);
         sceneData.CameraPosition = glm::vec4(cameraPosition, 1.0f);
 
         // How far something moved on screen is worked out from where the last frame's camera saw it.

@@ -205,7 +205,9 @@ float4 terrainColour(TerrainVaryings input)
         return float4(wireframeColour(), 1.0);
 
     TerrainData terrain = constants.terrains[input.terrain];
-    float2 place = input.worldPosition.xz - terrain.origin.xz;
+    // Where the pixel would be without the camera's jitter, so that the ground's pattern stands still
+    // from frame to frame, see steadyUv.
+    float2 place = steadyUv(input.worldPosition.xz - terrain.origin.xz);
 
     // The way the ground faces, from the heights to both sides of the place. Far away a pixel covers
     // many heights, and a smaller size of them is read, or the ground would glitter.

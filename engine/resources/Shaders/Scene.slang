@@ -99,7 +99,13 @@ public struct SceneConstants
     // The same in pixels, for reading colour textures where the pixel would be without the shift, see
     // steadyUv. Zero if textures are read where the shifted pixel is.
     public float2 textureJitter;
-    public uint64_t padding;
+
+    // Added to a pixel's place before a number is drawn for it by chance, see noiseOfPixel in
+    // StandardShading.slang. It differs from frame to frame while anti-aliasing over time is on, which
+    // then averages the grain of such numbers away. Zero otherwise: grain that changes every frame
+    // and is not averaged is far worse than grain that stands still.
+    public float noiseShift;
+    public uint padding;
 };
 
 // The binding number has to match SharedBindings.h.
