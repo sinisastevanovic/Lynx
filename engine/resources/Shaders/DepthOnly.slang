@@ -11,7 +11,7 @@ struct DepthConstants
     // material table, which is read for cut-outs only.
     MeshInstance* instances;
     MeshTransform* transforms;
-    uint* visibleInstances;
+    uint2* visibleInstances;
     StandardMaterial* materials;
 };
 [vk::push_constant] ConstantBuffer<DepthConstants> constants;
@@ -32,11 +32,12 @@ struct VertexOutput
 [shader("vertex")]
 VertexOutput vertexMain(VertexInput input, uint instanceIndex : SV_VulkanInstanceID, uint vertexIndex : SV_VulkanVertexID)
 {
-    MeshInstance instance = meshInstance(constants.instances, constants.visibleInstances, instanceIndex);
-    float3 position = leafPosition(instance, input.position, vertexIndex, drawnLevel(constants.visibleInstances, instanceIndex));
+    uint2 entry = drawnEntry(constants.visibleInstances, instanceIndex);
+    MeshInstance instance = meshInstance(constants.instances, entry);
+    float3 position = leafPosition(instance, input.position, vertexIndex, drawnLevel(entry));
 
     VertexOutput output;
-    output.position = meshPosition(meshModel(constants.transforms, constants.visibleInstances, instanceIndex), position).clip;
+    output.position = meshPosition(meshModel(constants.transforms, entry), position).clip;
     output.uv = input.uv;
     output.material = instance.material;
     return output;

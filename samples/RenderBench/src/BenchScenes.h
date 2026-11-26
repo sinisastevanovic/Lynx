@@ -97,7 +97,21 @@ void CreateDenseField(Scene& scene, AssetManager& assetManager, uint32_t count);
 // their makers modelled them, with every needle. It is what a forest costs before the renderer has levels
 // of detail, shadows that reach far and trees that are not entities.
 // The models are not in the repository: tools/fetch-polyhaven.ps1 fetches them.
-void CreateTrees(Scene& scene, AssetManager& assetManager, uint32_t count);
+// How the trees of the Trees benchmark are put into the scene.
+enum class TreesAs
+{
+    // One entity each.
+    Entities,
+
+    // One entity each, turned and sized as a scattered instance can hold it: to compare a picture of
+    // entities with one of scattered instances.
+    EntitiesAsScattered,
+
+    // Scattered instances of one entity, see ScatterComponent.
+    Scattered
+};
+
+void CreateTrees(Scene& scene, AssetManager& assetManager, uint32_t count, TreesAs as);
 
 // A square of hilly ground, made from noise: a terrain of the given number of heights a side, one
 // unit apart, around the middle of the scene. The same hills in every run.

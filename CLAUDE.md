@@ -212,8 +212,25 @@ build\bin\Debug\LynxSandboxGame.exe
   knows the level from which it moves outwards, which is when the usual leaf has grown out to where the vertex
   already is. Grown about its middle, a piece longer than a leaf stuck out of the crown as a spike.
   `LodSettings::LeafPixels` says
-  how large a leaf may be on screen. An entry of the list of drawn instances holds the place in 24 bits and the
-  level above them. A surface with cut-outs of few pieces, like a sail, keeps its one level.
+  how large a leaf may be on screen. An entry of the list of drawn instances holds the level in the lowest
+  byte of its second number. A surface with cut-outs of few pieces, like a sail, keeps its one level.
+- **Scattered instances.** Trees, rocks and the like that fill a landscape are not entities (step 3.12 of
+  Renderer V2). One is a `ScatterInstance` of 16 bytes (`Scene/Scatter.h`): where it stands, its turn about
+  the upward axis, its size and its kind, which is a mesh. It always stands upright. An entity with a
+  mesh costs 144 bytes per submesh on the GPU. A `ScatterComponent` in a scene's registry holds a list of
+  them with their kinds. It is not a saved component: whoever scatters makes it anew, and replaces it as a
+  whole. `SceneRenderer` hands it to `GpuScene::AddScatter`. There they are a second source of instances
+  for the same batches: what the scattered instances of a submesh share, its geometry and material, is one
+  instance with a place of its own that is never drawn itself, and culling (`cullScattered` in
+  `Cull.slang`, the threads after those of the places) counts them into the same draw commands. An entry
+  of the list of drawn instances is two numbers and says which source it is from, and `Mesh.slang` gives
+  the vertex shaders the instance and its matrix either way (`drawnEntry`, `meshInstance`, `meshModel`,
+  `previousMeshModel`). So no pass and no draw call knows the difference. A new shader that draws meshes
+  goes through those functions. `scene.scatterInstances` is their address. See-through submeshes are not
+  drawn, and a scattered instance cannot be picked. Every change lays all of them out anew, and every
+  draw command still keeps room for all instances of its batch: both are for the next parts of the step.
+  A benchmark with `Scatter=1` draws the trees of Trees this way, and `ScatterLike=1` gives the entities
+  the turns and sizes a scattered instance can hold, to compare the two.
 - **View modes.** A view of a scene can show one thing about the picture instead of the picture (`ViewMode` in
   `Renderer/ViewMode.h`: wireframe, unlit, lighting only, normals, level of detail, shadow cascades, motion, three of the TAA, ambient occlusion) and draw cut-outs whole
   (`ViewSettings::ShowCutOuts`). The settings belong to the view and travel with it (`ExtractedScene::Viewing`),
@@ -448,8 +465,11 @@ build\bin\Debug\LynxSandboxGame.exe
 - Build, then run the editor and the game and read `temp\engine.log` for `[error]`, `[critical]` and `VUID` lines.
 - Rendering and speed: `tools/bench.ps1 -Label <name>` runs the RenderBench benchmarks in Release and stores timings
   and pictures under the label. Run it before and after a change, then `tools/bench-compare.ps1 -Before <a> -After <b>`.
-  Pictures are identical between runs of the same code, so any difference comes from the change (Grid, Dense
-  and Trees differ in a few pixels from run to run, which is known and not explained).
+  Pictures are identical between runs of the same code, so any difference comes from the change. Grid, Dense
+  and Trees are the exception: 2 to 3 % of their pixels differ from run to run, nearly all by one or two
+  steps of 255 (under 0.01 % by more than 8). Culling writes instances in a different order every run, and
+  where surfaces lie in one plane or cut-outs overlap the order shows. `Exposure=<number>` fixes the
+  exposure, for comparing two pictures that should show the same.
   A benchmark takes `TAA=1` (with `TaaHistoryTime`, `TaaBoxGamma`, `TaaSharpness`, `TaaDepthTolerance`),
   `Jitter=1`, `JitterLength=<frames>`, `Accumulate=1`, `FXAA=0`, and `HoldFrames=<count>`,
   which draws every saved frame that many more times with the game standing still before its picture is taken:

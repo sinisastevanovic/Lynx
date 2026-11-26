@@ -11,6 +11,7 @@
 #include "Lynx/Scene/Components/PhysicsComponents.h"
 #include "Lynx/Scene/Components/TerrainComponent.h"
 #include "Lynx/Scene/Components/UIComponents.h"
+#include "Lynx/Scene/Scatter.h"
 #include "Lynx/Scene/Scene.h"
 
 namespace Lynx
@@ -30,6 +31,25 @@ namespace Lynx
             // The entity's place in the list of the mesh's users.
             size_t IndexAmongUsers = 0;
         };
+
+        // What the renderer keeps about an entity's scattered instances (ScatterComponent), in the
+        // scene's registry like MeshInstances and as little a registered component.
+        struct DrawnScatter
+        {
+            // What GpuScene::AddScatter returned.
+            uint32_t Scatter = 0;
+
+            // The state of every kind's mesh when the instances were handed over, see StateOf.
+            std::vector<uint64_t> KindStates;
+        };
+
+        // Changes when a mesh is loaded or reloaded: then what was made from it is out of date.
+        uint64_t StateOf(const std::shared_ptr<StaticMesh>& mesh)
+        {
+            if (!mesh)
+                return 0;
+            return (static_cast<uint64_t>(mesh->GetVersion()) << 1) | (mesh->IsLoaded() ? 1u : 0u);
+        }
 
         int EntityId(entt::entity entity)
         {
@@ -68,6 +88,7 @@ namespace Lynx
 
         // Left over if the scene was drawn before, by instances that are long gone.
         registry.clear<MeshInstances>();
+        registry.clear<DrawnScatter>();
 
         // Added, or given another mesh or other materials: both end in new instances.
         registry.on_construct<MeshComponent>().connect<&SceneRenderer::OnMeshAdded>(this);
@@ -77,8 +98,16 @@ namespace Lynx
         registry.on_destroy<DisabledComponent>().connect<&SceneRenderer::OnEntityEnabled>(this);
         registry.on_destroy<MeshInstances>().connect<&SceneRenderer::OnInstancesRemoved>(this);
 
+        // Scattered instances are replaced as a whole, so every change is one of these.
+        registry.on_construct<ScatterComponent>().connect<&SceneRenderer::OnScatterChanged>(this);
+        registry.on_update<ScatterComponent>().connect<&SceneRenderer::OnScatterChanged>(this);
+        registry.on_destroy<ScatterComponent>().connect<&SceneRenderer::OnScatterRemoved>(this);
+        registry.on_destroy<DrawnScatter>().connect<&SceneRenderer::OnDrawnScatterRemoved>(this);
+
         for (const entt::entity entity : registry.view<MeshComponent>(entt::exclude<DisabledComponent>))
             m_PendingEntities.push_back(entity);
+        for (const entt::entity entity : registry.view<ScatterComponent>())
+            m_PendingScatter.push_back(entity);
 
         // Everything in the scene is new to the renderer, so what moved before now does not matter.
         scene.ClearMovedEntities();
@@ -93,6 +122,11 @@ namespace Lynx
         registry.on_construct<DisabledComponent>().disconnect(this);
         registry.on_destroy<DisabledComponent>().disconnect(this);
         registry.on_destroy<MeshInstances>().disconnect(this);
+        registry.on_construct<ScatterComponent>().disconnect(this);
+        registry.on_update<ScatterComponent>().disconnect(this);
+        registry.on_destroy<ScatterComponent>().disconnect(this);
+        registry.on_destroy<DrawnScatter>().disconnect(this);
+        m_PendingScatter.clear();
 
         m_Renderer.GetGpuScene().Clear();
         m_Renderer.ResetHistory();
@@ -108,6 +142,21 @@ namespace Lynx
     void SceneRenderer::OnMeshRemoved(entt::registry& registry, entt::entity entity)
     {
         registry.remove<MeshInstances>(entity);
+    }
+
+    void SceneRenderer::OnScatterChanged(entt::registry&, entt::entity entity)
+    {
+        m_PendingScatter.push_back(entity);
+    }
+
+    void SceneRenderer::OnScatterRemoved(entt::registry& registry, entt::entity entity)
+    {
+        registry.remove<DrawnScatter>(entity);
+    }
+
+    void SceneRenderer::OnDrawnScatterRemoved(entt::registry& registry, entt::entity entity)
+    {
+        m_Renderer.GetGpuScene().RemoveScatter(registry.get<DrawnScatter>(entity).Scatter);
     }
 
     void SceneRenderer::OnEntityEnabled(entt::registry&, entt::entity entity)
@@ -227,6 +276,52 @@ namespace Lynx
             const MeshInstances& instances = characters.get<MeshInstances>(entity);
             if (instances.Range.Count > 0)
                 gpuScene.SetTransform(instances.Range, characters.get<TransformComponent>(entity).GetPhysicsInterpolatedTransform(physicsAlpha));
+        }
+    }
+
+    void SceneRenderer::SyncScatter()
+    {
+        entt::registry& registry = m_Scene->Reg();
+
+        // A kind whose mesh was loaded or reloaded since: the instances are handed over again.
+        const auto drawn = registry.view<ScatterComponent, DrawnScatter>();
+        for (const entt::entity entity : drawn)
+        {
+            const ScatterComponent& scatter = drawn.get<ScatterComponent>(entity);
+            const DrawnScatter& state = drawn.get<DrawnScatter>(entity);
+            for (size_t kind = 0; kind < scatter.Kinds.size() && kind < state.KindStates.size(); ++kind)
+            {
+                if (StateOf(scatter.Kinds[kind]) != state.KindStates[kind])
+                {
+                    m_PendingScatter.push_back(entity);
+                    break;
+                }
+            }
+        }
+
+        std::vector<entt::entity> pending = std::move(m_PendingScatter);
+        m_PendingScatter.clear();
+        for (const entt::entity entity : pending)
+        {
+            if (!registry.valid(entity))
+                continue;
+
+            registry.remove<DrawnScatter>(entity);
+            const ScatterComponent* scatter = registry.try_get<ScatterComponent>(entity);
+            if (!scatter)
+                continue;
+
+            // A kind whose mesh is still being loaded is left out until it is there.
+            DrawnScatter state;
+            std::vector<std::shared_ptr<StaticMesh>> kinds;
+            for (const std::shared_ptr<StaticMesh>& mesh : scatter->Kinds)
+            {
+                kinds.push_back(mesh && mesh->IsLoaded() ? mesh : nullptr);
+                state.KindStates.push_back(StateOf(mesh));
+            }
+
+            state.Scatter = m_Renderer.GetGpuScene().AddScatter(kinds, scatter->Instances);
+            registry.emplace<DrawnScatter>(entity, std::move(state));
         }
     }
 
@@ -350,6 +445,7 @@ namespace Lynx
         }
 
         SyncMeshes(isEditor, physicsAlpha);
+        SyncScatter();
 
         if (m_Renderer.GetShowColliders())
             DrawColliders(cameraPosition);

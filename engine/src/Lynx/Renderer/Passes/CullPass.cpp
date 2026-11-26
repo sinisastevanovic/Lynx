@@ -23,6 +23,7 @@ namespace Lynx
             uint64_t Lods;
             uint64_t Frame;
             uint64_t Visibility;
+            // Scattered instances are culled by the threads after those of the places.
             uint32_t PlaceCount;
             CullPhase Phase;
             uint32_t PyramidTexture;
@@ -89,7 +90,7 @@ namespace Lynx
 
         // Without draw commands there is nothing to fill in. Without the pipeline the commands keep
         // drawing nothing, which is what the upload left them as.
-        if (renderData.Culling.PlaceCount == 0 || !m_Vulkan->Pipeline)
+        if (renderData.Culling.PlaceCount + renderData.Culling.ScatterCount == 0 || !m_Vulkan->Pipeline)
             return false;
 
         resources.Computes = true;
@@ -115,6 +116,6 @@ namespace Lynx
 
         commands.bindPipeline(vk::PipelineBindPoint::eCompute, m_Vulkan->Pipeline);
         m_Vulkan->Shared->Push(commands, push);
-        commands.dispatch(GroupCountFor(push.PlaceCount, InstancesPerGroup), 1, 1);
+        commands.dispatch(GroupCountFor(push.PlaceCount + renderData.Culling.ScatterCount, InstancesPerGroup), 1, 1);
     }
 }

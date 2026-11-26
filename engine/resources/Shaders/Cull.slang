@@ -21,6 +21,24 @@ import Scene;
 import Mesh;
 import Textures;
 
+// A kind of scattered instance: where the list of scatter batches has its submeshes.
+// Has to match GpuScatterKind in GpuScene.cpp.
+struct ScatterKind
+{
+    uint firstBatch;
+    uint batchCount;
+};
+
+// One submesh of a kind of scattered instance: the batch its instances are drawn with, and the place
+// in the instance buffer that holds what they share. Has to match GpuScene::ScatterBatch.
+struct ScatterBatch
+{
+    uint batch;
+    uint sharedPlace;
+};
+
+static const uint noScatterKind = 4095;
+
 // The planes around what a view sees, pointing inwards: the normal in xyz, the distance in w.
 // Has to match CullView in GpuScene.cpp.
 struct View
@@ -63,6 +81,15 @@ struct CullFrame
     // covers in that view: the middle in xy, half its width in z, and in w the size of one of its texels.
     float4x4 sunView;
     float4 cascades[shadowCascadeCount];
+
+    // The scattered instances, see GpuScene: the instances, their kinds, the submeshes of the kinds,
+    // and per instance one bit per submesh that says whether the camera saw it in the last frame.
+    ScatterInstance* scatterInstances;
+    ScatterKind* scatterKinds;
+    ScatterBatch* scatterBatches;
+    uint* scatterVisibility;
+    uint scatterCount;
+    uint padding;
 };
 
 // Where the list of levels has those of a batch. No levels for a batch that is not drawn from here.
@@ -110,7 +137,7 @@ struct CullConstants
 {
     MeshInstance* instances;
     MeshTransform* transforms;
-    uint* visibleInstances;
+    uint2* visibleInstances;
     DrawCommand* commands;
     BatchLods* batches;
     LodCommands* lods;
@@ -119,7 +146,8 @@ struct CullConstants
     // Per place, whether the camera saw its instance in the last frame.
     uint* visibility;
 
-    // How many places the instance buffer has. Some of them may be empty.
+    // How many places the instance buffer has. Some of them may be empty. The threads after them cull
+    // the scattered instances, one each.
     uint placeCount;
     uint phase;
 
@@ -261,43 +289,26 @@ bool isCoveredByNearerCascade(uint cascade, float3 centre, float radius)
     return max(fromMiddle.x, fromMiddle.y) + radius <= unmixed;
 }
 
-// Adds an instance to a draw command. The level it is drawn in goes into the list with its place,
-// where the vertex shaders find it.
-void draw(uint command, uint place, uint level)
+// Adds an instance to a draw command. What it is entered as is two numbers, see meshInstance in
+// Mesh.slang: where the instance is found, and above the lowest byte of the second what a scattered
+// instance needs besides. The level it is drawn in goes into that byte, where the vertex shaders find it.
+void draw(uint command, uint2 entry, uint level)
 {
     uint countBefore;
     InterlockedAdd(constants.commands[command].instanceCount, 1, countBefore);
-    constants.visibleInstances[constants.commands[command].firstInstance + countBefore] = place | (level << 24);
+    constants.visibleInstances[constants.commands[command].firstInstance + countBefore] = uint2(entry.x, entry.y | level);
 }
 
-[shader("compute")]
-[numthreads(64, 1, 1)]
-void computeMain(uint3 thread : SV_DispatchThreadID)
+// Decides for one submesh of one instance, given the sphere around it in the world and how much larger
+// than its mesh it is, into which views it is drawn, and adds it to their draw commands.
+// Returns whether the camera sees it, which the late phase finds out. The early phase hands back what
+// it was told about the last frame.
+bool cull(uint batch, float3 centre, float radius, float scale, uint2 entry, bool seenLastFrame)
 {
-    // The last group reaches past the last place.
-    uint place = thread.x;
-    if (place >= constants.placeCount)
-        return;
-
-    uint batch = constants.instances[place].batch;
-    if (batch == noBatch)
-        return;
-
     // A batch without levels is see-through: the CPU culls and sorts those.
     BatchLods batchLods = constants.batches[batch];
     if (batchLods.count == 0)
-        return;
-
-    // The sphere around the instance in the world. Its radius grows by the largest of the three scales,
-    // which keeps it around the mesh however unevenly the instance is scaled.
-    MeshInstance instance = constants.instances[place];
-    float4x4 model = meshModel(constants.transforms[place]);
-    float3 axisX = meshDirection(model, float3(1.0, 0.0, 0.0));
-    float3 axisY = meshDirection(model, float3(0.0, 1.0, 0.0));
-    float3 axisZ = meshDirection(model, float3(0.0, 0.0, 1.0));
-    float scale = sqrt(max(dot(axisX, axisX), max(dot(axisY, axisY), dot(axisZ, axisZ))));
-    float3 centre = mul(model, float4(instance.boundingSphere.xyz, 1.0)).xyz;
-    float radius = instance.boundingSphere.w * scale;
+        return seenLastFrame;
 
     // The distance from the camera to the point of the instance that is nearest to it.
     float distanceToCamera = max(length(mul(constants.frame.view, float4(centre, 1.0)).xyz) - radius, constants.frame.nearPlane);
@@ -306,23 +317,21 @@ void computeMain(uint3 thread : SV_DispatchThreadID)
     uint level = levelAtDistance(batchLods, distanceToCamera, scale);
     LodCommands batchCommands = constants.lods[batchLods.first + level / levelSteps];
 
+    bool seen = seenLastFrame;
     if (batchCommands.camera != noCommand)
     {
         bool inView = isSeen(constants.frame.camera, centre, radius);
-        bool seenLastFrame = constants.visibility[place] != 0;
 
         if (constants.phase == phaseEarly)
         {
             if (inView && seenLastFrame)
-                draw(batchCommands.camera, place, level);
+                draw(batchCommands.camera, entry, level);
         }
         else
         {
-            bool seen = inView && !isHidden(centre, radius);
+            seen = inView && !isHidden(centre, radius);
             if (seen && !seenLastFrame)
-                draw(batchCommands.cameraLate, place, level);
-
-            constants.visibility[place] = seen ? 1 : 0;
+                draw(batchCommands.cameraLate, entry, level);
         }
     }
 
@@ -344,7 +353,74 @@ void computeMain(uint3 thread : SV_DispatchThreadID)
             if (radius < constants.frame.smallestCasterInTexels * constants.frame.cascades[cascade].w)
                 continue;
 
-            draw(command, place, levelInShadow);
+            draw(command, entry, levelInShadow);
         }
     }
+
+    return seen;
+}
+
+// An instance with a place in the instance buffer: one submesh of a mesh, anywhere and turned any way.
+void cullPlace(uint place)
+{
+    uint batch = constants.instances[place].batch;
+    if (batch == noBatch)
+        return;
+
+    // The sphere around the instance in the world. Its radius grows by the largest of the three scales,
+    // which keeps it around the mesh however unevenly the instance is scaled.
+    MeshInstance instance = constants.instances[place];
+    float4x4 model = meshModel(constants.transforms[place]);
+    float3 axisX = meshDirection(model, float3(1.0, 0.0, 0.0));
+    float3 axisY = meshDirection(model, float3(0.0, 1.0, 0.0));
+    float3 axisZ = meshDirection(model, float3(0.0, 0.0, 1.0));
+    float scale = sqrt(max(dot(axisX, axisX), max(dot(axisY, axisY), dot(axisZ, axisZ))));
+    float3 centre = mul(model, float4(instance.boundingSphere.xyz, 1.0)).xyz;
+    float radius = instance.boundingSphere.w * scale;
+
+    bool seenLastFrame = constants.visibility[place] != 0;
+    bool seen = cull(batch, centre, radius, scale, uint2(place, 0), seenLastFrame);
+    if (constants.phase == phaseLate && constants.batches[batch].count != 0)
+        constants.visibility[place] = seen ? 1 : 0;
+}
+
+// A scattered instance: every submesh of its kind, each with a sphere of its own, as an instance with
+// a place has them. What the camera saw of it is kept as one bit per submesh.
+void cullScattered(uint index)
+{
+    ScatterInstance instance = constants.frame.scatterInstances[index];
+    uint kindIndex = scatterKind(instance);
+    if (kindIndex == noScatterKind)
+        return;
+
+    ScatterKind kind = constants.frame.scatterKinds[kindIndex];
+    float4x4 model = scatterModel(instance);
+    float scale = scatterSize(instance);
+
+    uint seenLastFrame = constants.frame.scatterVisibility[index];
+    uint seenNow = 0;
+    for (uint submesh = 0; submesh < kind.batchCount; ++submesh)
+    {
+        ScatterBatch scatterBatch = constants.frame.scatterBatches[kind.firstBatch + submesh];
+        float4 sphere = constants.instances[scatterBatch.sharedPlace].boundingSphere;
+        float3 centre = mul(model, float4(sphere.xyz, 1.0)).xyz;
+
+        uint2 entry = uint2(index, (scatterBatch.sharedPlace + 1) << 8);
+        bool seen = cull(scatterBatch.batch, centre, sphere.w * scale, scale, entry, (seenLastFrame & (1u << submesh)) != 0);
+        seenNow |= seen ? (1u << submesh) : 0u;
+    }
+
+    if (constants.phase == phaseLate)
+        constants.frame.scatterVisibility[index] = seenNow;
+}
+
+[shader("compute")]
+[numthreads(64, 1, 1)]
+void computeMain(uint3 thread : SV_DispatchThreadID)
+{
+    // The last group reaches past the last instance.
+    if (thread.x < constants.placeCount)
+        cullPlace(thread.x);
+    else if (thread.x - constants.placeCount < constants.frame.scatterCount)
+        cullScattered(thread.x - constants.placeCount);
 }

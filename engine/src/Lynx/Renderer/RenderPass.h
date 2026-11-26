@@ -136,6 +136,9 @@ namespace Lynx
 
         // How many places the instance buffer has. Zero if there is nothing to cull.
         uint32_t PlaceCount = 0;
+
+        // How many scattered instances there are, which are culled after the places, see GpuScene.
+        uint32_t ScatterCount = 0;
     };
 
     // The scene's depth in ever smaller sizes, see DepthPyramidPass.
@@ -218,6 +221,10 @@ namespace Lynx
         // anti-aliasing over time is on, zero otherwise.
         float NoiseShift;
         uint32_t Padding;
+
+        // The address of the scene's scattered instances, one ScatterInstance each, see GpuScene.
+        uint64_t ScatterInstances;
+        uint64_t MorePadding;
     };
 
     // One see-through instance, drawn on its own: these are sorted by distance, which a shared draw

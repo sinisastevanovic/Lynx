@@ -41,6 +41,15 @@ public struct ExposureState
     public uint isAdapted;
 };
 
+// One scattered thing, a tree or a rock: where it stands, and in 32 bits how far it is turned about the
+// upward axis, how large it is and which kind of thing it is. See scatterModel in Mesh.slang.
+// Has to match ScatterInstance in Scatter.h.
+public struct ScatterInstance
+{
+    public float3 position;
+    public uint packed;
+};
+
 // Has to match SceneData in RenderPass.h.
 public struct SceneConstants
 {
@@ -106,6 +115,10 @@ public struct SceneConstants
     // and is not averaged is far worse than grain that stands still.
     public float noiseShift;
     public uint padding;
+
+    // The scene's scattered instances, see GpuScene. Null if there are none.
+    public ScatterInstance* scatterInstances;
+    public uint64_t morePadding;
 };
 
 // The binding number has to match SharedBindings.h.

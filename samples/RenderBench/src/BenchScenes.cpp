@@ -8,6 +8,7 @@
 #include <Lynx/Physics/PhysicsWorld.h>
 #include <Lynx/Scene/Components/PhysicsComponents.h>
 #include <Lynx/Scene/Components/TerrainComponent.h>
+#include <Lynx/Scene/Scatter.h>
 
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -383,7 +384,7 @@ void CreateDenseField(Scene& scene, AssetManager& assetManager, uint32_t count)
     LX_INFO("Created a field of {0} detailed models.", count);
 }
 
-void CreateTrees(Scene& scene, AssetManager& assetManager, uint32_t count)
+void CreateTrees(Scene& scene, AssetManager& assetManager, uint32_t count, TreesAs as)
 {
     const char* const paths[] = {
         "Models/fir_sapling_medium/fir_sapling_medium_a.gltf",
@@ -409,9 +410,12 @@ void CreateTrees(Scene& scene, AssetManager& assetManager, uint32_t count)
     const uint32_t side = static_cast<uint32_t>(std::ceil(std::sqrt(static_cast<float>(count))));
     const float origin = -0.5f * spacing * static_cast<float>(side - 1);
 
+    ScatterComponent scattered;
+    scattered.Kinds = meshes;
+
     for (uint32_t index = 0; index < count; ++index)
     {
-        const size_t kind = Hash(index * 16u + 0u) % std::size(paths);
+        const uint32_t kind = Hash(index * 16u + 0u) % static_cast<uint32_t>(std::size(paths));
         if (!meshes[kind])
             continue;
 
@@ -421,8 +425,25 @@ void CreateTrees(Scene& scene, AssetManager& assetManager, uint32_t count)
             GroundHeight,
             origin + spacing * static_cast<float>(index / side) + Random(index, 4, -2.3f, 2.3f));
 
-        CreateMeshEntity(scene, "Tree", meshes[kind], nullptr, position, TurnedAroundUp(Random(index, 5)), glm::vec3(Random(index, 6, 0.85f, 1.15f)));
+        const float turns = Random(index, 5);
+        const float size = Random(index, 6, 0.85f, 1.15f);
+        const ScatterInstance instance = ScatterInstance::At(position, turns, size, kind);
+        switch (as)
+        {
+            case TreesAs::Entities:
+                CreateMeshEntity(scene, "Tree", meshes[kind], nullptr, position, TurnedAroundUp(turns), glm::vec3(size));
+                break;
+            case TreesAs::EntitiesAsScattered:
+                CreateMeshEntity(scene, "Tree", meshes[kind], nullptr, position, TurnedAroundUp(instance.Turns()), glm::vec3(instance.Size()));
+                break;
+            case TreesAs::Scattered:
+                scattered.Instances.push_back(instance);
+                break;
+        }
     }
+
+    if (as == TreesAs::Scattered)
+        scene.CreateEntity("Trees").AddComponent<ScatterComponent>(std::move(scattered));
 
     LX_INFO("Created a stand of {0} trees.", count);
 }

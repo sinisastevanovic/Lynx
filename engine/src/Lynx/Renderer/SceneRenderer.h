@@ -53,8 +53,12 @@ namespace Lynx
         void OnEntityEnabled(entt::registry& registry, entt::entity entity);
         void OnEntityDisabled(entt::registry& registry, entt::entity entity);
         void OnInstancesRemoved(entt::registry& registry, entt::entity entity);
+        void OnScatterChanged(entt::registry& registry, entt::entity entity);
+        void OnScatterRemoved(entt::registry& registry, entt::entity entity);
+        void OnDrawnScatterRemoved(entt::registry& registry, entt::entity entity);
 
         void SyncMeshes(bool isEditor, float physicsAlpha);
+        void SyncScatter();
         void AddInstances(entt::entity entity, bool isEditor, float physicsAlpha);
 
     private:
@@ -75,6 +79,9 @@ namespace Lynx
         // Entities that may need instances: new mesh entities, and ones whose mesh or materials were replaced.
         // Looked at when the frame is drawn, by which time whoever made them has finished setting them up.
         std::vector<entt::entity> m_PendingEntities;
+
+        // Entities whose scattered instances are new or were replaced.
+        std::vector<entt::entity> m_PendingScatter;
 
         // Every mesh that has instances, with the entities that use it. When a mesh is loaded or
         // reloaded it gets a new version, and the instances of its users are made anew.

@@ -74,6 +74,21 @@ public:
         Scene& scene = *engine.GetActiveScene();
         AssetManager& assetManager = engine.GetAssetManager();
 
+        // Exposure=<number> shows the scene with that exposure in place of the automatic one, which
+        // follows what is on screen: two pictures can then be compared pixel by pixel when what they
+        // show differs a little.
+        if (const double exposure = settings.Parameter("Exposure", -1.0); exposure >= 0.0)
+        {
+            ExposureSettings fixedExposure;
+            fixedExposure.IsAutomatic = false;
+            fixedExposure.Fixed = static_cast<float>(exposure);
+            const auto exposures = scene.Reg().view<ExposureSettings>();
+            if (exposures.begin() == exposures.end())
+                scene.CreateEntity("Exposure").AddComponent<ExposureSettings>(fixedExposure);
+            for (const auto entity : exposures)
+                exposures.get<ExposureSettings>(entity) = fixedExposure;
+        }
+
         // How high the sun stands, in degrees above the horizon, for pictures of a low sun and long
         // shadows. Its compass bearing stays as the scene has it.
         if (const double elevation = settings.Parameter("SunElevation", -1.0); elevation >= 0.0)
@@ -96,8 +111,13 @@ public:
         if (const uint32_t dense = count("Dense"))
             CreateDenseField(scene, assetManager, dense);
 
+        // Scatter=1 draws the trees as scattered instances in place of entities, and ScatterLike=1 gives
+        // the entities the turns and sizes a scattered instance can hold, so that both show the same.
         if (const uint32_t trees = count("Trees"))
-            CreateTrees(scene, assetManager, trees);
+        {
+            const TreesAs as = count("Scatter") > 0 ? TreesAs::Scattered : count("ScatterLike") > 0 ? TreesAs::EntitiesAsScattered : TreesAs::Entities;
+            CreateTrees(scene, assetManager, trees, as);
+        }
 
         if (const uint32_t terrain = count("Terrain"))
             CreateTerrain(scene, assetManager, terrain, settings.Parameter("TerrainThroughFile", 0.0) > 0.0);

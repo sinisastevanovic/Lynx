@@ -14,7 +14,7 @@ struct ShadowConstants
     // material table, which is read for cut-outs only.
     MeshInstance* instances;
     MeshTransform* transforms;
-    uint* visibleInstances;
+    uint2* visibleInstances;
     StandardMaterial* materials;
 };
 [vk::push_constant] ConstantBuffer<ShadowConstants> constants;
@@ -35,11 +35,12 @@ struct VertexOutput
 [shader("vertex")]
 VertexOutput vertexMain(VertexInput input, uint instanceIndex : SV_VulkanInstanceID, uint vertexIndex : SV_VulkanVertexID)
 {
-    MeshInstance instance = meshInstance(constants.instances, constants.visibleInstances, instanceIndex);
-    float3 position = leafPosition(instance, input.position, vertexIndex, drawnLevel(constants.visibleInstances, instanceIndex));
+    uint2 entry = drawnEntry(constants.visibleInstances, instanceIndex);
+    MeshInstance instance = meshInstance(constants.instances, entry);
+    float3 position = leafPosition(instance, input.position, vertexIndex, drawnLevel(entry));
 
     VertexOutput output;
-    float4x4 model = meshModel(constants.transforms, constants.visibleInstances, instanceIndex);
+    float4x4 model = meshModel(constants.transforms, entry);
     output.position = mul(mul(constants.lightViewProjection, model), float4(position, 1.0));
     output.uv = input.uv;
     output.material = instance.material;

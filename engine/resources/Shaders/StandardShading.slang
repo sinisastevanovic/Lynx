@@ -17,7 +17,7 @@ public struct StandardConstants
     public MeshInstance* instances;
     public MeshTransform* transforms;
     public MeshTransform* previousTransforms;
-    public uint* visibleInstances;
+    public uint2* visibleInstances;
     public StandardMaterial* materials;
 
     // What the view shows, one of the numbers below, and whether materials with cut-outs are cut out.
@@ -68,15 +68,16 @@ public struct StandardVaryings
 
 public StandardVaryings standardVertex(StandardConstants constants, StandardVertex input, uint instanceIndex, uint vertexIndex)
 {
-    MeshInstance instance = meshInstance(constants.instances, constants.visibleInstances, instanceIndex);
-    float level = drawnLevel(constants.visibleInstances, instanceIndex);
+    uint2 entry = drawnEntry(constants.visibleInstances, instanceIndex);
+    MeshInstance instance = meshInstance(constants.instances, entry);
+    float level = drawnLevel(entry);
     float3 inMesh = leafPosition(instance, input.position, vertexIndex, level);
-    float4x4 model = meshModel(constants.transforms, constants.visibleInstances, instanceIndex);
+    float4x4 model = meshModel(constants.transforms, entry);
     MeshPosition position = meshPosition(model, inMesh);
 
     // Where the same vertex was a frame ago. Foliage is taken at the level it has now: a leaf that
     // grows or shrinks with the level does not count as moving.
-    float4x4 previousModel = meshModel(constants.previousTransforms, constants.visibleInstances, instanceIndex);
+    float4x4 previousModel = previousMeshModel(constants.previousTransforms, entry, model);
     float4 previousClip = mul(scene.previousViewProjection, mul(previousModel, float4(inMesh, 1.0)));
 
     StandardVaryings output;

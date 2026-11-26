@@ -4,10 +4,12 @@
 #include "RenderPass.h"
 #include "Vulkan/DeletionQueue.h"
 #include "Vulkan/GpuBuffer.h"
+#include "Lynx/Scene/Scatter.h"
 
 #include <glm/glm.hpp>
 
 #include <array>
+#include <map>
 #include <memory>
 #include <span>
 #include <unordered_map>
@@ -55,7 +57,8 @@ namespace Lynx
         // Written to the picking buffer in the editor. -1 for none.
         int32_t EntityId;
 
-        // The instances of one submesh in one material form a batch. GpuScene::NoBatch for a place that holds no instance.
+        // The instances of one submesh in one material form a batch. GpuScene::NoBatch for a place that
+        // holds no instance, and for one that holds what scattered instances of a submesh have in common.
         uint32_t Batch;
 
         // For foliage, the address of what its vertices know about their leaves, see LeafVertex. Zero otherwise.
@@ -88,13 +91,32 @@ namespace Lynx
     // command of their level and writes their places into its run.
     // The camera's view has two commands per batch and level, one for each phase of culling, see CullPhase.
     // See-through instances are the exception: they have to be sorted, which is done here, on the CPU.
+    //
+    // Scattered instances (ScatterInstance) are a second source of instances for the same batches. One
+    // is 16 bytes in a buffer of its own, however many submeshes its mesh has, where an instance with a
+    // place is 144 bytes per submesh. What the scattered instances of a submesh share, its geometry and
+    // material, is held once, by an instance with a place of its own that is never drawn itself. Culling
+    // counts both sources into the same draw commands, and an entry of the list of drawn instances says
+    // which source it is from, so the passes and their draw calls know nothing of the difference.
     class GpuScene
     {
     public:
         static constexpr uint32_t NoBatch = ~0u;
 
-        // The list of drawn instances holds a place in 24 bits and the level it is drawn in above them.
-        static constexpr uint32_t MaxPlaces = 1u << 24;
+        // An entry of the list of drawn instances names the place that holds what scattered instances
+        // share in 24 bits, of which zero says that the entry is not a scattered instance.
+        static constexpr uint32_t MaxPlaces = (1u << 24) - 1;
+
+        // One drawn instance. Has to match the entries Mesh.slang reads.
+        struct DrawnEntry
+        {
+            // The place of the instance, or where a scattered one is in the list of all of them.
+            uint32_t Index = 0;
+
+            // In the lowest byte the level of detail it is drawn in, in sixteenths. Above it, for a
+            // scattered instance, the place that holds what it shares with the others, plus one.
+            uint32_t LevelAndShared = 0;
+        };
 
         // The instances of one mesh in the scene: one per submesh that can be drawn, next to each other.
         struct Range
@@ -119,7 +141,9 @@ namespace Lynx
             uint64_t TransformAddress = 0;
             uint64_t PreviousTransformAddress = 0;
 
+            // Scattered instances count once each, whatever the number of their submeshes.
             uint64_t InstancesTested = 0;
+            uint64_t ScatterInstances = 0;
 
             // What the GPU decided, known a few frames late: these are of the frame drawn that long ago.
             // An instance counts once per view it is drawn in.
@@ -143,6 +167,20 @@ namespace Lynx
         Range Add(const std::shared_ptr<StaticMesh>& mesh, std::span<const std::shared_ptr<Material>> materials, const glm::mat4& transform, int entityId);
         void Remove(Range range);
         void SetTransform(Range range, const glm::mat4& transform);
+
+        // Adds scattered instances. An instance names its kind by its number in the list of meshes, and
+        // is drawn with that mesh's own materials. An instance whose kind is not in the list, or whose
+        // mesh is null, is left out, and so are see-through submeshes. The meshes have to be loaded.
+        // Returns what to hand to RemoveScatter.
+        //
+        // Every call, and every removal, lays all scattered instances out anew: fine for a few sets
+        // that change rarely, not for many that come and go.
+        uint32_t AddScatter(std::span<const std::shared_ptr<StaticMesh>> kinds, std::span<const ScatterInstance> instances);
+        void RemoveScatter(uint32_t scatter);
+
+        // The address shaders read the scattered instances from, one ScatterInstance each, and zero if
+        // there are none. Lays them out first if they changed, so it is right for the frame to come.
+        uint64_t ScatterInstanceAddress();
 
         // Lays out the frame's draw commands and queues for upload what changed since the last frame.
         // Call once per frame, before the uploads are recorded.
@@ -168,6 +206,35 @@ namespace Lynx
             // Renewed every frame: the editor can change a material's kind while it is on screen.
             MeshDrawKind Kind;
             bool IsTranslucent = false;
+
+            // How many scattered instances are drawn with the batch, and whether a kind of them uses it:
+            // a batch that does stays, with or without places.
+            uint32_t ScatterInstances = 0;
+            bool IsScattered = false;
+        };
+
+        // The scattered instances of one call to AddScatter, as they were handed in.
+        struct ScatterSet
+        {
+            std::vector<std::shared_ptr<StaticMesh>> Kinds;
+            std::vector<ScatterInstance> Instances;
+        };
+
+        // One submesh of a kind of scattered instance: the batch it is drawn with and the place that
+        // holds its geometry and material. Has to match ScatterBatch in Cull.slang.
+        struct ScatterBatch
+        {
+            uint32_t Batch = 0;
+            uint32_t SharedPlace = 0;
+        };
+
+        // A kind of scattered instance: a mesh, and where the list of scatter batches has its submeshes.
+        struct ScatterKind
+        {
+            std::shared_ptr<StaticMesh> Mesh;
+            uint32_t FirstBatch = 0;
+            uint32_t BatchCount = 0;
+            uint32_t InstanceCount = 0;
         };
 
         struct BatchKey
@@ -209,6 +276,9 @@ namespace Lynx
 
         uint32_t TakePlaces(uint32_t count);
         uint32_t BatchFor(const std::shared_ptr<StaticMesh>& mesh, uint32_t submeshIndex, const std::shared_ptr<Material>& material);
+        void ReleaseBatchIfUnused(uint32_t batchIndex);
+        void LayOutScatter();
+        uint32_t ScatterKindFor(const std::shared_ptr<StaticMesh>& mesh);
         void UploadChanges();
         void CullSeeThrough(const Frustum& camera, const glm::vec3& cameraPosition, uint32_t firstVisible, CommandCopy& counted);
         void ReadCounters(const CommandCopy& copy, Frame& frame) const;
@@ -265,6 +335,22 @@ namespace Lynx
         GpuBuffer m_CullInputBuffer;
 
         std::vector<TransparentDraw> m_TransparentDraws;
+
+        // What was handed in, by the number AddScatter returned, in the order they are laid out in.
+        std::map<uint32_t, ScatterSet> m_ScatterSets;
+        uint32_t m_NextScatter = 0;
+        bool m_ScatterIsStale = false;
+
+        // Laid out from the sets: every kind there is, their submeshes, and all instances in one list
+        // with the kinds numbered as in the list of kinds here.
+        std::vector<ScatterKind> m_ScatterKinds;
+        std::vector<ScatterBatch> m_ScatterBatches;
+        std::vector<ScatterInstance> m_ScatterInstances;
+        GpuBuffer m_ScatterInstanceBuffer;
+
+        // Per scattered instance, one bit per submesh: whether the camera saw it in the last frame.
+        // Only the GPU reads and writes it.
+        GpuBuffer m_ScatterVisibilityBuffer;
 
         std::array<CommandCopy, CommandCopyCount> m_CommandCopies;
         uint64_t m_Frame = 0;

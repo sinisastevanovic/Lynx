@@ -716,6 +716,7 @@ namespace Lynx
             // counted apart, and a triangle counts once per view, however many passes draw it.
             // What was drawn is decided on the GPU, so those numbers are of a frame a few frames back.
             m_Profiler.SetCounter("InstancesTested", static_cast<double>(meshes.InstancesTested));
+            m_Profiler.SetCounter("ScatterInstances", static_cast<double>(meshes.ScatterInstances));
             m_Profiler.SetCounter("InstancesDrawn", static_cast<double>(meshes.InstancesDrawn));
             m_Profiler.SetCounter("TrianglesDrawn", static_cast<double>(meshes.TrianglesDrawn));
             m_Profiler.SetCounter("ShadowInstancesDrawn", static_cast<double>(meshes.ShadowInstancesDrawn));
@@ -922,6 +923,7 @@ namespace Lynx
         sceneData.Atmosphere = ToAtmosphereData(m_CurrentFrameData.Atmosphere, cameraPosition.y, atmosphereTables);
         sceneData.SkyIrradiance = m_Frame->SkyIrradiance.Address();
         sceneData.Exposure = m_Frame->Exposure.Address();
+        sceneData.ScatterInstances = m_GpuScene->ScatterInstanceAddress();
         sceneData.SkyReflection = m_Frame->SkyReflectionSlot.Index();
         sceneData.SkyReflectionSampler = m_Frame->SkyReflectionSamplerIndex;
         m_CurrentFrameData.SkyReflection = &m_Frame->SkyReflection;

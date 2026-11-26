@@ -65,7 +65,26 @@ namespace Lynx
             // one of its texels.
             glm::mat4 SunView;
             glm::vec4 Cascades[ShadowCascadeCount];
+
+            // The scattered instances, their kinds, the submeshes of the kinds (GpuScene::ScatterBatch),
+            // and per instance the bits that say which of its submeshes the camera saw in the last frame.
+            uint64_t ScatterInstances;
+            uint64_t ScatterKinds;
+            uint64_t ScatterBatches;
+            uint64_t ScatterVisibility;
+            uint32_t ScatterCount;
+            uint32_t Padding;
         };
+
+        // Where the list of scatter batches has the submeshes of a kind. Has to match ScatterKind in Cull.slang.
+        struct GpuScatterKind
+        {
+            uint32_t FirstBatch = 0;
+            uint32_t BatchCount = 0;
+        };
+
+        // The bits of a scattered instance that say what the camera saw have room for this many submeshes.
+        constexpr uint32_t MaxSubmeshesOfScatterKind = 32;
 
         // Where the list of levels has those of a batch. No levels for a batch that culling on the GPU
         // does not draw. Has to match BatchLods in Cull.slang.
@@ -184,6 +203,11 @@ namespace Lynx
         m_DrawOrder.clear();
         m_DrawOrderIsStale = true;
         m_InstanceCount = 0;
+        m_ScatterSets.clear();
+        m_ScatterKinds.clear();
+        m_ScatterBatches.clear();
+        m_ScatterInstances.clear();
+        m_ScatterIsStale = false;
     }
 
     GpuScene::Range GpuScene::Add(const std::shared_ptr<StaticMesh>& mesh, std::span<const std::shared_ptr<Material>> materials, const glm::mat4& transform, int entityId)
@@ -251,15 +275,7 @@ namespace Lynx
             batch.Places[m_IndexInBatch[place]] = movedPlace;
             m_IndexInBatch[movedPlace] = m_IndexInBatch[place];
             batch.Places.pop_back();
-
-            if (batch.Places.empty())
-            {
-                // Lets go of the mesh and the material. The batch's place in the list is used again by the next new batch.
-                m_BatchIndices.erase(BatchKey{ batch.Mesh.get(), batch.SubmeshIndex, batch.Material.get() });
-                m_FreeBatches.push_back(batchIndex);
-                batch = Batch();
-                m_DrawOrderIsStale = true;
-            }
+            ReleaseBatchIfUnused(batchIndex);
 
             // Culling on the GPU goes over every place, so it has to be told that this one is empty.
             m_Instances[place].Batch = NoBatch;
@@ -268,6 +284,153 @@ namespace Lynx
 
         m_FreeRuns[range.Count].push_back(range.First);
         m_InstanceCount -= range.Count;
+    }
+
+    void GpuScene::ReleaseBatchIfUnused(uint32_t batchIndex)
+    {
+        Batch& batch = m_Batches[batchIndex];
+        if (!batch.Mesh || !batch.Places.empty() || batch.IsScattered)
+            return;
+
+        // Lets go of the mesh and the material. The batch's place in the list is used again by the next new batch.
+        m_BatchIndices.erase(BatchKey{ batch.Mesh.get(), batch.SubmeshIndex, batch.Material.get() });
+        m_FreeBatches.push_back(batchIndex);
+        batch = Batch();
+        m_DrawOrderIsStale = true;
+    }
+
+    uint32_t GpuScene::AddScatter(std::span<const std::shared_ptr<StaticMesh>> kinds, std::span<const ScatterInstance> instances)
+    {
+        const uint32_t scatter = m_NextScatter++;
+        ScatterSet& set = m_ScatterSets[scatter];
+        set.Kinds.assign(kinds.begin(), kinds.end());
+        set.Instances.assign(instances.begin(), instances.end());
+        m_ScatterIsStale = true;
+        return scatter;
+    }
+
+    void GpuScene::RemoveScatter(uint32_t scatter)
+    {
+        if (m_ScatterSets.erase(scatter) > 0)
+            m_ScatterIsStale = true;
+    }
+
+    uint64_t GpuScene::ScatterInstanceAddress()
+    {
+        if (m_ScatterIsStale)
+            LayOutScatter();
+        return m_ScatterInstances.empty() ? 0 : m_ScatterInstanceBuffer.Address();
+    }
+
+    uint32_t GpuScene::ScatterKindFor(const std::shared_ptr<StaticMesh>& mesh)
+    {
+        for (uint32_t index = 0; index < m_ScatterKinds.size(); ++index)
+        {
+            if (m_ScatterKinds[index].Mesh == mesh)
+                return index;
+        }
+        if (m_ScatterKinds.size() >= ScatterInstance::KindCount)
+            return ScatterInstance::NoKind;
+
+        ScatterKind kind;
+        kind.Mesh = mesh;
+        kind.FirstBatch = static_cast<uint32_t>(m_ScatterBatches.size());
+
+        const std::vector<Submesh>& submeshes = mesh->GetSubmeshes();
+        for (uint32_t submeshIndex = 0; submeshIndex < submeshes.size() && kind.BatchCount < MaxSubmeshesOfScatterKind; ++submeshIndex)
+        {
+            // See-through surfaces are sorted one by one on the CPU, which is not for a forest.
+            const Submesh& submesh = submeshes[submeshIndex];
+            if (!submesh.Geometry || !submesh.Material || submesh.Material->Mode == AlphaMode::Translucent)
+                continue;
+
+            const uint32_t batchIndex = BatchFor(mesh, submeshIndex, submesh.Material);
+            m_Batches[batchIndex].IsScattered = true;
+
+            // What every scattered instance of the submesh shares, in a place of its own. It names no
+            // batch, so culling does not take the place for an instance that stands somewhere.
+            const uint32_t place = TakePlaces(1);
+            GpuInstance& shared = m_Instances[place];
+            shared = {};
+            shared.BoundingSphere = submesh.BoundingSphere;
+            shared.FirstIndex = submesh.Geometry.FirstIndex();
+            shared.IndexCount = submesh.IndexCount;
+            shared.VertexOffset = submesh.Geometry.VertexOffset();
+            shared.Material = m_Materials.IndexOf(submesh.Material);
+            shared.EntityId = -1;
+            shared.Batch = NoBatch;
+            shared.LeafData = submesh.LeafData ? submesh.LeafData->Address() : 0;
+            m_Transforms[place] = InstanceTransform::From(glm::mat4(1.0f));
+            m_Changed.push_back(place);
+            m_Placed.push_back(place);
+
+            m_ScatterBatches.push_back({ batchIndex, place });
+            ++kind.BatchCount;
+        }
+
+        m_ScatterKinds.push_back(std::move(kind));
+        return static_cast<uint32_t>(m_ScatterKinds.size() - 1);
+    }
+
+    void GpuScene::LayOutScatter()
+    {
+        m_ScatterIsStale = false;
+
+        // The kinds there were let go of what they held. Kinds that are still used take it again below.
+        const std::vector<ScatterBatch> oldBatches = std::move(m_ScatterBatches);
+        const std::vector<ScatterKind> oldKinds = std::move(m_ScatterKinds);
+        m_ScatterBatches.clear();
+        m_ScatterKinds.clear();
+        m_ScatterInstances.clear();
+        for (const ScatterBatch& old : oldBatches)
+        {
+            m_Batches[old.Batch].IsScattered = false;
+            m_Batches[old.Batch].ScatterInstances = 0;
+            m_FreeRuns[1].push_back(old.SharedPlace);
+        }
+
+        for (const auto& [scatter, set] : m_ScatterSets)
+        {
+            std::vector<uint32_t> kindOf(set.Kinds.size(), ScatterInstance::NoKind);
+            for (size_t index = 0; index < set.Kinds.size(); ++index)
+            {
+                if (set.Kinds[index])
+                    kindOf[index] = ScatterKindFor(set.Kinds[index]);
+            }
+
+            for (const ScatterInstance& instance : set.Instances)
+            {
+                const uint32_t kind = instance.Kind() < kindOf.size() ? kindOf[instance.Kind()] : ScatterInstance::NoKind;
+                if (kind == ScatterInstance::NoKind)
+                    continue;
+
+                m_ScatterInstances.push_back(instance.WithKind(kind));
+                ++m_ScatterKinds[kind].InstanceCount;
+            }
+        }
+
+        for (const ScatterKind& kind : m_ScatterKinds)
+        {
+            for (uint32_t index = 0; index < kind.BatchCount; ++index)
+                m_Batches[m_ScatterBatches[kind.FirstBatch + index].Batch].ScatterInstances = kind.InstanceCount;
+        }
+
+        // Only now: a batch that the kinds of before and those of now both use was never without a user.
+        for (const ScatterBatch& old : oldBatches)
+            ReleaseBatchIfUnused(old.Batch);
+
+        if (m_ScatterInstances.empty())
+            return;
+
+        const vk::BufferUsageFlags usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+        const std::span<const ScatterInstance> instances(m_ScatterInstances);
+        EnsureSize(m_Context, m_ScatterInstanceBuffer, instances.size_bytes(), usage, "ScatterInstances");
+        m_Uploads.Upload(m_ScatterInstanceBuffer.Handle(), 0, std::as_bytes(instances));
+
+        // Nothing counts as seen in the last frame, so the first frame draws everything in the late phase.
+        const std::vector<uint32_t> nothingSeen(m_ScatterInstances.size(), 0u);
+        EnsureSize(m_Context, m_ScatterVisibilityBuffer, nothingSeen.size() * sizeof(uint32_t), usage, "ScatterVisibility");
+        m_Uploads.Upload(m_ScatterVisibilityBuffer.Handle(), 0, std::as_bytes(std::span<const uint32_t>(nothingSeen)));
     }
 
     void GpuScene::SetTransform(Range range, const glm::mat4& transform)
@@ -403,8 +566,12 @@ namespace Lynx
         // The oldest copy is read before this frame takes its place.
         CommandCopy& copy = m_CommandCopies[m_Frame % CommandCopyCount];
 
+        if (m_ScatterIsStale)
+            LayOutScatter();
+
         Frame frame;
-        frame.InstancesTested = m_InstanceCount;
+        frame.InstancesTested = m_InstanceCount + m_ScatterInstances.size();
+        frame.ScatterInstances = m_ScatterInstances.size();
         ReadCounters(copy, frame);
 
         // A material is looked at once per frame: this is where a change to it is noticed and written to its table.
@@ -477,9 +644,9 @@ namespace Lynx
         }
 
         // One draw command per batch, level and view, drawing nothing yet. Each gets a run in the list
-        // of drawn instances that is long enough for the whole batch, because all of its instances may
-        // be drawn in one level. Culling on the GPU counts the instances a view sees into the command of
-        // their level and writes their places into its run.
+        // of drawn instances that is long enough for the whole batch, the scattered instances that are
+        // drawn with it included, because all of its instances may be drawn in one level. Culling on the
+        // GPU counts the instances a view sees into the command of their level and writes them into its run.
         std::vector<vk::DrawIndexedIndirectCommand> commands;
         uint32_t visibleCount = 0;
         // commandOf says which of a level's commands is being laid out: that of one view.
@@ -505,7 +672,7 @@ namespace Lynx
                         const MeshLod& lod = submesh.Lods[level];
                         commandOf(lodCommands[batchLods[index].First + level]) = static_cast<uint32_t>(commands.size());
                         commands.emplace_back(lod.IndexCount, 0u, submesh.Geometry.FirstIndex() + lod.FirstIndex, submesh.Geometry.VertexOffset(), visibleCount);
-                        visibleCount += static_cast<uint32_t>(batch.Places.size());
+                        visibleCount += static_cast<uint32_t>(batch.Places.size()) + batch.ScatterInstances;
                     }
                 }
 
@@ -562,14 +729,37 @@ namespace Lynx
             cullFrame.ShadowBias = lods.ShadowBias;
             cullFrame.SmallestCasterInTexels = shadows.SmallestCasterInTexels;
 
+            std::vector<GpuScatterKind> scatterKinds;
+            scatterKinds.reserve(m_ScatterKinds.size());
+            for (const ScatterKind& kind : m_ScatterKinds)
+                scatterKinds.push_back({ kind.FirstBatch, kind.BatchCount });
+
+            // One after the other in one buffer: the frame, the batches, the levels, and for scattered
+            // instances their kinds and the submeshes of the kinds.
             const std::span<const BatchLods> batchList(batchLods);
             const std::span<const LodCommands> lodList(lodCommands);
+            const std::span<const GpuScatterKind> scatterKindList(scatterKinds);
+            const std::span<const ScatterBatch> scatterBatchList(m_ScatterBatches);
             const uint64_t lodOffset = sizeof(CullFrame) + batchList.size_bytes();
-            EnsureSize(m_Context, m_CullInputBuffer, lodOffset + lodList.size_bytes(),
+            const uint64_t scatterKindOffset = lodOffset + lodList.size_bytes();
+            const uint64_t scatterBatchOffset = scatterKindOffset + scatterKindList.size_bytes();
+            EnsureSize(m_Context, m_CullInputBuffer, scatterBatchOffset + scatterBatchList.size_bytes(),
                 vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, "CullInput");
+
+            cullFrame.ScatterCount = static_cast<uint32_t>(m_ScatterInstances.size());
+            cullFrame.ScatterInstances = cullFrame.ScatterCount > 0 ? m_ScatterInstanceBuffer.Address() : 0;
+            cullFrame.ScatterVisibility = cullFrame.ScatterCount > 0 ? m_ScatterVisibilityBuffer.Address() : 0;
+            cullFrame.ScatterKinds = m_CullInputBuffer.Address() + scatterKindOffset;
+            cullFrame.ScatterBatches = m_CullInputBuffer.Address() + scatterBatchOffset;
+            cullFrame.Padding = 0;
+
             m_Uploads.Upload(m_CullInputBuffer.Handle(), 0, std::as_bytes(std::span<const CullFrame>(&cullFrame, 1)));
             m_Uploads.Upload(m_CullInputBuffer.Handle(), sizeof(CullFrame), std::as_bytes(batchList));
             m_Uploads.Upload(m_CullInputBuffer.Handle(), lodOffset, std::as_bytes(lodList));
+            if (!scatterKinds.empty())
+                m_Uploads.Upload(m_CullInputBuffer.Handle(), scatterKindOffset, std::as_bytes(scatterKindList));
+            if (!m_ScatterBatches.empty())
+                m_Uploads.Upload(m_CullInputBuffer.Handle(), scatterBatchOffset, std::as_bytes(scatterBatchList));
 
             frame.Culling.CommandAddress = m_CommandBuffer.Address();
             frame.Culling.FrameAddress = m_CullInputBuffer.Address();
@@ -577,6 +767,7 @@ namespace Lynx
             frame.Culling.LodAddress = m_CullInputBuffer.Address() + lodOffset;
             frame.Culling.VisibilityAddress = m_VisibilityBuffer.Address();
             frame.Culling.PlaceCount = static_cast<uint32_t>(m_Instances.size());
+            frame.Culling.ScatterCount = cullFrame.ScatterCount;
         }
 
         frame.Draws.Buffer = &m_CommandBuffer;
@@ -617,7 +808,7 @@ namespace Lynx
         std::ranges::sort(sorted, [](const Sorted& a, const Sorted& b) { return std::tie(b.Distance, a.Place) < std::tie(a.Distance, b.Place); });
 
         // Their places follow the runs of the draw commands in the list of drawn instances.
-        std::vector<uint32_t> places;
+        std::vector<DrawnEntry> places;
         places.reserve(sorted.size());
         m_TransparentDraws.clear();
         counted.SeeThroughInstances = sorted.size();
@@ -627,7 +818,7 @@ namespace Lynx
             const GpuInstance& instance = m_Instances[entry.Place];
             m_TransparentDraws.push_back({ instance.IndexCount, instance.FirstIndex, instance.VertexOffset,
                 firstVisible + static_cast<uint32_t>(places.size()), m_Batches[instance.Batch].Kind.IsTwoSided });
-            places.push_back(entry.Place);
+            places.push_back({ entry.Place, 0u });
             counted.SeeThroughTriangles += instance.IndexCount / 3;
         }
 
@@ -636,9 +827,9 @@ namespace Lynx
         if (neededCount == 0)
             return;
 
-        EnsureSize(m_Context, m_VisibleBuffer, neededCount * sizeof(uint32_t), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, "VisibleInstances");
+        EnsureSize(m_Context, m_VisibleBuffer, neededCount * sizeof(DrawnEntry), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, "VisibleInstances");
         if (!places.empty())
-            m_Uploads.Upload(m_VisibleBuffer.Handle(), firstVisible * sizeof(uint32_t), std::as_bytes(std::span<const uint32_t>(places)));
+            m_Uploads.Upload(m_VisibleBuffer.Handle(), firstVisible * sizeof(DrawnEntry), std::as_bytes(std::span<const DrawnEntry>(places)));
     }
 
     void GpuScene::ReadCounters(const CommandCopy& copy, Frame& frame) const

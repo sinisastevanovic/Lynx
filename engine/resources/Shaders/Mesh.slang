@@ -49,14 +49,51 @@ public struct MeshInstance
     public LeafVertex* leaves;
 };
 
-// The instance a vertex belongs to. A frame draws the instances in a list of places in the instance
-// buffer, and drawnIndex is where the vertex's instance stands in that list.
-//
-// An entry of the list holds the place in its lower 24 bits and, above them, the level of detail the
-// instance is drawn in, in sixteenths of a level.
-public MeshInstance meshInstance(MeshInstance* instances, uint* visibleInstances, uint drawnIndex)
+// How large a scattered instance is, against its mesh. Has to match ScatterInstance::Size in Scatter.h.
+public float scatterSize(ScatterInstance instance)
 {
-    return instances[visibleInstances[drawnIndex] & 0x00FFFFFF];
+    return exp2((float((instance.packed >> 12) & 0xFF) - 128.0) / 64.0);
+}
+
+// Which kind of thing a scattered instance is: its number in the list of kinds.
+public uint scatterKind(ScatterInstance instance)
+{
+    return instance.packed >> 20;
+}
+
+// The matrix that takes the mesh of a scattered instance into the world: made larger or smaller, turned
+// about the upward axis and moved to where the instance stands.
+public float4x4 scatterModel(ScatterInstance instance)
+{
+    float angle = float(instance.packed & 0xFFF) * (6.283185307179586 / 4096.0);
+    float size = scatterSize(instance);
+    float alongX = size * cos(angle);
+    float alongZ = size * sin(angle);
+    return float4x4(
+        float4(alongX, 0.0, alongZ, instance.position.x),
+        float4(0.0, size, 0.0, instance.position.y),
+        float4(-alongZ, 0.0, alongX, instance.position.z),
+        float4(0.0, 0.0, 0.0, 1.0));
+}
+
+// A frame draws its instances in a list, and a vertex shader's instance index (SV_VulkanInstanceID) says
+// where the vertex's instance stands in it. An entry of the list is two numbers. For an instance with a
+// place in the instance buffer, the first is the place. For a scattered instance it is where the instance
+// stands among the scattered ones, and the second holds, above its lowest byte, the place that keeps
+// what all scattered instances of the submesh share, plus one. The lowest byte of the second is the
+// level of detail the instance is drawn in, in sixteenths of a level. Has to match GpuScene::DrawnEntry.
+//
+// A vertex shader reads its entry once and asks the functions below about it.
+public uint2 drawnEntry(uint2* visibleInstances, uint drawnIndex)
+{
+    return visibleInstances[drawnIndex];
+}
+
+// The instance of an entry: for a scattered one, what it shares with the others of its submesh.
+public MeshInstance meshInstance(MeshInstance* instances, uint2 entry)
+{
+    uint sharedPlace = entry.y >> 8;
+    return instances[sharedPlace != 0 ? sharedPlace - 1 : entry.x];
 }
 
 // The matrix that takes a mesh into the world.
@@ -65,18 +102,28 @@ public float4x4 meshModel(MeshTransform transform)
     return float4x4(transform.rows[0], transform.rows[1], transform.rows[2], float4(0.0, 0.0, 0.0, 1.0));
 }
 
-// The same for the instance a vertex belongs to. Given last frame's transforms, it says where the
-// instance was then.
-public float4x4 meshModel(MeshTransform* transforms, uint* visibleInstances, uint drawnIndex)
+// The same for the instance of an entry.
+public float4x4 meshModel(MeshTransform* transforms, uint2 entry)
 {
-    return meshModel(transforms[visibleInstances[drawnIndex] & 0x00FFFFFF]);
+    if ((entry.y >> 8) != 0)
+        return scatterModel(scene.scatterInstances[entry.x]);
+    return meshModel(transforms[entry.x]);
+}
+
+// The matrix the instance of an entry had in the last frame, given its matrix of this frame.
+// A scattered instance stands where it stood, so its matrix is not worked out a second time.
+public float4x4 previousMeshModel(MeshTransform* previousTransforms, uint2 entry, float4x4 model)
+{
+    if ((entry.y >> 8) != 0)
+        return model;
+    return meshModel(previousTransforms[entry.x]);
 }
 
 // The level of detail an instance is drawn in. Whole levels for most meshes. Foliage is drawn in
 // levels in between, so that it changes little by little.
-public float drawnLevel(uint* visibleInstances, uint drawnIndex)
+public float drawnLevel(uint2 entry)
 {
-    return float(visibleInstances[drawnIndex] >> 24) / 16.0;
+    return float(entry.y & 0xFF) / 16.0;
 }
 
 // A number from -1 to 1 that is stored in the lower 16 bits.
