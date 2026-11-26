@@ -359,17 +359,18 @@ build\bin\Debug\LynxSandboxGame.exe
   With `ViewPerMip`, `FaceView(face, mip)` is one face of one size as a flat picture to draw into, and
   `cubeDirection(face, uv)` gives the direction a pixel of it stands for. Cubes cannot be loaded from files yet.
 - **Texture settings.** What a texture holds is a setting of the texture asset, saved in its `.lxmeta`
-  (`TextureSpecification`: `Content`, `Compression`, `KeepsCoverage`, `MaxSize`, `Shape`),
+  (`TextureSpecification`: `Content`, `Compression`, `KeepsCoverage`, `MaxSize`, `Shape`, `Origin`),
   never taken from where it is used. A texture whose settings do not say (`TextureContent::Undecided`, also
   every texture saved before version 3) is guessed at when it is first loaded, from its pixels and, where
   they cannot tell, its file's name (`Asset/TextureGuess`): normal maps by their arrows of length one,
   cut-outs by an alpha that is nearly all or nothing, packed roughness and metalness by names like `_arm`.
-  The asset manager saves the guess, and the asset properties panel changes it. Something that knows more
-  may say so before the first load, and only then: a model file for its pictures
-  (`AssetManager::SuggestTextureContent`, `SuggestCutOutTexture`), a font for its atlas
-  (`SuggestExactTexture`). Icons and other pictures of a UI are "User interface", which nothing can guess:
-  set it by hand. `Shape` is there for cubes, which cannot be loaded yet. `Compression` is read by nothing
-  yet: block compression is the next part of the step "cooked textures" of Renderer V2.
+  The asset manager saves the guess, and the asset properties panel and the texture viewer change it.
+  `Origin` says who decided: a guess gives way to something that uses the texture and knows what it is,
+  and both to a choice made by hand. Those that know say so before the texture is loaded: a model file
+  for its pictures (`AssetManager::SuggestTextureContent`, `SuggestCutOutTexture`), a font for its atlas
+  (`SuggestExactTexture`), a sprite for its picture. Other pictures of a UI, like icons, are
+  "User interface", which nothing can guess: set it by hand, or they are compressed as colours.
+  `Shape` is there for cubes, which cannot be loaded yet.
 - **Cooked textures.** A texture file is cooked once (`Asset/TextureCooking`): every smaller size is made
   on the CPU from the one above, by what the texture holds. Colours are averaged as light, a normal map as
   directions brought back to length one, everything else as numbers, and the colours of a cut-out by how
@@ -377,8 +378,17 @@ build\bin\Debug\LynxSandboxGame.exe
   time) or a setting that cooking reads changes (`TextureCookingKey`). A change to cooking needs the
   version in `TextureCooking.cpp` bumped. `UploadQueue::UploadTextureSizes` hands every size to the GPU as
   it is. Only a texture that holds colours has the sRGB reading. A texture made from pixels in memory is
-  not cooked: its smaller sizes are still scaled on the GPU. The cache is not compressed yet and large,
-  2 GB for the benchmark project.
+  not cooked: its smaller sizes are still scaled on the GPU.
+- **Compressed textures.** Cooking ends by block-compressing every size (`Asset/TextureCompression`):
+  colours and packed numbers as BC7, a normal map as BC5, a picture of one channel as BC4. The pictures
+  of a UI, and a texture set to `TextureCompression::None`, stay as they are. A normal map therefore
+  holds two channels, and every shader that reads one works the third out with `normalFromMap` in
+  `Material.slang`. The encoders are bc7enc and rgbcx (`engine/vendor/bc7enc_rdo`, copied as they are,
+  MIT or public domain). Its `bc7enc.cpp` uses four of BC7's eight modes. The stronger `bc7e.ispc` of
+  the same repository was left out because it needs Intel's ISPC compiler in the build: all encoding
+  goes through `CompressTexture`, so it can take its place there. Compressing is slow, about a minute
+  for a scene's textures the first time, and done once. Run a project in Release the first time: the
+  encoders are many times slower in Debug.
 - **Asset windows.** A double click on an asset in the asset browser opens a window of its own for it, if
   its type has one (`editor/src/AssetWindows`): a window of the operating system with its title bar and
   task bar entry, one per asset, several at once. `AssetWindows` in the editor layer keeps them. A new
@@ -403,9 +413,11 @@ build\bin\Debug\LynxSandboxGame.exe
   shader: both were measured and are worse, see the comment at `KeepsCoverage`. What a tree really looks
   like, to measure against: set `GenerateMips` to false in the `.lxmeta` of its cut-out textures and
   take pictures with 64 samples a pixel.
-- **Texture colours.** Every RGBA8 texture is in the texture table twice. `Texture::GetColorTableIndex` reads it as
+- **Texture colours.** A texture that holds colours, and every texture made from pixels in memory, is in the
+  texture table twice. `Texture::GetColorTableIndex` reads it as
   sRGB and gives a shader linear light: use it for colours that are lit (albedo, emissive, particles).
   `GetTableIndex` gives the stored numbers: for normal maps, roughness, and pictures shown unlit (UI, ImGui).
+  A texture whose settings say it holds no colour has only the latter, under both names.
   Shaders never convert with `pow`.
 - **Vulkan.** The headers come from vcpkg (`vulkan-headers`). The engine does not link the Vulkan library: it
   loads the functions at run time through GLFW. NVRHI and shaderc are no longer part of the project.

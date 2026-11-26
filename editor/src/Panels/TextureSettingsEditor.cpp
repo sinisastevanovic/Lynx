@@ -95,6 +95,8 @@ namespace Lynx
         if (ImGui::Button("Apply Changes"))
         {
             // The texture is cooked and loaded anew with the settings, which are saved next to its file.
+            // They are a choice now, which no guess and nothing that uses the texture changes again.
+            m_Editing.Origin = TextureSettingsOrigin::Chosen;
             texture->SetSpecification(m_Editing);
             Engine::Get().GetAssetRegistry().UpdateMetadata(m_Handle, std::make_shared<TextureSpecification>(m_Editing));
             Engine::Get().GetAssetManager().ReloadAsset(m_Handle);

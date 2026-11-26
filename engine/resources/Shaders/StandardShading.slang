@@ -545,7 +545,7 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
         tangent = normalize(tangent);
         float3 bitangent = cross(normal, tangent) * input.tangent.w;
 
-        float3 mapped = sampleMaterialTexture(material.normalTexture, material.materialSampler, input.uv).rgb * 2.0 - 1.0;
+        float3 mapped = normalFromMap(sampleMaterialTexture(material.normalTexture, material.materialSampler, input.uv));
         normal = normalize(tangent * mapped.x + bitangent * mapped.y + normal * mapped.z);
     }
 

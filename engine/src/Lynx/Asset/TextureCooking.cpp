@@ -1,4 +1,5 @@
 #include "TextureCooking.h"
+#include "TextureCompression.h"
 
 #include "Lynx/Core/BinaryFile.h"
 
@@ -12,7 +13,8 @@ namespace Lynx
     {
         // Bump this when cooking gives another result for the same file and settings.
         // 3: the alpha of a cut-out's smaller sizes is the plain average again, see TextureSpecification::KeepsCoverage.
-        constexpr uint32_t CookingVersion = 3;
+        // 4: textures are block-compressed.
+        constexpr uint32_t CookingVersion = 4;
 
         // What the pixels of a texture are averaged as.
         enum class Meaning
@@ -258,7 +260,8 @@ namespace Lynx
         }
     }
 
-    CookedTexture CookTexture(std::span<const uint8_t> pixels, uint32_t width, uint32_t height, uint32_t channelCount, const TextureSpecification& settings)
+    // Every size of a texture as plain pixels, before any compression.
+    static CookedTexture MakeSizes(std::span<const uint8_t> pixels, uint32_t width, uint32_t height, uint32_t channelCount, const TextureSpecification& settings)
     {
         CookedTexture cooked;
         cooked.Format = channelCount == 1 ? TextureFormat::R8 : TextureFormat::RGBA8;
@@ -307,6 +310,18 @@ namespace Lynx
                 level = HalfOf(LevelSource{ level, level.Width, level.Height }, channelCount, meaning, weighsByAlpha);
         }
         return cooked;
+    }
+
+    CookedTexture CookTexture(std::span<const uint8_t> pixels, uint32_t width, uint32_t height, uint32_t channelCount, const TextureSpecification& settings)
+    {
+        // The sizes are made from plain pixels and compressed afterwards, each on its own: a
+        // smaller size made from compressed texels would carry their flaws along and add its own.
+        CookedTexture cooked = MakeSizes(pixels, width, height, channelCount, settings);
+        if (cooked.Sizes.empty())
+            return cooked;
+
+        const TextureFormat format = CompressedFormatOf(settings, cooked.Format);
+        return format == cooked.Format ? cooked : CompressTexture(cooked, format, settings);
     }
 
     uint64_t TextureCookingKey(const TextureSpecification& settings)

@@ -68,12 +68,12 @@ namespace Lynx
 
     void AssetManager::SuggestTextureContent(AssetHandle texture, TextureContent content)
     {
-        ChangeUndecidedTexture(texture, [content](TextureSpecification& settings) { settings.Content = content; });
+        SuggestTextureSettings(texture, [content](TextureSpecification& settings) { settings.Content = content; });
     }
 
     void AssetManager::SuggestCutOutTexture(AssetHandle texture)
     {
-        ChangeUndecidedTexture(texture, [](TextureSpecification& settings)
+        SuggestTextureSettings(texture, [](TextureSpecification& settings)
         {
             settings.Content = TextureContent::Color;
             settings.KeepsCoverage = true;
@@ -82,14 +82,14 @@ namespace Lynx
 
     void AssetManager::SuggestExactTexture(AssetHandle texture)
     {
-        ChangeUndecidedTexture(texture, [](TextureSpecification& settings)
+        SuggestTextureSettings(texture, [](TextureSpecification& settings)
         {
             settings.Content = TextureContent::Data;
             settings.Compression = TextureCompression::None;
         });
     }
 
-    void AssetManager::ChangeUndecidedTexture(AssetHandle texture, const std::function<void(TextureSpecification&)>& change)
+    void AssetManager::SuggestTextureSettings(AssetHandle texture, const std::function<void(TextureSpecification&)>& change)
     {
         if (!texture.IsValid() || !m_AssetRegistry->Contains(texture))
             return;
@@ -105,12 +105,16 @@ namespace Lynx
                 return;
         }
 
-        TextureSpecification settings = *std::static_pointer_cast<TextureSpecification>(metadata.Specification);
-        if (settings.Content != TextureContent::Undecided)
+        const TextureSpecification saved = *std::static_pointer_cast<TextureSpecification>(metadata.Specification);
+        if (saved.Origin == TextureSettingsOrigin::Chosen)
             return;
 
+        // Saying again what the settings say already is not worth writing a file for.
+        TextureSpecification settings = saved;
         change(settings);
-        m_AssetRegistry->UpdateMetadata(texture, std::make_shared<TextureSpecification>(settings));
+        settings.Origin = TextureSettingsOrigin::Suggested;
+        if (settings != saved)
+            m_AssetRegistry->UpdateMetadata(texture, std::make_shared<TextureSpecification>(settings));
     }
 
     bool AssetManager::HasPendingLoads() const

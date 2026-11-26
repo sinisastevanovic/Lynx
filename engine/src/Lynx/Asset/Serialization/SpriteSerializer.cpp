@@ -61,6 +61,8 @@ namespace Lynx
             AssetHandle textureHandle = json["Texture"].get<AssetHandle>();
             if (textureHandle.IsValid())
             {
+                // A sprite is a picture of a UI, which is shown as it is and has to stay exact.
+                Engine::Get().GetAssetManager().SuggestTextureContent(textureHandle, TextureContent::UserInterface);
                 outSprite.SetTexture(Engine::Get().GetAssetManager().GetAsset<Texture>(textureHandle));
             }
         }

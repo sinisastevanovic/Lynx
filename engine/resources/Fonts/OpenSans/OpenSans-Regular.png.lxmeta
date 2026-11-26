@@ -10,7 +10,8 @@
         "TextureFormat": 1,
         "UseAnisotropy": true,
         "Version": 3,
-        "WrapMode": 1
+        "WrapMode": 1,
+        "Origin": 2
     },
     "Type": 1,
     "UUID": 15713559924702624609

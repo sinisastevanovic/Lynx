@@ -50,6 +50,14 @@ target_sources(engine PRIVATE
     ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
 )
 
+# The encoders that block-compress textures while they are cooked: bc7enc for BC7, rgbcx for BC4 and BC5.
+# From github.com/richgel999/bc7enc_rdo, copied as they are, see vendor/bc7enc_rdo/LICENSE.
+target_sources(engine PRIVATE
+    vendor/bc7enc_rdo/bc7enc.cpp
+    vendor/bc7enc_rdo/rgbcx.cpp
+)
+target_include_directories(engine PRIVATE vendor/bc7enc_rdo)
+
 target_include_directories(engine
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src

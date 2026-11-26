@@ -160,6 +160,7 @@ namespace Lynx
         ImGui::TextWrapped("%s", std::filesystem::path(texture.GetFilePath()).filename().string().c_str());
         ImGui::Text("%u x %u, %u %s", texture.GetWidth(), texture.GetHeight(), texture.GetSizeCount(), texture.GetSizeCount() == 1 ? "size" : "sizes");
         ImGui::Text("Holds: %s", TextureContentNames[static_cast<size_t>(settings.Content)]);
+        ImGui::Text("Kept as: %s", TextureFormatName(settings.Format));
         ImGui::Text("In video memory: %.2f MB", static_cast<double>(texture.GetByteCount()) / (1024.0 * 1024.0));
         ImGui::SetItemTooltip("All of its sizes together, as they lie on the GPU.");
     }

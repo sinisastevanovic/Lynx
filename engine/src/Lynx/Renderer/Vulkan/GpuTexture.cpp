@@ -30,7 +30,12 @@ namespace Lynx
         // The format with the same bytes, read as sRGB. Undefined if there is none.
         vk::Format SrgbFormOf(vk::Format format)
         {
-            return format == vk::Format::eR8G8B8A8Unorm ? vk::Format::eR8G8B8A8Srgb : vk::Format::eUndefined;
+            switch (format)
+            {
+                case vk::Format::eR8G8B8A8Unorm: return vk::Format::eR8G8B8A8Srgb;
+                case vk::Format::eBc7UnormBlock: return vk::Format::eBc7SrgbBlock;
+                default: return vk::Format::eUndefined;
+            }
         }
 
         // What the GPU does with a picture in a layout: at which point of its work, and reading or writing.

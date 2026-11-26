@@ -41,6 +41,18 @@ public float4 sampleMaterialTexture(uint texture, uint materialSampler, float2 u
     return textures[NonUniformResourceIndex(texture)].Sample(samplers[NonUniformResourceIndex(materialSampler)], uv);
 }
 
+// The way a normal map tilts the surface at a texel, relative to the surface: x and y sideways, z out of it.
+//
+// A normal map is kept as its two sideways channels alone (BC5, see TextureCompression.h), each as
+// finely as a whole picture of one channel. The third follows from the length being one, and
+// working it out costs less than a third channel would in memory and in what compression loses.
+// A normal map that is not compressed has a third channel, which is not read.
+public float3 normalFromMap(float4 texel)
+{
+    float2 sideways = texel.rg * 2.0 - 1.0;
+    return float3(sideways, sqrt(saturate(1.0 - dot(sideways, sideways))));
+}
+
 // True where a material with cut-outs leaves the surface out. For the passes that only draw depth:
 // they read no more of the material than this needs.
 //

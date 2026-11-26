@@ -74,6 +74,9 @@ namespace Lynx
                 case TextureFormat::R32I:  return vk::Format::eR32Uint;
                 case TextureFormat::R8:    return vk::Format::eR8Unorm;
                 case TextureFormat::R16:   return vk::Format::eR16Unorm;
+                case TextureFormat::BC4:   return vk::Format::eBc4UnormBlock;
+                case TextureFormat::BC5:   return vk::Format::eBc5UnormBlock;
+                case TextureFormat::BC7:   return vk::Format::eBc7UnormBlock;
 
                 // Depth formats are for render targets, which are not made from pixels.
                 case TextureFormat::Depth32:
@@ -482,7 +485,7 @@ namespace Lynx
         // Only a texture that holds colours is read as such. Its plain reading stays as well: the
         // pictures of a UI go to the screen as they are stored.
         desc.SrgbView = specification.HoldsColor();
-        desc.ReadAsGrey = cooked.Format == TextureFormat::R8;
+        desc.ReadAsGrey = cooked.Format == TextureFormat::R8 || cooked.Format == TextureFormat::BC4;
 
         // A texture whose alpha cuts shapes out is tested from its finest sizes only.
         desc.FinestSizesView = specification.KeepsCoverage ? TextureSpecification::CutOutSizes : 0;

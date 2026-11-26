@@ -152,7 +152,7 @@ Ground groundOf(StandardMaterial material, float2 place, float tiles, float2 per
 
     Ground ground;
     ground.colour = textures[NonUniformResourceIndex(material.albedoTexture)].SampleGrad(layerSampler, uv, across, down).rgb * material.albedoColor.rgb;
-    ground.tilt = textures[NonUniformResourceIndex(material.normalTexture)].SampleGrad(layerSampler, uv, across, down).rgb * 2.0 - 1.0;
+    ground.tilt = normalFromMap(textures[NonUniformResourceIndex(material.normalTexture)].SampleGrad(layerSampler, uv, across, down));
     ground.metallic = metallicRoughness.b * material.metallic;
     ground.roughness = metallicRoughness.g * material.roughness;
     return ground;

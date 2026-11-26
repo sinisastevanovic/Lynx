@@ -35,7 +35,9 @@ namespace Lynx
     // Makes a texture ready for the GPU from the pixels of its file, as its settings say.
     // pixels has channelCount bytes a pixel, one or four. settings.Content has to be decided.
     //
-    // The largest size is the file's pixels as they are, unless MaxSize makes it smaller.
+    // The sizes are then compressed as the texture's content and settings ask for, see
+    // TextureCompression.h. Before that, the largest size is the file's pixels as they are, unless
+    // MaxSize makes it smaller.
     // Every smaller size is made from the one above it by what its content means:
     // - Colours are averaged as light. A file holds them as they go to a screen, where a middle value
     //   stands for a fifth of full brightness, so averaging the stored values makes every smaller

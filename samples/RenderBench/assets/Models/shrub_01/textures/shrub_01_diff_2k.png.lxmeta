@@ -6,6 +6,7 @@
         "GenerateMips": true,
         "KeepsCoverage": true,
         "MaxSize": 0,
+        "Origin": 1,
         "Shape": 0,
         "TextureFormat": 1,
         "UseAnisotropy": true,

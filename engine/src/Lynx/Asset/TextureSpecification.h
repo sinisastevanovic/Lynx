@@ -35,7 +35,27 @@ namespace Lynx
         // One whole number from 0 to 65535, read by shaders as 0 to 1: heights. Added at the end,
         // because saved texture settings hold these values as numbers.
         R16,
+
+        // Block-compressed, see TextureCompression.h: one channel, two channels, and four.
+        BC4,
+        BC5,
+        BC7,
     };
+
+    // What a format is called where a texture's facts are shown.
+    constexpr const char* TextureFormatName(TextureFormat format)
+    {
+        switch (format)
+        {
+            case TextureFormat::RGBA8: return "RGBA8, not compressed";
+            case TextureFormat::R8: return "R8, not compressed";
+            case TextureFormat::R16: return "R16, not compressed";
+            case TextureFormat::BC4: return "BC4, one channel";
+            case TextureFormat::BC5: return "BC5, two channels";
+            case TextureFormat::BC7: return "BC7, four channels";
+            default: return "other";
+        }
+    }
 
     // The shape of a texture. Only flat ones are loaded from files so far. The settings and the
     // cooked form carry the shape so that cubes can follow without changing either.
@@ -85,6 +105,20 @@ namespace Lynx
 
     inline constexpr std::array<const char*, 2> TextureCompressionNames = { "Automatic", "None" };
 
+    // Who said what a texture holds. The later ones know better: a guess gives way to something that
+    // knows, and both to a choice made by hand.
+    enum class TextureSettingsOrigin
+    {
+        // Guessed from the picture itself, see GuessTextureSettings.
+        Guessed = 0,
+
+        // Said by something that uses the texture and knows what it is: a model file, a font, a sprite.
+        Suggested,
+
+        // Set by hand, in the editor or in the settings file.
+        Chosen
+    };
+
     struct SamplerSettings
     {
         TextureWrap WrapMode = TextureWrap::Repeat;
@@ -109,6 +143,7 @@ namespace Lynx
         TextureShape Shape = TextureShape::Flat;
         TextureContent Content = TextureContent::Undecided;
         TextureCompression Compression = TextureCompression::Automatic;
+        TextureSettingsOrigin Origin = TextureSettingsOrigin::Guessed;
 
         // The alpha of this texture cuts shapes out, like leaves. Whether a pixel is cut away is then
         // decided from the texture's CutOutSizes finest sizes, however small it is on screen. Colours
@@ -147,6 +182,7 @@ namespace Lynx
             json["Shape"] = Shape;
             json["Content"] = Content;
             json["Compression"] = Compression;
+            json["Origin"] = Origin;
             json["KeepsCoverage"] = KeepsCoverage;
             json["MaxSize"] = MaxSize;
         }
@@ -163,6 +199,7 @@ namespace Lynx
             Shape = json.value("Shape", TextureShape::Flat);
             Content = json.value("Content", TextureContent::Undecided);
             Compression = json.value("Compression", TextureCompression::Automatic);
+            Origin = json.value("Origin", TextureSettingsOrigin::Guessed);
             KeepsCoverage = json.value("KeepsCoverage", false);
             MaxSize = json.value("MaxSize", 0u);
         }
@@ -172,7 +209,7 @@ namespace Lynx
             return Format == other.Format &&
                     SamplerSettings == other.SamplerSettings &&
                     GenerateMips == other.GenerateMips &&
-                    Shape == other.Shape && Content == other.Content && Compression == other.Compression &&
+                    Shape == other.Shape && Content == other.Content && Compression == other.Compression && Origin == other.Origin &&
                     KeepsCoverage == other.KeepsCoverage && MaxSize == other.MaxSize;
         }
         bool operator!=(const TextureSpecification& other) const { return !(*this == other); }
