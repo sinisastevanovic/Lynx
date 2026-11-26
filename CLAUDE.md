@@ -145,7 +145,11 @@ build\bin\Debug\LynxSandboxGame.exe
   is read between pixels (`BetweenPixelsShare`), because that read blurs and the blur adds up. And colour
   textures are read where the pixel would be without the jitter (`SteadyTextures`, `steadyUv` in
   `Scene.slang`), so their patterns stand still: a new shader that reads a colour texture should do the
-  same, and read what decides a cut-out with the jittered coordinates. Terrain does not do it yet.
+  same, and read what decides a cut-out with the jittered coordinates. Terrain reads its layers and
+  heights that way too.
+  What is drawn by chance per pixel, like the grain in a soft shadow's edge, adds `scene.noiseShift` to the
+  pixel's place: it changes every frame while frames are put together, so the grain averages away, and is
+  zero otherwise, so that the grain at least stands still (`VariesNoise`).
   A pixel that stands still, with the same surface behind it as before, gets a wider box and a longer
   history (`StillBoxScale`, `StillHistoryTime`), or what is thinner than a pixel flickers at rest. Both
   fade out over half a pixel of motion a frame.
@@ -219,7 +223,8 @@ build\bin\Debug\LynxSandboxGame.exe
 - **Soft shadows.** The edge of a shadow is sharp at its caster and widens with the distance from it, by
   the size of the sun, `DirectionalLightComponent::AngularSize` (`cascadeVisibility` in `StandardShading.slang`, percentage-closer soft shadows).
   Eight reads of four depths each find how far away the caster is, sixteen comparisons over a disc of that width
-  give the shadow. The disc is turned by a different angle per pixel, which shows as fine grain until TAA exists.
+  give the shadow. The disc is turned by a different angle per pixel, which shows as fine grain without TAA.
+  With TAA the angle is new in every frame and the grain averages away, see the temporal pass.
   Every point is compared with the depth the surface has there, worked out from its normal without the normal
   map, or a wide disc would put a slanted surface into its own shadow. The width is kept between 1.5 and 12
   texels, so far cascades are softer than the sun makes them.
