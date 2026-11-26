@@ -341,10 +341,14 @@ namespace Lynx
         // High 0.18 ms and 1.3 times.
         AmbientOcclusionQuality Quality = AmbientOcclusionQuality::Medium;
 
-        // Takes the coarsest grain out of a frame's occlusion before the frames average the rest away.
-        // Costs 0.02 ms at 1080p. Without it the picture in motion is a third farther from the
-        // average of 64 frames, and its grain reads as detail that is not there.
-        bool Smooths = true;
+        // How many times a frame's occlusion is smoothed across the pixels of a surface before the
+        // frames average the rest of its grain away, from 0 to 3. A round costs 0.02 ms at 1080p.
+        // Without any, the picture in motion is a third farther from the average of 64 frames, and its
+        // grain reads as detail that is not there. One round takes that grain out. Measured on the
+        // Motion benchmark against the same frames at Ultra, a second and a third round each end up
+        // about a tenth farther off, not nearer: they blur what the occlusion shows more than they
+        // smooth what is left of its grain.
+        uint32_t SmoothingRounds = 1;
     };
 
     struct BloomSettings

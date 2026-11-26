@@ -65,8 +65,10 @@ namespace Lynx
                     occlusion.Quality = static_cast<AmbientOcclusionQuality>(quality);
                 ImGui::SetItemTooltip("How many directions and places are tried per pixel and frame. Lower is grainier while the picture moves.");
 
-                ImGui::Checkbox("Smooth the grain", &occlusion.Smooths);
-                ImGui::SetItemTooltip("Mixes every pixel with those around it on the same surface.");
+                int rounds = static_cast<int>(occlusion.SmoothingRounds);
+                if (ImGui::SliderInt("Smoothing rounds", &rounds, 0, 3))
+                    occlusion.SmoothingRounds = static_cast<uint32_t>(rounds);
+                ImGui::SetItemTooltip("How many times every pixel is mixed with those around it on the same surface. More takes more grain out of a moving picture.");
             }
 
             if (ImGui::CollapsingHeader("Level of Detail", ImGuiTreeNodeFlags_DefaultOpen))

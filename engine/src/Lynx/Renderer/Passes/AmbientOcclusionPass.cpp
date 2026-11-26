@@ -26,9 +26,10 @@ namespace Lynx
         // XeGTAO works with this many times the radius that is set, and its other numbers were fitted with it.
         constexpr float RadiusMultiplier = 1.457f;
 
-        // How much a pixel counts next to its eight neighbours when its grain is smoothed out, and
-        // what leaves it all but as it is.
-        constexpr float SmoothedWeightOfCentre = 1.2f;
+        // How much a pixel counts next to its eight neighbours in the last round of smoothing, in the
+        // rounds before it, which smooth more, and what leaves it all but as it is (XeGTAO's numbers).
+        constexpr float WeightOfCentre = 1.2f;
+        constexpr float WeightOfCentreBeforeLast = WeightOfCentre / 5.0f;
         constexpr float UnsmoothedWeightOfCentre = 1.0e4f;
 
         // Distances from the camera, where half floats are precise enough and half the memory to read.
@@ -72,9 +73,7 @@ namespace Lynx
             uint32_t OcclusionTexture;
             uint32_t OutputTexture;
             float WeightOfCentre;
-
-            // Slang pads push constants to a multiple of their largest member, here a pair of numbers.
-            uint32_t Padding;
+            uint32_t IsLast;
         };
 
         const char* ShaderOf(AmbientOcclusionStep step)
@@ -110,6 +109,13 @@ namespace Lynx
             uint32_t StepCount;
         };
 
+        // How many rounds of the last step a frame takes. Without smoothing it is still one, which
+        // leaves every pixel as it is and only brings the result into its final form.
+        uint32_t RoundCountOf(const AmbientOcclusionSettings& settings)
+        {
+            return std::clamp(settings.SmoothingRounds, 1u, AmbientOcclusionPass::MaxSmoothingRounds);
+        }
+
         Sampling SamplingOf(AmbientOcclusionQuality quality)
         {
             switch (quality)
@@ -129,9 +135,14 @@ namespace Lynx
         TextureSlot DistancesRead;
         std::array<TextureSlot, SizeCount> DistancesWrite;
 
-        GpuTexture Working;
-        TextureSlot WorkingRead;
-        TextureSlot WorkingWrite;
+        // The occlusion before it is smoothed. The rounds of smoothing read one and write the other.
+        struct WorkingPicture
+        {
+            GpuTexture Texture;
+            TextureSlot Read;
+            TextureSlot Write;
+        };
+        std::array<WorkingPicture, 2> Working;
 
         GpuTexture Result;
         TextureSlot ResultRead;
@@ -153,9 +164,12 @@ namespace Lynx
 
             desc.Format = WorkingFormat;
             desc.Name = "AmbientOcclusionWorking";
-            Working = GpuTexture(context, desc);
-            WorkingRead = TextureSlot(shared, shared.AddTexture(Working.View()));
-            WorkingWrite = TextureSlot(shared, shared.AddWritableTexture(Working.View()), TextureTable::Writable);
+            for (WorkingPicture& working : Working)
+            {
+                working.Texture = GpuTexture(context, desc);
+                working.Read = TextureSlot(shared, shared.AddTexture(working.Texture.View()));
+                working.Write = TextureSlot(shared, shared.AddWritableTexture(working.Texture.View()), TextureTable::Writable);
+            }
 
             // Whoever shows the result as a picture sees it grey. A picture is written through a view
             // that leaves its numbers where they are, which the view of a single size is.
@@ -198,8 +212,8 @@ namespace Lynx
         return std::make_shared<AmbientOcclusionPictures>();
     }
 
-    AmbientOcclusionPass::AmbientOcclusionPass(AmbientOcclusionStep step, std::shared_ptr<AmbientOcclusionPictures> pictures)
-        : m_Step(step), m_Pictures(std::move(pictures))
+    AmbientOcclusionPass::AmbientOcclusionPass(AmbientOcclusionStep step, std::shared_ptr<AmbientOcclusionPictures> pictures, uint32_t round)
+        : m_Step(step), m_Round(round), m_Pictures(std::move(pictures))
     {
     }
 
@@ -263,6 +277,11 @@ namespace Lynx
             return false;
         }
 
+        // There is always one round, which also brings the result into its final form.
+        const uint32_t roundCount = RoundCountOf(renderData.AmbientOcclusion);
+        if (m_Step == AmbientOcclusionStep::Denoise && m_Round >= roundCount)
+            return false;
+
         switch (m_Step)
         {
             case AmbientOcclusionStep::Depth:
@@ -272,11 +291,12 @@ namespace Lynx
             case AmbientOcclusionStep::Occlusion:
                 resources.Sample(renderData.SceneDepth);
                 resources.Sample(&pictures.Distances);
-                resources.Write(&pictures.Working);
+                resources.Write(&pictures.Working[0].Texture);
                 break;
             case AmbientOcclusionStep::Denoise:
-                resources.Sample(&pictures.Working);
-                resources.Write(&pictures.Result);
+                // Round by round from one working picture into the other, and at last into the result.
+                resources.Sample(&pictures.Working[m_Round % 2].Texture);
+                resources.Write(m_Round + 1 == roundCount ? &pictures.Result : &pictures.Working[(m_Round + 1) % 2].Texture);
                 break;
         }
         resources.Computes = true;
@@ -321,7 +341,7 @@ namespace Lynx
             OcclusionPushData push{};
             push.Size = size;
             push.DistanceTexture = pictures.DistancesRead.Index();
-            push.OutputTexture = pictures.WorkingWrite.Index();
+            push.OutputTexture = pictures.Working[0].Write.Index();
             push.ViewScale = 2.0f * halfView;
             push.ViewOffset = -halfView - push.ViewScale * renderData.Jitter;
             push.Radius = radius;
@@ -335,13 +355,18 @@ namespace Lynx
             return;
         }
 
+        const bool isLast = m_Round + 1 == RoundCountOf(settings);
+
         DenoisePushData push{};
         push.Size = size;
-        push.OcclusionTexture = pictures.WorkingRead.Index();
-        push.OutputTexture = pictures.ResultWrite.Index();
-        push.WeightOfCentre = settings.Smooths ? SmoothedWeightOfCentre : UnsmoothedWeightOfCentre;
+        push.OcclusionTexture = pictures.Working[m_Round % 2].Read.Index();
+        push.OutputTexture = isLast ? pictures.ResultWrite.Index() : pictures.Working[(m_Round + 1) % 2].Write.Index();
+        push.WeightOfCentre = settings.SmoothingRounds == 0 ? UnsmoothedWeightOfCentre : isLast ? WeightOfCentre : WeightOfCentreBeforeLast;
+        push.IsLast = isLast ? 1u : 0u;
         m_Vulkan->Shared->Push(commands, push);
         commands.dispatch(GroupCountFor(picture.Width, ThreadsPerSide), GroupCountFor(picture.Height, ThreadsPerSide), 1);
+        if (!isLast)
+            return;
 
         // From here on the frame has its occlusion.
         renderData.SceneOcclusion = &pictures.Result;

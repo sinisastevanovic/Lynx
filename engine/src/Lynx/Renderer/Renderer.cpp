@@ -384,7 +384,8 @@ namespace Lynx
         const std::shared_ptr<AmbientOcclusionPictures> occlusion = AmbientOcclusionPass::MakePictures();
         m_Graph->Add("OcclusionDepth", std::make_unique<AmbientOcclusionPass>(AmbientOcclusionStep::Depth, occlusion));
         m_Graph->Add("Occlusion", std::make_unique<AmbientOcclusionPass>(AmbientOcclusionStep::Occlusion, occlusion));
-        m_Graph->Add("OcclusionDenoise", std::make_unique<AmbientOcclusionPass>(AmbientOcclusionStep::Denoise, occlusion));
+        for (uint32_t round = 0; round < AmbientOcclusionPass::MaxSmoothingRounds; ++round)
+            m_Graph->Add("OcclusionDenoise" + std::to_string(round), std::make_unique<AmbientOcclusionPass>(AmbientOcclusionStep::Denoise, occlusion, round));
         m_Graph->Add("Sky", std::make_unique<SkyPass>());
         m_Graph->Add("Terrain", std::make_unique<TerrainPass>(TerrainPassKind::Colour));
         m_Graph->Add("Forward", std::make_unique<ForwardPass>());

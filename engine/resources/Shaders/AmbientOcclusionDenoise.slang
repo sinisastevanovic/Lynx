@@ -1,5 +1,5 @@
 // The last step of ambient occlusion, see AmbientOcclusionPass: every pixel is mixed with the eight
-// around it, as far as they lie on the same surface.
+// around it, as far as they lie on the same surface. Several rounds of it reach farther.
 //
 // The occlusion of a pixel comes from a few lines through it, picked by chance, and is grainy. The
 // frames average that away, and this step takes the coarsest of it out before, so that less is left
@@ -22,6 +22,10 @@ struct DenoiseConstants
     // How much the pixel itself counts next to its neighbours, each of which counts for up to 1.
     // A large number leaves the pixel as it is.
     float weightOfCentre;
+
+    // Not zero for the last round, whose result is what the frame uses. The rounds before it hand
+    // on what they read, smoothed, for the next round to read.
+    uint isLast;
 };
 [vk::push_constant] ConstantBuffer<DenoiseConstants> constants;
 
@@ -86,5 +90,8 @@ void computeMain(uint3 thread : SV_DispatchThreadID)
         + writtenAt(pixel + int2(-1, 1)).x * belowLeft + writtenAt(pixel + int2(1, 1)).x * belowRight;
     float weights = constants.weightOfCentre + dot(ofCentre, float4(1.0, 1.0, 1.0, 1.0)) + aboveLeft + aboveRight + belowLeft + belowRight;
 
-    writableTextures[constants.outputTexture][pixel] = float4(saturate(sum / weights * storedRange), 0.0, 0.0, 0.0);
+    float smoothed = sum / weights;
+    writableTextures[constants.outputTexture][pixel] = constants.isLast != 0
+        ? float4(saturate(smoothed * storedRange), 0.0, 0.0, 0.0)
+        : float4(smoothed, centre.y, 0.0, 0.0);
 }

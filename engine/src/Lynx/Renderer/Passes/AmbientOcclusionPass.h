@@ -35,7 +35,9 @@ namespace Lynx
     public:
         static std::shared_ptr<AmbientOcclusionPictures> MakePictures();
 
-        AmbientOcclusionPass(AmbientOcclusionStep step, std::shared_ptr<AmbientOcclusionPictures> pictures);
+        // The smoothing takes up to MaxSmoothingRounds rounds, each a pass of its own: round says which.
+        static constexpr uint32_t MaxSmoothingRounds = 3;
+        AmbientOcclusionPass(AmbientOcclusionStep step, std::shared_ptr<AmbientOcclusionPictures> pictures, uint32_t round = 0);
         ~AmbientOcclusionPass() override;
 
         void Init(RenderContext& ctx) override;
@@ -50,6 +52,7 @@ namespace Lynx
         std::unique_ptr<VulkanObjects> m_Vulkan;
 
         AmbientOcclusionStep m_Step;
+        uint32_t m_Round;
         std::shared_ptr<AmbientOcclusionPictures> m_Pictures;
         PipelineState m_PipelineState;
     };

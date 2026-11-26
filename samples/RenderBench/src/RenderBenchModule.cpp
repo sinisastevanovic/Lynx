@@ -62,7 +62,7 @@ public:
         occlusion.Enabled = settings.Parameter("AO", occlusion.Enabled ? 1.0 : 0.0) > 0.0;
         occlusion.Radius = static_cast<float>(settings.Parameter("AoRadius", occlusion.Radius));
         occlusion.Quality = static_cast<AmbientOcclusionQuality>(std::clamp(static_cast<int>(settings.Parameter("AoQuality", static_cast<double>(occlusion.Quality))), 0, 3));
-        occlusion.Smooths = settings.Parameter("AoSmooth", occlusion.Smooths ? 1.0 : 0.0) > 0.0;
+        occlusion.SmoothingRounds = static_cast<uint32_t>(std::clamp(static_cast<int>(settings.Parameter("AoSmooth", occlusion.SmoothingRounds)), 0, 3));
 
         // What the view shows, for pictures of every view mode. See ViewMode for the numbers.
         ViewSettings& viewing = engine.GetSceneRenderer().GetViewSettings();
