@@ -71,13 +71,12 @@ namespace Lynx
         ChangeUndecidedTexture(texture, [content](TextureSpecification& settings) { settings.Content = content; });
     }
 
-    void AssetManager::SuggestTextureCoverage(AssetHandle texture, float cutoff)
+    void AssetManager::SuggestCutOutTexture(AssetHandle texture)
     {
-        ChangeUndecidedTexture(texture, [cutoff](TextureSpecification& settings)
+        ChangeUndecidedTexture(texture, [](TextureSpecification& settings)
         {
             settings.Content = TextureContent::Color;
             settings.KeepsCoverage = true;
-            settings.CoverageCutoff = cutoff;
         });
     }
 

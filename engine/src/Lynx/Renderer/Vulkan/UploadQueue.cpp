@@ -111,6 +111,31 @@ namespace Lynx
         block.HasPendingData = true;
     }
 
+    void UploadQueue::UploadTextureSizes(const GpuTexture& texture, std::span<const std::byte> pixels, std::span<const TextureSize> sizes)
+    {
+        if (pixels.empty() || sizes.empty())
+            return;
+
+        StagingBlock& block = BlockWithRoomFor(pixels.size());
+        std::memcpy(static_cast<std::byte*>(block.Buffer.Data()) + block.Used, pixels.data(), pixels.size());
+
+        TextureCopy& copy = m_TextureCopies.emplace_back();
+        copy.Staging = block.Buffer.Handle();
+        copy.StagingOffset = block.Used;
+        copy.Image = texture.Image();
+        copy.Extent = vk::Extent2D(texture.Desc().Width, texture.Desc().Height);
+        copy.MipLevels = texture.Desc().MipLevels;
+        for (uint32_t index = 0; index < sizes.size(); ++index)
+        {
+            const TextureSize& size = sizes[index];
+            copy.Sizes.emplace_back(block.Used + size.Offset, 0, 0, vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, index, 0, 1),
+                vk::Offset3D(0, 0, 0), vk::Extent3D(size.Width, size.Height, 1));
+        }
+
+        block.Used = NextPlace(block.Used + pixels.size());
+        block.HasPendingData = true;
+    }
+
     void UploadQueue::MoveContents(GpuBuffer source, vk::Buffer destination)
     {
         for (Copy& copy : m_Copies)
@@ -139,6 +164,17 @@ namespace Lynx
         transition(0, copy.MipLevels, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
             {}, vk::AccessFlagBits::eTransferWrite, vk::PipelineStageFlagBits::eTransfer);
 
+        const vk::PipelineStageFlags readers = vk::PipelineStageFlagBits::eVertexShader | vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eComputeShader;
+
+        // Every size comes with its own pixels.
+        if (!copy.Sizes.empty())
+        {
+            commands.copyBufferToImage(copy.Staging, copy.Image, vk::ImageLayout::eTransferDstOptimal, copy.Sizes);
+            transition(0, copy.MipLevels, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eShaderRead, readers);
+            return;
+        }
+
         const vk::BufferImageCopy region(copy.StagingOffset, 0, 0, level(0), vk::Offset3D(0, 0, 0), vk::Extent3D(copy.Extent, 1));
         commands.copyBufferToImage(copy.Staging, copy.Image, vk::ImageLayout::eTransferDstOptimal, region);
 
@@ -162,7 +198,6 @@ namespace Lynx
         }
 
         // All sizes but the smallest were read from last, the smallest was written last.
-        const vk::PipelineStageFlags readers = vk::PipelineStageFlagBits::eVertexShader | vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eComputeShader;
         if (copy.MipLevels > 1)
         {
             transition(0, copy.MipLevels - 1, vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,

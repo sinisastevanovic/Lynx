@@ -169,7 +169,7 @@ namespace Lynx
             {
                 material->AlbedoTexture = am.GetAssetHandle(source.MaterialData.AlbedoPath);
                 if (material->Mode == AlphaMode::Mask)
-                    am.SuggestTextureCoverage(material->AlbedoTexture, material->AlphaCutoff);
+                    am.SuggestCutOutTexture(material->AlbedoTexture);
                 else
                     am.SuggestTextureContent(material->AlbedoTexture, TextureContent::Color);
             }

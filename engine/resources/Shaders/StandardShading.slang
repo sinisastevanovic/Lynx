@@ -557,20 +557,11 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     if (constants.viewMode == viewWireframe)
         return float4(wireframeColour(), 1.0);
 
-    // The colour is read where the pixel would be without the camera's jitter, see steadyUv. Where a
-    // cut-out ends has to jitter like every edge, so a material with cut-outs is read twice.
-    bool isCutOut = material.alphaCutoff >= 0.0 && constants.showCutOuts != 0;
-    float2 colourUv = steadyUv(input.uv);
-    float4 albedoSample = sampleMaterialTexture(material.albedoTexture, material.materialSampler, isCutOut ? input.uv : colourUv);
-    float3 albedoColour = albedoSample.rgb;
-    if (isCutOut)
-    {
-        if (cutOutAlpha(material.albedoTexture, material.materialSampler, input.uv, albedoSample.a) < material.alphaCutoff)
-            discard;
-        if (scene.textureJitter.x != 0.0 || scene.textureJitter.y != 0.0)
-            albedoColour = sampleMaterialTexture(material.albedoTexture, material.materialSampler, colourUv).rgb;
-    }
-    float3 albedo = albedoColour * material.albedoColor.rgb;
+    // The colour is read where the pixel would be without the camera's jitter, see steadyUv.
+    // A cut-out is not tested here: this pass draws where the depth is the one the depth pass left,
+    // and that pass has left out what is cut away, with the jitter every edge needs.
+    float4 albedoSample = sampleMaterialTexture(material.albedoTexture, material.materialSampler, steadyUv(input.uv));
+    float3 albedo = albedoSample.rgb * material.albedoColor.rgb;
 
     LitSurface surface;
     surface.position = input.worldPosition;

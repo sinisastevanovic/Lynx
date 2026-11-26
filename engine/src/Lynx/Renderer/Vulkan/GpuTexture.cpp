@@ -141,6 +141,13 @@ namespace Lynx
             viewInfo.format = m_Desc.Format;
         }
 
+        if (m_Desc.FinestSizesView > 0)
+        {
+            viewInfo.subresourceRange.levelCount = std::min(m_Desc.FinestSizesView, m_Desc.MipLevels);
+            m_FinestSizesView = context.Device().createImageView(viewInfo);
+            viewInfo.subresourceRange.levelCount = m_Desc.MipLevels;
+        }
+
         if (m_Desc.ViewPerMip)
         {
             // These are drawn into, which a view that rearranges channels does not allow, and one flat
@@ -172,6 +179,7 @@ namespace Lynx
           m_Image(std::exchange(other.m_Image, nullptr)),
           m_View(std::exchange(other.m_View, nullptr)),
           m_SrgbView(std::exchange(other.m_SrgbView, nullptr)),
+          m_FinestSizesView(std::exchange(other.m_FinestSizesView, nullptr)),
           m_MipViews(std::move(other.m_MipViews)),
           m_Allocation(std::exchange(other.m_Allocation, nullptr)),
           m_Desc(std::exchange(other.m_Desc, {})),
@@ -188,6 +196,7 @@ namespace Lynx
             m_Image = std::exchange(other.m_Image, nullptr);
             m_View = std::exchange(other.m_View, nullptr);
             m_SrgbView = std::exchange(other.m_SrgbView, nullptr);
+            m_FinestSizesView = std::exchange(other.m_FinestSizesView, nullptr);
             m_MipViews = std::move(other.m_MipViews);
             m_Allocation = std::exchange(other.m_Allocation, nullptr);
             m_Desc = std::exchange(other.m_Desc, {});
@@ -242,11 +251,13 @@ namespace Lynx
             return;
 
         // A frame that is still on the GPU may be drawing into the texture or reading it.
-        m_Context->Deletions().Retire([device = m_Context->Device(), allocator = m_Context->Allocator(), image = static_cast<VkImage>(m_Image), view = m_View, srgbView = m_SrgbView, mipViews = std::move(m_MipViews), allocation = m_Allocation]()
+        m_Context->Deletions().Retire([device = m_Context->Device(), allocator = m_Context->Allocator(), image = static_cast<VkImage>(m_Image), view = m_View, srgbView = m_SrgbView, finestSizesView = m_FinestSizesView, mipViews = std::move(m_MipViews), allocation = m_Allocation]()
         {
             device.destroyImageView(view);
             if (srgbView)
                 device.destroyImageView(srgbView);
+            if (finestSizesView)
+                device.destroyImageView(finestSizesView);
             for (const vk::ImageView mipView : mipViews)
                 device.destroyImageView(mipView);
 
@@ -258,6 +269,7 @@ namespace Lynx
         m_Image = nullptr;
         m_View = nullptr;
         m_SrgbView = nullptr;
+        m_FinestSizesView = nullptr;
         m_MipViews.clear();
         m_Allocation = nullptr;
         m_Desc = {};

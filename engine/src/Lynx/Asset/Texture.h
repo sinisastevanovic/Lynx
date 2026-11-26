@@ -2,6 +2,7 @@
 #include "Lynx/Core.h"
 #include "Asset.h"
 
+#include "TextureCooking.h"
 #include "TextureSpecification.h"
 #include "Lynx/Renderer/TextureSlot.h"
 
@@ -34,6 +35,10 @@ namespace Lynx
         // GetTableIndex gives the stored numbers as they are: for normal maps, roughness, and for pictures
         // that go to the screen unlit, like the UI's.
         uint32_t GetColorTableIndex() const { return m_ColorTableSlot ? m_ColorTableSlot.Index() : m_TableSlot.Index(); }
+
+        // Where the texture table has what a cut-out is tested from: the texture's finest sizes alone
+        // if its alpha cuts shapes out (TextureSpecification::KeepsCoverage), the whole texture otherwise.
+        uint32_t GetCutOutTableIndex() const { return m_CutOutTableSlot ? m_CutOutTableSlot.Index() : GetColorTableIndex(); }
         uint32_t GetSamplerIndex() const { return m_SamplerIndex; }
 
         uint32_t GetWidth() const { return m_Specification.Width; }
@@ -58,10 +63,17 @@ namespace Lynx
 
         // Empty for a format without an sRGB form, such as a font's single channel.
         TextureSlot m_ColorTableSlot;
+
+        // Empty for a texture whose alpha cuts nothing out.
+        TextureSlot m_CutOutTableSlot;
         uint32_t m_SamplerIndex = 0;
         bool m_HasGuessedSettings = false;
 
+        // A texture made from pixels in memory: they are handed to the GPU as they are.
         unsigned char* m_PixelData = nullptr;
+
+        // A texture from a file, between loading and reaching the GPU: every size of it, see TextureCooking.
+        CookedTexture m_Cooked;
     };
 }
 

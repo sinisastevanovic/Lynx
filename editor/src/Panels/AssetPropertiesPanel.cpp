@@ -167,11 +167,6 @@ namespace Lynx
         }
 
         if (LXUI::DrawCheckBox("Alpha Cuts Shapes Out", m_EditingSpec.KeepsCoverage)) m_IsDirty = true;
-        if (m_EditingSpec.KeepsCoverage)
-        {
-            if (LXUI::DrawDragFloat("Cut-Off To Keep", m_EditingSpec.CoverageCutoff, 0.01f, 0.01f, 0.99f, 0.5f))
-                m_IsDirty = true;
-        }
 
         if (LXUI::DrawCheckBox("Generate Mips", m_EditingSpec.GenerateMips)) m_IsDirty = true;
 

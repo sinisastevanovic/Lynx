@@ -5,6 +5,7 @@
 #include <stb_image.h>
 
 #include "Lynx/Engine.h"
+#include "TextureCache.h"
 #include "Lynx/Renderer/Vulkan/GpuTexture.h"
 
 namespace Lynx
@@ -26,14 +27,7 @@ namespace Lynx
             m_State = AssetState::Error;
     }
 
-    Texture::~Texture()
-    {
-        if (m_PixelData)
-        {
-            stbi_image_free(m_PixelData);
-            m_PixelData = nullptr;
-        }
-    }
+    Texture::~Texture() = default;
 
     bool Texture::LoadSourceData()
     {
@@ -41,6 +35,24 @@ namespace Lynx
         {
             LX_CORE_ERROR("File does not exist: {0}", m_FilePath);
             return false;
+        }
+
+        m_Specification.DebugName = m_FilePath;
+        m_HasGuessedSettings = false;
+
+        // A texture that was cooked before, from this file as it is and with these settings, is read
+        // as it was cooked. Settings that do not say what the texture holds cannot have been cooked with.
+        const TextureCache& cache = Engine::Get().GetTextureCache();
+        if (m_Specification.Content != TextureContent::Undecided)
+        {
+            if (std::optional<CookedTexture> cooked = cache.Load(m_FilePath, TextureCookingKey(m_Specification)))
+            {
+                m_Cooked = std::move(*cooked);
+                m_Specification.Width = m_Cooked.Width();
+                m_Specification.Height = m_Cooked.Height();
+                m_Specification.Format = m_Cooked.Format;
+                return true;
+            }
         }
 
         // A file with one channel stays as it is. Every other one is read as four: GPUs have no texture
@@ -54,34 +66,41 @@ namespace Lynx
         }
 
         const int channels = channelsInFile == 1 ? 1 : 4;
-        m_PixelData = stbi_load(m_FilePath.c_str(), &width, &height, &channelsInFile, channels);
-        if (!m_PixelData)
+        unsigned char* decoded = stbi_load(m_FilePath.c_str(), &width, &height, &channelsInFile, channels);
+        if (!decoded)
         {
             LX_CORE_ERROR("Failed to load texture: {0}", m_FilePath);
             return false;
         }
-
-        m_Specification.Width = width;
-        m_Specification.Height = height;
-        m_Specification.DebugName = m_FilePath;
-        m_Specification.Format = channels == 1 ? TextureFormat::R8 : TextureFormat::RGBA8;
+        const std::span<const uint8_t> pixels(decoded, static_cast<size_t>(width) * height * channels);
 
         // Settings that do not say what the texture holds get a guess from the picture itself.
         m_HasGuessedSettings = m_Specification.Content == TextureContent::Undecided;
         if (m_HasGuessedSettings)
         {
-            const size_t byteCount = static_cast<size_t>(width) * height * channels;
-            const TextureGuess guess = GuessTextureSettings(std::span<const uint8_t>(m_PixelData, byteCount), width, height, channels, m_FilePath);
+            const TextureGuess guess = GuessTextureSettings(pixels, width, height, channels, m_FilePath);
             m_Specification.Content = guess.Content;
             m_Specification.KeepsCoverage = guess.KeepsCoverage;
         }
 
+        m_Cooked = CookTexture(pixels, width, height, channels, m_Specification);
+        stbi_image_free(decoded);
+        if (m_Cooked.Sizes.empty())
+        {
+            LX_CORE_ERROR("Failed to cook texture: {0}", m_FilePath);
+            return false;
+        }
+        cache.Store(m_FilePath, TextureCookingKey(m_Specification), m_Cooked);
+
+        m_Specification.Width = m_Cooked.Width();
+        m_Specification.Height = m_Cooked.Height();
+        m_Specification.Format = m_Cooked.Format;
         return true;
     }
 
     bool Texture::CreateRenderResources()
     {
-        if (!m_PixelData)
+        if (!m_PixelData && m_Cooked.Sizes.empty())
             return false;
 
         Renderer& renderer = Engine::Get().GetRenderer();
@@ -89,17 +108,18 @@ namespace Lynx
         // The places in the table go before the picture they point at.
         m_TableSlot = TextureSlot();
         m_ColorTableSlot = TextureSlot();
-        m_GpuTexture = renderer.CreateTexture(m_Specification, m_PixelData);
+        m_CutOutTableSlot = TextureSlot();
+        m_GpuTexture = m_PixelData ? renderer.CreateTexture(m_Specification, m_PixelData) : renderer.CreateTexture(m_Specification, m_Cooked);
 
-        if (!m_FilePath.empty())
-            stbi_image_free(m_PixelData);
-
+        // The pixels are the GPU's from here on. A texture made in memory never owned its own.
         m_PixelData = nullptr;
+        m_Cooked = CookedTexture();
 
         if (m_GpuTexture)
         {
             m_TableSlot = renderer.AddToTextureTable(*m_GpuTexture);
             m_ColorTableSlot = renderer.AddColorToTextureTable(*m_GpuTexture);
+            m_CutOutTableSlot = renderer.AddFinestSizesToTextureTable(*m_GpuTexture);
             m_SamplerIndex = renderer.SamplerIndex(m_Specification.SamplerSettings);
             LX_CORE_TRACE("Texture loaded successfully: {0} ({1}x{2})", m_FilePath, GetWidth(), GetHeight());
             IncrementVersion();

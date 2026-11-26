@@ -359,17 +359,37 @@ build\bin\Debug\LynxSandboxGame.exe
   With `ViewPerMip`, `FaceView(face, mip)` is one face of one size as a flat picture to draw into, and
   `cubeDirection(face, uv)` gives the direction a pixel of it stands for. Cubes cannot be loaded from files yet.
 - **Texture settings.** What a texture holds is a setting of the texture asset, saved in its `.lxmeta`
-  (`TextureSpecification`: `Content`, `Compression`, `KeepsCoverage` with `CoverageCutoff`, `MaxSize`, `Shape`),
+  (`TextureSpecification`: `Content`, `Compression`, `KeepsCoverage`, `MaxSize`, `Shape`),
   never taken from where it is used. A texture whose settings do not say (`TextureContent::Undecided`, also
   every texture saved before version 3) is guessed at when it is first loaded, from its pixels and, where
   they cannot tell, its file's name (`Asset/TextureGuess`): normal maps by their arrows of length one,
   cut-outs by an alpha that is nearly all or nothing, packed roughness and metalness by names like `_arm`.
   The asset manager saves the guess, and the asset properties panel changes it. Something that knows more
   may say so before the first load, and only then: a model file for its pictures
-  (`AssetManager::SuggestTextureContent`, `SuggestTextureCoverage`), a font for its atlas
+  (`AssetManager::SuggestTextureContent`, `SuggestCutOutTexture`), a font for its atlas
   (`SuggestExactTexture`). Icons and other pictures of a UI are "User interface", which nothing can guess:
-  set it by hand. The settings do not change how a texture is drawn yet, the cooker that reads them is the
-  next part of the step "cooked textures" of Renderer V2. `Shape` is there for cubes, which cannot be loaded yet.
+  set it by hand. `Shape` is there for cubes, which cannot be loaded yet. `Compression` is read by nothing
+  yet: block compression is the next part of the step "cooked textures" of Renderer V2.
+- **Cooked textures.** A texture file is cooked once (`Asset/TextureCooking`): every smaller size is made
+  on the CPU from the one above, by what the texture holds. Colours are averaged as light, a normal map as
+  directions brought back to length one, everything else as numbers, and the colours of a cut-out by how
+  much each texel shows. The result is kept in `temp\TextureCache` and used until the file (its size and
+  time) or a setting that cooking reads changes (`TextureCookingKey`). A change to cooking needs the
+  version in `TextureCooking.cpp` bumped. `UploadQueue::UploadTextureSizes` hands every size to the GPU as
+  it is. Only a texture that holds colours has the sRGB reading. A texture made from pixels in memory is
+  not cooked: its smaller sizes are still scaled on the GPU. The cache is not compressed yet and large,
+  2 GB for the benchmark project.
+- **Cut-outs at a distance.** Whether a pixel of a cut-out is left out is decided in the depth and shadow
+  passes alone (`isCutOut` in `Material.slang`). The forward pass does not test: it draws where the depth
+  is the one the depth pass left. The alpha is read from the material's `cutOutTexture`. For a texture
+  whose alpha cuts shapes out (`TextureSpecification::KeepsCoverage`, guessed, or set in the asset panel)
+  that is a view of its three finest sizes only (`GpuTextureDesc::FinestSizesView`), so the test never
+  reads a coarse size, whatever size the colour comes from. A texture of twigs is mostly empty space, and
+  every coarser size mixes more of it into each texel: without this, trees get barer with distance and
+  lose their shadows. Do not try to mend that in the texture's smaller sizes or with a boost in the
+  shader: both were measured and are worse, see the comment at `KeepsCoverage`. What a tree really looks
+  like, to measure against: set `GenerateMips` to false in the `.lxmeta` of its cut-out textures and
+  take pictures with 64 samples a pixel.
 - **Texture colours.** Every RGBA8 texture is in the texture table twice. `Texture::GetColorTableIndex` reads it as
   sRGB and gives a shader linear light: use it for colours that are lit (albedo, emissive, particles).
   `GetTableIndex` gives the stored numbers: for normal maps, roughness, and pictures shown unlit (UI, ImGui).

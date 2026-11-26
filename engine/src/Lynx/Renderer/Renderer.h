@@ -99,6 +99,9 @@ namespace Lynx
         // Null if the pixels are missing or the format cannot be used.
         std::unique_ptr<GpuTexture> CreateTexture(const TextureSpecification& specification, const unsigned char* data);
 
+        // The same for a texture that was cooked: every size comes with its pixels, and none is made on the GPU.
+        std::unique_ptr<GpuTexture> CreateTexture(const TextureSpecification& specification, const CookedTexture& cooked);
+
         // Asks which entity the scene picture shows at a pixel. The answer arrives a few frames later,
         // so that no frame has to wait for the GPU. A new request replaces one that is still under way.
         void RequestEntityIdAt(uint32_t x, uint32_t y);
@@ -138,6 +141,9 @@ namespace Lynx
         // Puts the texture in a second time, read as sRGB: what a shader samples there is linear light.
         // An empty slot for a texture whose format has no sRGB form.
         TextureSlot AddColorToTextureTable(const GpuTexture& texture);
+
+        // The same for the view of a texture's finest sizes. Empty if the texture has none.
+        TextureSlot AddFinestSizesToTextureTable(const GpuTexture& texture);
 
         // The index of the sampler with these settings in the sampler table.
         uint32_t SamplerIndex(const SamplerSettings& settings);

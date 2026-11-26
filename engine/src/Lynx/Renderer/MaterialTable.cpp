@@ -21,7 +21,7 @@ namespace Lynx
     MaterialTable::MaterialTable(GraphicsContext& context, UploadQueue& uploads, AssetManager& assets, const MaterialTextureIndices& defaults)
         : m_Context(context), m_Uploads(uploads), m_Assets(assets), m_Defaults(defaults)
     {
-        static_assert(sizeof(GpuMaterial) == 64);
+        static_assert(sizeof(GpuMaterial) == 80);
     }
 
     void MaterialTable::BeginFrame()
@@ -78,6 +78,7 @@ namespace Lynx
         current.MetallicRoughnessTexture = slot.Textures.MetallicRoughness;
         current.EmissiveTexture = slot.Textures.Emissive;
         current.Sampler = slot.Textures.Sampler;
+        current.CutOutTexture = slot.Textures.CutOut;
 
         // The colours and factors are compared themselves, not by version: the editor changes them
         // directly while a slider is dragged, which gives the material no new version.
@@ -143,6 +144,7 @@ namespace Lynx
         if (const std::shared_ptr<Texture> albedo = loaded(material.AlbedoTexture))
         {
             indices.Albedo = albedo->GetColorTableIndex();
+            indices.CutOut = albedo->GetCutOutTableIndex();
             indices.Sampler = albedo->GetSamplerIndex();
         }
         if (const std::shared_ptr<Texture> normal = loaded(material.NormalMap))

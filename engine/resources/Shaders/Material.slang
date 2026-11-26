@@ -25,6 +25,13 @@ public struct StandardMaterial
     public uint metallicRoughnessTexture;
     public uint emissiveTexture;
     public uint materialSampler;
+
+    // What a cut-out is tested from: the albedo texture, or only its finest sizes if its alpha cuts
+    // shapes out (TextureSpecification::KeepsCoverage).
+    public uint cutOutTexture;
+    uint padding0;
+    uint padding1;
+    uint padding2;
 };
 
 // Reads one of a material's textures. The index comes from the table and may differ between the pixels
@@ -34,33 +41,21 @@ public float4 sampleMaterialTexture(uint texture, uint materialSampler, float2 u
     return textures[NonUniformResourceIndex(texture)].Sample(samplers[NonUniformResourceIndex(materialSampler)], uv);
 }
 
-// By how much the alpha of a cut-out is raised for every size of its texture below the full one.
-static const float alphaGainPerSize = 0.25;
-
-// The alpha a cut-out is tested with, from the alpha that was read at uv.
-//
-// A texture seen from far away is read from one of its smaller sizes, in which a texel is the average
-// of many. Of a twig with thin needles that average lies below the cut-off nearly everywhere, so the
-// whole twig is left out, and a tree gets barer the farther away it is. Raising the alpha with the size
-// that is read keeps about as much of the surface as its full size shows. It is a rule of thumb that
-// is in wide use, not an exact repair: that would be to make the smaller sizes so that they keep the
-// share of texels above the cut-off, where textures are cooked.
-public float cutOutAlpha(uint texture, uint materialSampler, float2 uv, float alpha)
-{
-    float size = textures[NonUniformResourceIndex(texture)].CalculateLevelOfDetail(samplers[NonUniformResourceIndex(materialSampler)], uv);
-    return alpha * (1.0 + max(size, 0.0) * alphaGainPerSize);
-}
-
 // True where a material with cut-outs leaves the surface out. For the passes that only draw depth:
 // they read no more of the material than this needs.
+//
+// And for nothing else: what is drawn after the depth passes is drawn where its depth is the one
+// they left, so it needs no test of its own.
+//
+// The alpha is read from the material's cutOutTexture. A texture seen from far away is read from one
+// of its smaller sizes, in which a texel is the average of many, and of a twig that average lies
+// below the cut-off nearly everywhere: trees get barer with distance. So for a texture whose alpha
+// cuts shapes out, cutOutTexture holds its finest sizes only, see TextureSpecification::KeepsCoverage.
 public bool isCutOut(StandardMaterial* materials, uint material, float2 uv)
 {
     float alphaCutoff = materials[material].alphaCutoff;
     if (alphaCutoff < 0.0)
         return false;
 
-    uint texture = materials[material].albedoTexture;
-    uint materialSampler = materials[material].materialSampler;
-    float alpha = sampleMaterialTexture(texture, materialSampler, uv).a;
-    return cutOutAlpha(texture, materialSampler, uv, alpha) < alphaCutoff;
+    return sampleMaterialTexture(materials[material].cutOutTexture, materials[material].materialSampler, uv).a < alphaCutoff;
 }

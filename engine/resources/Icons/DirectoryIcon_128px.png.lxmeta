@@ -2,7 +2,6 @@
     "Settings": {
         "Compression": 1,
         "Content": 5,
-        "CoverageCutoff": 0.5,
         "FilterMode": 0,
         "GenerateMips": true,
         "KeepsCoverage": false,

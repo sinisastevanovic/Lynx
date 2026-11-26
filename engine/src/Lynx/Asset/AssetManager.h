@@ -79,8 +79,8 @@ namespace Lynx
         // what is saved with a texture, by a guess or by hand, stays.
         void SuggestTextureContent(AssetHandle texture, TextureContent content);
 
-        // The same for a texture whose alpha cuts shapes out at the given cut-off.
-        void SuggestTextureCoverage(AssetHandle texture, float cutoff);
+        // The same for a colour texture whose alpha cuts shapes out.
+        void SuggestCutOutTexture(AssetHandle texture);
 
         // The same for a texture whose numbers have to stay exactly as they are in its file, such as
         // the distances of a font's atlas: plain numbers, never compressed.

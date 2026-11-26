@@ -14,6 +14,7 @@
 #include "Renderer/Shader/ShaderCompiler.h"
 #include "Renderer/ShaderCache.h"
 #include "Asset/MeshCache.h"
+#include "Asset/TextureCache.h"
 #include "Scripting/ScriptEngine.h"
 
 namespace Lynx
@@ -61,6 +62,7 @@ namespace Lynx
         const ContentPaths& GetContentPaths() const { return *m_ContentPaths; }
         const ShaderCache& GetShaderCache() const { return *m_ShaderCache; }
         const MeshCache& GetMeshCache() const { return *m_MeshCache; }
+        const TextureCache& GetTextureCache() const { return *m_TextureCache; }
         ShaderCompiler& GetShaderCompiler() { return *m_ShaderCompiler; }
         AssetManager& GetAssetManager() { return *m_AssetManager; }
         AssetRegistry& GetAssetRegistry() { return *m_AssetRegistry; }
@@ -125,6 +127,7 @@ namespace Lynx
         std::unique_ptr<ContentPaths> m_ContentPaths;
         std::unique_ptr<ShaderCache> m_ShaderCache;
         std::unique_ptr<MeshCache> m_MeshCache;
+        std::unique_ptr<TextureCache> m_TextureCache;
         std::unique_ptr<ShaderCompiler> m_ShaderCompiler;
         std::string m_ImGuiLayoutFile;
 

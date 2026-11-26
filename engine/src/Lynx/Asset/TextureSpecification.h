@@ -110,11 +110,21 @@ namespace Lynx
         TextureContent Content = TextureContent::Undecided;
         TextureCompression Compression = TextureCompression::Automatic;
 
-        // The alpha of this texture cuts shapes out, like leaves: its smaller sizes are made so that
-        // each cuts as much away as the full size does at CoverageCutoff. Plain averaging lets thin
-        // shapes fade below the cut-off, and foliage thins out with distance (Castano, 2010).
+        // The alpha of this texture cuts shapes out, like leaves. Whether a pixel is cut away is then
+        // decided from the texture's CutOutSizes finest sizes, however small it is on screen. Colours
+        // still come from every size.
+        //
+        // A texture of twigs is mostly empty space with twigs in it. Each smaller size mixes more of
+        // that emptiness into every texel, until the alpha lies below any cut-off: trees get barer
+        // with distance and lose their shadows, which are drawn from the coarsest sizes of all.
+        // Measured on the Trees benchmark against 64 samples a pixel read from the full size alone
+        // (26 November 2026), as the distance in steps of 255: tested from the full size 3.3, from
+        // the three finest 3.6, the five finest 12.8, every size 19.5. Remaking the alpha of the
+        // smaller sizes does not help, because the GPU blends across texels and sizes after it:
+        // Castano's scaling 19.5, Yuksel's alpha distribution 21.7, a test by chance (Wyman and
+        // McGuire) 18.4. Raising the alpha with the size that is read, as the shaders used to, 7.2.
         bool KeepsCoverage = false;
-        float CoverageCutoff = 0.5f;
+        static constexpr uint32_t CutOutSizes = 3;
 
         // The texture is used no larger than this many pixels a side. Zero for as large as its file.
         uint32_t MaxSize = 0;
@@ -138,7 +148,6 @@ namespace Lynx
             json["Content"] = Content;
             json["Compression"] = Compression;
             json["KeepsCoverage"] = KeepsCoverage;
-            json["CoverageCutoff"] = CoverageCutoff;
             json["MaxSize"] = MaxSize;
         }
 
@@ -155,7 +164,6 @@ namespace Lynx
             Content = json.value("Content", TextureContent::Undecided);
             Compression = json.value("Compression", TextureCompression::Automatic);
             KeepsCoverage = json.value("KeepsCoverage", false);
-            CoverageCutoff = json.value("CoverageCutoff", 0.5f);
             MaxSize = json.value("MaxSize", 0u);
         }
 
@@ -165,7 +173,7 @@ namespace Lynx
                     SamplerSettings == other.SamplerSettings &&
                     GenerateMips == other.GenerateMips &&
                     Shape == other.Shape && Content == other.Content && Compression == other.Compression &&
-                    KeepsCoverage == other.KeepsCoverage && CoverageCutoff == other.CoverageCutoff && MaxSize == other.MaxSize;
+                    KeepsCoverage == other.KeepsCoverage && MaxSize == other.MaxSize;
         }
         bool operator!=(const TextureSpecification& other) const { return !(*this == other); }
     };

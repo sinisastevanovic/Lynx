@@ -350,6 +350,7 @@ namespace Lynx
 
         MaterialTextureIndices defaults;
         defaults.Albedo = m_Frame->WhiteTextureIndex;
+        defaults.CutOut = m_Frame->WhiteTextureIndex;
         defaults.Normal = m_Frame->NormalTextureIndex;
         defaults.MetallicRoughness = m_Frame->MetallicRoughnessTextureIndex;
         defaults.Emissive = m_Frame->WhiteTextureIndex;
@@ -455,6 +456,49 @@ namespace Lynx
 
         const size_t byteCount = static_cast<size_t>(specification.Width) * specification.Height * Helpers::GetTextureFormatByteSize(specification.Format);
         m_Frame->Uploads->UploadTexture(*texture, std::as_bytes(std::span<const unsigned char>(data, byteCount)));
+        return texture;
+    }
+
+    std::unique_ptr<GpuTexture> Renderer::CreateTexture(const TextureSpecification& specification, const CookedTexture& cooked)
+    {
+        if (cooked.Sizes.empty())
+            return nullptr;
+
+        const vk::Format format = Helpers::ToVulkan(cooked.Format);
+        if (format == vk::Format::eUndefined)
+        {
+            LX_CORE_ERROR("Texture '{0}' was cooked into a format that cannot be filled from pixels.", specification.DebugName);
+            return nullptr;
+        }
+
+        GpuTextureDesc desc;
+        desc.Width = cooked.Width();
+        desc.Height = cooked.Height();
+        desc.Format = format;
+        desc.MipLevels = static_cast<uint32_t>(cooked.Sizes.size());
+
+        // Only a texture that holds colours is read as such. Its plain reading stays as well: the
+        // pictures of a UI go to the screen as they are stored.
+        desc.SrgbView = specification.HoldsColor();
+        desc.ReadAsGrey = cooked.Format == TextureFormat::R8;
+
+        // A texture whose alpha cuts shapes out is tested from its finest sizes only.
+        desc.FinestSizesView = specification.KeepsCoverage ? TextureSpecification::CutOutSizes : 0;
+        desc.Usage = vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+        desc.Name = specification.DebugName.c_str();
+
+        // See the other CreateTexture for why a texture is marked as if it could be drawn into.
+        const vk::FormatFeatureFlags supported = m_Context->PhysicalDevice().getFormatProperties(format).optimalTilingFeatures;
+        if (supported & vk::FormatFeatureFlagBits::eColorAttachment)
+            desc.Usage |= vk::ImageUsageFlagBits::eColorAttachment;
+
+        auto texture = std::make_unique<GpuTexture>(*m_Context, desc);
+
+        std::vector<UploadQueue::TextureSize> sizes;
+        sizes.reserve(cooked.Sizes.size());
+        for (const CookedTexture::Size& size : cooked.Sizes)
+            sizes.push_back({ size.Offset, size.Width, size.Height });
+        m_Frame->Uploads->UploadTextureSizes(*texture, std::as_bytes(std::span<const uint8_t>(cooked.Pixels)), sizes);
         return texture;
     }
 
@@ -943,6 +987,13 @@ namespace Lynx
         if (!texture.SrgbView())
             return TextureSlot();
         return TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(texture.SrgbView()));
+    }
+
+    TextureSlot Renderer::AddFinestSizesToTextureTable(const GpuTexture& texture)
+    {
+        if (!texture.FinestSizesView())
+            return TextureSlot();
+        return TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(texture.FinestSizesView()));
     }
 
     uint32_t Renderer::SamplerIndex(const SamplerSettings& settings)

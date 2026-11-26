@@ -31,6 +31,19 @@ namespace Lynx
         // The texture has to have been created for copying from and into it.
         void UploadTexture(const GpuTexture& texture, std::span<const std::byte> pixels);
 
+        // One size of a texture, and where its pixels start in what is handed over with it.
+        struct TextureSize
+        {
+            uint64_t Offset = 0;
+            uint32_t Width = 0;
+            uint32_t Height = 0;
+        };
+
+        // Fills every size of a texture with pixels that were made for it, the largest first. Nothing is
+        // scaled on the GPU. After the next Flush the texture is in the layout for reading, and stays in it.
+        // The texture has to have been created for copying into it, with as many sizes as are given.
+        void UploadTextureSizes(const GpuTexture& texture, std::span<const std::byte> pixels, std::span<const TextureSize> sizes);
+
         // Copies everything a buffer holds to the start of another one, which takes its place: uploads
         // that are still pending for the old buffer go to the new one. The copy is recorded by the next Flush,
         // ahead of the uploads, and the old buffer is given up after it.
@@ -71,6 +84,9 @@ namespace Lynx
             vk::Image Image;
             vk::Extent2D Extent;
             uint32_t MipLevels = 1;
+
+            // Where each size is read from. Empty if the smaller sizes are made from the largest.
+            std::vector<vk::BufferImageCopy> Sizes;
         };
 
         struct Move

@@ -36,6 +36,10 @@ namespace Lynx
         // picture painted for the screen. Ignored for a format that has no sRGB form.
         bool SrgbView = false;
 
+        // Also make a view that holds only this many of the largest sizes. Read through it, a
+        // texture never gives a size smaller than those, however small it is on screen. Zero for none.
+        uint32_t FinestSizesView = 0;
+
         // For a texture with one channel: shaders read its value as red, green and blue alike, with an
         // alpha of 1. That is what a greyscale picture means, whichever channel a shader looks at.
         // Without it, green and blue read as 0.
@@ -74,6 +78,9 @@ namespace Lynx
 
         // Null unless the texture was made with SrgbView and its format has an sRGB form.
         vk::ImageView SrgbView() const { return m_SrgbView; }
+
+        // Null unless the texture was made with FinestSizesView.
+        vk::ImageView FinestSizesView() const { return m_FinestSizesView; }
         const GpuTextureDesc& Desc() const { return m_Desc; }
 
         // Only for a texture made with ViewPerMip, and not for a cube.
@@ -103,6 +110,7 @@ namespace Lynx
         vk::Image m_Image;
         vk::ImageView m_View;
         vk::ImageView m_SrgbView;
+        vk::ImageView m_FinestSizesView;
         std::vector<vk::ImageView> m_MipViews;
 
         // Null for a wrapped picture, whose memory is not this object's.

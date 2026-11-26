@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include "Vulkan/GpuBuffer.h"
 
 #include <glm/glm.hpp>
@@ -23,6 +24,9 @@ namespace Lynx
         uint32_t MetallicRoughness = 0;
         uint32_t Emissive = 0;
         uint32_t Sampler = 0;
+
+        // What a cut-out is tested from, see Texture::GetCutOutTableIndex.
+        uint32_t CutOut = 0;
     };
 
     // Every material that is drawn, as one buffer on the GPU. An instance carries the index of its material
@@ -64,6 +68,10 @@ namespace Lynx
             uint32_t MetallicRoughnessTexture;
             uint32_t EmissiveTexture;
             uint32_t Sampler;
+            uint32_t CutOutTexture;
+
+            // Keeps the size a multiple of 16 bytes, which a shader takes it to be.
+            std::array<uint32_t, 3> Padding;
         };
 
         struct Slot
