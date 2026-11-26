@@ -33,7 +33,8 @@ the steps of the stage in work as they land. Stages 1 and 2 are complete. The no
 - `cmake/LynxGame.cmake` `lynx_add_game()`, which builds a game
 - `samples/RenderBench/` the project the renderer is measured with: benchmark scenes, and one file per benchmark in `bench/`.
   Its code hands out asset IDs of its own, meshes from 7300000000000000000, materials from 7400000000000000000, and a terrain with its layers from 7600000000000000001:
-  an asset file in that project must not use one of those.
+  an asset file in that project must not use one of those. The files it writes itself, the forest terrain
+  below, have handles from 7700000000000000001.
 - `tools/` scripts for verifying changes
 
 ## Build and run
@@ -517,7 +518,12 @@ build\bin\Debug\LynxSandboxGame.exe
   (`editor.exe D:\LynxEngine\samples\RenderBench\RenderBench.lxproj`), open the scene and press Play: the
   module then builds what the benchmark named like the scene builds (`Scenes/Crowd.lxscene` from
   `bench/crowd.json`), without its camera path and its measuring. Most of those scenes are nearly empty
-  until then. A benchmark and its scene therefore share a name.
+  until then. A benchmark and its scene therefore share a name. While a scene is played without a benchmark,
+  the module steers its camera (`FreeCamera`): W, A, S, D, E and Q move, the mouse turns, the left shift key
+  makes it fast, and Shift with F1 gives the mouse back to the editor.
+  `Scenes/ForestAsset.lxscene` is the forest without the module: its terrain is an asset file with layers
+  and scatter rules, to be seen and changed in the editor without Play. The file is not in the repository,
+  13 MB: `tools/bench.ps1 -Bench forest -Runs 1 -Set TerrainSaveAsset=1` writes it into `assets/Terrains`.
 - The editor window: `tools/capture-window.ps1` saves a picture of it. Compare one from before with one from after.
 - F3, or `--profiler` on the command line, shows frame, CPU and GPU times on screen in the editor and in a game.
 - Serialization: re-save every scene and prefab with the old and the new code and compare the JSON.

@@ -3,6 +3,7 @@
 #include "Shapes.h"
 
 #include <Lynx/Asset/Material.h>
+#include <Lynx/Asset/Serialization/MaterialSerializer.h>
 #include <Lynx/Asset/Terrain.h>
 #include <Lynx/Asset/Texture.h>
 #include <Lynx/Physics/PhysicsWorld.h>
@@ -16,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <iterator>
 #include <string>
 
@@ -473,7 +475,63 @@ namespace
     }
 }
 
-void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution, bool throughFile, bool isScattered)
+namespace
+{
+    // The file next to an asset's file that says what it is and which handle it has.
+    void WriteAssetMeta(const std::filesystem::path& assetFile, AssetType type, uint64_t handle)
+    {
+        std::filesystem::path metaFile = assetFile;
+        metaFile += ".lxmeta";
+        std::ofstream meta(metaFile, std::ios::trunc);
+        meta << "{\n    \"Type\": " << static_cast<uint32_t>(type) << ",\n    \"UUID\": " << handle << "\n}";
+    }
+
+    // Writes the terrain and the materials of its layers into the project as assets of their own.
+    // The materials made in code keep their handles for the benchmark, so the files get others, and
+    // the terrain's file is made to name those.
+    void SaveTerrainAsAsset(const Terrain& terrain, std::span<const TerrainLayer> layers, std::span<const char* const> layerNames)
+    {
+        constexpr uint64_t FirstHandleMadeInCode = 7600000000000000001ull;
+        constexpr uint64_t FirstHandleInFiles = 7700000000000000001ull;
+
+        const std::filesystem::path folder = Engine::Get().GetContentPaths().ProjectAsset("Terrains");
+        std::error_code error;
+        std::filesystem::create_directories(folder, error);
+
+        for (size_t layer = 0; layer < layers.size(); ++layer)
+        {
+            const std::filesystem::path file = folder / (std::string(layerNames[layer]) + ".lxmat");
+            if (!MaterialSerializer::Serialize(file, layers[layer].Material))
+                LX_ERROR("RenderBench: cannot write {0}", file.string());
+            WriteAssetMeta(file, AssetType::Material, FirstHandleInFiles + 1 + layer);
+        }
+
+        const std::filesystem::path file = folder / "Forest.lxterrain";
+        if (!terrain.Save(file))
+        {
+            LX_ERROR("RenderBench: cannot write {0}", file.string());
+            return;
+        }
+
+        std::string text;
+        {
+            std::ifstream saved(file);
+            text.assign(std::istreambuf_iterator<char>(saved), std::istreambuf_iterator<char>());
+        }
+        for (size_t layer = 0; layer < layers.size(); ++layer)
+        {
+            const std::string madeInCode = std::to_string(FirstHandleMadeInCode + 1 + layer);
+            if (const size_t at = text.find(madeInCode); at != std::string::npos)
+                text.replace(at, madeInCode.size(), std::to_string(FirstHandleInFiles + 1 + layer));
+        }
+        std::ofstream(file, std::ios::trunc) << text;
+        WriteAssetMeta(file, AssetType::Terrain, FirstHandleInFiles);
+
+        LX_INFO("Wrote the terrain to {0}. Scenes/ForestAsset.lxscene uses it.", file.string());
+    }
+}
+
+void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution, bool throughFile, bool isScattered, bool savesAsAsset)
 {
     // Hills from seven layers of noise, each twice as fine and half as high as the one before.
     const float highest = 0.12f * static_cast<float>(resolution);
@@ -586,6 +644,12 @@ void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution
             rule("Models/fir_sapling_medium/fir_sapling_medium_b.gltf", 6.0f, 0.2f, 32.0f, { 1.0f, 0.0f, 1.0f, 0.0f }),
         };
         terrain->SetScatterRules(rules);
+    }
+
+    if (savesAsAsset)
+    {
+        const char* const layerNames[] = { "ForestFloor", "ForestRock", "ForestMud" };
+        SaveTerrainAsAsset(*terrain, layers, layerNames);
     }
 
     // For checking the terrain's file: saved, and the one that is drawn read back from what was saved.
@@ -745,4 +809,69 @@ void TerrainPhysicsCheck::Report(Scene& scene) const
             ++lying;
     }
     LX_INFO("Terrain physics: {0} of {1} balls lie on the ground. The lowest a ball's middle ever was above the ground: {2:.3f} units, with a radius of {3}.", lying, count, m_LowestClearance, BallRadius);
+}
+
+FreeCamera::FreeCamera(Scene& scene, const glm::vec3* position, const glm::vec3* target)
+{
+    Input::BindAxis("FreeCameraForward", KeyCode::W, KeyCode::S);
+    Input::BindAxis("FreeCameraRight", KeyCode::D, KeyCode::A);
+    Input::BindAxis("FreeCameraUp", KeyCode::E, KeyCode::Q);
+    Input::BindAction("FreeCameraFast", KeyCode::LeftShift);
+
+    // The mouse turns the camera, so it is kept in the window. In the editor, Shift and F1 give it back.
+    Input::SetCursorMode(CursorMode::Locked);
+
+    const auto cameras = scene.Reg().view<TransformComponent, CameraComponent>();
+    for (const auto entity : cameras)
+    {
+        if (!cameras.get<CameraComponent>(entity).Primary)
+            continue;
+
+        TransformComponent& transform = cameras.get<TransformComponent>(entity);
+        if (position)
+            transform.SetTranslation(*position);
+
+        // Which way it looks to begin with: at the target, or as the scene has it.
+        glm::vec3 looking = glm::rotate(transform.GetRotation(), glm::vec3(0.0f, 0.0f, -1.0f));
+        if (position && target && glm::distance(*position, *target) > 0.0001f)
+            looking = glm::normalize(*target - *position);
+        m_Pitch = std::asin(std::clamp(looking.y, -1.0f, 1.0f));
+        m_Yaw = std::atan2(looking.x, -looking.z);
+        break;
+    }
+}
+
+void FreeCamera::Update(Scene& scene, float deltaTime)
+{
+    constexpr float RadiansPerPixel = 0.0025f;
+    constexpr float UnitsPerSecond = 12.0f;
+    constexpr float FastFactor = 8.0f;
+
+    // Only while the game has the mouse: in the editor it can be given back to work in the panels.
+    if (Input::GetCursorMode() != CursorMode::Locked)
+        return;
+
+    const glm::vec2 mouse = Input::GetMouseDelta();
+    m_Yaw += mouse.x * RadiansPerPixel;
+    m_Pitch = std::clamp(m_Pitch - mouse.y * RadiansPerPixel, -1.55f, 1.55f);
+
+    // Turned about the upward axis first, then tilted: the horizon stays level.
+    const glm::quat rotation = glm::angleAxis(-m_Yaw, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::angleAxis(m_Pitch, glm::vec3(1.0f, 0.0f, 0.0f));
+    const glm::vec3 forward = glm::rotate(rotation, glm::vec3(0.0f, 0.0f, -1.0f));
+    const glm::vec3 right = glm::rotate(rotation, glm::vec3(1.0f, 0.0f, 0.0f));
+    const glm::vec3 direction = forward * Input::GetAxis("FreeCameraForward") + right * Input::GetAxis("FreeCameraRight")
+        + glm::vec3(0.0f, 1.0f, 0.0f) * Input::GetAxis("FreeCameraUp");
+    const float speed = UnitsPerSecond * (Input::GetButton("FreeCameraFast") ? FastFactor : 1.0f);
+
+    const auto cameras = scene.Reg().view<TransformComponent, CameraComponent>();
+    for (const auto entity : cameras)
+    {
+        if (!cameras.get<CameraComponent>(entity).Primary)
+            continue;
+
+        TransformComponent& transform = cameras.get<TransformComponent>(entity);
+        transform.SetRotation(rotation);
+        transform.SetTranslation(transform.GetTranslation() + direction * (speed * deltaTime));
+        break;
+    }
 }

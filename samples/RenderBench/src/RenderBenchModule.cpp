@@ -23,6 +23,15 @@ public:
     {
         Engine& engine = Engine::Get();
         m_Settings = SettingsFor(engine);
+
+        // No benchmark steers the camera, so whoever plays the scene does. It starts where the
+        // benchmark's camera would, which is a place the scene is made to be seen from.
+        if (!engine.GetBenchmark())
+        {
+            const auto* start = m_Settings && !m_Settings->CameraPath.empty() ? &m_Settings->CameraPath.front() : nullptr;
+            m_FreeCamera.emplace(*engine.GetActiveScene(), start ? &start->Position : nullptr, start ? &start->Target : nullptr);
+        }
+
         if (!m_Settings)
             return;
 
@@ -125,7 +134,8 @@ public:
         }
 
         if (const uint32_t terrain = count("Terrain"))
-            CreateTerrain(scene, assetManager, terrain, settings.Parameter("TerrainThroughFile", 0.0) > 0.0, settings.Parameter("TerrainScatter", 0.0) > 0.0);
+            CreateTerrain(scene, assetManager, terrain, settings.Parameter("TerrainThroughFile", 0.0) > 0.0, settings.Parameter("TerrainScatter", 0.0) > 0.0,
+                settings.Parameter("TerrainSaveAsset", 0.0) > 0.0);
 
         if (const uint32_t balls = count("TerrainBalls"))
             m_TerrainPhysics.emplace(scene, balls);
@@ -149,6 +159,8 @@ public:
     void OnUpdate(float deltaTime) override
     {
         Engine& engine = Engine::Get();
+        if (m_FreeCamera)
+            m_FreeCamera->Update(*engine.GetActiveScene(), deltaTime);
         if (m_Crowd)
             m_Crowd->Update(*engine.GetActiveScene(), deltaTime);
         if (m_MotionProps)
@@ -185,6 +197,7 @@ public:
     void OnShutdown() override
     {
         m_Settings.reset();
+        m_FreeCamera.reset();
         m_Crowd.reset();
         m_MotionProps.reset();
         m_TerrainPhysics.reset();
@@ -220,6 +233,7 @@ private:
     }
 
     std::optional<BenchmarkSettings> m_Settings;
+    std::optional<FreeCamera> m_FreeCamera;
     std::optional<Crowd> m_Crowd;
     std::optional<MotionProps> m_MotionProps;
     std::optional<TerrainPhysicsCheck> m_TerrainPhysics;

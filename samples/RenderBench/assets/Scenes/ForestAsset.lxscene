@@ -1,0 +1,102 @@
+{
+    "Entities": [
+        {
+            "ID": 7000000000000000030,
+            "Tag": {
+                "Tag": "Sun"
+            },
+            "Transform": {
+                "Translation": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Rotation": [
+                    0.8567866719650288,
+                    -0.44601491077688155,
+                    0.22957529683877867,
+                    0.11950933515490465
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "DirectionalLight": {
+                "Color": [
+                    1.0,
+                    0.96,
+                    0.9
+                ],
+                "Intensity": 3.0,
+                "CastShadows": true
+            }
+        },
+        {
+            "ID": 7000000000000000031,
+            "Tag": {
+                "Tag": "Camera"
+            },
+            "Transform": {
+                "Translation": [
+                    -700.0,
+                    260.0,
+                    -700.0
+                ],
+                "Rotation": [
+                    0.38173967562205335,
+                    -0.026859438986988678,
+                    -0.921601102182667,
+                    -0.06484442188012073
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "Camera": {
+                "FixedAspectRatio": false,
+                "Primary": true,
+                "SceneCamera": {
+                    "OrthographicFar": 1.0,
+                    "OrthographicNear": -1.0,
+                    "OrthographicSize": 10.0,
+                    "PerspectiveFOV": 1.0471975511965976,
+                    "PerspectiveFar": 4000.0,
+                    "PerspectiveNear": 0.1,
+                    "ProjectionType": 0
+                }
+            }
+        },
+        {
+            "ID": 7000000000000000040,
+            "Tag": {
+                "Tag": "Terrain"
+            },
+            "Transform": {
+                "Translation": [
+                    -1024.0,
+                    0.0,
+                    -1024.0
+                ],
+                "Rotation": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "Scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
+            },
+            "Terrain": {
+                "Terrain": 7700000000000000001
+            }
+        }
+    ],
+    "Scene": "Trees"
+}

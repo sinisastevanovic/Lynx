@@ -26,5 +26,8 @@ samples/RenderBench/assets/Models/grass_medium_01/
 samples/RenderBench/assets/Textures/forest_ground_04/
 samples/RenderBench/assets/Textures/rock_face_03/
 samples/RenderBench/assets/Textures/brown_mud_leaves_01/
+
+# The forest terrain as an asset, which the Forest benchmark writes with TerrainSaveAsset=1. 13 MB.
+samples/RenderBench/assets/Terrains/
 *.pdf
 *.pptx

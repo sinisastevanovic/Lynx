@@ -116,7 +116,26 @@ void CreateTrees(Scene& scene, AssetManager& assetManager, uint32_t count, Trees
 // A square of hilly ground, made from noise: a terrain of the given number of heights a side, one
 // unit apart, around the middle of the scene. The same hills in every run.
 // throughFile saves the terrain and draws what is read back, to check the terrain's file.
-void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution, bool throughFile, bool isScattered);
+// With savesAsAsset the terrain and its layers' materials are also written into the project, as
+// assets/Terrains/Forest.lxterrain and three .lxmat files, for a scene to use without this code and
+// for the editor's panels to change. Their handles start at 7700000000000000001.
+void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution, bool throughFile, bool isScattered, bool savesAsAsset);
+
+// A camera to look around with while a scene is played by hand: W, A, S and D move, E and Q go up and
+// down, the mouse turns, and holding the left shift key makes it fast.
+class FreeCamera
+{
+public:
+    // Takes the scene's main camera. With a place and a target it starts there, looking at the target.
+    FreeCamera(Scene& scene, const glm::vec3* position, const glm::vec3* target);
+
+    void Update(Scene& scene, float deltaTime);
+
+private:
+    // How far the camera is turned to the right of looking along -z, and how far it looks up, in radians.
+    float m_Yaw = 0.0f;
+    float m_Pitch = 0.0f;
+};
 
 // Checks that the terrain's ground is solid, and that it is the ground that is drawn. Gives the
 // terrain a collider, drops balls onto it, and after a few frames shoots rays down at it. Writes

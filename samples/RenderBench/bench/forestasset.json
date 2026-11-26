@@ -1,0 +1,65 @@
+{
+    "Name": "forestasset",
+    "Scene": "Scenes/ForestAsset.lxscene",
+    "Frames": 600,
+    "ScreenshotFrames": [
+        0,
+        300,
+        599
+    ],
+    "Parameters": {},
+    "CameraPath": [
+        {
+            "Frame": 0,
+            "Position": [
+                -700.0,
+                260.0,
+                -700.0
+            ],
+            "Target": [
+                0.0,
+                120.0,
+                0.0
+            ]
+        },
+        {
+            "Frame": 200,
+            "Position": [
+                -250.0,
+                190.0,
+                -200.0
+            ],
+            "Target": [
+                100.0,
+                120.0,
+                150.0
+            ]
+        },
+        {
+            "Frame": 400,
+            "Position": [
+                100.0,
+                210.0,
+                60.0
+            ],
+            "Target": [
+                500.0,
+                120.0,
+                300.0
+            ]
+        },
+        {
+            "Frame": 599,
+            "Position": [
+                300.0,
+                420.0,
+                300.0
+            ],
+            "Target": [
+                0.0,
+                100.0,
+                -200.0
+            ]
+        }
+    ]
+}
