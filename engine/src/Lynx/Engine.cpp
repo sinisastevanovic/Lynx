@@ -65,7 +65,10 @@ namespace Lynx
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
         // ImGui keeps the pointer, so the string has to outlive the context.
-        m_ImGuiLayoutFile = (m_ContentPaths->TempDirectory() / "imgui.ini").string();
+        // The editor and a game keep their window layouts apart. With one file for both, a game that ran
+        // first left a layout without the editor's panels, and the editor, finding a layout, did not
+        // apply its default one.
+        m_ImGuiLayoutFile = (m_ContentPaths->TempDirectory() / (m_IsEditor ? "imgui.ini" : "imgui-game.ini")).string();
         io.IniFilename = m_ImGuiLayoutFile.c_str();
         
         ImFontConfig fontConfig;
