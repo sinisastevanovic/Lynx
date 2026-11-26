@@ -5,6 +5,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "Lynx/Asset/Texture.h"
@@ -81,12 +82,13 @@ namespace Lynx
         uint64_t GetImGuiTexture(uint32_t tableIndex) const;
 
         // Asks for a texture to be drawn into a picture of its own in this frame, as the preview says:
-        // one of its sizes, some of its channels, a part of it. For a window that shows textures.
+        // one of its sizes, some of its channels, a part of it. For a window that shows a texture.
+        // key tells the window from others that ask in the same frame: each gets a picture of its own.
         // Call it in every frame the picture is shown in.
-        void ShowTexturePreview(const TexturePreview& preview) { m_PendingPreview = preview; }
+        void ShowTexturePreview(uint64_t key, const TexturePreview& preview);
 
-        // The picture the last preview was drawn into, to hand to ImGui::Image. Zero before the first.
-        uint64_t GetTexturePreviewImGuiTexture() const;
+        // The picture the last frame drew for a key, to hand to ImGui::Image. Zero if it drew none.
+        uint64_t GetTexturePreviewImGuiTexture(uint64_t key) const;
 
         // Call before ImGui::NewFrame.
         void BeginImGuiFrame();
@@ -237,11 +239,10 @@ namespace Lynx
         TemporalSettings m_TemporalSettings;
         AmbientOcclusionSettings m_AmbientOcclusionSettings;
 
-        // What ShowTexturePreview asked for since the last frame was drawn, the picture the frame
-        // that is being drawn made of it, and where the texture table has the last such picture.
-        std::optional<TexturePreview> m_PendingPreview;
-        GpuTexture* m_PreviewPicture = nullptr;
-        std::optional<uint32_t> m_PreviewPictureIndex;
+        // What ShowTexturePreview asked for since the last frame was drawn, and where the texture
+        // table has the pictures the last frame drew, by their keys.
+        std::vector<TexturePreviewRequest> m_PendingPreviews;
+        std::unordered_map<uint64_t, uint32_t> m_PreviewPictures;
 
         // How many frames have been jittered, which says how the next one is.
         uint64_t m_JitterFrame = 0;

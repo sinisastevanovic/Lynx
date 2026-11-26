@@ -1036,13 +1036,13 @@ namespace Lynx
         // further. And anti-aliasing over time takes the place of FXAA.
         m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled && !m_TemporalSettings.Accumulates && !m_TemporalSettings.Resolves;
         m_CurrentFrameData.ShownInstead = nullptr;
-        m_CurrentFrameData.Preview = std::exchange(m_PendingPreview, std::nullopt);
-        m_CurrentFrameData.PreviewPicture = nullptr;
+        m_CurrentFrameData.Previews = std::exchange(m_PendingPreviews, {});
+        m_CurrentFrameData.PreviewPictures.clear();
 
         m_Graph->Execute(m_RenderContext, m_CurrentFrameData);
-        m_PreviewPicture = m_CurrentFrameData.PreviewPicture;
-        if (m_PreviewPicture)
-            m_PreviewPictureIndex = m_CurrentFrameData.PreviewPictureIndex;
+        m_PreviewPictures.clear();
+        for (const TexturePreviewPicture& picture : m_CurrentFrameData.PreviewPictures)
+            m_PreviewPictures[picture.Key] = picture.TextureIndex;
         m_Frame->ReactiveNeedsClearing = m_CurrentFrameData.WroteReactive;
         m_GpuScene->CopyCommandsForCounters(m_Frame->Commands);
         CopyRequestedEntityId();
@@ -1147,11 +1147,6 @@ namespace Lynx
         if (m_ShouldCreateIDTarget && m_Frame->SceneOutput)
             m_Frame->SceneOutput.Transition(commands, vk::ImageLayout::eShaderReadOnlyOptimal);
 
-        // So does a window that shows a texture, with the picture this frame drew of it.
-        if (m_PreviewPicture)
-            m_PreviewPicture->Transition(commands, vk::ImageLayout::eShaderReadOnlyOptimal);
-        m_PreviewPicture = nullptr;
-
         // A frame without a scene has no pass that would bring pending uploads to the GPU,
         // and ImGui may be about to show a texture that was just loaded.
         m_Frame->Uploads->Flush(commands);
@@ -1182,9 +1177,24 @@ namespace Lynx
         return m_Frame->SceneOutputSlot ? m_ImGui->TextureId(m_Frame->SceneOutputSlot.Index()) : 0;
     }
 
-    uint64_t Renderer::GetTexturePreviewImGuiTexture() const
+    void Renderer::ShowTexturePreview(uint64_t key, const TexturePreview& preview)
     {
-        return m_PreviewPictureIndex ? m_ImGui->TextureId(*m_PreviewPictureIndex) : 0;
+        // The last word of a frame counts for a key.
+        for (TexturePreviewRequest& pending : m_PendingPreviews)
+        {
+            if (pending.Key == key)
+            {
+                pending.Preview = preview;
+                return;
+            }
+        }
+        m_PendingPreviews.push_back({ key, preview });
+    }
+
+    uint64_t Renderer::GetTexturePreviewImGuiTexture(uint64_t key) const
+    {
+        const auto found = m_PreviewPictures.find(key);
+        return found != m_PreviewPictures.end() ? m_ImGui->TextureId(found->second) : 0;
     }
 
     uint64_t Renderer::GetImGuiTexture(uint32_t tableIndex) const

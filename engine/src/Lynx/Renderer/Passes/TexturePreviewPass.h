@@ -7,8 +7,10 @@ namespace Lynx
     // chosen channels, a part of it or all (TexturePreview.slang). A window cannot do that by showing
     // the texture itself, which always comes as a whole, in the size that fits, with every channel.
     //
-    // It runs in a frame that asked for it (RenderData::Preview) and leaves the picture in
-    // RenderData::PreviewPicture. The picture is as large as was asked for and made anew when that changes.
+    // Several windows can each show a texture at once, so it draws a picture for every request of a
+    // frame (RenderData::Previews), each into a picture kept under the request's key, and says where
+    // the texture table has them (RenderData::PreviewPictures). A picture is as large as was asked
+    // for, made anew when that changes, and given up a few frames after nobody asked for it.
     class TexturePreviewPass : public VulkanPass
     {
     public:

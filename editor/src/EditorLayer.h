@@ -3,6 +3,7 @@
 
 #include "EditorState.h"
 #include "Panels/EditorPanel.h"
+#include "AssetWindows/AssetWindows.h"
 
 namespace Lynx
 {
@@ -43,6 +44,7 @@ namespace Lynx
         EditorState m_State;
 
         std::vector<std::unique_ptr<EditorPanel>> m_Panels;
+        AssetWindows m_AssetWindows;
         class Viewport* m_ViewportPanel = nullptr;
 
         std::shared_ptr<Scene> m_EditorScene;

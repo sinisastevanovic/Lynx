@@ -379,15 +379,19 @@ build\bin\Debug\LynxSandboxGame.exe
   it is. Only a texture that holds colours has the sRGB reading. A texture made from pixels in memory is
   not cooked: its smaller sizes are still scaled on the GPU. The cache is not compressed yet and large,
   2 GB for the benchmark project.
-- **Texture viewer.** The editor's texture viewer (`editor/src/Panels/TextureViewerPanel`) is a window that opens when a
-  texture is picked in the asset browser with a double click, and is closed like any window. It shows the
-  texture as it is on the GPU after cooking: any of its sizes, any
-  of its channels, zoomed and moved about, with what it takes in video memory and its settings
-  (`TextureSettingsEditor`, which the asset properties panel shows too). A window cannot show one size or
-  one channel of a texture by itself, so `Passes/TexturePreviewPass` draws the part that is seen into a
-  picture of its own in every frame a window asks for it (`Renderer::ShowTexturePreview`,
-  `GetTexturePreviewImGuiTexture`). The Features benchmark asks for it too, so that the pass runs under
-  the validation layer.
+- **Asset windows.** A double click on an asset in the asset browser opens a window of its own for it, if
+  its type has one (`editor/src/AssetWindows`): a window of the operating system with its title bar and
+  task bar entry, one per asset, several at once. `AssetWindows` in the editor layer keeps them. A new
+  kind is a class derived from `AssetWindow` (`GetKindName`, `DrawContents`) and one line in
+  `EditorLayer`: `m_AssetWindows.Register<MeshEditorWindow>(AssetType::StaticMesh)`. Such a window is not
+  docked into the main window: the system's title bar moves it, which ImGui does not see.
+- **Texture viewer.** `TextureViewerWindow` is the asset window of a texture. It shows the texture as it is
+  on the GPU after cooking: any of its sizes, any of its channels, zoomed and moved about, with what it
+  takes in video memory and its settings (`TextureSettingsEditor`, which the asset properties panel shows
+  too). A window cannot show one size or one channel of a texture by itself, so
+  `Passes/TexturePreviewPass` draws the part that is seen into a picture of its own, one per window, in
+  every frame a window asks for it (`Renderer::ShowTexturePreview` with a key, `GetTexturePreviewImGuiTexture`).
+  The Features benchmark asks for two, so that the pass runs under the validation layer.
 - **Cut-outs at a distance.** Whether a pixel of a cut-out is left out is decided in the depth and shadow
   passes alone (`isCutOut` in `Material.slang`). The forward pass does not test: it draws where the depth
   is the one the depth pass left. The alpha is read from the material's `cutOutTexture`. For a texture

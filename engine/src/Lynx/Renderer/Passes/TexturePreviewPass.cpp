@@ -6,9 +6,11 @@
 #include "Lynx/Renderer/TextureSlot.h"
 #include "Lynx/Renderer/Vulkan/GpuTexture.h"
 #include "Lynx/Renderer/Vulkan/GraphicsPipeline.h"
+#include "Lynx/Renderer/Vulkan/Rendering.h"
 #include "Lynx/Renderer/Vulkan/SharedBindings.h"
 
 #include <algorithm>
+#include <unordered_map>
 
 namespace Lynx
 {
@@ -19,6 +21,9 @@ namespace Lynx
 
         // A window is never larger than this. A request for more is a mistake, and is cut down.
         constexpr uint32_t LargestPicture = 8192;
+
+        // A picture nobody asked for in this many frames belongs to a window that was closed.
+        constexpr uint64_t FramesKeptUnused = 8;
 
         // Have to match TexturePreview.slang.
         constexpr uint32_t ShowsRed = 1;
@@ -49,8 +54,15 @@ namespace Lynx
         uint32_t BlendingSampler = 0;
         uint32_t NearestSampler = 0;
 
-        GpuTexture Picture;
-        TextureSlot PictureSlot;
+        // The picture of every key that was asked for lately.
+        struct Picture
+        {
+            GpuTexture Texture;
+            TextureSlot Slot;
+            uint64_t UsedInFrame = 0;
+        };
+        std::unordered_map<uint64_t, Picture> Pictures;
+        uint64_t Frame = 0;
 
         // The renderer waits for the GPU before it destroys its passes, so nothing here is still in use.
         ~VulkanObjects()
@@ -111,14 +123,23 @@ namespace Lynx
     {
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipeline(*shader); });
 
-        if (!renderData.Preview || !m_Vulkan->Pipeline)
+        VulkanObjects& vulkan = *m_Vulkan;
+        ++vulkan.Frame;
+        std::erase_if(vulkan.Pictures, [&vulkan](const auto& entry) { return vulkan.Frame - entry.second.UsedInFrame > FramesKeptUnused; });
+
+        if (renderData.Previews.empty() || !vulkan.Pipeline)
             return false;
 
-        const uint32_t width = std::clamp(renderData.Preview->Width, 1u, LargestPicture);
-        const uint32_t height = std::clamp(renderData.Preview->Height, 1u, LargestPicture);
-        VulkanObjects& vulkan = *m_Vulkan;
-        if (!vulkan.Picture || vulkan.Picture.Desc().Width != width || vulkan.Picture.Desc().Height != height)
+        for (const TexturePreviewRequest& request : renderData.Previews)
         {
+            const uint32_t width = std::clamp(request.Preview.Width, 1u, LargestPicture);
+            const uint32_t height = std::clamp(request.Preview.Height, 1u, LargestPicture);
+
+            VulkanObjects::Picture& picture = vulkan.Pictures[request.Key];
+            picture.UsedInFrame = vulkan.Frame;
+            if (picture.Texture && picture.Texture.Desc().Width == width && picture.Texture.Desc().Height == height)
+                continue;
+
             GpuTextureDesc desc;
             desc.Width = width;
             desc.Height = height;
@@ -127,35 +148,51 @@ namespace Lynx
             desc.Name = "TexturePreview";
 
             // The place in the table goes before the picture it points at.
-            vulkan.PictureSlot = TextureSlot();
-            vulkan.Picture = GpuTexture(*vulkan.Context, desc);
-            vulkan.PictureSlot = TextureSlot(*vulkan.Shared, vulkan.Shared->AddTexture(vulkan.Picture.View()));
+            picture.Slot = TextureSlot();
+            picture.Texture = GpuTexture(*vulkan.Context, desc);
+            picture.Slot = TextureSlot(*vulkan.Shared, vulkan.Shared->AddTexture(picture.Texture.View()));
         }
 
-        // The texture that is shown needs no mention: a texture of an asset is always ready for reading.
-        resources.ColorTarget = &vulkan.Picture;
-        resources.OverwritesTarget = true;
+        // The pictures are this pass's own, several of them, and so are their layouts. The textures that
+        // are shown need no mention: a texture of an asset is always ready for reading.
+        resources.OwnTargets = true;
         return true;
     }
 
     void TexturePreviewPass::Execute(vk::CommandBuffer commands, RenderData& renderData)
     {
-        const TexturePreview& preview = *renderData.Preview;
+        VulkanObjects& vulkan = *m_Vulkan;
+        commands.bindPipeline(vk::PipelineBindPoint::eGraphics, vulkan.Pipeline);
 
-        PreviewPushData push{};
-        push.UvStart = preview.UvStart;
-        push.UvSpan = preview.UvSpan;
-        push.Texture = preview.TextureIndex;
-        push.Sampler = preview.BlendsBetweenTexels ? m_Vulkan->BlendingSampler : m_Vulkan->NearestSampler;
-        push.Size = preview.Size;
-        push.Channels = (preview.ShowsRed ? ShowsRed : 0) | (preview.ShowsGreen ? ShowsGreen : 0) | (preview.ShowsBlue ? ShowsBlue : 0) | (preview.ShowsAlpha ? ShowsAlpha : 0);
+        for (const TexturePreviewRequest& request : renderData.Previews)
+        {
+            const TexturePreview& preview = request.Preview;
+            VulkanObjects::Picture& picture = vulkan.Pictures.at(request.Key);
 
-        commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->Pipeline);
-        m_Vulkan->Shared->Push(commands, push);
-        commands.draw(3, 1, 0, 0);
-        renderData.DrawCalls++;
+            PreviewPushData push{};
+            push.UvStart = preview.UvStart;
+            push.UvSpan = preview.UvSpan;
+            push.Texture = preview.TextureIndex;
+            push.Sampler = preview.BlendsBetweenTexels ? vulkan.BlendingSampler : vulkan.NearestSampler;
+            push.Size = preview.Size;
+            push.Channels = (preview.ShowsRed ? ShowsRed : 0) | (preview.ShowsGreen ? ShowsGreen : 0) | (preview.ShowsBlue ? ShowsBlue : 0) | (preview.ShowsAlpha ? ShowsAlpha : 0);
 
-        renderData.PreviewPicture = &m_Vulkan->Picture;
-        renderData.PreviewPictureIndex = m_Vulkan->PictureSlot.Index();
+            // Every pixel is drawn, so what the picture held does not matter.
+            picture.Texture.Transition(commands, vk::ImageLayout::eColorAttachmentOptimal);
+            RenderingTargets targets;
+            targets.Color = picture.Texture.View();
+            targets.Extent = vk::Extent2D(picture.Texture.Desc().Width, picture.Texture.Desc().Height);
+            targets.ColorLoad = vk::AttachmentLoadOp::eDontCare;
+            BeginRendering(commands, targets);
+
+            vulkan.Shared->Push(commands, push);
+            commands.draw(3, 1, 0, 0);
+            commands.endRendering();
+            renderData.DrawCalls++;
+
+            // A window shows it later in the frame, so it is left ready for reading.
+            picture.Texture.Transition(commands, vk::ImageLayout::eShaderReadOnlyOptimal);
+            renderData.PreviewPictures.push_back({ request.Key, picture.Slot.Index() });
+        }
     }
 }

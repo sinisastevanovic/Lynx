@@ -148,7 +148,12 @@ public:
             preview.Width = 256;
             preview.Height = 256;
             preview.ShowsAlpha = true;
-            engine.GetRenderer().ShowTexturePreview(preview);
+            engine.GetRenderer().ShowTexturePreview(1, preview);
+
+            // A second one, as a second window would ask for it, of another size.
+            preview.Width = 96;
+            preview.ShowsAlpha = false;
+            engine.GetRenderer().ShowTexturePreview(2, preview);
         }
     }
 

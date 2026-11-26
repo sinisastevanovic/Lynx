@@ -11,7 +11,7 @@
 #include "Panels/RenderSettings.h"
 #include "Panels/SceneHierarchyPanel.h"
 #include "Panels/StatsPanel.h"
-#include "Panels/TextureViewerPanel.h"
+#include "AssetWindows/TextureViewerWindow.h"
 #include "Panels/Viewport.h"
 #include "Utils/PlatformUtils.h"
 
@@ -57,7 +57,9 @@ namespace Lynx
         m_Panels.push_back(std::make_unique<StatsPanel>());
         m_Panels.push_back(std::make_unique<RenderSettings>());
         m_Panels.push_back(std::make_unique<AssetPropertiesPanel>());
-        m_Panels.push_back(std::make_unique<TextureViewerPanel>());
+
+        // What a double click on an asset opens, by the asset's type.
+        m_AssetWindows.Register<TextureViewerWindow>(AssetType::Texture);
 
         m_Engine->SetAppEventCallback([this](Event& e) { OnEvent(e); });
 
@@ -74,6 +76,7 @@ namespace Lynx
         m_EditorScene.reset();
         m_RuntimeScene.reset();
         m_Panels.clear();
+        m_AssetWindows.CloseAll();
     }
 
     void EditorLayer::DrawMenuBar()
@@ -197,6 +200,7 @@ namespace Lynx
         {
             panel->OnImGuiRender();
         }
+        m_AssetWindows.OnImGuiRender();
         
         if (m_ViewportPanel)
         {
@@ -451,6 +455,9 @@ namespace Lynx
         m_SelectedAsset = asset;
         for (auto& panel : m_Panels)
             panel->OnSelectedAssetChanged(asset);
+
+        // An asset is picked with a double click, which also opens its window if its type has one.
+        m_AssetWindows.Open(asset);
 
         if (Engine::Get().GetAssetRegistry().Contains(m_SelectedAsset))
         {

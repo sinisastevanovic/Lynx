@@ -392,6 +392,21 @@ namespace Lynx
         bool BlendsBetweenTexels = true;
     };
 
+    // A preview that was asked for, under a key that tells it from the others of the frame: every
+    // window that shows a texture has a key of its own. And where the texture table has the picture
+    // that was drawn for a key.
+    struct TexturePreviewRequest
+    {
+        uint64_t Key = 0;
+        TexturePreview Preview;
+    };
+
+    struct TexturePreviewPicture
+    {
+        uint64_t Key = 0;
+        uint32_t TextureIndex = 0;
+    };
+
     struct BloomSettings
     {
         // Parts of the picture brighter than this glow. The knee makes the cut soft.
@@ -585,11 +600,10 @@ namespace Lynx
         GpuTexture* ShownInstead = nullptr;
         uint32_t ShownInsteadIndex = 0;
 
-        // A texture that a window asked to see in this frame, and the picture it was drawn into,
-        // which is null until TexturePreviewPass has run.
-        std::optional<TexturePreview> Preview;
-        GpuTexture* PreviewPicture = nullptr;
-        uint32_t PreviewPictureIndex = 0;
+        // The textures that windows asked to see in this frame, and the pictures they were drawn into,
+        // which TexturePreviewPass fills in.
+        std::vector<TexturePreviewRequest> Previews;
+        std::vector<TexturePreviewPicture> PreviewPictures;
 
         // How the view that is being drawn is shown.
         ViewSettings Viewing;
