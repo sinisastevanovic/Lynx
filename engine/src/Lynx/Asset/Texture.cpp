@@ -111,6 +111,14 @@ namespace Lynx
         m_CutOutTableSlot = TextureSlot();
         m_GpuTexture = m_PixelData ? renderer.CreateTexture(m_Specification, m_PixelData) : renderer.CreateTexture(m_Specification, m_Cooked);
 
+        if (m_GpuTexture)
+        {
+            // A texture made in memory has its smaller sizes made on the GPU, which take a third more.
+            const uint64_t largest = static_cast<uint64_t>(GetWidth()) * GetHeight() * (m_Specification.Format == TextureFormat::R8 ? 1 : 4);
+            m_SizeCount = m_GpuTexture->Desc().MipLevels;
+            m_ByteCount = !m_Cooked.Sizes.empty() ? m_Cooked.Pixels.size() : m_SizeCount > 1 ? largest * 4 / 3 : largest;
+        }
+
         // The pixels are the GPU's from here on. A texture made in memory never owned its own.
         m_PixelData = nullptr;
         m_Cooked = CookedTexture();

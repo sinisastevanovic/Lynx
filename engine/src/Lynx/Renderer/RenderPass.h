@@ -363,6 +363,35 @@ namespace Lynx
         float HistoryTime = 0.05f;
     };
 
+    // A texture to draw into a picture of its own, for a window that shows it. See TexturePreviewPass.
+    struct TexturePreview
+    {
+        // Where the texture table has the texture.
+        uint32_t TextureIndex = 0;
+
+        // The size of the picture in pixels: that of the space it is shown in.
+        uint32_t Width = 1;
+        uint32_t Height = 1;
+
+        // The part of the texture the picture shows, in texture coordinates: where it starts and how
+        // far it reaches. A part that lies outside the texture is left dark.
+        glm::vec2 UvStart{ 0.0f };
+        glm::vec2 UvSpan{ 1.0f };
+
+        // Which of the texture's sizes is shown, 0 for the largest.
+        float Size = 0.0f;
+
+        // The channels that are shown. One alone is shown as a grey. With the alpha next to colours,
+        // the texture lies on squares that show through where it is see-through.
+        bool ShowsRed = true;
+        bool ShowsGreen = true;
+        bool ShowsBlue = true;
+        bool ShowsAlpha = false;
+
+        // False shows every texel as the square it is, for a texture that is looked at from close up.
+        bool BlendsBetweenTexels = true;
+    };
+
     struct BloomSettings
     {
         // Parts of the picture brighter than this glow. The knee makes the cut soft.
@@ -555,6 +584,12 @@ namespace Lynx
         // A picture to show in place of the scene, as it is: a view of how a pass worked. Null for none.
         GpuTexture* ShownInstead = nullptr;
         uint32_t ShownInsteadIndex = 0;
+
+        // A texture that a window asked to see in this frame, and the picture it was drawn into,
+        // which is null until TexturePreviewPass has run.
+        std::optional<TexturePreview> Preview;
+        GpuTexture* PreviewPicture = nullptr;
+        uint32_t PreviewPictureIndex = 0;
 
         // How the view that is being drawn is shown.
         ViewSettings Viewing;

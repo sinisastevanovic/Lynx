@@ -138,6 +138,18 @@ public:
         DebugRenderer::DrawBox(glm::vec3(-7.0f, 0.0f, 6.0f), glm::vec3(-5.0f, 2.0f, 8.0f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f));
         DebugRenderer::DrawSphere(glm::vec3(4.0f, 1.5f, 6.0f), 1.5f, glm::vec4(0.2f, 1.0f, 0.2f, 1.0f));
         DebugRenderer::DrawLine(glm::vec3(-9.0f, 0.1f, 9.0f), glm::vec3(9.0f, 4.0f, -4.0f), glm::vec4(0.3f, 0.5f, 1.0f, 1.0f));
+
+        // The pass that draws a texture for the editor's texture viewer has no window to ask for it
+        // here. Asking for it keeps it under the eyes of the validation layer. Its picture is not shown.
+        if (const std::shared_ptr<Texture> texture = engine.GetAssetManager().GetDefaultTexture(); texture && texture->IsOnGpu())
+        {
+            TexturePreview preview;
+            preview.TextureIndex = texture->GetTableIndex();
+            preview.Width = 256;
+            preview.Height = 256;
+            preview.ShowsAlpha = true;
+            engine.GetRenderer().ShowTexturePreview(preview);
+        }
     }
 
     void OnShutdown() override

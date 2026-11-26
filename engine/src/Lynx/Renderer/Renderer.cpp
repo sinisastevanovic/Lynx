@@ -40,6 +40,7 @@
 #include "Passes/SkyReflectionPass.h"
 #include "Passes/TemporalPass.h"
 #include "Passes/TerrainPass.h"
+#include "Passes/TexturePreviewPass.h"
 #include "TerrainRenderer.h"
 #include "Passes/ShadowPass.h"
 #include "Lynx/Engine.h"
@@ -398,6 +399,7 @@ namespace Lynx
         if (m_ShouldCreateIDTarget)
             m_Graph->Add("Grid", std::make_unique<GridPass>());
         m_Graph->Add("Debug", std::make_unique<DebugPass>());
+        m_Graph->Add("TexturePreview", std::make_unique<TexturePreviewPass>());
         m_Graph->Add("UI", std::make_unique<UIPass>(), [this]() { return m_ShowUI; });
         m_Graph->Init(m_RenderContext);
 
@@ -1034,8 +1036,13 @@ namespace Lynx
         // further. And anti-aliasing over time takes the place of FXAA.
         m_CurrentFrameData.FXAAEnabled = m_FXAAEnabled && !m_TemporalSettings.Accumulates && !m_TemporalSettings.Resolves;
         m_CurrentFrameData.ShownInstead = nullptr;
+        m_CurrentFrameData.Preview = std::exchange(m_PendingPreview, std::nullopt);
+        m_CurrentFrameData.PreviewPicture = nullptr;
 
         m_Graph->Execute(m_RenderContext, m_CurrentFrameData);
+        m_PreviewPicture = m_CurrentFrameData.PreviewPicture;
+        if (m_PreviewPicture)
+            m_PreviewPictureIndex = m_CurrentFrameData.PreviewPictureIndex;
         m_Frame->ReactiveNeedsClearing = m_CurrentFrameData.WroteReactive;
         m_GpuScene->CopyCommandsForCounters(m_Frame->Commands);
         CopyRequestedEntityId();
@@ -1140,6 +1147,11 @@ namespace Lynx
         if (m_ShouldCreateIDTarget && m_Frame->SceneOutput)
             m_Frame->SceneOutput.Transition(commands, vk::ImageLayout::eShaderReadOnlyOptimal);
 
+        // So does a window that shows a texture, with the picture this frame drew of it.
+        if (m_PreviewPicture)
+            m_PreviewPicture->Transition(commands, vk::ImageLayout::eShaderReadOnlyOptimal);
+        m_PreviewPicture = nullptr;
+
         // A frame without a scene has no pass that would bring pending uploads to the GPU,
         // and ImGui may be about to show a texture that was just loaded.
         m_Frame->Uploads->Flush(commands);
@@ -1168,6 +1180,11 @@ namespace Lynx
     uint64_t Renderer::GetViewportImGuiTexture() const
     {
         return m_Frame->SceneOutputSlot ? m_ImGui->TextureId(m_Frame->SceneOutputSlot.Index()) : 0;
+    }
+
+    uint64_t Renderer::GetTexturePreviewImGuiTexture() const
+    {
+        return m_PreviewPictureIndex ? m_ImGui->TextureId(*m_PreviewPictureIndex) : 0;
     }
 
     uint64_t Renderer::GetImGuiTexture(uint32_t tableIndex) const

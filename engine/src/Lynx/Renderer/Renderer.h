@@ -80,6 +80,14 @@ namespace Lynx
         uint64_t GetViewportImGuiTexture() const;
         uint64_t GetImGuiTexture(uint32_t tableIndex) const;
 
+        // Asks for a texture to be drawn into a picture of its own in this frame, as the preview says:
+        // one of its sizes, some of its channels, a part of it. For a window that shows textures.
+        // Call it in every frame the picture is shown in.
+        void ShowTexturePreview(const TexturePreview& preview) { m_PendingPreview = preview; }
+
+        // The picture the last preview was drawn into, to hand to ImGui::Image. Zero before the first.
+        uint64_t GetTexturePreviewImGuiTexture() const;
+
         // Call before ImGui::NewFrame.
         void BeginImGuiFrame();
 
@@ -228,6 +236,12 @@ namespace Lynx
 
         TemporalSettings m_TemporalSettings;
         AmbientOcclusionSettings m_AmbientOcclusionSettings;
+
+        // What ShowTexturePreview asked for since the last frame was drawn, the picture the frame
+        // that is being drawn made of it, and where the texture table has the last such picture.
+        std::optional<TexturePreview> m_PendingPreview;
+        GpuTexture* m_PreviewPicture = nullptr;
+        std::optional<uint32_t> m_PreviewPictureIndex;
 
         // How many frames have been jittered, which says how the next one is.
         uint64_t m_JitterFrame = 0;

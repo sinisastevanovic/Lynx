@@ -138,91 +138,9 @@ namespace Lynx
     void AssetPropertiesPanel::DrawTextureProperties()
     {
         auto texture = std::static_pointer_cast<Texture>(m_SelectedAsset);
-        ImGui::Text("Texture: %s", m_EditingSpec.DebugName.c_str());
+        ImGui::Text("Texture: %s", texture->GetSpecification().DebugName.c_str());
         ImGui::Separator();
-        
-        LXUI::BeginPropertyGrid();
-
-        std::vector<std::string> formatStrings = { "None", "RGBA8", "RG16F", "RG32F", "R32I", "R8", "Depth32", "Depth24Stencil8" };
-        int currFormat = (int)m_EditingSpec.Format;
-        
-        ImGui::Text("Format: %s", formatStrings[currFormat].c_str());
-
-        // What the texture holds was guessed from the picture when it was first loaded. Undecided is
-        // left out of the choices, and stands for a texture that has not been loaded yet.
-        const std::vector<std::string> contentOptions(TextureContentNames.begin() + 1, TextureContentNames.end());
-        int currentContent = std::max(static_cast<int>(m_EditingSpec.Content) - 1, 0);
-        if (LXUI::DrawComboControl("Holds", currentContent, contentOptions))
-        {
-            m_EditingSpec.Content = static_cast<TextureContent>(currentContent + 1);
-            m_IsDirty = true;
-        }
-
-        const std::vector<std::string> compressionOptions(TextureCompressionNames.begin(), TextureCompressionNames.end());
-        int currentCompression = static_cast<int>(m_EditingSpec.Compression);
-        if (LXUI::DrawComboControl("Compression", currentCompression, compressionOptions))
-        {
-            m_EditingSpec.Compression = static_cast<TextureCompression>(currentCompression);
-            m_IsDirty = true;
-        }
-
-        if (LXUI::DrawCheckBox("Alpha Cuts Shapes Out", m_EditingSpec.KeepsCoverage)) m_IsDirty = true;
-
-        if (LXUI::DrawCheckBox("Generate Mips", m_EditingSpec.GenerateMips)) m_IsDirty = true;
-
-        std::vector<std::string> filterOptions = { "Bilinear", "Nearest", "Trilinear" };
-        int currentFilter = (int)m_EditingSpec.SamplerSettings.FilterMode;
-        if (LXUI::DrawComboControl("Filter Mode", currentFilter, filterOptions))
-        {
-            m_EditingSpec.SamplerSettings.FilterMode = (TextureFilter)currentFilter;
-            m_IsDirty = true;
-        }
-
-        std::vector<std::string> wrapOptions = { "Repeat", "Clamp", "Mirror" };
-        int currentWrap = (int)m_EditingSpec.SamplerSettings.WrapMode;
-        if (LXUI::DrawComboControl("Wrap Mode", currentWrap, wrapOptions))
-        {
-            m_EditingSpec.SamplerSettings.WrapMode = (TextureWrap)currentWrap;
-            m_IsDirty = true;
-        }
-
-        if (m_EditingSpec.SamplerSettings.FilterMode == TextureFilter::Trilinear)
-        {
-            if (LXUI::DrawCheckBox("Use Anisotropy", m_EditingSpec.SamplerSettings.UseAnisotropy))
-            {
-                m_IsDirty = true;
-            }
-        }
-
-        LXUI::EndPropertyGrid();
-        
-        ImGui::Spacing();
-        ImGui::Separator();
-
-        bool canApply = m_IsDirty || (m_EditingSpec != texture->GetSpecification());
-        if (!canApply)
-            ImGui::BeginDisabled();
-
-        if (ImGui::Button("Apply Changes"))
-        {
-            texture->SetSpecification(m_EditingSpec);
-
-            auto specPtr = std::make_shared<TextureSpecification>(m_EditingSpec);
-            Engine::Get().GetAssetRegistry().UpdateMetadata(m_SelectedAssetHandle, specPtr);
-            Engine::Get().GetAssetManager().ReloadAsset(m_SelectedAssetHandle);
-            //texture->Reload();
-            m_IsDirty = false;
-        }
-
-        if (!canApply)
-            ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        if (ImGui::Button("Revert"))
-        {
-            m_EditingSpec = texture->GetSpecification();
-            m_IsDirty = false;
-        }
+        m_TextureSettings.Draw();
     }
 
     void AssetPropertiesPanel::DrawMaterialProperties()
@@ -373,7 +291,7 @@ namespace Lynx
         
         m_SelectedAsset = Engine::Get().GetAssetManager().GetAsset<Asset>(handle);
         if (m_SelectedAsset && m_SelectedAsset->GetType() == AssetType::Texture)
-            m_EditingSpec = std::static_pointer_cast<Texture>(m_SelectedAsset)->GetSpecification();
+            m_TextureSettings.SetTexture(handle);
 
         if (m_SelectedAsset && m_SelectedAsset->GetType() == AssetType::Terrain)
         {

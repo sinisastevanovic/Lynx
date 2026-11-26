@@ -11,6 +11,7 @@
 #include "Panels/RenderSettings.h"
 #include "Panels/SceneHierarchyPanel.h"
 #include "Panels/StatsPanel.h"
+#include "Panels/TextureViewerPanel.h"
 #include "Panels/Viewport.h"
 #include "Utils/PlatformUtils.h"
 
@@ -56,6 +57,7 @@ namespace Lynx
         m_Panels.push_back(std::make_unique<StatsPanel>());
         m_Panels.push_back(std::make_unique<RenderSettings>());
         m_Panels.push_back(std::make_unique<AssetPropertiesPanel>());
+        m_Panels.push_back(std::make_unique<TextureViewerPanel>());
 
         m_Engine->SetAppEventCallback([this](Event& e) { OnEvent(e); });
 

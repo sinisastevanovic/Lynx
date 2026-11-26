@@ -44,6 +44,11 @@ namespace Lynx
         uint32_t GetWidth() const { return m_Specification.Width; }
         uint32_t GetHeight() const { return m_Specification.Height; }
 
+        // In how many sizes the texture is on the GPU, each half the one before, and how many bytes
+        // all of them take there together. Valid once the texture is on the GPU.
+        uint32_t GetSizeCount() const { return m_SizeCount; }
+        uint64_t GetByteCount() const { return m_ByteCount; }
+
         void SetSpecification(const TextureSpecification& spec) { m_Specification = spec; }
         const TextureSpecification& GetSpecification() const { return m_Specification; }
         const SamplerSettings& GetSamplerSettings() const { return m_Specification.SamplerSettings; }
@@ -68,6 +73,8 @@ namespace Lynx
         TextureSlot m_CutOutTableSlot;
         uint32_t m_SamplerIndex = 0;
         bool m_HasGuessedSettings = false;
+        uint32_t m_SizeCount = 1;
+        uint64_t m_ByteCount = 0;
 
         // A texture made from pixels in memory: they are handed to the GPU as they are.
         unsigned char* m_PixelData = nullptr;

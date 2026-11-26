@@ -1,5 +1,6 @@
 #pragma once
 #include "EditorPanel.h"
+#include "TextureSettingsEditor.h"
 #include "Lynx/Asset/Material.h"
 #include "Lynx/Asset/TextureSpecification.h"
 
@@ -28,7 +29,7 @@ namespace Lynx
         AssetHandle m_SelectedAssetHandle = AssetHandle::Null();
         std::shared_ptr<Asset> m_SelectedAsset;
 
-        TextureSpecification m_EditingSpec;
+        TextureSettingsEditor m_TextureSettings;
         bool m_IsDirty = false;
 
         // A terrain's layers while they are edited: the material and the repeat of each, and a picture

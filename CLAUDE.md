@@ -379,6 +379,14 @@ build\bin\Debug\LynxSandboxGame.exe
   it is. Only a texture that holds colours has the sRGB reading. A texture made from pixels in memory is
   not cooked: its smaller sizes are still scaled on the GPU. The cache is not compressed yet and large,
   2 GB for the benchmark project.
+- **Texture viewer.** The editor's "Texture Viewer" window (`editor/src/Panels/TextureViewerPanel`) shows the
+  texture that is selected in the asset browser as it is on the GPU after cooking: any of its sizes, any
+  of its channels, zoomed and moved about, with what it takes in video memory and its settings
+  (`TextureSettingsEditor`, which the asset properties panel shows too). A window cannot show one size or
+  one channel of a texture by itself, so `Passes/TexturePreviewPass` draws the part that is seen into a
+  picture of its own in every frame a window asks for it (`Renderer::ShowTexturePreview`,
+  `GetTexturePreviewImGuiTexture`). The Features benchmark asks for it too, so that the pass runs under
+  the validation layer.
 - **Cut-outs at a distance.** Whether a pixel of a cut-out is left out is decided in the depth and shadow
   passes alone (`isCutOut` in `Material.slang`). The forward pass does not test: it draws where the depth
   is the one the depth pass left. The alpha is read from the material's `cutOutTexture`. For a texture
