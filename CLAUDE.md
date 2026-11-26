@@ -141,7 +141,11 @@ build\bin\Debug\LynxSandboxGame.exe
   The history's alpha counts the frames it is made of, and `HistoryTime` sets the least a frame counts.
   The history is dropped off screen and where the depths around the pixel now and around its place then
   have nothing in common: single depths cannot be compared, the jitter moves every edge. The pass keeps
-  last frame's depth itself. It is right at rest and still too soft in motion (step 3.10c).
+  last frame's depth itself. Two things keep it sharp in motion. A frame counts for more where the history
+  is read between pixels (`BetweenPixelsShare`), because that read blurs and the blur adds up. And colour
+  textures are read where the pixel would be without the jitter (`SteadyTextures`, `steadyUv` in
+  `Scene.slang`), so their patterns stand still: a new shader that reads a colour texture should do the
+  same, and read what decides a cut-out with the jittered coordinates. Terrain does not do it yet.
   The view modes "TAA: ..." show the share of the frame, where the history was dropped and how far it was
   pulled in: the pass draws them into a picture that the composite pass shows in place of the scene
   (`RenderData::ShownInstead`). The grid and debug lines are drawn after it, without the jitter.
@@ -343,7 +347,11 @@ build\bin\Debug\LynxSandboxGame.exe
   `-Set Jitter=1,JitterLength=64,Accumulate=1,HoldFrames=63` gives pictures with 64 samples a pixel.
   The Motion benchmark is the scene anti-aliasing over time is judged on: Sponza, a sideways move of well
   under a pixel a frame, a nearly still stretch and a faster turn, with a box that keeps crossing the hall,
-  bars of a pixel's width and wires thinner than a pixel (`MotionProps` in the benchmark's code). The timings compared
+  bars of a pixel's width and wires thinner than a pixel (`MotionProps` in the benchmark's code).
+  `tools/taa-score.ps1 -Truth <label> -Label <labels>` scores pictures against such 64-sample pictures of
+  the same frames: the distance to them, the fine detail kept as a share of theirs (under 100 % is softer,
+  over 100 % is jagged), and with `-Still <a>,<b>` (two labels held one frame apart) the flicker at rest.
+  Judge a change to the temporal pass with it before trusting the eye. The timings compared
   are "clean": each benchmark runs five times and every frame counts with its fastest run, which removes the GPU time
   the Windows compositor takes at every display refresh. Clean GPU times repeat within about 1.3 %.
   "Frame" is the slower of two times, and "Bound by" says which: what the CPU needs for a frame without waiting for
