@@ -77,6 +77,9 @@ struct TerrainConstants
     // Not zero for the pass that draws into a shadow map. The patches are as fine as the camera's
     // distance asks for either way.
     uint isSeenBySun;
+
+    // Where the texture table has how open every pixel is to the sky, see openToSkyAt.
+    uint ambientOcclusionTexture;
 };
 [vk::push_constant] ConstantBuffer<TerrainConstants> constants;
 
@@ -323,6 +326,7 @@ float4 terrainColour(TerrainVaryings input)
 
     if (constants.viewMode == viewLightingOnly)
         surface = inLightAlone(surface);
+    surface.openToSky = openToSkyAt(constants.ambientOcclusionTexture, input.position.xy);
     return float4(lightOn(surface, input.position.xy), 1.0);
 }
 

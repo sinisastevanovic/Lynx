@@ -314,6 +314,39 @@ namespace Lynx
         bool Accumulates = false;
     };
 
+    // How finely ambient occlusion looks around a pixel: along how many lines through it, and at how
+    // many places along each. The frames average what one frame misses, so a low quality is grainier
+    // while the picture moves, not darker or lighter.
+    enum class AmbientOcclusionQuality : uint32_t
+    {
+        Low,
+        Medium,
+        High,
+        Ultra
+    };
+
+    inline constexpr std::array<const char*, 4> AmbientOcclusionQualityNames = { "Low", "Medium", "High", "Ultra" };
+
+    // How the light of the sky is kept out of corners and creases, see AmbientOcclusionPass
+    // (step 3.11 of Renderer V2).
+    struct AmbientOcclusionSettings
+    {
+        bool Enabled = true;
+
+        // How far around a place something counts as standing in the sky's way, in the scene's units.
+        float Radius = 0.5f;
+
+        // Measured at 1080p on the Motion benchmark, as the time of a frame and the flicker of a view
+        // at rest next to no occlusion at all: Low 0.11 ms and 2.4 times, Medium 0.14 ms and 1.45 times,
+        // High 0.18 ms and 1.3 times.
+        AmbientOcclusionQuality Quality = AmbientOcclusionQuality::Medium;
+
+        // Takes the coarsest grain out of a frame's occlusion before the frames average the rest away.
+        // Costs 0.02 ms at 1080p. Without it the picture in motion is a third farther from the
+        // average of 64 frames, and its grain reads as detail that is not there.
+        bool Smooths = true;
+    };
+
     struct BloomSettings
     {
         // Parts of the picture brighter than this glow. The knee makes the cut soft.
@@ -455,6 +488,14 @@ namespace Lynx
         uint32_t SceneReactiveIndex = 0;
         bool WroteReactive = false;
 
+        // How open every pixel is to the sky past what stands around it, from 0 to 1, see
+        // AmbientOcclusionPass. Null, with NoSceneOcclusion as its place in the texture table, in a
+        // frame that has none: a pass that lights surfaces then takes every pixel as open.
+        static constexpr uint32_t NoSceneOcclusion = ~0u;
+        GpuTexture* SceneOcclusion = nullptr;
+        uint32_t SceneOcclusionIndex = NoSceneOcclusion;
+        AmbientOcclusionSettings AmbientOcclusion;
+
         // Where the finished picture goes: the window, or the editor's viewport picture.
         GpuTexture* Output = nullptr;
 
@@ -482,6 +523,12 @@ namespace Lynx
         // exactly as in the last frame.
         TemporalSettings Temporal;
         bool ViewIsStill = false;
+
+        // How far the frame's jitter shifts the picture, in texture coordinates. And which of 64
+        // patterns what is drawn by chance per pixel takes in this frame: it changes from frame to frame
+        // while the frames are put together, which averages the grain away, and stays 0 otherwise.
+        glm::vec2 Jitter{ 0.0f };
+        uint32_t NoiseFrame = 0;
 
         // True in a frame that shows something else than the last one: another scene, or a camera that
         // jumped. What the frames before left behind is then of no use.

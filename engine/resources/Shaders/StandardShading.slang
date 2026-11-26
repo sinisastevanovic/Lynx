@@ -23,6 +23,9 @@ public struct StandardConstants
     // What the view shows, one of the numbers below, and whether materials with cut-outs are cut out.
     public uint viewMode;
     public uint showCutOuts;
+
+    // Where the texture table has how open every pixel is to the sky, see openToSkyAt.
+    public uint ambientOcclusionTexture;
 };
 
 // Has to match ViewMode in ViewMode.h.
@@ -341,9 +344,49 @@ public struct LitSurface
     public float3 albedo;
     public float metallic;
     public float roughness;
+
+    // How much of the sky the place sees past what stands around it, from 0 to 1, see openToSkyAt.
+    public float openToSky;
 };
 
-// The light a surface sends towards the eye: what it takes from the sun, shadowed, and from the sky.
+// Has to match RenderData::NoSceneOcclusion: the frame has no picture of how open its pixels are.
+static const uint noSceneOcclusion = 0xFFFFFFFF;
+
+// How open the surface at a pixel is to the sky past what stands around it: ambient occlusion, which
+// AmbientOcclusionPass works out from the depth buffer before anything is lit. texture is where the
+// texture table has its picture. Only what is in the depth buffer has a place in it: what is
+// see-through takes itself as open.
+public float openToSkyAt(uint texture, float2 pixel)
+{
+    if (texture == noSceneOcclusion)
+        return 1.0;
+    return textures[texture].Load(int3(int2(pixel), 0)).r;
+}
+
+// What a surface in a corner gets of the sky's light. Less than in the open, but more than the share
+// of the sky it sees: the surfaces that hide the sky from it are lit too and throw light back, the
+// more the lighter they are. Taken to be of the surface's own colour, which is mostly right for what
+// stands next to it ("Practical Real-Time Strategies for Accurate Indirect Occlusion", Jimenez and
+// others, 2016). A surface that is wholly open gets exactly all of it.
+float3 skyLightShare(float openToSky, float3 colour)
+{
+    float3 a = 2.0404 * colour - 0.3324;
+    float3 b = -4.7951 * colour + 0.6417;
+    float3 c = 2.7552 * colour + 0.6903;
+    return max(float3(openToSky, openToSky, openToSky), ((openToSky * a + b) * openToSky + c) * openToSky);
+}
+
+// The same for what a surface mirrors of the sky. A smooth surface mirrors from one direction, which
+// is hidden or not, so its share falls off faster than the open share of the sky, and a rough one
+// mirrors from nearly everywhere ("Moving Frostbite to Physically Based Rendering", Lagarde and
+// de Rousiers, 2014).
+float skyMirrorShare(float openToSky, float nDotV, float roughness)
+{
+    return saturate(pow(nDotV + openToSky, exp2(-16.0 * roughness - 1.0)) - 1.0 + openToSky);
+}
+
+// The light a surface sends towards the eye: what it takes from the sun, shadowed, and from the sky,
+// as far as the surface is open to it.
 // Everything that is lit goes through here, meshes and terrain alike. pixel is where the place is on screen.
 public float3 lightOn(LitSurface surface, float2 pixel)
 {
@@ -373,7 +416,8 @@ public float3 lightOn(LitSurface surface, float2 pixel)
     float3 sunLight = (diffuseShare * surface.albedo / pi + specular) * sunlightOnGround() * nDotL * visibility;
     // The light of the sky, from every direction the surface faces, comes back out in the surface's
     // colour. A metal has no such colour: it only mirrors.
-    float3 ambient = surface.albedo * (1.0 - surface.metallic) / pi * skyIrradiance(surface.normal);
+    float3 ownColour = surface.albedo * (1.0 - surface.metallic);
+    float3 ambient = ownColour / pi * skyIrradiance(surface.normal) * skyLightShare(surface.openToSky, ownColour);
 
     // And what the surface mirrors of the sky: sharply if it is smooth, as a blur if it is rough.
     // A rough surface mirrors most from a direction between the mirrored one and its normal, the
@@ -387,7 +431,9 @@ public float3 lightOn(LitSurface surface, float2 pixel)
 
     // A normal map can tilt the mirrored direction into the surface itself, where there is no sky to see.
     float aboveSurface = saturate(1.0 + dot(mirrored, surface.faceNormal));
-    ambient += skyReflection(mostMirrored, surface.roughness) * mirroredShare(f0, surface.roughness, max(dot(surface.normal, toEye), 0.0)) * (aboveSurface * aboveSurface);
+    float nDotV = max(dot(surface.normal, toEye), 0.0);
+    ambient += skyReflection(mostMirrored, surface.roughness) * mirroredShare(f0, surface.roughness, nDotV) * (aboveSurface * aboveSurface)
+        * skyMirrorShare(surface.openToSky, nDotV, surface.roughness);
 
     return ambient + sunLight;
 }
@@ -552,6 +598,7 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
 
     surface.metallic = metallic;
     surface.roughness = roughness;
+    surface.openToSky = openToSkyAt(constants.ambientOcclusionTexture, input.position.xy);
     if (isLightingOnly)
         surface = inLightAlone(surface);
     float3 light = lightOn(surface, input.position.xy);

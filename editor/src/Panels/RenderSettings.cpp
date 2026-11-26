@@ -51,6 +51,24 @@ namespace Lynx
                 ImGui::SetItemTooltip("Things smaller than this many texels of a cascade's map cast no shadow into it.\nSmall things then lose their shadow some way off, which is where most of the cost of far shadows lies.");
             }
 
+            if (ImGui::CollapsingHeader("Ambient Occlusion", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                AmbientOcclusionSettings& occlusion = renderer.GetAmbientOcclusionSettings();
+                ImGui::Checkbox("Darken corners and creases", &occlusion.Enabled);
+                ImGui::SetItemTooltip("Keeps the light of the sky out of where things stand in its way. Never dims the sun.");
+
+                ImGui::DragFloat("Reach", &occlusion.Radius, 0.01f, 0.05f, 10.0f);
+                ImGui::SetItemTooltip("How far around a place something counts as standing in the sky's way.");
+
+                int quality = static_cast<int>(occlusion.Quality);
+                if (ImGui::Combo("Quality", &quality, AmbientOcclusionQualityNames.data(), static_cast<int>(AmbientOcclusionQualityNames.size())))
+                    occlusion.Quality = static_cast<AmbientOcclusionQuality>(quality);
+                ImGui::SetItemTooltip("How many directions and places are tried per pixel and frame. Lower is grainier while the picture moves.");
+
+                ImGui::Checkbox("Smooth the grain", &occlusion.Smooths);
+                ImGui::SetItemTooltip("Mixes every pixel with those around it on the same surface.");
+            }
+
             if (ImGui::CollapsingHeader("Level of Detail", ImGuiTreeNodeFlags_DefaultOpen))
             {
                 LodSettings& lods = renderer.GetLodSettings();

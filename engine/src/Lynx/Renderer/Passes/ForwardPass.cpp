@@ -22,6 +22,10 @@ namespace Lynx
             uint64_t Materials;
             ViewMode Mode;
             uint32_t ShowCutOuts;
+            uint32_t AmbientOcclusionTexture;
+
+            // The addresses make the shader's size a multiple of 8 bytes.
+            uint32_t Padding;
         };
     }
 
@@ -151,6 +155,8 @@ namespace Lynx
             resources.Sample(transmittance);
         if (renderData.SkyReflection)
             resources.Sample(renderData.SkyReflection);
+        if (renderData.SceneOcclusion)
+            resources.Sample(renderData.SceneOcclusion);
         return true;
     }
 
@@ -172,6 +178,7 @@ namespace Lynx
         push.Materials = renderData.MaterialAddress;
         push.Mode = renderData.Viewing.Mode;
         push.ShowCutOuts = renderData.Viewing.ShowCutOuts ? 1u : 0u;
+        push.AmbientOcclusionTexture = renderData.SceneOcclusionIndex;
         m_Vulkan->Shared->Push(commands, push);
 
         // Opaque materials and those with cut-outs are shaded by the same pipeline, whichever phase of
@@ -221,6 +228,11 @@ namespace Lynx
 
         if (!isWireframe)
             commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->TransparentPipeline);
+
+        // What is see-through is not in the depth buffer, so the occlusion at its pixels is that of
+        // what lies behind it: a pane of glass in front of a corner would turn dark.
+        push.AmbientOcclusionTexture = RenderData::NoSceneOcclusion;
+        m_Vulkan->Shared->Push(commands, push);
         for (const TransparentDraw& draw : renderData.TransparentDraws)
         {
             SetCulling(commands, draw.IsTwoSided);

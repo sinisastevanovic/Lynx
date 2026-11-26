@@ -44,11 +44,15 @@ namespace Lynx
 
         // How far the history was pulled to fit the colours around the pixel: what would have been a trail.
         TemporalClipped,
+
+        // How open every pixel is to the sky past what stands around it, see AmbientOcclusionPass:
+        // white for wholly, darker for less.
+        AmbientOcclusion,
     };
 
     // The modes by their numbers, as a list to choose from.
-    inline constexpr std::array<const char*, 11> ViewModeNames = { "Lit", "Wireframe", "Unlit", "Lighting only", "Normals", "Level of detail", "Shadow cascades", "Motion",
-        "TAA: share of the frame", "TAA: history dropped", "TAA: history pulled in" };
+    inline constexpr std::array<const char*, 12> ViewModeNames = { "Lit", "Wireframe", "Unlit", "Lighting only", "Normals", "Level of detail", "Shadow cascades", "Motion",
+        "TAA: share of the frame", "TAA: history dropped", "TAA: history pulled in", "Ambient occlusion" };
 
     // True for a mode whose colours mean something as they are. They are shown without bloom and tone
     // mapping, which would change them.

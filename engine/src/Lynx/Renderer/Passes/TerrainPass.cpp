@@ -20,6 +20,10 @@ namespace Lynx
             uint64_t Materials;
             ViewMode Mode;
             uint32_t IsSeenBySun;
+            uint32_t AmbientOcclusionTexture;
+
+            // Slang pads push constants to a multiple of their largest member, here the matrix's 16 bytes.
+            std::array<uint32_t, 3> Padding;
         };
     }
 
@@ -159,6 +163,8 @@ namespace Lynx
                 resources.Sample(transmittance);
             if (renderData.SkyReflection)
                 resources.Sample(renderData.SkyReflection);
+            if (renderData.SceneOcclusion)
+                resources.Sample(renderData.SceneOcclusion);
         }
         return true;
     }
@@ -178,6 +184,7 @@ namespace Lynx
         push.Materials = renderData.MaterialAddress;
         push.Mode = renderData.Viewing.Mode;
         push.IsSeenBySun = isShadow ? 1 : 0;
+        push.AmbientOcclusionTexture = renderData.SceneOcclusionIndex;
         if (isShadow)
             push.SunViewProjection = renderData.ClipCascadeViewProjection[m_Cascade];
         m_Vulkan->Shared->Push(commands, push);

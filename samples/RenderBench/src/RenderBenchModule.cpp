@@ -58,6 +58,12 @@ public:
         if (settings.Parameter("FXAA", 1.0) <= 0.0)
             engine.GetRenderer().SetFXAAEnabled(false);
 
+        AmbientOcclusionSettings& occlusion = engine.GetRenderer().GetAmbientOcclusionSettings();
+        occlusion.Enabled = settings.Parameter("AO", occlusion.Enabled ? 1.0 : 0.0) > 0.0;
+        occlusion.Radius = static_cast<float>(settings.Parameter("AoRadius", occlusion.Radius));
+        occlusion.Quality = static_cast<AmbientOcclusionQuality>(std::clamp(static_cast<int>(settings.Parameter("AoQuality", static_cast<double>(occlusion.Quality))), 0, 3));
+        occlusion.Smooths = settings.Parameter("AoSmooth", occlusion.Smooths ? 1.0 : 0.0) > 0.0;
+
         // What the view shows, for pictures of every view mode. See ViewMode for the numbers.
         ViewSettings& viewing = engine.GetSceneRenderer().GetViewSettings();
         const double mode = std::clamp(settings.Parameter("ViewMode", 0.0), 0.0, static_cast<double>(ViewModeNames.size() - 1));

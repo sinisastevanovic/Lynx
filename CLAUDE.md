@@ -137,7 +137,10 @@ build\bin\Debug\LynxSandboxGame.exe
   own, `writableTextures[index][pixel] = colour` in `Textures.slang`. The texture is made with the storage
   usage and added with `SharedBindings::AddWritableTexture` (a `TextureSlot` with `TextureTable::Writable`),
   and the pass names it with `PassResources::Write`, which brings it into the general layout. To be read
-  afterwards it is in the table of textures as well.
+  afterwards it is in the table of textures as well. Each size of a texture with several is added on its
+  own (`MipView`), and one dispatch can write them all. A texture made with `ReadAsGrey` is written through
+  `MipView(0)`: a view that moves channels about cannot be written. A pass that reads what it wrote itself
+  is split into passes, one per step, so that the graph does the waiting and the layouts.
 - **Temporal pass.** `Passes/TemporalPass` (`Temporal.slang`) runs after everything of the scene is drawn and
   before exposure, bloom and the composite pass, which then work with its result (it points
   `RenderData::SceneColor` at its own picture). It is the renderer's anti-aliasing, see step 3.10 of
@@ -205,12 +208,13 @@ build\bin\Debug\LynxSandboxGame.exe
   how large a leaf may be on screen. An entry of the list of drawn instances holds the place in 24 bits and the
   level above them. A surface with cut-outs of few pieces, like a sail, keeps its one level.
 - **View modes.** A view of a scene can show one thing about the picture instead of the picture (`ViewMode` in
-  `Renderer/ViewMode.h`: wireframe, unlit, lighting only, normals, level of detail, shadow cascades, motion, three of the TAA) and draw cut-outs whole
+  `Renderer/ViewMode.h`: wireframe, unlit, lighting only, normals, level of detail, shadow cascades, motion, three of the TAA, ambient occlusion) and draw cut-outs whole
   (`ViewSettings::ShowCutOuts`). The settings belong to the view and travel with it (`ExtractedScene::Viewing`),
   so two views can show a scene differently. `SceneRenderer::GetViewSettings` holds those of the main view, the
   viewport panel has the dropdown, and a benchmark takes `ViewMode=<number>` and `ShowCutOuts=0`
   (and `SunElevation=<degrees>` for a low sun). The forward
-  shader does the modes, but the motion, which the composite pass shows from the motion picture. Modes with raw colours skip bloom and tone mapping (`ShowsRawColours`). A new mode is a
+  shader does the modes, but the motion, which the composite pass shows from the motion picture, and those a pass
+  draws into a picture of its own to show in place of the scene (`RenderData::ShownInstead`). Modes with raw colours skip bloom and tone mapping (`ShowsRawColours`). A new mode is a
   new enum value, its name, and a branch in `StandardShading.slang`.
 - **Shadows.** The sun's shadow is in four maps of 2048 texels, the cascades (`Renderer/ShadowCascades`), each
   for a stretch of what the camera sees. `FitShadowCascades` fits each to the sphere around its stretch and moves
@@ -252,8 +256,23 @@ build\bin\Debug\LynxSandboxGame.exe
   3 %. `Passes/SkyReflectionPass` draws what shiny surfaces mirror of the sky: a cube of 64 texels an edge in
   six sizes, each blurred for a rougher surface. `skyReflection(direction, roughness)` reads it, and `mirroredShare` in `StandardShading.slang`
   is the fitted curve for how much of it a surface mirrors. Both passes run only when the sun, the air or the
-  camera's height (in steps of a quarter doubling) changed (`Passes/SkyInputs.h`). Nothing blocks either light
-  yet: under a roof they are as bright as in the open, until ambient occlusion (step 3.11).
+  camera's height (in steps of a quarter doubling) changed (`Passes/SkyInputs.h`). Only ambient occlusion
+  keeps either light out of anywhere, and only out of corners: under a roof they are as bright as in the open.
+- **Ambient occlusion.** How much of the sky's light reaches every pixel past what stands around it, worked
+  out from the depth buffer alone, after the depth passes and before anything is lit (GTAO, as Intel's XeGTAO
+  does it). Three compute passes, all `Passes/AmbientOcclusionPass` with a step each, which share their
+  pictures: "OcclusionDepth" turns the depth into distances in five sizes with one dispatch, "Occlusion"
+  looks for the horizon along a few lines through every pixel, "OcclusionDenoise" mixes each pixel with its
+  neighbours on the same surface. The lines differ per pixel and frame (`RenderData::NoiseFrame`) and the
+  temporal pass averages them. The result is `RenderData::SceneOcclusion`, one byte a pixel, null in a
+  frame without. A pass that lights surfaces hands its place in the texture table to its shader, which
+  fills `LitSurface::openToSky` with `openToSkyAt(texture, pixel)`: `lightOn` dims what comes from the
+  sky by it, the mirrored part more for smooth surfaces, and never the sun. What is see-through is not in
+  the depth buffer and takes itself as open. It knows only what is on screen and within
+  `AmbientOcclusionSettings::Radius`, half a unit: it darkens creases and the ground under things, not a
+  hall under its roof. `Renderer::GetAmbientOcclusionSettings`, "Ambient Occlusion" in the render settings
+  panel, the view mode "Ambient occlusion", and `AO=0`, `AoQuality=<0 to 3>`, `AoRadius`, `AoSmooth=0` in
+  a benchmark. At 1080p it costs 0.11 to 0.14 ms a frame at Medium, the default.
 - **Occlusion.** The camera's view is culled in two phases (`CullPhase`), so what is hidden behind other things is
   not drawn. Early: what was seen in the last frame, kept as a flag per instance on the GPU. Its depth becomes the
   depth pyramid (`Passes/DepthPyramidPass`): the depth in ever smaller sizes, each pixel the farthest of those it

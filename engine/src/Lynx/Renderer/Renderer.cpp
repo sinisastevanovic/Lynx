@@ -31,6 +31,7 @@
 #include "Passes/BloomPass.h"
 #include "Passes/GridPass.h"
 #include "RenderFormats.h"
+#include "Passes/AmbientOcclusionPass.h"
 #include "Passes/AtmospherePass.h"
 #include "Passes/DepthRangePass.h"
 #include "Passes/ExposurePass.h"
@@ -379,6 +380,11 @@ namespace Lynx
         m_Graph->Add("DepthLate", std::make_unique<DepthPass>(CullPhase::Late));
         // Only the fitting of the shadow's cascades asks how far the scene reaches.
         m_Graph->Add("DepthRange", std::make_unique<DepthRangePass>(), [this]() { return m_ShadowSettings.FitsToView; });
+        // How open every pixel is to the sky, from the finished depth, for the passes that light surfaces.
+        const std::shared_ptr<AmbientOcclusionPictures> occlusion = AmbientOcclusionPass::MakePictures();
+        m_Graph->Add("OcclusionDepth", std::make_unique<AmbientOcclusionPass>(AmbientOcclusionStep::Depth, occlusion));
+        m_Graph->Add("Occlusion", std::make_unique<AmbientOcclusionPass>(AmbientOcclusionStep::Occlusion, occlusion));
+        m_Graph->Add("OcclusionDenoise", std::make_unique<AmbientOcclusionPass>(AmbientOcclusionStep::Denoise, occlusion));
         m_Graph->Add("Sky", std::make_unique<SkyPass>());
         m_Graph->Add("Terrain", std::make_unique<TerrainPass>(TerrainPassKind::Colour));
         m_Graph->Add("Forward", std::make_unique<ForwardPass>());
@@ -809,10 +815,13 @@ namespace Lynx
         sceneData.Jitter = jitterInPixels / sceneSize;
         sceneData.TextureJitter = m_TemporalSettings.SteadyTextures ? jitterInPixels : glm::vec2(0.0f);
 
-        // The shift that gives interleaved gradient noise a new pattern in each of 64 frames (Jimenez, 2014).
-        // The average of many frames is the picture to measure against, so it averages the grain too.
-        if ((m_TemporalSettings.Resolves || m_TemporalSettings.Accumulates) && m_TemporalSettings.VariesNoise)
-            sceneData.NoiseShift = 5.588238f * static_cast<float>(m_JitterFrame % 64);
+        // What is drawn by chance per pixel takes a new pattern in each of 64 frames. The average of
+        // many frames is the picture to measure against, so it averages the grain too.
+        // For interleaved gradient noise the pattern is a shift of the pixel's place (Jimenez, 2014).
+        const bool variesNoise = (m_TemporalSettings.Resolves || m_TemporalSettings.Accumulates) && m_TemporalSettings.VariesNoise;
+        m_CurrentFrameData.NoiseFrame = variesNoise ? static_cast<uint32_t>(m_JitterFrame % 64) : 0;
+        m_CurrentFrameData.Jitter = sceneData.Jitter;
+        sceneData.NoiseShift = 5.588238f * static_cast<float>(m_CurrentFrameData.NoiseFrame);
         sceneData.CameraPosition = glm::vec4(cameraPosition, 1.0f);
 
         // How far something moved on screen is worked out from where the last frame's camera saw it.
@@ -821,6 +830,7 @@ namespace Lynx
         m_CurrentFrameData.ViewIsStill = m_PreviousClipViewProjection == unjittered;
         m_CurrentFrameData.HistoryWasReset = !m_PreviousClipViewProjection.has_value();
         m_CurrentFrameData.Temporal = m_TemporalSettings;
+        m_CurrentFrameData.AmbientOcclusion = m_AmbientOcclusionSettings;
         m_PreviousClipViewProjection = unjittered;
 
         // The sun's shadow. Its maps keep the usual depth: the sun's view has no perspective, so the
@@ -960,6 +970,8 @@ namespace Lynx
         m_CurrentFrameData.DepthPyramid = {};
         m_CurrentFrameData.SeenDepthRange.reset();
         m_CurrentFrameData.HasSkyView = false;
+        m_CurrentFrameData.SceneOcclusion = nullptr;
+        m_CurrentFrameData.SceneOcclusionIndex = RenderData::NoSceneOcclusion;
         m_CurrentFrameData.BloomTextureIndex = m_Frame->BlackTextureIndex;
         m_CurrentFrameData.Bloom = m_BloomSettings;
         if (ShowsRawColours(m_CurrentFrameData.Viewing.Mode))

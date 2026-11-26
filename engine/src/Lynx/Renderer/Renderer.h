@@ -156,6 +156,9 @@ namespace Lynx
         TemporalSettings& GetTemporalSettings() { return m_TemporalSettings; }
         const TemporalSettings& GetTemporalSettings() const { return m_TemporalSettings; }
 
+        AmbientOcclusionSettings& GetAmbientOcclusionSettings() { return m_AmbientOcclusionSettings; }
+        const AmbientOcclusionSettings& GetAmbientOcclusionSettings() const { return m_AmbientOcclusionSettings; }
+
         LodSettings& GetLodSettings() { return m_LodSettings; }
         const LodSettings& GetLodSettings() const { return m_LodSettings; }
 
@@ -218,6 +221,7 @@ namespace Lynx
         std::optional<glm::mat4> m_PreviousClipViewProjection;
 
         TemporalSettings m_TemporalSettings;
+        AmbientOcclusionSettings m_AmbientOcclusionSettings;
 
         // How many frames have been jittered, which says how the next one is.
         uint64_t m_JitterFrame = 0;
