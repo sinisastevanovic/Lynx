@@ -129,7 +129,7 @@ namespace Lynx
 
         // Without draw commands there is nothing to fill in. Without the pipelines the commands keep
         // drawing nothing, which is what the upload left them as.
-        if (renderData.Culling.PlaceCount + renderData.Culling.ScatterCount == 0 || !m_Vulkan->Pipeline || !m_Vulkan->RunPipeline)
+        if (renderData.Culling.PlaceCount + renderData.Culling.ScatterChunkCount == 0 || !m_Vulkan->Pipeline || !m_Vulkan->RunPipeline)
             return false;
 
         resources.Computes = true;
@@ -175,7 +175,8 @@ namespace Lynx
             runs.Count = culling.CameraCommandsPerPhase;
         }
 
-        const uint32_t groups = GroupCountFor(culling.PlaceCount + culling.ScatterCount, InstancesPerGroup);
+        // The places first, then one group for every piece of a cell of scattered instances.
+        const uint32_t groups = GroupCountFor(culling.PlaceCount, InstancesPerGroup) + culling.ScatterChunkCount;
         commands.bindPipeline(vk::PipelineBindPoint::eCompute, m_Vulkan->Pipeline);
 
         // A scene with few instances: the CPU laid the runs out, and one step does it all.

@@ -156,8 +156,9 @@ namespace Lynx
         // How many places the instance buffer has. Zero if there is nothing to cull.
         uint32_t PlaceCount = 0;
 
-        // How many scattered instances there are, which are culled after the places, see GpuScene.
-        uint32_t ScatterCount = 0;
+        // How many pieces of cells of scattered instances there are to test, each a group of culling's
+        // threads, after the groups of the places. See GpuScene.
+        uint32_t ScatterChunkCount = 0;
 
         // Per draw command, how many of its instances are written into its run so far.
         uint64_t CursorAddress = 0;

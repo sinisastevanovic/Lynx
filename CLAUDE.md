@@ -235,8 +235,13 @@ build\bin\Debug\LynxSandboxGame.exe
   the vertex shaders the instance and its matrix either way (`drawnEntry`, `meshInstance`, `meshModel`,
   `previousMeshModel`). So no pass and no draw call knows the difference. A new shader that draws meshes
   goes through those functions. `scene.scatterInstances` is their address. See-through submeshes are not
-  drawn, and a scattered instance cannot be picked. Every change lays all of them out anew, which is for
-  the next part of the step.
+  drawn, and a scattered instance cannot be picked. Every change lays all of them out anew.
+  They are sorted into square cells of ground, 64 units a side (`ScatterCellSize`). Every frame the CPU
+  leaves out the cells that neither the camera nor a cascade can see, and hands culling the rest in
+  pieces of 64 instances, each with the views that see its cell (`ScatterChunk`): culling tests those
+  alone, and the list of drawn instances has room for them and no more. In the forest of the benchmark
+  that is a third of the trees. They take part in both phases of occlusion: tested late only, the forest
+  draws 6 % more and is 1.2 % slower.
   A benchmark with `Scatter=1` draws the trees of Trees this way, and `ScatterLike=1` gives the entities
   the turns and sizes a scattered instance can hold, to compare the two.
 - **Scatter rules.** What grows on a terrain is said by rules of the terrain asset (`ScatterRule` in

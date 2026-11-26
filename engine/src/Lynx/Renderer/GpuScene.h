@@ -102,6 +102,9 @@ namespace Lynx
     // material, is held once, by an instance with a place of its own that is never drawn itself. Culling
     // counts both sources into the same draw commands, and an entry of the list of drawn instances says
     // which source it is from, so the passes and their draw calls know nothing of the difference.
+    // The scattered instances are sorted into square cells of ground. Every frame the CPU leaves out
+    // the cells that neither the camera nor a cascade of the sun's shadow can see, so culling on the
+    // GPU tests what is left, and the list of drawn instances has room for that and no more.
     class GpuScene
     {
     public:
@@ -145,7 +148,8 @@ namespace Lynx
             uint64_t TransformAddress = 0;
             uint64_t PreviousTransformAddress = 0;
 
-            // Scattered instances count once each, whatever the number of their submeshes.
+            // Scattered instances count once each, whatever the number of their submeshes, and only
+            // those in cells that a view can see are tested.
             uint64_t InstancesTested = 0;
             uint64_t ScatterInstances = 0;
 
@@ -243,6 +247,35 @@ namespace Lynx
             uint32_t FirstBatch = 0;
             uint32_t BatchCount = 0;
             uint32_t InstanceCount = 0;
+
+            // How far the mesh reaches from where an instance of it stands, at a size of one.
+            float Reach = 0.0f;
+        };
+
+        // The scattered instances that stand on one square of ground. They lie next to each other in
+        // the list of all of them.
+        struct ScatterCell
+        {
+            uint32_t First = 0;
+            uint32_t Count = 0;
+
+            // A sphere around everything the cell's instances draw.
+            glm::vec3 Centre{ 0.0f };
+            float Radius = 0.0f;
+
+            // The submeshes of all its instances together: what one view draws of it at most.
+            uint32_t SubmeshCount = 0;
+        };
+
+        // A piece of a cell that one group of culling's threads tests, with the views that can see the
+        // cell: the camera in the lowest bit, the cascades of the sun's shadow above it.
+        // Has to match ScatterChunk in Cull.slang.
+        struct ScatterChunk
+        {
+            uint32_t First = 0;
+            uint32_t Count = 0;
+            uint32_t Views = 0;
+            uint32_t Padding = 0;
         };
 
         struct BatchKey
@@ -358,6 +391,7 @@ namespace Lynx
         std::vector<ScatterKind> m_ScatterKinds;
         std::vector<ScatterBatch> m_ScatterBatches;
         std::vector<ScatterInstance> m_ScatterInstances;
+        std::vector<ScatterCell> m_ScatterCells;
         GpuBuffer m_ScatterInstanceBuffer;
 
         // Per scattered instance, one bit per submesh: whether the camera saw it in the last frame.

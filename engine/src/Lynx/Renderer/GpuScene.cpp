@@ -11,6 +11,7 @@
 #include <cassert>
 #include <cstring>
 #include <iterator>
+#include <limits>
 #include <span>
 #include <tuple>
 
@@ -77,7 +78,10 @@ namespace Lynx
             uint64_t ScatterKinds;
             uint64_t ScatterBatches;
             uint64_t ScatterVisibility;
-            uint32_t ScatterCount;
+
+            // The pieces of the cells that a view of this frame can see, one per group of threads.
+            uint64_t ScatterChunks;
+            uint32_t ScatterChunkCount;
             uint32_t Padding;
         };
 
@@ -96,6 +100,14 @@ namespace Lynx
             uint32_t Used = 0;
             uint32_t Capacity = 0;
         };
+
+        // The side of the squares of ground that scattered instances are sorted into, in units. Smaller
+        // squares fit a view more closely and are more to look through every frame: a square kilometre
+        // is 244 of these.
+        constexpr float ScatterCellSize = 64.0f;
+
+        // Has to match the numthreads of Cull.slang: a group of threads tests one piece of a cell.
+        constexpr uint32_t ScatterChunkSize = 64;
 
         // The bits of a scattered instance that say what the camera saw have room for this many submeshes.
         constexpr uint32_t MaxSubmeshesOfScatterKind = 32;
@@ -221,6 +233,7 @@ namespace Lynx
         m_ScatterKinds.clear();
         m_ScatterBatches.clear();
         m_ScatterInstances.clear();
+        m_ScatterCells.clear();
         m_ScatterIsStale = false;
     }
 
@@ -374,6 +387,7 @@ namespace Lynx
             shared.EntityId = -1;
             shared.Batch = NoBatch;
             shared.LeafData = submesh.LeafData ? submesh.LeafData->Address() : 0;
+            kind.Reach = std::max(kind.Reach, glm::length(glm::vec3(submesh.BoundingSphere)) + submesh.BoundingSphere.w);
             m_Transforms[place] = InstanceTransform::From(glm::mat4(1.0f));
             m_Changed.push_back(place);
             m_Placed.push_back(place);
@@ -396,6 +410,7 @@ namespace Lynx
         m_ScatterBatches.clear();
         m_ScatterKinds.clear();
         m_ScatterInstances.clear();
+        m_ScatterCells.clear();
         for (const ScatterBatch& old : oldBatches)
         {
             m_Batches[old.Batch].IsScattered = false;
@@ -435,6 +450,40 @@ namespace Lynx
 
         if (m_ScatterInstances.empty())
             return;
+
+        // Sorted into cells, square by square. Within a cell they keep the order they came in, so
+        // that the list is the same every time.
+        const auto cellOf = [](const ScatterInstance& instance)
+        {
+            const int64_t cellX = static_cast<int64_t>(std::floor(instance.Position.x / ScatterCellSize));
+            const int64_t cellZ = static_cast<int64_t>(std::floor(instance.Position.z / ScatterCellSize));
+            return (cellZ << 32) ^ (cellX & 0xFFFFFFFFll);
+        };
+        std::ranges::stable_sort(m_ScatterInstances, [&cellOf](const ScatterInstance& a, const ScatterInstance& b) { return cellOf(a) < cellOf(b); });
+
+        for (uint32_t first = 0; first < m_ScatterInstances.size();)
+        {
+            ScatterCell& cell = m_ScatterCells.emplace_back();
+            cell.First = first;
+
+            // The box around where its instances stand, grown by how far the largest of them reaches.
+            glm::vec3 lowest(std::numeric_limits<float>::max());
+            glm::vec3 highest(std::numeric_limits<float>::lowest());
+            float reach = 0.0f;
+            const int64_t key = cellOf(m_ScatterInstances[first]);
+            for (; first < m_ScatterInstances.size() && cellOf(m_ScatterInstances[first]) == key; ++first)
+            {
+                const ScatterInstance& instance = m_ScatterInstances[first];
+                const ScatterKind& kind = m_ScatterKinds[instance.Kind()];
+                lowest = glm::min(lowest, instance.Position);
+                highest = glm::max(highest, instance.Position);
+                reach = std::max(reach, kind.Reach * instance.Size());
+                cell.SubmeshCount += kind.BatchCount;
+            }
+            cell.Count = first - cell.First;
+            cell.Centre = 0.5f * (lowest + highest);
+            cell.Radius = 0.5f * glm::distance(lowest, highest) + reach;
+        }
 
         const vk::BufferUsageFlags usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
         const std::span<const ScatterInstance> instances(m_ScatterInstances);
@@ -583,8 +632,31 @@ namespace Lynx
         if (m_ScatterIsStale)
             LayOutScatter();
 
+        std::array<Frustum, ShadowCascadeCount> seenBySun;
+        for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
+            seenBySun[cascade].FromViewProjection(sun[cascade].ViewProjection);
+
+        // The cells of scattered instances that a view of this frame can see, in pieces of one group of
+        // culling's threads each. A cell that no view sees costs nothing further in this frame.
+        std::vector<ScatterChunk> scatterChunks;
+        uint64_t scatterTested = 0;
+        uint64_t scatterDrawnAtMost = 0;
+        for (const ScatterCell& cell : m_ScatterCells)
+        {
+            uint32_t views = camera.Planes.IsOnFrustum(cell.Centre, cell.Radius) ? 1u : 0u;
+            for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
+                views |= seenBySun[cascade].IsOnFrustum(cell.Centre, cell.Radius) ? (2u << cascade) : 0u;
+            if (views == 0)
+                continue;
+
+            scatterTested += cell.Count;
+            scatterDrawnAtMost += static_cast<uint64_t>(cell.SubmeshCount) * static_cast<uint64_t>(std::popcount(views));
+            for (uint32_t offset = 0; offset < cell.Count; offset += ScatterChunkSize)
+                scatterChunks.push_back({ cell.First + offset, std::min(ScatterChunkSize, cell.Count - offset), views, 0u });
+        }
+
         Frame frame;
-        frame.InstancesTested = m_InstanceCount + m_ScatterInstances.size();
+        frame.InstancesTested = m_InstanceCount + scatterTested;
         frame.ScatterInstances = m_ScatterInstances.size();
         ReadCounters(copy, frame);
 
@@ -705,13 +777,14 @@ namespace Lynx
         copy.CameraCommandCount = frame.Draws.Camera().Count;
 
         // An instance is drawn in one level per view, and by the camera in one of its two phases. So
-        // the runs of all commands together are never longer than every instance once per view.
-        uint64_t drawnAtMost = 0;
+        // the runs of all commands together are never longer than every instance once per view, and
+        // for scattered instances once per view that can see their cell.
+        uint64_t drawnAtMost = scatterDrawnAtMost;
         for (const uint32_t index : m_DrawOrder)
         {
             const Batch& batch = m_Batches[index];
             if (!batch.IsTranslucent)
-                drawnAtMost += (batch.Places.size() + batch.ScatterInstances) * (1 + ShadowCascadeCount);
+                drawnAtMost += batch.Places.size() * (1 + ShadowCascadeCount);
         }
 
         // A run per command that could hold its whole batch is longer by the number of levels, and more.
@@ -754,9 +827,7 @@ namespace Lynx
             cullFrame.SunView = sun.front().SunView;
             for (uint32_t cascade = 0; cascade < ShadowCascadeCount; ++cascade)
             {
-                Frustum seenBySun;
-                seenBySun.FromViewProjection(sun[cascade].ViewProjection);
-                cullFrame.Sun[cascade] = ToCullView(seenBySun);
+                cullFrame.Sun[cascade] = ToCullView(seenBySun[cascade]);
                 cullFrame.Cascades[cascade] = glm::vec4(sun[cascade].Centre, sun[cascade].Radius, sun[cascade].TexelSize);
             }
             cullFrame.View = camera.View;
@@ -787,8 +858,10 @@ namespace Lynx
             const uint64_t lodOffset = sizeof(CullFrame) + batchList.size_bytes();
             const uint64_t scatterKindOffset = lodOffset + lodList.size_bytes();
             const uint64_t scatterBatchOffset = scatterKindOffset + scatterKindList.size_bytes();
+            const std::span<const ScatterChunk> scatterChunkList(scatterChunks);
             const uint64_t stateOffset = scatterBatchOffset + scatterBatchList.size_bytes();
-            EnsureSize(m_Context, m_CullInputBuffer, stateOffset + sizeof(CullState),
+            const uint64_t scatterChunkOffset = stateOffset + sizeof(CullState);
+            EnsureSize(m_Context, m_CullInputBuffer, scatterChunkOffset + scatterChunkList.size_bytes(),
                 vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, "CullInput");
 
             // The see-through instances stand first in the list. Only culling that counts first reads this.
@@ -797,9 +870,10 @@ namespace Lynx
             EnsureSize(m_Context, m_CursorBuffer, commandList.size_bytes() / sizeof(vk::DrawIndexedIndirectCommand) * sizeof(uint32_t),
                 vk::BufferUsageFlagBits::eStorageBuffer, "MeshDrawCursors");
 
-            cullFrame.ScatterCount = static_cast<uint32_t>(m_ScatterInstances.size());
-            cullFrame.ScatterInstances = cullFrame.ScatterCount > 0 ? m_ScatterInstanceBuffer.Address() : 0;
-            cullFrame.ScatterVisibility = cullFrame.ScatterCount > 0 ? m_ScatterVisibilityBuffer.Address() : 0;
+            cullFrame.ScatterChunkCount = static_cast<uint32_t>(scatterChunks.size());
+            cullFrame.ScatterChunks = m_CullInputBuffer.Address() + scatterChunkOffset;
+            cullFrame.ScatterInstances = m_ScatterInstances.empty() ? 0 : m_ScatterInstanceBuffer.Address();
+            cullFrame.ScatterVisibility = m_ScatterInstances.empty() ? 0 : m_ScatterVisibilityBuffer.Address();
             cullFrame.ScatterKinds = m_CullInputBuffer.Address() + scatterKindOffset;
             cullFrame.ScatterBatches = m_CullInputBuffer.Address() + scatterBatchOffset;
             cullFrame.Padding = 0;
@@ -811,6 +885,8 @@ namespace Lynx
                 m_Uploads.Upload(m_CullInputBuffer.Handle(), scatterKindOffset, std::as_bytes(scatterKindList));
             if (!m_ScatterBatches.empty())
                 m_Uploads.Upload(m_CullInputBuffer.Handle(), scatterBatchOffset, std::as_bytes(scatterBatchList));
+            if (!scatterChunks.empty())
+                m_Uploads.Upload(m_CullInputBuffer.Handle(), scatterChunkOffset, std::as_bytes(scatterChunkList));
 
             frame.Culling.CommandAddress = m_CommandBuffer.Address();
             frame.Culling.FrameAddress = m_CullInputBuffer.Address();
@@ -818,7 +894,7 @@ namespace Lynx
             frame.Culling.LodAddress = m_CullInputBuffer.Address() + lodOffset;
             frame.Culling.VisibilityAddress = m_VisibilityBuffer.Address();
             frame.Culling.PlaceCount = static_cast<uint32_t>(m_Instances.size());
-            frame.Culling.ScatterCount = cullFrame.ScatterCount;
+            frame.Culling.ScatterChunkCount = cullFrame.ScatterChunkCount;
             frame.Culling.CursorAddress = m_CursorBuffer.Address();
             frame.Culling.StateAddress = m_CullInputBuffer.Address() + stateOffset;
             frame.Culling.CountsFirst = countsFirst;

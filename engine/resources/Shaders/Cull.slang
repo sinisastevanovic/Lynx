@@ -44,6 +44,21 @@ struct ScatterBatch
 
 static const uint noScatterKind = 4095;
 
+// A piece of a cell of scattered instances, which one group of threads tests: where its instances
+// stand in the list of all of them, how many they are, and which views can see the cell, the camera
+// in the lowest bit and the cascades of the sun's shadow above it. The CPU leaves out the cells that
+// no view sees. Has to match GpuScene::ScatterChunk.
+struct ScatterChunk
+{
+    uint first;
+    uint count;
+    uint views;
+    uint padding;
+};
+
+// Every view there is, for an instance that the CPU has not looked at.
+static const uint allViews = 0xFFFFFFFF;
+
 // The planes around what a view sees, pointing inwards: the normal in xyz, the distance in w.
 // Has to match CullView in GpuScene.cpp.
 struct View
@@ -93,7 +108,8 @@ struct CullFrame
     ScatterKind* scatterKinds;
     ScatterBatch* scatterBatches;
     uint* scatterVisibility;
-    uint scatterCount;
+    ScatterChunk* scatterChunks;
+    uint scatterChunkCount;
     uint padding;
 };
 
@@ -334,9 +350,10 @@ void draw(uint command, uint2 entry, uint level)
 
 // Decides for one submesh of one instance, given the sphere around it in the world and how much larger
 // than its mesh it is, into which views it is drawn, and adds it to their draw commands.
+// views says which views can see it at all, see ScatterChunk: the others are not tested.
 // Returns whether the camera sees it, which the late phase finds out. The early phase hands back what
-// it was told about the last frame.
-bool cull(uint batch, float3 centre, float radius, float scale, uint2 entry, bool seenLastFrame)
+// it was told about the last frame, and so does a call that leaves the camera out.
+bool cull(uint batch, float3 centre, float radius, float scale, uint2 entry, bool seenLastFrame, uint views)
 {
     // A batch without levels is see-through: the CPU culls and sorts those.
     BatchLods batchLods = constants.batches[batch];
@@ -351,7 +368,7 @@ bool cull(uint batch, float3 centre, float radius, float scale, uint2 entry, boo
     LodCommands batchCommands = constants.lods[batchLods.first + level / levelSteps];
 
     bool seen = seenLastFrame;
-    if (batchCommands.camera != noCommand)
+    if (batchCommands.camera != noCommand && (views & 1) != 0)
     {
         bool inView = isSeen(constants.frame.camera, centre, radius);
 
@@ -377,7 +394,7 @@ bool cull(uint batch, float3 centre, float radius, float scale, uint2 entry, boo
         {
             uint levelInShadow = shadowLevel(batchLods, cascade, distanceToCamera, scale);
             uint command = constants.lods[batchLods.first + levelInShadow / levelSteps].sun[cascade];
-            if (command == noCommand || !isSeen(constants.frame.sun[cascade], centre, radius))
+            if (command == noCommand || (views & (2u << cascade)) == 0 || !isSeen(constants.frame.sun[cascade], centre, radius))
                 continue;
             if (isCoveredByNearerCascade(cascade, centre, radius))
                 continue;
@@ -412,7 +429,7 @@ void cullPlace(uint place)
     float radius = instance.boundingSphere.w * scale;
 
     bool seenLastFrame = constants.visibility[place] != 0;
-    bool seen = cull(batch, centre, radius, scale, uint2(place, 0), seenLastFrame);
+    bool seen = cull(batch, centre, radius, scale, uint2(place, 0), seenLastFrame, allViews);
     // Kept only once the instance is written: the step that counts has to find what the last frame left.
     if (constants.phase == phaseLate && constants.step != stepCount && constants.batches[batch].count != 0)
         constants.visibility[place] = seen ? 1 : 0;
@@ -420,7 +437,7 @@ void cullPlace(uint place)
 
 // A scattered instance: every submesh of its kind, each with a sphere of its own, as an instance with
 // a place has them. What the camera saw of it is kept as one bit per submesh.
-void cullScattered(uint index)
+void cullScattered(uint index, uint views)
 {
     ScatterInstance instance = constants.frame.scatterInstances[index];
     uint kindIndex = scatterKind(instance);
@@ -440,7 +457,7 @@ void cullScattered(uint index)
         float3 centre = mul(model, float4(sphere.xyz, 1.0)).xyz;
 
         uint2 entry = uint2(index, (scatterBatch.sharedPlace + 1) << 8);
-        bool seen = cull(scatterBatch.batch, centre, sphere.w * scale, scale, entry, (seenLastFrame & (1u << submesh)) != 0);
+        bool seen = cull(scatterBatch.batch, centre, sphere.w * scale, scale, entry, (seenLastFrame & (1u << submesh)) != 0, views);
         seenNow |= seen ? (1u << submesh) : 0u;
     }
 
@@ -452,9 +469,24 @@ void cullScattered(uint index)
 [numthreads(64, 1, 1)]
 void computeMain(uint3 thread : SV_DispatchThreadID)
 {
-    // The last group reaches past the last instance.
-    if (thread.x < constants.placeCount)
-        cullPlace(thread.x);
-    else if (thread.x - constants.placeCount < constants.frame.scatterCount)
-        cullScattered(thread.x - constants.placeCount);
+    // The groups of the places come first, and the last of them reaches past the last place. Every
+    // group after them has a piece of a cell of scattered instances, which may not fill it.
+    const uint threadsPerGroup = 64;
+    uint placeThreads = ((constants.placeCount + threadsPerGroup - 1) / threadsPerGroup) * threadsPerGroup;
+    if (thread.x < placeThreads)
+    {
+        if (thread.x < constants.placeCount)
+            cullPlace(thread.x);
+        return;
+    }
+
+    uint inScatter = thread.x - placeThreads;
+    uint chunkIndex = inScatter / threadsPerGroup;
+    if (chunkIndex >= constants.frame.scatterChunkCount)
+        return;
+
+    ScatterChunk chunk = constants.frame.scatterChunks[chunkIndex];
+    uint inChunk = inScatter % threadsPerGroup;
+    if (inChunk < chunk.count)
+        cullScattered(chunk.first + inChunk, chunk.views);
 }
