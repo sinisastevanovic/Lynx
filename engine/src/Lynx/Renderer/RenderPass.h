@@ -357,8 +357,10 @@ namespace Lynx
         // at Ultra: 0.1 s takes about 30 % of the grain out for 0.02 to 0.03 ms at 1080p, which is
         // what High does for the same time, and the two add up. The finished picture is as near the
         // average of 64 frames as without. Longer histories take out no more and flatten creases:
-        // at 0.5 s the picture is a tenth farther off.
-        float HistoryTime = 0.1f;
+        // at 0.5 s the picture is a tenth farther off. The default is shorter than what was measured:
+        // at 0.1 s the occlusion can be seen building up behind a camera that moves, and Sinisa
+        // found 0.05 s the better trade by eye (26 November 2026).
+        float HistoryTime = 0.05f;
     };
 
     struct BloomSettings

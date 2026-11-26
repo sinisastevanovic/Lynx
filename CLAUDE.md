@@ -264,7 +264,7 @@ build\bin\Debug\LynxSandboxGame.exe
   pictures: "OcclusionDepth" turns the depth into distances in five sizes with one dispatch, "Occlusion"
   looks for the horizon along a few lines through every pixel, "OcclusionDenoise0" to "2" mix each pixel
   with its neighbours on the same surface, as many rounds as `SmoothingRounds` says, one by default.
-  The last round also mixes the result with that of the frames before (`HistoryTime`, 0.1 s, zero for
+  The last round also mixes the result with that of the frames before (`HistoryTime`, 0.05 s, zero for
   none): in motion the temporal pass trusts its own history too little to average the grain away. The
   history is fetched from where the camera's move puts a pixel's surface, because the scene's motion is
   not drawn yet, read with the Catmull-Rom curve, dropped where the distance kept with it says it is another
