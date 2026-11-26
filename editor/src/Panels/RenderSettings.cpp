@@ -70,13 +70,17 @@ namespace Lynx
 
             if (ImGui::CollapsingHeader("AntiAliasing", ImGuiTreeNodeFlags_DefaultOpen))
             {
-                bool fxaa = renderer.GetFXAAEnabled();
-                if (ImGui::Checkbox("Enable FXAA", &fxaa))
-                    renderer.SetFXAAEnabled(fxaa);
-
                 TemporalSettings& temporal = renderer.GetTemporalSettings();
                 ImGui::Checkbox("Temporal anti-aliasing", &temporal.Resolves);
-                ImGui::SetItemTooltip("Smooths the picture over several frames. Takes the place of FXAA while it is on.\nThe view modes that start with \"TAA\" show how it works a frame out.");
+                ImGui::SetItemTooltip("Smooths the picture over several frames.\nThe view modes that start with \"TAA\" show how it works a frame out.");
+
+                // FXAA only smooths a frame on its own, and only stands in while the above is off.
+                ImGui::BeginDisabled(temporal.Resolves);
+                bool fxaa = renderer.GetFXAAEnabled();
+                if (ImGui::Checkbox("FXAA instead", &fxaa))
+                    renderer.SetFXAAEnabled(fxaa);
+                ImGui::SetItemTooltip("A cheaper smoothing of single frames, used while temporal anti-aliasing is off.");
+                ImGui::EndDisabled();
                 if (temporal.Resolves)
                 {
                     int jitterLength = static_cast<int>(temporal.JitterLength);

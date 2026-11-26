@@ -127,7 +127,8 @@ build\bin\Debug\LynxSandboxGame.exe
   there. It is emptied and read only around a frame that drew into it. A new pass that blends into the
   scene should write it too. A fragment shader's outputs are numbered colour, motion, mask, entity IDs,
   each only if the pass has it.
-- **Jitter.** With `TemporalSettings::Jitters` (`Renderer::GetTemporalSettings`, off by default) the camera is
+- **Jitter.** While anti-aliasing over time is on, which is the default, or with `TemporalSettings::Jitters`
+  (`Renderer::GetTemporalSettings`), the camera is
   shifted by a part of a pixel, differently in every frame, along the Halton sequence of bases 2 and 3, by a
   count of frames so that runs repeat. `scene.viewProjection` holds the shift, so everything drawn with it is
   shifted. `scene.unjitteredViewProjection` and `scene.previousViewProjection` do not, and motion is worked
@@ -139,10 +140,10 @@ build\bin\Debug\LynxSandboxGame.exe
   afterwards it is in the table of textures as well.
 - **Temporal pass.** `Passes/TemporalPass` (`Temporal.slang`) runs after everything of the scene is drawn and
   before exposure, bloom and the composite pass, which then work with its result (it points
-  `RenderData::SceneColor` at its own picture). It is where anti-aliasing over time is being built, see step
-  3.10 of Renderer V2 and `docs/High-Quality TAA Implementation Brief.md`.
-  With `TemporalSettings::Resolves` (off by default, "Temporal anti-aliasing" in the render settings panel) it
-  is the anti-aliasing: a pixel takes the motion of the nearest thing around it, reads the history there with
+  `RenderData::SceneColor` at its own picture). It is the renderer's anti-aliasing, see step 3.10 of
+  Renderer V2 and `docs/High-Quality TAA Implementation Brief.md` for why it works as it does.
+  With `TemporalSettings::Resolves` (on by default, "Temporal anti-aliasing" in the render settings panel,
+  `TAA=0` in a benchmark; FXAA stands in while it is off): a pixel takes the motion of the nearest thing around it, reads the history there with
   the Catmull-Rom curve, pulls it into the box of the colours around the pixel (in YCoCg, rounded as Karis
   does, `BoxGamma` for variance clipping), and mixes it with the frame, weighted by brightness after exposure.
   The history's alpha counts the frames it is made of, and `HistoryTime` sets the least a frame counts.

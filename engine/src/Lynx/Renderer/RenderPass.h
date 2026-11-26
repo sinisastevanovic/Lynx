@@ -266,7 +266,8 @@ namespace Lynx
 
         // Anti-aliasing over time, see TemporalPass: every pixel mixes the frame with what the frames
         // before left where its surface was. Jitters the camera whether Jitters is set or not.
-        bool Resolves = false;
+        // It is the renderer's anti-aliasing. FXAA takes its place only while this is off.
+        bool Resolves = true;
 
         // How long what a pixel showed keeps counting, in seconds: after this time, a frame's share
         // has fallen to about a third. Longer is smoother and slower to follow a change.
