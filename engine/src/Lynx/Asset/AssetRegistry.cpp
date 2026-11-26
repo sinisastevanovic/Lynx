@@ -16,6 +16,7 @@ namespace Lynx
 
     void AssetRegistry::LoadRegistry()
     {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         m_AssetMetadata.clear();
         m_PathToHandle.clear();
         m_FileWatchers.clear();
@@ -45,20 +46,38 @@ namespace Lynx
 
     void AssetRegistry::UpdateMetadata(AssetHandle handle, std::shared_ptr<AssetSpecification> spec)
     {
-        if (m_AssetMetadata.contains(handle))
-        {
-            m_AssetMetadata[handle].Specification = spec;
-            WriteMetadata(m_AssetMetadata[handle]);
-        }
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        const auto found = m_AssetMetadata.find(handle);
+        if (found == m_AssetMetadata.end())
+            return;
+
+        found->second.Specification = std::move(spec);
+        WriteMetadata(found->second);
+    }
+
+    std::vector<AssetMetadata> AssetRegistry::GetAllMetadata() const
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        std::vector<AssetMetadata> all;
+        all.reserve(m_AssetMetadata.size());
+        for (const auto& [handle, metadata] : m_AssetMetadata)
+            all.push_back(metadata);
+        return all;
+    }
+
+    std::vector<AssetHandle> AssetRegistry::GetChangedAssets() const
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        return m_ProcessedChangedAssets;
     }
 
     void AssetRegistry::Update()
     {
-        std::vector<FileEvent> eventsToProcess;
-        {
-            std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-            eventsToProcess = std::move(m_FileEvents);
-        }
+        // Held throughout: the events change the registry, and nobody should see it half changed.
+        // The watchers wait with their next events meanwhile, which only takes as long as a few files do.
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
+        std::vector<FileEvent> eventsToProcess = std::move(m_FileEvents);
+        m_FileEvents.clear();
 
         m_ProcessedChangedAssets.clear();
 
@@ -184,7 +203,8 @@ namespace Lynx
                 case FileAction::Modified:
                 {
                     LX_CORE_TRACE("FileAction: File modified ({0})", event.Path.string());
-                    m_ProcessedChangedAssets.push_back(m_PathToHandle[event.Path]);
+                    if (const auto found = m_PathToHandle.find(event.Path); found != m_PathToHandle.end())
+                        m_ProcessedChangedAssets.push_back(found->second);
                     break;
                 }
                 case FileAction::Renamed:
@@ -307,6 +327,7 @@ namespace Lynx
 
     void AssetRegistry::OnAssetRemoved(const std::filesystem::path& assetPath)
     {
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         if (Contains(assetPath))
         {
             AssetHandle handle = m_PathToHandle[assetPath];
@@ -326,6 +347,7 @@ namespace Lynx
     void AssetRegistry::OnAssetRenamed(const std::filesystem::path& oldPath, const std::filesystem::path& newPath)
     {
         // TODO: Currently when we rename files, the asset itself doesnt update it's filepath!
+        std::lock_guard<std::recursive_mutex> lock(m_Mutex);
         if (!Contains(oldPath))
             return;
 
@@ -352,21 +374,18 @@ namespace Lynx
         }
     }
 
-    const AssetMetadata& AssetRegistry::Get(AssetHandle handle) const
+    AssetMetadata AssetRegistry::Get(AssetHandle handle) const
     {
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-        if (m_AssetMetadata.contains(handle))
-            return m_AssetMetadata.at(handle);
-        return m_NullMetadata;
+        const auto found = m_AssetMetadata.find(handle);
+        return found != m_AssetMetadata.end() ? found->second : AssetMetadata();
     }
 
-    const AssetMetadata& AssetRegistry::Get(const std::filesystem::path& assetPath) const
+    AssetMetadata AssetRegistry::Get(const std::filesystem::path& assetPath) const
     {
         std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-        auto it = m_PathToHandle.find(ContentPaths::Normalize(assetPath));
-        if (it != m_PathToHandle.end())
-            return Get(it->second);
-        return m_NullMetadata;
+        const auto found = m_PathToHandle.find(ContentPaths::Normalize(assetPath));
+        return found != m_PathToHandle.end() ? Get(found->second) : AssetMetadata();
     }
 
     bool AssetRegistry::Contains(AssetHandle handle) const

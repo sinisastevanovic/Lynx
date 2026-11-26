@@ -406,10 +406,11 @@ namespace Lynx
 
             std::string searchQuery = searchBuffer;
             std::ranges::transform(searchQuery, searchQuery.begin(), ::tolower);
-            const auto& allAssets = Engine::Get().GetAssetRegistry().GetMetadata();
+            const std::vector<AssetMetadata> allAssets = Engine::Get().GetAssetRegistry().GetAllMetadata();
             int assetIndex = 0;
-            for (const auto& [handle, meta] : allAssets)
+            for (const AssetMetadata& meta : allAssets)
             {
+                const AssetHandle handle = meta.Handle;
                 bool typeAllowed = false;
                 for (AssetType t : allowedTypes)
                 {
