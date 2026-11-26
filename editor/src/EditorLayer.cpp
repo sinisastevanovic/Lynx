@@ -195,6 +195,9 @@ namespace Lynx
             io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
         }
         
+        if (std::exchange(m_StopsPlay, false) && m_Engine->GetSceneState() == SceneState::Play)
+            OnSceneStop();
+
         DrawToolBar();
         for (auto& panel : m_Panels)
         {
@@ -243,8 +246,10 @@ namespace Lynx
 
         m_Engine->GetRenderer().SetShowUI(m_ShowUI);
         
+        // The game may have kept the mouse to itself. The editor gets it back whatever the game did.
         m_InputCapturedByGame = false;
         m_LastCursorMode = CursorMode::Normal;
+        Input::SetCursorMode(CursorMode::Normal);
         m_Engine->SetPaused(false);
     }
 
@@ -281,6 +286,15 @@ namespace Lynx
 
         dispatcher.Dispatch<KeyPressedEvent>([this](KeyPressedEvent& e)
         {
+            // Escape ends play from anywhere, also while the game holds the mouse and nothing else
+            // can be reached. The game does not get the key. Play ends where the frame is drawn, not
+            // here in the middle of handing out events.
+            if (e.GetKeyCode() == KeyCode::Escape && m_Engine->GetSceneState() == SceneState::Play)
+            {
+                m_StopsPlay = true;
+                return true;
+            }
+
             if (e.GetKeyCode() == KeyCode::F1 && Input::IsKeyPressed(KeyCode::LeftShift) && m_InputCapturedByGame)
             {
                 m_InputCapturedByGame = false;

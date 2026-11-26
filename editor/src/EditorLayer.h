@@ -59,6 +59,9 @@ namespace Lynx
         bool m_ShowUI = true;
         
         bool m_InputCapturedByGame = false;
+
+        // Escape was pressed while playing: play ends with the next frame that is drawn.
+        bool m_StopsPlay = false;
         CursorMode m_LastCursorMode = CursorMode::Normal;
     };
 }
