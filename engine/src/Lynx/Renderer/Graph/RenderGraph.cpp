@@ -79,6 +79,8 @@ namespace Lynx
             resources.ColorTarget->Transition(commands, vk::ImageLayout::eColorAttachmentOptimal);
         if (resources.MotionTarget)
             resources.MotionTarget->Transition(commands, vk::ImageLayout::eColorAttachmentOptimal);
+        if (resources.ReactiveTarget)
+            resources.ReactiveTarget->Transition(commands, vk::ImageLayout::eColorAttachmentOptimal);
         if (resources.IdTarget)
             resources.IdTarget->Transition(commands, vk::ImageLayout::eColorAttachmentOptimal);
         if (resources.DepthTarget)
@@ -121,6 +123,8 @@ namespace Lynx
             targets.Color = resources.ColorTarget->View();
         if (resources.MotionTarget)
             targets.Motion = resources.MotionTarget->View();
+        if (resources.ReactiveTarget)
+            targets.Reactive = resources.ReactiveTarget->View();
         if (resources.IdTarget)
             targets.Ids = resources.IdTarget->View();
         if (resources.DepthTarget)

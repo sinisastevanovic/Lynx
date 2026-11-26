@@ -13,6 +13,10 @@ namespace Lynx
         // The picture of the scene's motion next to the colour picture. Null for none. Its content is always kept.
         vk::ImageView Motion;
 
+        // The picture of how much of every pixel is see-through, next to the colour picture. Null for none.
+        // Its content is always kept.
+        vk::ImageView Reactive;
+
         // The picture of entity IDs next to the colour picture. Null for none. Its content is always kept.
         vk::ImageView Ids;
 

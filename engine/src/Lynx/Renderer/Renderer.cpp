@@ -128,6 +128,7 @@ namespace Lynx
         TextureSlot SceneColorSlot;
         TextureSlot SceneDepthSlot;
         TextureSlot SceneMotionSlot;
+        TextureSlot SceneReactiveSlot;
 
         // The finished scene picture, which the editor shows in a panel through ImGui.
         TextureSlot SceneOutputSlot;
@@ -230,6 +231,10 @@ namespace Lynx
         GpuTexture SceneOutput;
         GpuTexture SceneEntityIds;
         GpuTexture SceneMotion;
+        GpuTexture SceneReactive;
+
+        // True if a pass drew into the see-through mask in the last frame, or it was never emptied.
+        bool ReactiveNeedsClearing = true;
     };
 
     Renderer::Renderer(GLFWwindow* window, FrameProfiler& profiler, AssetManager& assets, bool initIdTarget)
@@ -288,6 +293,7 @@ namespace Lynx
         m_Frame->SceneColorSlot = TextureSlot();
         m_Frame->SceneDepthSlot = TextureSlot();
         m_Frame->SceneMotionSlot = TextureSlot();
+        m_Frame->SceneReactiveSlot = TextureSlot();
         m_Frame->SceneOutputSlot = TextureSlot();
         m_Frame->ShadowMapSlots = {};
         m_Frame->AtmosphereTableSlots = {};
@@ -309,6 +315,7 @@ namespace Lynx
         m_Frame->SceneOutput = {};
         m_Frame->SceneEntityIds = {};
         m_Frame->SceneMotion = {};
+        m_Frame->SceneReactive = {};
         m_Frame->ShadowMaps = {};
         m_Frame->AtmosphereTables = {};
         m_Frame->SkyReflection = {};
@@ -596,6 +603,8 @@ namespace Lynx
         create(m_Frame->SceneDepth, RenderFormats::SceneDepth, depthUsage, "SceneDepth");
         create(m_Frame->SceneOutput, RenderFormats::Output, colorUsage, "SceneOutput");
         create(m_Frame->SceneMotion, RenderFormats::SceneMotion, colorUsage, "SceneMotion");
+        create(m_Frame->SceneReactive, RenderFormats::SceneReactive, colorUsage, "SceneReactive");
+        m_Frame->ReactiveNeedsClearing = true;
         if (m_ShouldCreateIDTarget)
             create(m_Frame->SceneEntityIds, RenderFormats::EntityIds, colorUsage, "SceneEntityIds");
 
@@ -605,6 +614,7 @@ namespace Lynx
         // The depth pyramid is built from the depth.
         m_Frame->SceneDepthSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SceneDepth.View()));
         m_Frame->SceneMotionSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SceneMotion.View()));
+        m_Frame->SceneReactiveSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SceneReactive.View()));
         m_Frame->SceneOutputSlot = TextureSlot(*m_Frame->Shared, m_Frame->Shared->AddTexture(m_Frame->SceneOutput.View()));
     }
 
@@ -728,6 +738,8 @@ namespace Lynx
         m_CurrentFrameData.SceneDepth = &m_Frame->SceneDepth;
         m_CurrentFrameData.SceneEntityIds = m_Frame->SceneEntityIds ? &m_Frame->SceneEntityIds : nullptr;
         m_CurrentFrameData.SceneMotion = &m_Frame->SceneMotion;
+        m_CurrentFrameData.SceneReactive = &m_Frame->SceneReactive;
+        m_CurrentFrameData.WroteReactive = false;
 
         // Negating the second row turns the Y of every position a shader computes with the matrix.
         const auto toVulkanClip = [](glm::mat4 matrix)
@@ -871,6 +883,14 @@ namespace Lynx
 
         // Where no pass writes how a pixel moved, it did not: a view without a sky, for one.
         m_Frame->SceneMotion.ClearColor(commands, vk::ClearColorValue(0.0f, 0.0f, 0.0f, 0.0f));
+
+        // The see-through mask is only emptied after a frame that drew into it: most frames of most
+        // scenes draw nothing see-through.
+        if (m_Frame->ReactiveNeedsClearing)
+        {
+            m_Frame->SceneReactive.ClearColor(commands, vk::ClearColorValue(0.0f, 0.0f, 0.0f, 0.0f));
+            m_Frame->ReactiveNeedsClearing = false;
+        }
         if (m_Frame->SceneEntityIds)
             m_Frame->SceneEntityIds.ClearColor(commands, vk::ClearColorValue(std::array<int32_t, 4>{ -1, 0, 0, 0 }));
     }
@@ -936,6 +956,7 @@ namespace Lynx
         m_CurrentFrameData.SceneColorIndex = m_Frame->SceneColorSlot.Index();
         m_CurrentFrameData.SceneDepthIndex = m_Frame->SceneDepthSlot.Index();
         m_CurrentFrameData.SceneMotionIndex = m_Frame->SceneMotionSlot.Index();
+        m_CurrentFrameData.SceneReactiveIndex = m_Frame->SceneReactiveSlot.Index();
         m_CurrentFrameData.DepthPyramid = {};
         m_CurrentFrameData.SeenDepthRange.reset();
         m_CurrentFrameData.HasSkyView = false;
@@ -950,6 +971,7 @@ namespace Lynx
         m_CurrentFrameData.ShownInstead = nullptr;
 
         m_Graph->Execute(m_RenderContext, m_CurrentFrameData);
+        m_Frame->ReactiveNeedsClearing = m_CurrentFrameData.WroteReactive;
         m_GpuScene->CopyCommandsForCounters(m_Frame->Commands);
         CopyRequestedEntityId();
 

@@ -88,6 +88,7 @@ namespace Lynx
         desc.DynamicCullMode = true;
         desc.ColorFormat = RenderFormats::SceneColor;
         desc.MotionFormat = RenderFormats::SceneMotion;
+        desc.ReactiveFormat = RenderFormats::SceneReactive;
         if (m_WritesEntityIds)
             desc.IdFormat = RenderFormats::EntityIds;
         desc.DepthFormat = RenderFormats::SceneDepth;
@@ -138,6 +139,7 @@ namespace Lynx
 
         resources.ColorTarget = renderData.SceneColor;
         resources.MotionTarget = renderData.SceneMotion;
+        resources.ReactiveTarget = renderData.SceneReactive;
         if (m_WritesEntityIds)
             resources.IdTarget = renderData.SceneEntityIds;
         resources.DepthTarget = renderData.SceneDepth;
@@ -213,6 +215,9 @@ namespace Lynx
 
         if (renderData.TransparentDraws.empty())
             return;
+
+        // In the wireframe view the edges are drawn whole, by a pipeline that does not blend.
+        renderData.WroteReactive |= !isWireframe;
 
         if (!isWireframe)
             commands.bindPipeline(vk::PipelineBindPoint::eGraphics, m_Vulkan->TransparentPipeline);

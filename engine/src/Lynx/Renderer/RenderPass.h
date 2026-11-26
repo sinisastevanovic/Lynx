@@ -446,6 +446,14 @@ namespace Lynx
         // Written by the passes that draw what covers a pixel wholly: meshes, terrain and sky.
         GpuTexture* SceneMotion = nullptr;
 
+        // Next to the colour: how much of every pixel is covered by what is see-through, see RenderFormats.
+        // The motion of such a pixel is that of what lies behind, so what is put together from several
+        // frames trusts its history less there. Written by the passes that blend: see-through meshes and
+        // particles. A pass that draws into it says so with WroteReactive, and only then is it read.
+        GpuTexture* SceneReactive = nullptr;
+        uint32_t SceneReactiveIndex = 0;
+        bool WroteReactive = false;
+
         // Where the finished picture goes: the window, or the editor's viewport picture.
         GpuTexture* Output = nullptr;
 

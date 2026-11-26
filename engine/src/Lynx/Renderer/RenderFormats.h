@@ -13,6 +13,10 @@ namespace Lynx::RenderFormats
     // Next to the colour of the scene: for every pixel, how far what it shows moved on screen since the
     // last frame, in texture coordinates. Half floats tell a hundredth of a pixel apart at any picture size.
     constexpr vk::Format SceneMotion = vk::Format::eR16G16Sfloat;
+
+    // Next to the colour of the scene: for every pixel, how much of it is covered by what is see-through
+    // and has no motion of its own in the picture of motion, from 0 to 1. Known elsewhere as the reactive mask.
+    constexpr vk::Format SceneReactive = vk::Format::eR8Unorm;
     constexpr vk::Format ShadowMap = vk::Format::eD32Sfloat;
 
     // The scene's depth in ever smaller sizes, which culling reads. A depth format cannot be drawn into

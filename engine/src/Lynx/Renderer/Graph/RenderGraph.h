@@ -38,6 +38,10 @@ namespace Lynx
         // the colour. Null for none.
         GpuTexture* MotionTarget = nullptr;
 
+        // The picture of how much of every pixel is see-through, which a pass that blends writes next to
+        // the colour. Null for none.
+        GpuTexture* ReactiveTarget = nullptr;
+
         // The picture of entity IDs the pass writes next to the colour. Null for none.
         GpuTexture* IdTarget = nullptr;
 

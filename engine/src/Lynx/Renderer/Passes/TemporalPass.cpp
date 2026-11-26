@@ -54,10 +54,10 @@ namespace Lynx
             float BetweenPixelsShare;
             float StillBoxScale;
             float StillWeight;
-
-            // The shader's size is a multiple of eight bytes, for the pair of numbers it starts with.
-            uint32_t Padding;
+            uint32_t ReactiveTexture;
         };
+
+        constexpr uint32_t NoTexture = ~0u;
 
         // The view of the pass's working that a view mode asks for, as Temporal.slang numbers them.
         uint32_t ViewOf(ViewMode mode)
@@ -213,6 +213,8 @@ namespace Lynx
         {
             resources.Sample(renderData.SceneMotion);
             resources.Sample(renderData.SceneDepth);
+            if (renderData.WroteReactive)
+                resources.Sample(renderData.SceneReactive);
             if (m_HasHistory)
                 resources.Sample(&m_Vulkan->Depth[last].Texture);
             resources.Write(&m_Vulkan->Depth[m_Target].Texture);
@@ -250,6 +252,7 @@ namespace Lynx
         push.DepthTolerance = std::max(settings.DepthTolerance, 0.0f);
         push.BetweenPixelsShare = std::clamp(settings.BetweenPixelsShare, 0.0f, 1.0f);
         push.StillBoxScale = std::max(settings.StillBoxScale, 1.0f);
+        push.ReactiveTexture = renderData.WroteReactive ? renderData.SceneReactiveIndex : NoTexture;
 
         if (m_WasAccumulating)
         {

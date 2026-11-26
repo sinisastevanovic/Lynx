@@ -75,6 +75,7 @@ namespace Lynx
         desc.Program = program.get();
         desc.Layout = m_Vulkan->Shared->PipelineLayout();
         desc.ColorFormat = RenderFormats::SceneColor;
+        desc.ReactiveFormat = RenderFormats::SceneReactive;
         desc.DepthFormat = RenderFormats::SceneDepth;
         // Tested against the scene, but not written: particles are see-through and must not hide each other.
         desc.DepthTest = true;
@@ -104,7 +105,9 @@ namespace Lynx
             return false;
 
         // The particles go into the scene's picture. The entity ID picture next to it is left alone.
+        // They have no motion in the picture of motion, so they mark the pixels they cover.
         resources.ColorTarget = renderData.SceneColor;
+        resources.ReactiveTarget = renderData.SceneReactive;
         resources.DepthTarget = renderData.SceneDepth;
         return true;
     }
@@ -112,6 +115,7 @@ namespace Lynx
     void ParticlePass::Execute(vk::CommandBuffer commands, RenderData& renderData)
     {
         vk::Pipeline boundPipeline;
+        renderData.WroteReactive = true;
 
         for (const ParticleBatch& batch : renderData.ParticleQueue)
         {

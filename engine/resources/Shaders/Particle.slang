@@ -85,11 +85,24 @@ VertexOutput vertexMain(uint vertexIndex : SV_VertexID, uint instanceIndex : SV_
     return output;
 }
 
+// The targets in the order the render graph gives them to a pass: the colour, then how much of the
+// pixel the particle covers. A particle writes no motion, and the second says so to whoever puts
+// frames together.
+struct FragmentOutput
+{
+    float4 color : SV_Target0;
+    float reactive : SV_Target1;
+};
+
 [shader("fragment")]
-float4 fragmentMain(VertexOutput input) : SV_Target
+FragmentOutput fragmentMain(VertexOutput input)
 {
     float4 color = textures[constants.albedoTexture].Sample(samplers[constants.albedoSampler], input.uv);
     color *= input.color * constants.albedoColor;
     color.rgb *= constants.emissiveStrength;
-    return color;
+
+    FragmentOutput output;
+    output.color = color;
+    output.reactive = saturate(color.a);
+    return output;
 }

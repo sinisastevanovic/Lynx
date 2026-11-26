@@ -16,7 +16,13 @@ import Textures;
 // its own width, and a frame counts as much as for everything that moves.
 static const float speedOfTheNarrowBox = 0.5;
 
+// What is see-through has no motion of its own in the picture of motion: its pixels move as what lies
+// behind them does. Where it covers a pixel wholly, the frame counts for this much, and the history
+// for the little that keeps the jitter from showing (Karis, 2014, and the reactive mask of FSR 2).
+static const float shareWhereSeeThrough = 0.9;
+
 // Have to match TemporalPass.cpp.
+static const uint noTexture = 0xFFFFFFFF;
 static const uint modeAccumulate = 0;
 static const uint modeResolve = 1;
 
@@ -72,7 +78,10 @@ struct TemporalConstants
     // least a frame counts there.
     float stillBoxScale;
     float stillWeight;
-    uint padding;
+
+    // Resolving: where the texture table has the picture of how much of every pixel is see-through,
+    // or noTexture in a frame that drew nothing see-through.
+    uint reactiveTexture;
 };
 [vk::push_constant] ConstantBuffer<TemporalConstants> constants;
 
@@ -267,6 +276,8 @@ void resolve(int2 pixel)
     float2 betweenPixels = abs(frac(historyUv * size) - 0.5) * 2.0;
     float leastMoving = lerp(constants.currentWeight, max(constants.currentWeight, constants.betweenPixelsShare), max(betweenPixels.x, betweenPixels.y));
     float leastShare = lerp(min(constants.stillWeight, constants.currentWeight), leastMoving, moving);
+    if (constants.reactiveTexture != noTexture)
+        leastShare = max(leastShare, shareWhereSeeThrough * textures[constants.reactiveTexture].Load(int3(pixel, 0)).r);
     float frames = hasHistory ? history.a : 0.0;
     float currentShare = hasHistory ? max(1.0 / (frames + 1.0), leastShare) : 1.0;
 

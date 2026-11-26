@@ -6,9 +6,9 @@ namespace Lynx
 {
     void BeginRendering(vk::CommandBuffer commands, const RenderingTargets& targets)
     {
-        // The colour target first, then the motion target, then the ID target, each only if the pass has it.
-        // A fragment shader's outputs are numbered in that order, and so are a pipeline's formats.
-        std::array<vk::RenderingAttachmentInfo, 3> colorAttachments;
+        // The colour target first, then the motion, the see-through mask and the IDs, each only if the pass
+        // has it. A fragment shader's outputs are numbered in that order, and so are a pipeline's formats.
+        std::array<vk::RenderingAttachmentInfo, 4> colorAttachments;
         uint32_t colorCount = 0;
         if (targets.Color)
         {
@@ -19,7 +19,7 @@ namespace Lynx
             attachment.storeOp = vk::AttachmentStoreOp::eStore;
             attachment.clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 0.0f);
         }
-        for (const vk::ImageView kept : { targets.Motion, targets.Ids })
+        for (const vk::ImageView kept : { targets.Motion, targets.Reactive, targets.Ids })
         {
             if (!kept)
                 continue;

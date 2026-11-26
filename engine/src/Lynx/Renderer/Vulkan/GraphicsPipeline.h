@@ -67,6 +67,11 @@ namespace Lynx
         // Undefined for none.
         vk::Format MotionFormat = vk::Format::eUndefined;
 
+        // A further target for how much of every pixel is see-through. The other way round: it is written
+        // only by a pipeline that blends, with the alpha of what it draws, and left alone by one that
+        // does not. Undefined for none.
+        vk::Format ReactiveFormat = vk::Format::eUndefined;
+
         // A further target that receives whole numbers and is never blended: the entity IDs the editor picks by.
         // Undefined for none.
         vk::Format IdFormat = vk::Format::eUndefined;

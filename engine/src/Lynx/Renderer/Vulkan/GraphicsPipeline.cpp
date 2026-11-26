@@ -81,7 +81,7 @@ namespace Lynx
         depthStencil.depthWriteEnable = desc.DepthWrite;
         depthStencil.depthCompareOp = desc.DepthCompare;
 
-        // The colour target first, then the motion target, then the ID target, each only if the pass has it.
+        // The colour target first, then the motion, the see-through mask and the IDs, each only if the pass has it.
         std::vector<vk::Format> colorFormats;
         std::vector<vk::PipelineColorBlendAttachmentState> blendAttachments;
         if (desc.ColorFormat != vk::Format::eUndefined)
@@ -96,6 +96,24 @@ namespace Lynx
                 motion.colorWriteMask = {};
             colorFormats.push_back(desc.MotionFormat);
             blendAttachments.push_back(motion);
+        }
+        if (desc.ReactiveFormat != vk::Format::eUndefined)
+        {
+            // What a see-through surface covers adds up: its own share, plus what was there of the rest.
+            vk::PipelineColorBlendAttachmentState reactive;
+            if (desc.Blend != BlendMode::Opaque)
+            {
+                reactive.colorWriteMask = vk::ColorComponentFlagBits::eR;
+                reactive.blendEnable = VK_TRUE;
+                reactive.colorBlendOp = vk::BlendOp::eAdd;
+                reactive.alphaBlendOp = vk::BlendOp::eAdd;
+                reactive.srcColorBlendFactor = vk::BlendFactor::eOne;
+                reactive.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcColor;
+                reactive.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+                reactive.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+            }
+            colorFormats.push_back(desc.ReactiveFormat);
+            blendAttachments.push_back(reactive);
         }
         if (desc.IdFormat != vk::Format::eUndefined)
         {
