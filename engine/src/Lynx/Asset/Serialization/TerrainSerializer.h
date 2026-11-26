@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Lynx/Asset/Asset.h"
+#include "Lynx/Asset/TerrainScatter.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -28,6 +29,14 @@ namespace Lynx
         };
         std::vector<Layer> Layers;
 
+        // What the terrain is scattered with: a rule, whose mesh is named by its handle here.
+        struct Scatter
+        {
+            AssetHandle Mesh = AssetHandle::Null();
+            ScatterRule Rule;
+        };
+        std::vector<Scatter> ScatterRules;
+
         // The heights and weights of each tile with their borders, tile by tile, row by row.
         struct Tile
         {
@@ -44,8 +53,8 @@ namespace Lynx
     // weights_<x>_<z>.rgba, four bytes per place. Both are nothing but the numbers, borders included, so
     // that one tile can later be read on its own. Their endings are none the engine takes for an asset.
     // The text file holds the terrain's size, the heights that the smallest and the largest number
-    // stand for, how it is cut into tiles, and the layers: a material and how many units one repeat of
-    // its textures covers.
+    // stand for, how it is cut into tiles, the layers: a material and how many units one repeat of
+    // its textures covers, and the rules it is scattered with.
     //
     // A terrain comes into being from pictures made elsewhere: ReadHeights and ReadWeights read those.
     class LX_API TerrainSerializer

@@ -116,7 +116,7 @@ void CreateTrees(Scene& scene, AssetManager& assetManager, uint32_t count, Trees
 // A square of hilly ground, made from noise: a terrain of the given number of heights a side, one
 // unit apart, around the middle of the scene. The same hills in every run.
 // throughFile saves the terrain and draws what is read back, to check the terrain's file.
-void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution, bool throughFile);
+void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution, bool throughFile, bool isScattered);
 
 // Checks that the terrain's ground is solid, and that it is the ground that is drawn. Gives the
 // terrain a collider, drops balls onto it, and after a few frames shoots rays down at it. Writes

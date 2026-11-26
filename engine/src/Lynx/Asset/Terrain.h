@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Asset.h"
+#include "TerrainScatter.h"
 
 #include <glm/glm.hpp>
 
@@ -134,6 +135,16 @@ namespace Lynx
         // The layers that have a material, in order.
         std::span<const TerrainLayer> GetLayers() const { return std::span<const TerrainLayer>(m_Layers.data(), m_LayerCount); }
 
+        // What the terrain is scattered with, see ScatterRule. The rules are part of the terrain and
+        // saved with it. Whoever scatters looks at the version, which every change of the rules raises:
+        // the terrain's own version stays, so that its ground is not made anew for a moved tree.
+        void SetScatterRules(std::span<const ScatterRule> rules);
+        const std::vector<ScatterRule>& GetScatterRules() const { return m_ScatterRules; }
+        uint32_t GetScatterVersion() const { return m_ScatterVersion; }
+
+        // A copy of a tile's heights and weights, to scatter over on another thread.
+        TerrainTileCopy CopyTile(uint32_t tileX, uint32_t tileZ) const;
+
         // How many texels a side the pictures of a tile have, their borders included.
         uint32_t GetHeightTexels() const { return m_TileQuads + 1 + 2 * TerrainTileBorder; }
         uint32_t GetWeightTexels() const { return m_WeightTileResolution + 2 * TerrainTileBorder; }
@@ -209,5 +220,20 @@ namespace Lynx
             float TileSize = 4.0f;
         };
         std::vector<PendingLayer> m_PendingLayers;
+
+        std::vector<ScatterRule> m_ScatterRules;
+        uint32_t m_ScatterVersion = 0;
+
+        // The same for the rules of a terrain that was read from a file: their meshes are known by
+        // their handles until it comes to the GPU.
+        struct PendingRule
+        {
+            AssetHandle Mesh = AssetHandle::Null();
+            ScatterRule Rule;
+        };
+        std::vector<PendingRule> m_PendingRules;
+
+        // Set by reading a file, also one without rules: the rules there were are then replaced.
+        bool m_HasPendingRules = false;
     };
 }

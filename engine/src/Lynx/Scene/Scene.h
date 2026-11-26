@@ -12,6 +12,7 @@
 #include "Lynx/Physics/PhysicsSystem.h"
 #include "Systems/ParticleSystem.h"
 #include "Systems/SystemManager.h"
+#include "TerrainScatterer.h"
 
 namespace Lynx
 {
@@ -138,6 +139,9 @@ namespace Lynx
         PhysicsWorld& GetPhysicsWorldChecked() { LX_ASSERT(m_PhysicsWorld, "PhysicsWorld only available in player mode!"); return *m_PhysicsWorld; }
         ParticleSystem* GetParticleSystem() { return &m_ParticleSystem; }
 
+        // True while a terrain of the scene is still being scattered, see TerrainScatterer.
+        bool IsScattering() const { return m_TerrainScatterer.IsScattering(); }
+
         static AssetType GetAssetType() { return AssetType::Scene; }
         virtual AssetType GetType() const override { return Scene::GetAssetType(); }
 
@@ -177,6 +181,7 @@ namespace Lynx
         entt::dispatcher m_Dispatcher;
         
         ParticleSystem m_ParticleSystem;
+        TerrainScatterer m_TerrainScatterer;
         std::unique_ptr<PhysicsWorld> m_PhysicsWorld;
         PhysicsSystem m_PhysicsSystem;
         

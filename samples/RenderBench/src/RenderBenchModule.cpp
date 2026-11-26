@@ -125,7 +125,7 @@ public:
         }
 
         if (const uint32_t terrain = count("Terrain"))
-            CreateTerrain(scene, assetManager, terrain, settings.Parameter("TerrainThroughFile", 0.0) > 0.0);
+            CreateTerrain(scene, assetManager, terrain, settings.Parameter("TerrainThroughFile", 0.0) > 0.0, settings.Parameter("TerrainScatter", 0.0) > 0.0);
 
         if (const uint32_t balls = count("TerrainBalls"))
             m_TerrainPhysics.emplace(scene, balls);

@@ -473,7 +473,7 @@ namespace
     }
 }
 
-void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution, bool throughFile)
+void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution, bool throughFile, bool isScattered)
 {
     // Hills from seven layers of noise, each twice as fine and half as high as the one before.
     const float highest = 0.12f * static_cast<float>(resolution);
@@ -561,6 +561,32 @@ void CreateTerrain(Scene& scene, AssetManager& assetManager, uint32_t resolution
     const float size = static_cast<float>(resolution - 1);
     auto terrain = std::make_shared<Terrain>(resolution, size, 0.0f, highest, heights);
     terrain->SetLayers(layers, weightResolution, weights);
+
+    // A forest by rules: pines and firs share their places on the forest floor and the mud, saplings
+    // stand closer and also where it is steeper. Nothing grows on rock.
+    if (isScattered)
+    {
+        const auto rule = [&assetManager](const char* path, float spacing, float density, float steepest, std::array<float, 4> layerShares)
+        {
+            ScatterRule made;
+            made.Mesh = assetManager.GetProjectAsset<StaticMesh>(path, AssetLoadMode::Blocking);
+            if (!made.Mesh)
+                LX_ERROR("RenderBench: cannot load {0}. The tree models are fetched by tools/fetch-polyhaven.ps1.", path);
+            made.Spacing = spacing;
+            made.Density = density;
+            made.SteepestSlope = steepest;
+            made.LayerShares = layerShares;
+            return made;
+        };
+        const ScatterRule rules[] = {
+            rule("Models/pine_tree_01/pine_tree_01_a.gltf", 14.0f, 0.35f, 25.0f, { 1.0f, 0.0f, 0.5f, 0.0f }),
+            rule("Models/fir_tree_01/fir_tree_01_a.gltf", 14.0f, 0.35f, 25.0f, { 1.0f, 0.0f, 0.5f, 0.0f }),
+            rule("Models/fir_tree_01/fir_tree_01_b.gltf", 14.0f, 0.2f, 25.0f, { 1.0f, 0.0f, 0.5f, 0.0f }),
+            rule("Models/fir_sapling_medium/fir_sapling_medium_a.gltf", 6.0f, 0.3f, 32.0f, { 1.0f, 0.0f, 1.0f, 0.0f }),
+            rule("Models/fir_sapling_medium/fir_sapling_medium_b.gltf", 6.0f, 0.2f, 32.0f, { 1.0f, 0.0f, 1.0f, 0.0f }),
+        };
+        terrain->SetScatterRules(rules);
+    }
 
     // For checking the terrain's file: saved, and the one that is drawn read back from what was saved.
     // The pictures have to come out as without this.

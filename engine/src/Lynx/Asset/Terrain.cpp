@@ -1,4 +1,5 @@
 #include "Terrain.h"
+#include "StaticMesh.h"
 
 #include "Material.h"
 #include "TextureSpecification.h"
@@ -212,6 +213,32 @@ namespace Lynx
             m_LayerCount = 0;
     }
 
+    void Terrain::SetScatterRules(std::span<const ScatterRule> rules)
+    {
+        m_ScatterRules.assign(rules.begin(), rules.end());
+        ++m_ScatterVersion;
+    }
+
+    TerrainTileCopy Terrain::CopyTile(uint32_t tileX, uint32_t tileZ) const
+    {
+        const Tile& tile = TileAt(tileX, tileZ);
+        TerrainTileCopy copy;
+        copy.Size = GetTileSize();
+        copy.Origin = glm::vec2(static_cast<float>(tileX), static_cast<float>(tileZ)) * copy.Size;
+        copy.Spacing = GetSpacing();
+        copy.Lowest = m_Lowest;
+        copy.Highest = m_Highest;
+        copy.Border = TerrainTileBorder;
+        copy.HeightTexels = GetHeightTexels();
+        copy.Heights = tile.Heights;
+        if (m_LayerCount > 0)
+        {
+            copy.WeightTexels = GetWeightTexels();
+            copy.Weights = tile.Weights;
+        }
+        return copy;
+    }
+
     float Terrain::GetHeightAtPlace(float x, float z) const
     {
         if (m_Tiles.empty())
@@ -329,6 +356,18 @@ namespace Lynx
         source.WeightTileResolution = m_LayerCount > 0 ? m_WeightTileResolution : 0;
         for (const TerrainLayer& layer : GetLayers())
             source.Layers.push_back({ layer.Material->GetHandle(), layer.TileSize });
+
+        // A rule is saved by the handle of its mesh and, like a pending one, keeps none itself.
+        for (const ScatterRule& rule : m_ScatterRules)
+        {
+            if (!rule.Mesh)
+                continue;
+
+            TerrainSource::Scatter& saved = source.ScatterRules.emplace_back();
+            saved.Mesh = rule.Mesh->GetHandle();
+            saved.Rule = rule;
+            saved.Rule.Mesh = nullptr;
+        }
         for (const Tile& tile : m_Tiles)
             source.Tiles.push_back({ tile.Heights, m_LayerCount > 0 ? tile.Weights : std::vector<uint8_t>() });
         return TerrainSerializer::Serialize(filePath, source);
@@ -366,6 +405,11 @@ namespace Lynx
         m_PendingLayers.clear();
         for (const TerrainSource::Layer& layer : source.Layers)
             m_PendingLayers.push_back({ layer.Material, layer.TileSize });
+
+        m_PendingRules.clear();
+        for (const TerrainSource::Scatter& rule : source.ScatterRules)
+            m_PendingRules.push_back({ rule.Mesh, rule.Rule });
+        m_HasPendingRules = true;
         return true;
     }
 
@@ -400,6 +444,25 @@ namespace Lynx
         m_HeightSampler = renderer.SamplerIndex(SamplerSettings{ TextureWrap::Clamp, TextureFilter::Trilinear, false });
         m_IsOnGpu = true;
         IncrementVersion();
+
+        // The rules of a terrain that was read from a file: their meshes are looked up now. A mesh may
+        // still be loading: whoever draws the scattered things waits for it.
+        if (m_HasPendingRules)
+        {
+            AssetManager& assets = Engine::Get().GetAssetManager();
+            std::vector<ScatterRule> rules;
+            for (PendingRule& pending : m_PendingRules)
+            {
+                pending.Rule.Mesh = assets.GetAsset<StaticMesh>(pending.Mesh);
+                if (pending.Rule.Mesh)
+                    rules.push_back(std::move(pending.Rule));
+                else
+                    LX_CORE_ERROR("Terrain {0}: the mesh of a scatter rule was not found. The rule is left out.", m_FilePath);
+            }
+            m_PendingRules.clear();
+            m_HasPendingRules = false;
+            SetScatterRules(rules);
+        }
 
         // The layers of a terrain that was read from a file: their materials are looked up now, on the
         // main thread. One that cannot be found ends the list, as in SetLayers.

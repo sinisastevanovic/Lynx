@@ -279,7 +279,7 @@ namespace Lynx
                 ++m_WarmupFramesDone;
 
                 // Game time stands still during the warm-up, so its length does not change what is measured.
-                if (m_WarmupFramesDone >= m_Settings.WarmupFrames && !assetManager.HasPendingLoads())
+                if (m_WarmupFramesDone >= m_Settings.WarmupFrames && !assetManager.HasPendingLoads() && !scene.IsScattering())
                 {
                     LX_CORE_INFO("Benchmark '{0}': measuring {1} frames after {2} warm-up frames.", m_Settings.Name, m_Settings.Frames, m_WarmupFramesDone);
                     profiler.StartRecording();

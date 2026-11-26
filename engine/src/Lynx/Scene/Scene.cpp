@@ -516,6 +516,9 @@ namespace Lynx
         ProcessDestroyQueue();
         DispatchEvents();
 
+        // After the transforms: a terrain is scattered where its entity stands.
+        m_TerrainScatterer.Update(*this);
+
         // After the transforms, so particles are emitted where their emitter is in this frame.
         m_ParticleSystem.Simulate(deltaTime, *this);
     }
@@ -546,6 +549,7 @@ namespace Lynx
         }
 
         UpdateGlobalTransforms();
+        m_TerrainScatterer.Update(*this);
         m_ParticleSystem.Simulate(deltaTime, *this);
     }
 

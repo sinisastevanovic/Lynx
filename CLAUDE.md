@@ -238,6 +238,22 @@ build\bin\Debug\LynxSandboxGame.exe
   the next part of the step.
   A benchmark with `Scatter=1` draws the trees of Trees this way, and `ScatterLike=1` gives the entities
   the turns and sizes a scattered instance can hold, to compare the two.
+- **Scatter rules.** What grows on a terrain is said by rules of the terrain asset (`ScatterRule` in
+  `Asset/TerrainScatter.h`, `Terrain::SetScatterRules`), saved in its `.lxterrain`. Nothing is placed by
+  hand and nothing placed is saved. A rule is a mesh and where it stands: a spacing, a density, sizes, the
+  steepest slope, a range of heights, and how well it grows on each ground layer. `ScatterOverTile`
+  (`Scene/TerrainScatterer`) turns rules into instances, after Horizon Zero Dawn's placement (van Muijden,
+  GDC 2017): one point in every square of a grid as wide as the spacing, anchored at the terrain's first
+  corner, each with a threshold, and a point becomes an instance where the rule's density there is above
+  it. Rules with the same spacing share the points and lie on top of each other, the upper ones first, so
+  that two things never stand on one place. The same rules give the same forest every time.
+  `TerrainScatterer`, a member of the scene, looks at the scene's terrains every frame, in the editor as
+  while playing, and scatters a terrain anew when it, its rules (`GetScatterVersion`) or its entity's
+  position change: tile by tile on a thread of its own, from copies (`Terrain::CopyTile`), into the
+  `ScatterComponent` of the terrain's entity. What was there stays until the new is complete.
+  `Scene::IsScattering` says that it is not, and a benchmark waits for it. The terrain's panel in the
+  editor has the list of rules. A benchmark with `TerrainScatter=1` scatters trees over its terrain:
+  61,000 over 4 km² in 43 ms.
 - **View modes.** A view of a scene can show one thing about the picture instead of the picture (`ViewMode` in
   `Renderer/ViewMode.h`: wireframe, unlit, lighting only, normals, level of detail, shadow cascades, motion, three of the TAA, ambient occlusion) and draw cut-outs whole
   (`ViewSettings::ShowCutOuts`). The settings belong to the view and travel with it (`ExtractedScene::Viewing`),

@@ -7,6 +7,7 @@
 #include "Lynx/Asset/Serialization/MaterialSerializer.h"
 #include "Lynx/Asset/Serialization/SpriteSerializer.h"
 #include "Lynx/Asset/Serialization/TerrainSerializer.h"
+#include "Lynx/Asset/StaticMesh.h"
 #include "Lynx/Asset/Terrain.h"
 #include "../Utils/PlatformUtils.h"
 #include "Lynx/ImGui/LXUI.h"
@@ -38,6 +39,54 @@ namespace Lynx
         }
 
         ImGui::End();
+    }
+
+    void AssetPropertiesPanel::DrawTerrainScatterRules()
+    {
+        ImGui::TextWrapped("What grows on the terrain. Nothing is placed by hand: a rule says where its kind stands, and the places follow from it. Rules with the same spacing never put two things on one place, and the upper ones go first.");
+
+        size_t removed = m_TerrainScatterRules.size();
+        for (size_t index = 0; index < m_TerrainScatterRules.size(); ++index)
+        {
+            ScatterRuleEdit& edited = m_TerrainScatterRules[index];
+            ScatterRule& rule = edited.Rule;
+
+            ImGui::PushID(static_cast<int>(index));
+            if (ImGui::CollapsingHeader(("Scattered " + std::to_string(index + 1)).c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                bool changed = false;
+                LXUI::BeginPropertyGrid();
+                changed |= LXUI::DrawAssetReference("Mesh", edited.Mesh, { AssetType::StaticMesh });
+                changed |= LXUI::DrawDragFloat("Spacing (units)", rule.Spacing, 0.1f, 0.25f, 1000.0f, 6.0f);
+                changed |= LXUI::DrawDragFloat("Density", rule.Density, 0.01f, 0.0f, 1.0f, 1.0f);
+                changed |= LXUI::DrawDragFloat("Smallest Size", rule.SmallestSize, 0.01f, 0.25f, 4.0f, 0.85f);
+                changed |= LXUI::DrawDragFloat("Largest Size", rule.LargestSize, 0.01f, 0.25f, 4.0f, 1.15f);
+                changed |= LXUI::DrawDragFloat("Steepest Slope (degrees)", rule.SteepestSlope, 0.5f, 0.0f, 90.0f, 30.0f);
+                changed |= LXUI::DrawDragFloat("Lowest Height", rule.LowestHeight, 1.0f, -100000.0f, 100000.0f, -100000.0f);
+                changed |= LXUI::DrawDragFloat("Highest Height", rule.HighestHeight, 1.0f, -100000.0f, 100000.0f, 100000.0f);
+                for (size_t layer = 0; layer < rule.LayerShares.size(); ++layer)
+                    changed |= LXUI::DrawDragFloat("On Layer " + std::to_string(layer + 1), rule.LayerShares[layer], 0.01f, 0.0f, 1.0f, 1.0f);
+                LXUI::EndPropertyGrid();
+
+                rule.LargestSize = std::max(rule.LargestSize, rule.SmallestSize);
+                if (ImGui::Button("Remove"))
+                    removed = index;
+                m_IsDirty |= changed;
+            }
+            ImGui::PopID();
+        }
+
+        if (removed < m_TerrainScatterRules.size())
+        {
+            m_TerrainScatterRules.erase(m_TerrainScatterRules.begin() + static_cast<ptrdiff_t>(removed));
+            m_IsDirty = true;
+        }
+
+        if (ImGui::Button("Add Scattered"))
+        {
+            m_TerrainScatterRules.emplace_back();
+            m_IsDirty = true;
+        }
     }
 
     void AssetPropertiesPanel::DrawTerrainProperties()
@@ -78,6 +127,9 @@ namespace Lynx
             }
         }
 
+        ImGui::Separator();
+        DrawTerrainScatterRules();
+
         if (!m_TerrainError.empty())
             ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_TerrainError.c_str());
 
@@ -94,6 +146,17 @@ namespace Lynx
                     break;
                 layers.push_back({ std::move(material), m_TerrainLayerTileSizes[layer] });
             }
+
+            // A rule without a mesh scatters nothing and is not kept.
+            std::vector<ScatterRule> rules;
+            for (const ScatterRuleEdit& edited : m_TerrainScatterRules)
+            {
+                ScatterRule rule = edited.Rule;
+                rule.Mesh = edited.Mesh.IsValid() ? assets.GetAsset<StaticMesh>(edited.Mesh) : nullptr;
+                if (rule.Mesh)
+                    rules.push_back(std::move(rule));
+            }
+            terrain->SetScatterRules(rules);
 
             m_TerrainError.clear();
             if (m_TerrainWeightsPath[0] != '\0' && !layers.empty())
@@ -299,6 +362,10 @@ namespace Lynx
             m_TerrainLayerTileSizes.fill(4.0f);
             m_TerrainWeightsPath[0] = '\0';
             m_TerrainError.clear();
+
+            m_TerrainScatterRules.clear();
+            for (const ScatterRule& rule : std::static_pointer_cast<Terrain>(m_SelectedAsset)->GetScatterRules())
+                m_TerrainScatterRules.push_back({ rule.Mesh ? rule.Mesh->GetHandle() : AssetHandle::Null(), rule });
 
             const std::span<const TerrainLayer> layers = std::static_pointer_cast<Terrain>(m_SelectedAsset)->GetLayers();
             for (size_t layer = 0; layer < layers.size(); ++layer)

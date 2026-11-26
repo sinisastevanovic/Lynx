@@ -159,6 +159,25 @@ namespace Lynx
             for (const TerrainSource::Layer& layer : terrain.Layers)
                 layers.push_back({ { "Material", static_cast<uint64_t>(layer.Material) }, { "TileSize", layer.TileSize } });
         }
+        if (!terrain.ScatterRules.empty())
+        {
+            nlohmann::json& rules = json["Scatter"] = nlohmann::json::array();
+            for (const TerrainSource::Scatter& scatter : terrain.ScatterRules)
+            {
+                const ScatterRule& rule = scatter.Rule;
+                rules.push_back({
+                    { "Mesh", static_cast<uint64_t>(scatter.Mesh) },
+                    { "Spacing", rule.Spacing },
+                    { "Density", rule.Density },
+                    { "SmallestSize", rule.SmallestSize },
+                    { "LargestSize", rule.LargestSize },
+                    { "SteepestSlope", rule.SteepestSlope },
+                    { "LowestHeight", rule.LowestHeight },
+                    { "HighestHeight", rule.HighestHeight },
+                    { "LayerShares", rule.LayerShares },
+                });
+            }
+        }
 
         std::ofstream file(filePath);
         file << json.dump(4);
@@ -211,6 +230,28 @@ namespace Lynx
                 TerrainSource::Layer& read = outTerrain.Layers.emplace_back();
                 read.Material = AssetHandle(layer.value("Material", uint64_t{ 0 }));
                 read.TileSize = layer.value("TileSize", read.TileSize);
+            }
+        }
+
+        if (json.contains("Scatter") && json["Scatter"].is_array())
+        {
+            for (const nlohmann::json& saved : json["Scatter"])
+            {
+                if (!saved.is_object())
+                    continue;
+
+                TerrainSource::Scatter& read = outTerrain.ScatterRules.emplace_back();
+                ScatterRule& rule = read.Rule;
+                read.Mesh = AssetHandle(saved.value("Mesh", uint64_t{ 0 }));
+                rule.Spacing = saved.value("Spacing", rule.Spacing);
+                rule.Density = saved.value("Density", rule.Density);
+                rule.SmallestSize = saved.value("SmallestSize", rule.SmallestSize);
+                rule.LargestSize = saved.value("LargestSize", rule.LargestSize);
+                rule.SteepestSlope = saved.value("SteepestSlope", rule.SteepestSlope);
+                rule.LowestHeight = saved.value("LowestHeight", rule.LowestHeight);
+                rule.HighestHeight = saved.value("HighestHeight", rule.HighestHeight);
+                if (saved.contains("LayerShares") && saved["LayerShares"].is_array() && saved["LayerShares"].size() == rule.LayerShares.size())
+                    rule.LayerShares = saved["LayerShares"].get<std::array<float, 4>>();
             }
         }
 
