@@ -25,6 +25,10 @@ namespace Lynx
     // the shaders). The passes that light surfaces read the result at their pixel
     // (RenderData::SceneOcclusion) and dim what comes from the sky by it, never the sun.
     //
+    // The last round of smoothing mixes the result with that of the frames before, fetched from
+    // where every pixel's surface was (AmbientOcclusionSettings::HistoryTime). The scene's motion is
+    // not drawn yet at that point, so the place is worked out from the camera's move alone.
+    //
     // It only knows what the depth buffer shows: what is hidden or off screen hides nothing, and only
     // what stands within AmbientOcclusionSettings::Radius counts. It makes corners, creases and
     // the ground under things darker. It does not make a hall dark because it has a roof.

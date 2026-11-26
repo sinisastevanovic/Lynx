@@ -349,6 +349,16 @@ namespace Lynx
         // about a tenth farther off, not nearer: they blur what the occlusion shows more than they
         // smooth what is left of its grain.
         uint32_t SmoothingRounds = 1;
+
+        // How long what a pixel's occlusion was keeps counting, in seconds, as HistoryTime does for
+        // anti-aliasing over time. The occlusion keeps a history of its own, because anti-aliasing
+        // over time trusts its history too little in motion to average the grain away. Zero for none.
+        // Measured on the Motion benchmark in motion, on the occlusion alone against the same frames
+        // at Ultra: 0.1 s takes about 30 % of the grain out for 0.02 to 0.03 ms at 1080p, which is
+        // what High does for the same time, and the two add up. The finished picture is as near the
+        // average of 64 frames as without. Longer histories take out no more and flatten creases:
+        // at 0.5 s the picture is a tenth farther off.
+        float HistoryTime = 0.1f;
     };
 
     struct BloomSettings
@@ -447,8 +457,10 @@ namespace Lynx
         glm::mat4 ClipViewProjection;
 
         // The same without the jitter, for what is drawn after the frames are put together and has to
-        // stand still: the grid, debug lines.
+        // stand still: the grid, debug lines. And that of the last frame, which is the same matrix in
+        // a frame that has none before it.
         glm::mat4 UnjitteredClipViewProjection;
+        glm::mat4 PreviousClipViewProjection;
 
         // The cascades of the sun's shadow: what each covers, its matrix as shaders get it, and its map.
         std::array<ShadowCascade, ShadowCascadeCount> Cascades;

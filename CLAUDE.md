@@ -263,7 +263,12 @@ build\bin\Debug\LynxSandboxGame.exe
   does it). Three compute passes, all `Passes/AmbientOcclusionPass` with a step each, which share their
   pictures: "OcclusionDepth" turns the depth into distances in five sizes with one dispatch, "Occlusion"
   looks for the horizon along a few lines through every pixel, "OcclusionDenoise0" to "2" mix each pixel
-  with its neighbours on the same surface, as many rounds as `SmoothingRounds` says, one by default. The lines differ per pixel and frame (`RenderData::NoiseFrame`) and the
+  with its neighbours on the same surface, as many rounds as `SmoothingRounds` says, one by default.
+  The last round also mixes the result with that of the frames before (`HistoryTime`, 0.1 s, zero for
+  none): in motion the temporal pass trusts its own history too little to average the grain away. The
+  history is fetched from where the camera's move puts a pixel's surface, because the scene's motion is
+  not drawn yet, read with the Catmull-Rom curve, dropped where the distance kept with it says it is another
+  surface, and counted for less near the picture's edge, where occlusion is only a guess. The lines differ per pixel and frame (`RenderData::NoiseFrame`) and the
   temporal pass averages them. The result is `RenderData::SceneOcclusion`, one byte a pixel, null in a
   frame without. A pass that lights surfaces hands its place in the texture table to its shader, which
   fills `LitSurface::openToSky` with `openToSkyAt(texture, pixel)`: `lightOn` dims what comes from the
@@ -271,8 +276,8 @@ build\bin\Debug\LynxSandboxGame.exe
   the depth buffer and takes itself as open. It knows only what is on screen and within
   `AmbientOcclusionSettings::Radius`, half a unit: it darkens creases and the ground under things, not a
   hall under its roof. `Renderer::GetAmbientOcclusionSettings`, "Ambient Occlusion" in the render settings
-  panel, the view mode "Ambient occlusion", and `AO=0`, `AoQuality=<0 to 3>`, `AoRadius`, `AoSmooth=<rounds, 0 to 3>` in
-  a benchmark. At 1080p it costs 0.11 to 0.14 ms a frame at Medium, the default.
+  panel, the view mode "Ambient occlusion", and `AO=0`, `AoQuality=<0 to 3>`, `AoRadius`, `AoSmooth=<rounds, 0 to 3>`, `AoHistoryTime=<seconds>` in
+  a benchmark. At 1080p it costs 0.13 to 0.17 ms a frame at Medium, the default, and 33 MB.
 - **Occlusion.** The camera's view is culled in two phases (`CullPhase`), so what is hidden behind other things is
   not drawn. Early: what was seen in the last frame, kept as a flag per instance on the GPU. Its depth becomes the
   depth pyramid (`Passes/DepthPyramidPass`): the depth in ever smaller sizes, each pixel the farthest of those it

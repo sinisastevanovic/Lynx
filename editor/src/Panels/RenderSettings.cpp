@@ -69,6 +69,9 @@ namespace Lynx
                 if (ImGui::SliderInt("Smoothing rounds", &rounds, 0, 3))
                     occlusion.SmoothingRounds = static_cast<uint32_t>(rounds);
                 ImGui::SetItemTooltip("How many times every pixel is mixed with those around it on the same surface. More takes more grain out of a moving picture.");
+
+                ImGui::SliderFloat("History time##occlusion", &occlusion.HistoryTime, 0.0f, 1.0f, "%.2f s");
+                ImGui::SetItemTooltip("How long what a pixel's occlusion was keeps counting. Longer takes more grain out of a moving picture and follows a change later. 0 keeps no history.");
             }
 
             if (ImGui::CollapsingHeader("Level of Detail", ImGuiTreeNodeFlags_DefaultOpen))

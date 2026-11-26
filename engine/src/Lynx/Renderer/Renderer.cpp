@@ -828,6 +828,7 @@ namespace Lynx
         // How far something moved on screen is worked out from where the last frame's camera saw it.
         // The first frame has none before it, and nothing moved.
         sceneData.PreviousViewProjectionMatrix = m_PreviousClipViewProjection.value_or(unjittered);
+        m_CurrentFrameData.PreviousClipViewProjection = sceneData.PreviousViewProjectionMatrix;
         m_CurrentFrameData.ViewIsStill = m_PreviousClipViewProjection == unjittered;
         m_CurrentFrameData.HistoryWasReset = !m_PreviousClipViewProjection.has_value();
         m_CurrentFrameData.Temporal = m_TemporalSettings;
