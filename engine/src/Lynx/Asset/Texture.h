@@ -61,6 +61,11 @@ namespace Lynx
         virtual bool CreateRenderResources() override;
         virtual bool Reload() override;
 
+        // A texture from a file is read, cooked and compressed anew on a worker thread, which takes
+        // seconds for a large one, and stays as it was until then.
+        virtual std::unique_ptr<AssetReload> BeginReload() override;
+        virtual bool FinishReload(AssetReload& reload) override;
+
     private:
         TextureSpecification m_Specification;
         std::unique_ptr<GpuTexture> m_GpuTexture;

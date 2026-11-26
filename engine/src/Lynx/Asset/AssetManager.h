@@ -108,7 +108,15 @@ namespace Lynx
         std::shared_ptr<Font> GetDefaultFont();
 
         void Update();
+
+        // Reads a loaded asset's file anew, for a file or settings that changed. Main thread only.
+        // An asset that can be read in the background (Asset::BeginReload) is, and stays in use as
+        // it was until that is done: asked again meanwhile, it is read once more afterwards, so the
+        // last request is the one that shows. Every other asset is reloaded before this returns.
         void ReloadAsset(AssetHandle handle);
+
+        // True while the asset is being read anew in the background.
+        bool IsReloading(AssetHandle handle) const;
         void UnloadAsset(AssetHandle handle);
         
         void UnloadAllGameAssets();
@@ -123,6 +131,12 @@ namespace Lynx
         void FinishLoad(const std::shared_ptr<Asset>& asset);
         void SuggestTextureSettings(AssetHandle texture, const std::function<void(TextureSpecification&)>& change);
         void FinishLoadOnMainThread(const std::shared_ptr<Asset>& asset);
+        void SaveGuessedSettings(const Asset& asset);
+
+        // The end of a reload in the background, on the main thread, and what follows every reload:
+        // whatever uses the asset learns that it changed.
+        void FinishReload(const std::shared_ptr<Asset>& asset, AssetReload& reload, bool wasRead);
+        void AnnounceReload(const std::shared_ptr<Asset>& asset);
 
         bool IsMainThread() const;
 
@@ -138,6 +152,11 @@ namespace Lynx
         // Guards m_LoadedAssets. Worker threads reach it too, through assets that load other assets.
         mutable std::mutex m_AssetsMutex;
         std::unordered_map<AssetHandle, std::shared_ptr<Asset>> m_LoadedAssets;
+
+        // The assets being read anew in the background, each with whether a further reload was asked
+        // for meanwhile. Guarded by m_AssetsMutex. One asset is never read twice at once: both
+        // readings would write the same entry of a cache.
+        std::unordered_map<AssetHandle, bool> m_BackgroundReloads;
 
         // Work that worker threads leave for the main thread. Run by Update.
         std::mutex m_QueueMutex;

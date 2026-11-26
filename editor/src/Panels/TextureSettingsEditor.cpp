@@ -109,6 +109,11 @@ namespace Lynx
             m_IsDirty = false;
         }
         ImGui::EndDisabled();
+
+        // Cooking takes seconds for a large texture and runs in the background. The texture is shown
+        // as it was until it is done.
+        if (Engine::Get().GetAssetManager().IsReloading(m_Handle))
+            ImGui::TextDisabled("Cooking with the new settings...");
         ImGui::PopID();
     }
 }

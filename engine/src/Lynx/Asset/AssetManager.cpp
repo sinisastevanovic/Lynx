@@ -125,7 +125,7 @@ namespace Lynx
             if (asset->GetState() == AssetState::Loading)
                 return true;
         }
-        return false;
+        return !m_BackgroundReloads.empty();
     }
 
     std::shared_ptr<Asset> AssetManager::LoadAsset(const AssetMetadata& metadata, AssetLoadMode mode)
@@ -186,14 +186,7 @@ namespace Lynx
             return;
         }
 
-        // A guess at what a texture holds is saved with the texture: it is then made once, shows in
-        // the editor and stays as whoever knows better changes it.
-        if (asset->GetType() == AssetType::Texture)
-        {
-            const Texture& texture = static_cast<const Texture&>(*asset);
-            if (texture.HasGuessedSettings() && m_AssetRegistry->Contains(asset->GetHandle()))
-                m_AssetRegistry->UpdateMetadata(asset->GetHandle(), std::make_shared<TextureSpecification>(texture.GetSpecification()));
-        }
+        SaveGuessedSettings(*asset);
 
         // A material that was built while its texture was still loading has to pick the texture up now.
         if (asset->GetType() == AssetType::Texture)
@@ -207,6 +200,18 @@ namespace Lynx
         }
 
         asset->SetState(AssetState::Ready);
+    }
+
+    void AssetManager::SaveGuessedSettings(const Asset& asset)
+    {
+        // A guess at what a texture holds is saved with the texture: it is then made once, shows in
+        // the editor and stays as whoever knows better changes it.
+        if (asset.GetType() != AssetType::Texture)
+            return;
+
+        const Texture& texture = static_cast<const Texture&>(asset);
+        if (texture.HasGuessedSettings() && m_AssetRegistry->Contains(asset.GetHandle()))
+            m_AssetRegistry->UpdateMetadata(asset.GetHandle(), std::make_shared<TextureSpecification>(texture.GetSpecification()));
     }
 
     void AssetManager::FinishLoadOnMainThread(const std::shared_ptr<Asset>& asset)
@@ -278,27 +283,86 @@ namespace Lynx
             if (it == m_LoadedAssets.end())
                 return;
 
+            // Being read already: once that is done it is read again, with what it is set to by then.
+            if (const auto reload = m_BackgroundReloads.find(handle); reload != m_BackgroundReloads.end())
+            {
+                reload->second = true;
+                return;
+            }
+
             asset = it->second;
         }
 
         LX_CORE_INFO("Reloading Asset: {0}", handle);
-        if (asset->Reload())
+        if (std::shared_ptr<AssetReload> reload = asset->BeginReload())
         {
-            LX_CORE_INFO("Asset reloaded successfully");
             {
                 std::lock_guard<std::mutex> lock(m_AssetsMutex);
-                for (auto& [otherHandle, otherAsset] : m_LoadedAssets)
-                {
-                    if (otherAsset->DependsOn(asset->GetHandle()))
-                    {
-                        otherAsset->IncrementVersion();
-                    }
-                }
+                m_BackgroundReloads[handle] = false;
             }
-            asset->IncrementVersion();
-            AssetReloadedEvent e(handle);
-            Engine::Get().OnEvent(e);
+
+            m_Workers->Submit([this, asset, reload]()
+            {
+                const bool wasRead = reload->Read();
+                std::lock_guard<std::mutex> lock(m_QueueMutex);
+                m_MainThreadQueue.push_back([this, asset, reload, wasRead]() { FinishReload(asset, *reload, wasRead); });
+            });
+            return;
         }
+
+        if (asset->Reload())
+            AnnounceReload(asset);
+    }
+
+    void AssetManager::FinishReload(const std::shared_ptr<Asset>& asset, AssetReload& reload, bool wasRead)
+    {
+        const AssetHandle handle = asset->GetHandle();
+        bool wasAskedForAgain = false;
+        {
+            std::lock_guard<std::mutex> lock(m_AssetsMutex);
+            const auto pending = m_BackgroundReloads.find(handle);
+            wasAskedForAgain = pending != m_BackgroundReloads.end() && pending->second;
+            m_BackgroundReloads.erase(handle);
+        }
+
+        // What was read is out of date already. The asset keeps what it shows until the next reading is done.
+        if (wasAskedForAgain)
+        {
+            ReloadAsset(handle);
+            return;
+        }
+
+        // An asset whose file cannot be read stays as it was.
+        if (!wasRead || !asset->FinishReload(reload))
+        {
+            LX_CORE_ERROR("Failed to reload asset: {0}", asset->GetFilePath());
+            return;
+        }
+
+        SaveGuessedSettings(*asset);
+        AnnounceReload(asset);
+    }
+
+    void AssetManager::AnnounceReload(const std::shared_ptr<Asset>& asset)
+    {
+        LX_CORE_INFO("Asset reloaded successfully");
+        {
+            std::lock_guard<std::mutex> lock(m_AssetsMutex);
+            for (auto& [otherHandle, otherAsset] : m_LoadedAssets)
+            {
+                if (otherAsset->DependsOn(asset->GetHandle()))
+                    otherAsset->IncrementVersion();
+            }
+        }
+        asset->IncrementVersion();
+        AssetReloadedEvent e(asset->GetHandle());
+        Engine::Get().OnEvent(e);
+    }
+
+    bool AssetManager::IsReloading(AssetHandle handle) const
+    {
+        std::lock_guard<std::mutex> lock(m_AssetsMutex);
+        return m_BackgroundReloads.contains(handle);
     }
 
     void AssetManager::UnloadAsset(AssetHandle handle)

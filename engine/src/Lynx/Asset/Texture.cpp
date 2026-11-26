@@ -10,6 +10,101 @@
 
 namespace Lynx
 {
+    namespace
+    {
+        // Every size of the texture in a file, cooked with the settings, from the cache where the
+        // file was cooked with them before. The settings take the texture's size and format, and a
+        // guess at what it holds where they did not say. Uses nothing of a texture, so any thread
+        // may run it for one that is in use.
+        bool ReadTextureFile(const std::string& filePath, TextureSpecification& settings, CookedTexture& cooked, bool& hasGuessedSettings)
+        {
+            if (!std::filesystem::exists(filePath))
+            {
+                LX_CORE_ERROR("File does not exist: {0}", filePath);
+                return false;
+            }
+
+            settings.DebugName = filePath;
+            hasGuessedSettings = false;
+
+            // A texture that was cooked before, from this file as it is and with these settings, is read
+            // as it was cooked. Settings that do not say what the texture holds cannot have been cooked with.
+            const TextureCache& cache = Engine::Get().GetTextureCache();
+            if (settings.Content != TextureContent::Undecided)
+            {
+                if (std::optional<CookedTexture> cached = cache.Load(filePath, TextureCookingKey(settings)))
+                {
+                    cooked = std::move(*cached);
+                    settings.Width = cooked.Width();
+                    settings.Height = cooked.Height();
+                    settings.Format = cooked.Format;
+                    return true;
+                }
+            }
+
+            // A file with one channel stays as it is. Every other one is read as four: GPUs have no texture
+            // format with three channels, and most pictures, every JPEG among them, are stored with three.
+            // The header says how many the file has, so the pixels are decoded once, in the form they are used in.
+            int width, height, channelsInFile;
+            if (!stbi_info(filePath.c_str(), &width, &height, &channelsInFile))
+            {
+                LX_CORE_ERROR("Failed to load texture: {0}", filePath);
+                return false;
+            }
+
+            const int channels = channelsInFile == 1 ? 1 : 4;
+            unsigned char* decoded = stbi_load(filePath.c_str(), &width, &height, &channelsInFile, channels);
+            if (!decoded)
+            {
+                LX_CORE_ERROR("Failed to load texture: {0}", filePath);
+                return false;
+            }
+            const std::span<const uint8_t> pixels(decoded, static_cast<size_t>(width) * height * channels);
+
+            // Settings that do not say what the texture holds get a guess from the picture itself.
+            hasGuessedSettings = settings.Content == TextureContent::Undecided;
+            if (hasGuessedSettings)
+            {
+                const TextureGuess guess = GuessTextureSettings(pixels, width, height, channels, filePath);
+                settings.Content = guess.Content;
+                settings.KeepsCoverage = guess.KeepsCoverage;
+            }
+
+            cooked = CookTexture(pixels, width, height, channels, settings);
+            stbi_image_free(decoded);
+            if (cooked.Sizes.empty())
+            {
+                LX_CORE_ERROR("Failed to cook texture: {0}", filePath);
+                return false;
+            }
+            cache.Store(filePath, TextureCookingKey(settings), cooked);
+
+            settings.Width = cooked.Width();
+            settings.Height = cooked.Height();
+            settings.Format = cooked.Format;
+            return true;
+        }
+
+        // A texture's file read anew, with the settings the texture had when the reload began.
+        class TextureReload : public AssetReload
+        {
+        public:
+            TextureReload(std::string filePath, const TextureSpecification& settings)
+                : Settings(settings), m_FilePath(std::move(filePath))
+            {
+            }
+
+            bool Read() override { return ReadTextureFile(m_FilePath, Settings, Cooked, HasGuessedSettings); }
+
+            TextureSpecification Settings;
+            CookedTexture Cooked;
+            bool HasGuessedSettings = false;
+
+        private:
+            std::string m_FilePath;
+        };
+    }
+
     Texture::Texture(const std::string& filepath, const TextureSpecification& spec)
         : Asset(filepath), m_Specification(spec)
     {
@@ -31,71 +126,7 @@ namespace Lynx
 
     bool Texture::LoadSourceData()
     {
-        if (!std::filesystem::exists(m_FilePath))
-        {
-            LX_CORE_ERROR("File does not exist: {0}", m_FilePath);
-            return false;
-        }
-
-        m_Specification.DebugName = m_FilePath;
-        m_HasGuessedSettings = false;
-
-        // A texture that was cooked before, from this file as it is and with these settings, is read
-        // as it was cooked. Settings that do not say what the texture holds cannot have been cooked with.
-        const TextureCache& cache = Engine::Get().GetTextureCache();
-        if (m_Specification.Content != TextureContent::Undecided)
-        {
-            if (std::optional<CookedTexture> cooked = cache.Load(m_FilePath, TextureCookingKey(m_Specification)))
-            {
-                m_Cooked = std::move(*cooked);
-                m_Specification.Width = m_Cooked.Width();
-                m_Specification.Height = m_Cooked.Height();
-                m_Specification.Format = m_Cooked.Format;
-                return true;
-            }
-        }
-
-        // A file with one channel stays as it is. Every other one is read as four: GPUs have no texture
-        // format with three channels, and most pictures, every JPEG among them, are stored with three.
-        // The header says how many the file has, so the pixels are decoded once, in the form they are used in.
-        int width, height, channelsInFile;
-        if (!stbi_info(m_FilePath.c_str(), &width, &height, &channelsInFile))
-        {
-            LX_CORE_ERROR("Failed to load texture: {0}", m_FilePath);
-            return false;
-        }
-
-        const int channels = channelsInFile == 1 ? 1 : 4;
-        unsigned char* decoded = stbi_load(m_FilePath.c_str(), &width, &height, &channelsInFile, channels);
-        if (!decoded)
-        {
-            LX_CORE_ERROR("Failed to load texture: {0}", m_FilePath);
-            return false;
-        }
-        const std::span<const uint8_t> pixels(decoded, static_cast<size_t>(width) * height * channels);
-
-        // Settings that do not say what the texture holds get a guess from the picture itself.
-        m_HasGuessedSettings = m_Specification.Content == TextureContent::Undecided;
-        if (m_HasGuessedSettings)
-        {
-            const TextureGuess guess = GuessTextureSettings(pixels, width, height, channels, m_FilePath);
-            m_Specification.Content = guess.Content;
-            m_Specification.KeepsCoverage = guess.KeepsCoverage;
-        }
-
-        m_Cooked = CookTexture(pixels, width, height, channels, m_Specification);
-        stbi_image_free(decoded);
-        if (m_Cooked.Sizes.empty())
-        {
-            LX_CORE_ERROR("Failed to cook texture: {0}", m_FilePath);
-            return false;
-        }
-        cache.Store(m_FilePath, TextureCookingKey(m_Specification), m_Cooked);
-
-        m_Specification.Width = m_Cooked.Width();
-        m_Specification.Height = m_Cooked.Height();
-        m_Specification.Format = m_Cooked.Format;
-        return true;
+        return ReadTextureFile(m_FilePath, m_Specification, m_Cooked, m_HasGuessedSettings);
     }
 
     bool Texture::CreateRenderResources()
@@ -139,11 +170,24 @@ namespace Lynx
 
     bool Texture::Reload()
     {
-        // TODO: This could be done async too. Add later and keep old texture handle alive until new one is loaded.
-        if (LoadSourceData())
-        {
-            return CreateRenderResources();
-        }
-        return false;
+        return LoadSourceData() && CreateRenderResources();
+    }
+
+    std::unique_ptr<AssetReload> Texture::BeginReload()
+    {
+        // A texture made from pixels in memory has no file to read anew.
+        if (m_FilePath.empty())
+            return nullptr;
+
+        return std::make_unique<TextureReload>(m_FilePath, m_Specification);
+    }
+
+    bool Texture::FinishReload(AssetReload& reload)
+    {
+        TextureReload& read = static_cast<TextureReload&>(reload);
+        m_Specification = read.Settings;
+        m_Cooked = std::move(read.Cooked);
+        m_HasGuessedSettings = read.HasGuessedSettings;
+        return CreateRenderResources();
     }
 }

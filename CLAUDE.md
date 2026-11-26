@@ -75,6 +75,10 @@ build\bin\Debug\LynxSandboxGame.exe
   The asset registry may be asked from any thread and hands out copies, never references into itself:
   what `Get` returns is as things were at that moment, and null if the asset has gone since `Contains`.
   An asset's settings are replaced as a whole (`UpdateMetadata`), never changed in place.
+  `AssetManager::ReloadAsset` is for the main thread. A texture is read, cooked and compressed anew on a worker
+  thread and used as it was until that is done (`Asset::BeginReload`, `AssetReload::Read`, `FinishReload`,
+  `AssetManager::IsReloading`): asked again meanwhile, it is read once more afterwards. Every other kind of
+  asset still reloads at once, on the main thread, and can take the same road by overriding those two.
 - **Shutdown order matters.** Scenes go before the script engine, assets before the renderer. See `Engine::Shutdown`.
 - **Shaders.** Shaders are written in Slang (`.slang`) and compiled once into `temp\ShaderCache`. Mark entry points
   with `[shader("vertex")]`. Shared code lives in modules (`Scene`, `Textures`, `Mesh`, `Material`, `Atmosphere`, `StandardShading`) that a
