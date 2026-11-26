@@ -146,6 +146,9 @@ build\bin\Debug\LynxSandboxGame.exe
   textures are read where the pixel would be without the jitter (`SteadyTextures`, `steadyUv` in
   `Scene.slang`), so their patterns stand still: a new shader that reads a colour texture should do the
   same, and read what decides a cut-out with the jittered coordinates. Terrain does not do it yet.
+  A pixel that stands still, with the same surface behind it as before, gets a wider box and a longer
+  history (`StillBoxScale`, `StillHistoryTime`), or what is thinner than a pixel flickers at rest. Both
+  fade out over half a pixel of motion a frame.
   The view modes "TAA: ..." show the share of the frame, where the history was dropped and how far it was
   pulled in: the pass draws them into a picture that the composite pass shows in place of the scene
   (`RenderData::ShownInstead`). The grid and debug lines are drawn after it, without the jitter.
@@ -336,6 +339,8 @@ build\bin\Debug\LynxSandboxGame.exe
 
 ## Verifying a change
 
+- Build the whole preset before a commit, not one target: `tools/bench.ps1` builds RenderBench alone, and
+  an editor that no longer compiles goes unnoticed (it happened on 26 November 2026).
 - Build, then run the editor and the game and read `temp\engine.log` for `[error]`, `[critical]` and `VUID` lines.
 - Rendering and speed: `tools/bench.ps1 -Label <name>` runs the RenderBench benchmarks in Release and stores timings
   and pictures under the label. Run it before and after a change, then `tools/bench-compare.ps1 -Before <a> -After <b>`.
