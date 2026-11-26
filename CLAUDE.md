@@ -395,6 +395,8 @@ build\bin\Debug\LynxSandboxGame.exe
   kind is a class derived from `AssetWindow` (`GetKindName`, `DrawContents`) and one line in
   `EditorLayer`: `m_AssetWindows.Register<MeshEditorWindow>(AssetType::StaticMesh)`. Such a window is not
   docked into the main window: the system's title bar moves it, which ImGui does not see.
+  ImGui folds a dropdown list that once stuck out of such a window into the main window, where it is drawn
+  out of sight: `AssetWindow` hands those back every frame (`KeepPopupsInThisWindow`).
 - **Texture viewer.** `TextureViewerWindow` is the asset window of a texture. It shows the texture as it is
   on the GPU after cooking: any of its sizes, any of its channels, zoomed and moved about, with what it
   takes in video memory and its settings (`TextureSettingsEditor`, which the asset properties panel shows

@@ -1,6 +1,7 @@
 #include "AssetWindow.h"
 
 #include <imgui.h>
+#include <imgui_internal.h>
 
 #include "Lynx/Engine.h"
 
@@ -12,6 +13,42 @@ namespace Lynx
     {
         // A window that has no place yet opens this far from the main window's corner.
         constexpr float FirstOffset = 80.0f;
+
+        // Dropdown lists and menus opened from the window that is being drawn, if ImGui has moved them
+        // into the editor's main window, are handed back.
+        //
+        // A list that sticks out of its window gets an operating system window of its own, and one
+        // that fits again is folded back, but only ever into the main window: ImGui knows no other
+        // window that can hold more than itself (the FIXME at UpdateTryMergeWindowIntoHostViewports).
+        // Opened at the mouse, a list sticks out for its first frame whenever the click was near the
+        // right or lower edge. Folded into the main window, it is drawn there, under this window,
+        // where nobody sees it. Without a viewport, a list takes its parent's when it is next begun.
+        void KeepPopupsInThisWindow()
+        {
+            ImGuiContext& context = *ImGui::GetCurrentContext();
+            const ImGuiWindow* thisWindow = ImGui::GetCurrentWindow();
+            const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+            if (thisWindow->Viewport == mainViewport)
+                return;
+
+            for (const ImGuiPopupData& popup : context.OpenPopupStack)
+            {
+                ImGuiWindow* list = popup.Window;
+                if (!list || list->Viewport != mainViewport)
+                    continue;
+
+                // A list opened from another list, or from a part of the window, belongs to it as well.
+                for (const ImGuiWindow* parent = list->ParentWindow; parent; parent = parent->ParentWindow)
+                {
+                    if (parent == thisWindow)
+                    {
+                        list->Viewport = nullptr;
+                        list->ViewportId = 0;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     AssetWindow::AssetWindow(AssetHandle asset)
@@ -56,6 +93,7 @@ namespace Lynx
         const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoCollapse;
         if (ImGui::Begin(title.c_str(), &m_IsOpen, flags))
         {
+            KeepPopupsInThisWindow();
             if (!DrawContents())
                 m_IsOpen = false;
         }
