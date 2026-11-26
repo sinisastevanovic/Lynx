@@ -25,6 +25,11 @@ namespace Lynx
 
         constexpr uint32_t NoCommand = ~0u;
 
+        // Up to this many entries, the list of drawn instances may be laid out with a run per command
+        // that could hold the command's whole batch, which saves culling two of its three steps.
+        // Beyond it, 32 MB, culling counts first, and the list is as long as what can be drawn.
+        constexpr uint64_t LongestListWithoutCounting = 4u * 1024u * 1024u;
+
         // The planes of a view, pointing inwards. Has to match View in Cull.slang.
         struct CullView
         {
@@ -81,6 +86,15 @@ namespace Lynx
         {
             uint32_t FirstBatch = 0;
             uint32_t BatchCount = 0;
+        };
+
+        // How much of the list of drawn instances is given out to draw commands, and how long the list
+        // is. Written by the CPU at the start of a frame, with what the see-through instances take, and
+        // moved on by culling. Has to match CullState in CullRuns.slang.
+        struct CullState
+        {
+            uint32_t Used = 0;
+            uint32_t Capacity = 0;
         };
 
         // The bits of a scattered instance that say what the camera saw have room for this many submeshes.
@@ -643,12 +657,13 @@ namespace Lynx
                 lodCommands.push_back({ .Error = level.Error });
         }
 
-        // One draw command per batch, level and view, drawing nothing yet. Each gets a run in the list
-        // of drawn instances that is long enough for the whole batch, the scattered instances that are
-        // drawn with it included, because all of its instances may be drawn in one level. Culling on the
-        // GPU counts the instances a view sees into the command of their level and writes them into its run.
+        // One draw command per batch, level and view, drawing nothing yet. Culling on the GPU counts
+        // the instances a view sees into the command of their level. Where the run of a command starts
+        // in the list of drawn instances is decided further down, or left to culling.
         std::vector<vk::DrawIndexedIndirectCommand> commands;
-        uint32_t visibleCount = 0;
+
+        // Per command, how many instances its batch has: how long its run would have to be to hold them all.
+        std::vector<uint32_t> batchSizes;
         // commandOf says which of a level's commands is being laid out: that of one view.
         const auto addCommands = [&](auto&& commandOf)
         {
@@ -671,8 +686,8 @@ namespace Lynx
                     {
                         const MeshLod& lod = submesh.Lods[level];
                         commandOf(lodCommands[batchLods[index].First + level]) = static_cast<uint32_t>(commands.size());
-                        commands.emplace_back(lod.IndexCount, 0u, submesh.Geometry.FirstIndex() + lod.FirstIndex, submesh.Geometry.VertexOffset(), visibleCount);
-                        visibleCount += static_cast<uint32_t>(batch.Places.size()) + batch.ScatterInstances;
+                        commands.emplace_back(lod.IndexCount, 0u, submesh.Geometry.FirstIndex() + lod.FirstIndex, submesh.Geometry.VertexOffset(), 0u);
+                        batchSizes.push_back(static_cast<uint32_t>(batch.Places.size()) + batch.ScatterInstances);
                     }
                 }
 
@@ -689,8 +704,37 @@ namespace Lynx
         copy.CommandCount = static_cast<uint32_t>(commands.size());
         copy.CameraCommandCount = frame.Draws.Camera().Count;
 
-        CullSeeThrough(camera.Planes, cameraPosition, visibleCount, copy);
+        // An instance is drawn in one level per view, and by the camera in one of its two phases. So
+        // the runs of all commands together are never longer than every instance once per view.
+        uint64_t drawnAtMost = 0;
+        for (const uint32_t index : m_DrawOrder)
+        {
+            const Batch& batch = m_Batches[index];
+            if (!batch.IsTranslucent)
+                drawnAtMost += (batch.Places.size() + batch.ScatterInstances) * (1 + ShadowCascadeCount);
+        }
+
+        // A run per command that could hold its whole batch is longer by the number of levels, and more.
+        // Where that is still short, the runs are laid out here and culling is spared the counting.
+        uint64_t allRuns = 0;
+        for (const uint32_t size : batchSizes)
+            allRuns += size;
+        const bool countsFirst = m_CountsFirst.value_or(allRuns > LongestListWithoutCounting);
+
+        const uint32_t roomForTheRest = static_cast<uint32_t>(countsFirst ? drawnAtMost : allRuns);
+        const uint32_t seeThroughCount = CullSeeThrough(camera.Planes, cameraPosition, roomForTheRest, copy);
         frame.TransparentDraws = m_TransparentDraws;
+
+        if (!countsFirst)
+        {
+            // The see-through instances, which the CPU has written, stand first in the list.
+            uint32_t runStart = seeThroughCount;
+            for (size_t index = 0; index < commands.size(); ++index)
+            {
+                commands[index].firstInstance = runStart;
+                runStart += batchSizes[index];
+            }
+        }
 
         UploadChanges();
 
@@ -743,8 +787,15 @@ namespace Lynx
             const uint64_t lodOffset = sizeof(CullFrame) + batchList.size_bytes();
             const uint64_t scatterKindOffset = lodOffset + lodList.size_bytes();
             const uint64_t scatterBatchOffset = scatterKindOffset + scatterKindList.size_bytes();
-            EnsureSize(m_Context, m_CullInputBuffer, scatterBatchOffset + scatterBatchList.size_bytes(),
+            const uint64_t stateOffset = scatterBatchOffset + scatterBatchList.size_bytes();
+            EnsureSize(m_Context, m_CullInputBuffer, stateOffset + sizeof(CullState),
                 vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, "CullInput");
+
+            // The see-through instances stand first in the list. Only culling that counts first reads this.
+            const CullState state{ seeThroughCount, seeThroughCount + roomForTheRest };
+            m_Uploads.Upload(m_CullInputBuffer.Handle(), stateOffset, std::as_bytes(std::span<const CullState>(&state, 1)));
+            EnsureSize(m_Context, m_CursorBuffer, commandList.size_bytes() / sizeof(vk::DrawIndexedIndirectCommand) * sizeof(uint32_t),
+                vk::BufferUsageFlagBits::eStorageBuffer, "MeshDrawCursors");
 
             cullFrame.ScatterCount = static_cast<uint32_t>(m_ScatterInstances.size());
             cullFrame.ScatterInstances = cullFrame.ScatterCount > 0 ? m_ScatterInstanceBuffer.Address() : 0;
@@ -768,6 +819,11 @@ namespace Lynx
             frame.Culling.VisibilityAddress = m_VisibilityBuffer.Address();
             frame.Culling.PlaceCount = static_cast<uint32_t>(m_Instances.size());
             frame.Culling.ScatterCount = cullFrame.ScatterCount;
+            frame.Culling.CursorAddress = m_CursorBuffer.Address();
+            frame.Culling.StateAddress = m_CullInputBuffer.Address() + stateOffset;
+            frame.Culling.CountsFirst = countsFirst;
+            frame.Culling.CommandCount = static_cast<uint32_t>(commands.size());
+            frame.Culling.CameraCommandsPerPhase = frame.Draws.CameraEarly.All().Count;
         }
 
         frame.Draws.Buffer = &m_CommandBuffer;
@@ -778,7 +834,7 @@ namespace Lynx
         return frame;
     }
 
-    void GpuScene::CullSeeThrough(const Frustum& camera, const glm::vec3& cameraPosition, uint32_t firstVisible, CommandCopy& counted)
+    uint32_t GpuScene::CullSeeThrough(const Frustum& camera, const glm::vec3& cameraPosition, uint32_t roomForTheRest, CommandCopy& counted)
     {
         // See-through instances are drawn one by one, the farthest first, so that nearer ones cover them.
         struct Sorted
@@ -807,7 +863,7 @@ namespace Lynx
         // Instances at the same distance keep the order of their places, so that a frame looks the same in every run.
         std::ranges::sort(sorted, [](const Sorted& a, const Sorted& b) { return std::tie(b.Distance, a.Place) < std::tie(a.Distance, b.Place); });
 
-        // Their places follow the runs of the draw commands in the list of drawn instances.
+        // They stand first in the list of drawn instances, before the runs of the draw commands.
         std::vector<DrawnEntry> places;
         places.reserve(sorted.size());
         m_TransparentDraws.clear();
@@ -817,19 +873,21 @@ namespace Lynx
         {
             const GpuInstance& instance = m_Instances[entry.Place];
             m_TransparentDraws.push_back({ instance.IndexCount, instance.FirstIndex, instance.VertexOffset,
-                firstVisible + static_cast<uint32_t>(places.size()), m_Batches[instance.Batch].Kind.IsTwoSided });
+                static_cast<uint32_t>(places.size()), m_Batches[instance.Batch].Kind.IsTwoSided });
             places.push_back({ entry.Place, 0u });
             counted.SeeThroughTriangles += instance.IndexCount / 3;
         }
 
-        // Room for every see-through instance, seen or not, so that the buffer does not grow as the camera turns.
-        const uint64_t neededCount = firstVisible + seeThroughCount;
+        // Room for every see-through instance, seen or not, so that the buffer does not grow as the
+        // camera turns, and behind them for what culling on the GPU writes.
+        const uint64_t neededCount = seeThroughCount + roomForTheRest;
         if (neededCount == 0)
-            return;
+            return 0;
 
         EnsureSize(m_Context, m_VisibleBuffer, neededCount * sizeof(DrawnEntry), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, "VisibleInstances");
         if (!places.empty())
-            m_Uploads.Upload(m_VisibleBuffer.Handle(), firstVisible * sizeof(DrawnEntry), std::as_bytes(std::span<const DrawnEntry>(places)));
+            m_Uploads.Upload(m_VisibleBuffer.Handle(), 0, std::as_bytes(std::span<const DrawnEntry>(places)));
+        return static_cast<uint32_t>(seeThroughCount);
     }
 
     void GpuScene::ReadCounters(const CommandCopy& copy, Frame& frame) const

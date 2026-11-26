@@ -11,6 +11,7 @@
 #include <array>
 #include <map>
 #include <memory>
+#include <optional>
 #include <span>
 #include <unordered_map>
 #include <vector>
@@ -86,9 +87,12 @@ namespace Lynx
     // covers a run of it.
     //
     // Which instances are drawn, and in which level of detail, is decided on the GPU (CullPass). The CPU
-    // only lays the frame out: one draw command per batch, level and view, each with a run of the list
-    // that could hold all of the batch's instances. Culling counts the instances a view sees into the
-    // command of their level and writes their places into its run.
+    // only lays the frame out: one draw command per batch, level and view, drawing nothing. Culling
+    // counts the instances a view sees into the command of their level, gives every command a run of
+    // the list as long as its count, and writes the instances into the runs (CullStep). So the list is
+    // as long as what can be drawn at most, each instance once per view, whatever the number of levels.
+    // A scene with few instances skips the counting: there the CPU gives every command a run that
+    // could hold its whole batch, which is many times more than is drawn but little all the same.
     // The camera's view has two commands per batch and level, one for each phase of culling, see CullPhase.
     // See-through instances are the exception: they have to be sorted, which is done here, on the CPU.
     //
@@ -181,6 +185,10 @@ namespace Lynx
         // The address shaders read the scattered instances from, one ScatterInstance each, and zero if
         // there are none. Lays them out first if they changed, so it is right for the frame to come.
         uint64_t ScatterInstanceAddress();
+
+        // Makes culling count first, or never, whatever the size of the scene: for measuring one way
+        // against the other. Without a value, which is how it starts, the size of the scene decides.
+        void SetCountsFirst(std::optional<bool> countsFirst) { m_CountsFirst = countsFirst; }
 
         // Lays out the frame's draw commands and queues for upload what changed since the last frame.
         // Call once per frame, before the uploads are recorded.
@@ -280,7 +288,7 @@ namespace Lynx
         void LayOutScatter();
         uint32_t ScatterKindFor(const std::shared_ptr<StaticMesh>& mesh);
         void UploadChanges();
-        void CullSeeThrough(const Frustum& camera, const glm::vec3& cameraPosition, uint32_t firstVisible, CommandCopy& counted);
+        uint32_t CullSeeThrough(const Frustum& camera, const glm::vec3& cameraPosition, uint32_t roomForTheRest, CommandCopy& counted);
         void ReadCounters(const CommandCopy& copy, Frame& frame) const;
 
     private:
@@ -333,6 +341,10 @@ namespace Lynx
 
         // What culling reads besides the instances: the views of the frame, then per batch its commands.
         GpuBuffer m_CullInputBuffer;
+
+        // Per draw command, how many instances culling has written into its run. Only the GPU uses it.
+        GpuBuffer m_CursorBuffer;
+        std::optional<bool> m_CountsFirst;
 
         std::vector<TransparentDraw> m_TransparentDraws;
 

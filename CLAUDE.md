@@ -194,6 +194,13 @@ build\bin\Debug\LynxSandboxGame.exe
   camera and the sun, counts those seen into the command and writes their places into its run. A command may end
   up drawing nothing, and the order of instances within a batch differs from frame to frame. The CPU learns what
   was drawn four frames later, from a copy of the commands, and only for the counters.
+  A scene with many instances is culled in three steps per phase (`CullStep`, all in one `CullPass`): the
+  shader counts what every command draws, `CullRuns.slang` gives every command a run of the list as long
+  as its count, and the shader runs again and writes. The list of drawn instances then holds every
+  instance at most once per view, 40 bytes per submesh, where a run per command for its whole batch is
+  longer by the number of levels and views. The steps cost 0.015 to 0.04 ms a frame, so they are taken
+  only when the list would otherwise pass 32 MB (`LongestListWithoutCounting` in `GpuScene.cpp`): below
+  that the CPU lays the runs out as before. A benchmark forces either way with `CullCounts=1` or `0`.
 - **Levels of detail.** Cooking makes coarser levels of every submesh of 1,024 triangles or more, each about half
   the one before, with meshoptimizer (`BuildLods`). A level is a further run of indices over the same vertices
   (`MeshLod`, `Submesh::Lods`) and knows how far it is off the original. The cull shader picks, per instance, the
@@ -227,8 +234,8 @@ build\bin\Debug\LynxSandboxGame.exe
   the vertex shaders the instance and its matrix either way (`drawnEntry`, `meshInstance`, `meshModel`,
   `previousMeshModel`). So no pass and no draw call knows the difference. A new shader that draws meshes
   goes through those functions. `scene.scatterInstances` is their address. See-through submeshes are not
-  drawn, and a scattered instance cannot be picked. Every change lays all of them out anew, and every
-  draw command still keeps room for all instances of its batch: both are for the next parts of the step.
+  drawn, and a scattered instance cannot be picked. Every change lays all of them out anew, which is for
+  the next part of the step.
   A benchmark with `Scatter=1` draws the trees of Trees this way, and `ScatterLike=1` gives the entities
   the turns and sizes a scattered instance can hold, to compare the two.
 - **View modes.** A view of a scene can show one thing about the picture instead of the picture (`ViewMode` in

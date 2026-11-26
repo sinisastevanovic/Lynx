@@ -43,6 +43,25 @@ namespace Lynx
         Late = 1
     };
 
+    // Culling fills the draw commands of a phase in three steps, so that the list of drawn instances
+    // holds what is drawn and no more. A scene whose list is short either way is culled in one step.
+    enum class CullStep : uint32_t
+    {
+        // Every instance is tested, and those that are seen are counted into their draw commands.
+        Count = 0,
+
+        // Every draw command gets a run in the list of drawn instances, as long as its count.
+        Runs = 1,
+
+        // Every instance is tested again, the same way, and those that are seen are written into the runs.
+        Write = 2,
+
+        // In place of the three: every instance is tested once, counted and written at the same time,
+        // into runs that the CPU laid out, each long enough for every instance its command could draw.
+        // The two steps saved are worth about 0.015 ms a frame, which is 2 to 3 % of a small scene's.
+        CountAndWrite = 3
+    };
+
     // What about a material decides how the mesh passes draw a surface: with which pipeline, and in which
     // state. The draw commands of a frame are grouped by it, so that a pass sets each state once and draws
     // a whole group with one call. A further way of drawing is a further member here and a larger Count,
@@ -139,6 +158,20 @@ namespace Lynx
 
         // How many scattered instances there are, which are culled after the places, see GpuScene.
         uint32_t ScatterCount = 0;
+
+        // Per draw command, how many of its instances are written into its run so far.
+        uint64_t CursorAddress = 0;
+
+        // How much of the list of drawn instances is given out, and how long it is (GpuScene's CullState).
+        uint64_t StateAddress = 0;
+
+        // False if the CPU laid the runs out and one step does it all, see CullStep::CountAndWrite.
+        bool CountsFirst = false;
+
+        // The draw commands in the order they lie in: the camera's of the early phase, as many of the
+        // late phase, then the sun's, which the early phase fills.
+        uint32_t CommandCount = 0;
+        uint32_t CameraCommandsPerPhase = 0;
     };
 
     // The scene's depth in ever smaller sizes, see DepthPyramidPass.

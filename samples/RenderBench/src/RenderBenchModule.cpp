@@ -1,6 +1,7 @@
 #include <Lynx.h>
 #include <Lynx/GameModule.h>
 #include <Lynx/Renderer/DebugRenderer.h>
+#include <Lynx/Renderer/GpuScene.h>
 
 #include "BenchScenes.h"
 
@@ -30,6 +31,10 @@ public:
         const auto count = [&settings](const char* name) { return static_cast<uint32_t>(std::max(settings.Parameter(name, 0.0), 0.0)); };
 
         // How levels of detail are picked, for measuring what they gain and for looking at one level.
+        // CullCounts=1 makes culling count before it writes, 0 never: by itself the size of the scene decides.
+        if (const double counts = settings.Parameter("CullCounts", -1.0); counts >= 0.0)
+            engine.GetRenderer().GetGpuScene().SetCountsFirst(counts > 0.0);
+
         LodSettings& lods = engine.GetRenderer().GetLodSettings();
         lods.ErrorPixels = static_cast<float>(settings.Parameter("LodErrorPixels", lods.ErrorPixels));
         lods.LeafPixels = static_cast<float>(settings.Parameter("LodLeafPixels", lods.LeafPixels));

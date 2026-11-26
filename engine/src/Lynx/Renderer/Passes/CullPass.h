@@ -7,8 +7,8 @@ namespace Lynx
     // the scene against the camera's view and the sun's, and fills in the draw commands that the passes
     // after it draw from. See GpuScene for how a frame is laid out, and Cull.slang.
     //
-    // It runs once per phase, see CullPhase. The late phase needs the depth pyramid of what the early
-    // phase drew, and without one it lets through everything that is in view.
+    // It runs once per phase, see CullPhase, in three steps, see CullStep. The late phase needs the
+    // depth pyramid of what the early phase drew, and without one it lets through everything in view.
     class CullPass : public VulkanPass
     {
     public:
@@ -20,7 +20,8 @@ namespace Lynx
         void Execute(vk::CommandBuffer commands, RenderData& renderData) override;
 
     private:
-        void CreatePipeline(const Shader& shader);
+        void UpdatePipelines();
+        void CreatePipeline(const Shader& shader, const char* name, size_t pushSize, bool handsOutRuns);
 
     private:
         struct VulkanObjects;
@@ -28,5 +29,6 @@ namespace Lynx
 
         CullPhase m_Phase;
         PipelineState m_PipelineState;
+        PipelineState m_RunPipelineState;
     };
 }

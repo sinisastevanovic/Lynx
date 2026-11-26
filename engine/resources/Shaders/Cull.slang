@@ -2,11 +2,16 @@
 // against the camera's view and the sun's, and those that are seen are added to the draw command of
 // their batch and of the level of detail that suits their distance.
 //
-// The CPU has laid the frame out: one draw command per batch, level and view that draws nothing yet,
-// each with a run in the list of drawn instances that could hold the whole batch. Here an instance that is seen
-// takes the next free place in the run and the command's count goes up by one. Many instances do that
-// at the same time, so the count is raised atomically, which also hands every instance a place of its own.
-// The order of the instances within a run therefore differs from frame to frame.
+// The CPU has laid the frame out: one draw command per batch, level and view that draws nothing yet.
+// This shader runs twice for a phase. First it counts: an instance that is seen raises the count of its
+// command by one. CullRuns.slang then gives every command a run in the list of drawn instances, as long
+// as its count. Then this shader runs again, decides the same, and an instance that is seen takes the
+// next free place in the run of its command. Many instances do that at the same time, so counts and
+// places are raised atomically, which hands every instance a place of its own. The order of the
+// instances within a run therefore differs from frame to frame.
+//
+// A scene with few instances is culled in one step instead: the CPU has given every command a run that
+// could hold its whole batch, and an instance that is seen is counted and written at once.
 //
 // For the camera this runs twice per frame, so that what lies behind other things is not drawn
 // (after "GPU-Driven Rendering Pipelines", Haar and Aaltonen, SIGGRAPH 2015):
@@ -133,6 +138,11 @@ static const uint noCommand = 0xFFFFFFFF;
 static const uint phaseEarly = 0;
 static const uint phaseLate = 1;
 
+// Has to match CullStep in RenderPass.h. The step in between is CullRuns.slang.
+static const uint stepCount = 0;
+static const uint stepWrite = 2;
+static const uint stepCountAndWrite = 3;
+
 struct CullConstants
 {
     MeshInstance* instances;
@@ -146,15 +156,20 @@ struct CullConstants
     // Per place, whether the camera saw its instance in the last frame.
     uint* visibility;
 
+    // Per draw command, how many instances are written into its run so far.
+    uint* cursors;
+
     // How many places the instance buffer has. Some of them may be empty. The threads after them cull
     // the scattered instances, one each.
     uint placeCount;
     uint phase;
+    uint step;
 
     // The depth pyramid: where the texture table has it, how many sizes it has and its largest size
     // in pixels. No sizes means there is no pyramid, and nothing counts as hidden.
     uint pyramidTexture;
     uint pyramidMipCount;
+    uint padding;
     int2 pyramidSize;
 };
 [vk::push_constant] ConstantBuffer<CullConstants> constants;
@@ -294,9 +309,27 @@ bool isCoveredByNearerCascade(uint cascade, float3 centre, float radius)
 // instance needs besides. The level it is drawn in goes into that byte, where the vertex shaders find it.
 void draw(uint command, uint2 entry, uint level)
 {
-    uint countBefore;
-    InterlockedAdd(constants.commands[command].instanceCount, 1, countBefore);
-    constants.visibleInstances[constants.commands[command].firstInstance + countBefore] = uint2(entry.x, entry.y | level);
+    if (constants.step == stepCount)
+    {
+        InterlockedAdd(constants.commands[command].instanceCount, 1);
+        return;
+    }
+
+    // The run could hold the whole batch, so the count is the place.
+    if (constants.step == stepCountAndWrite)
+    {
+        uint countBefore;
+        InterlockedAdd(constants.commands[command].instanceCount, 1, countBefore);
+        constants.visibleInstances[constants.commands[command].firstInstance + countBefore] = uint2(entry.x, entry.y | level);
+        return;
+    }
+
+    // The run is as long as the count. Both steps decide alike, so the check never fails, and is there
+    // so that a fault could not write into the run of another command.
+    uint writtenBefore;
+    InterlockedAdd(constants.cursors[command], 1, writtenBefore);
+    if (writtenBefore < constants.commands[command].instanceCount)
+        constants.visibleInstances[constants.commands[command].firstInstance + writtenBefore] = uint2(entry.x, entry.y | level);
 }
 
 // Decides for one submesh of one instance, given the sphere around it in the world and how much larger
@@ -380,7 +413,8 @@ void cullPlace(uint place)
 
     bool seenLastFrame = constants.visibility[place] != 0;
     bool seen = cull(batch, centre, radius, scale, uint2(place, 0), seenLastFrame);
-    if (constants.phase == phaseLate && constants.batches[batch].count != 0)
+    // Kept only once the instance is written: the step that counts has to find what the last frame left.
+    if (constants.phase == phaseLate && constants.step != stepCount && constants.batches[batch].count != 0)
         constants.visibility[place] = seen ? 1 : 0;
 }
 
@@ -410,7 +444,7 @@ void cullScattered(uint index)
         seenNow |= seen ? (1u << submesh) : 0u;
     }
 
-    if (constants.phase == phaseLate)
+    if (constants.phase == phaseLate && constants.step != stepCount)
         constants.frame.scatterVisibility[index] = seenNow;
 }
 
