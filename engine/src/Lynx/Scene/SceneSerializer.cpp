@@ -90,7 +90,8 @@ namespace Lynx
     {
         const std::string serialized = SceneSerializer(source).SerializeToString();
 
-        auto copy = std::make_shared<Scene>();
+        // The copy knows which file it is a copy of, so that a game can tell which scene it plays.
+        auto copy = std::make_shared<Scene>(source->GetFilePath());
         SceneSerializer(copy).DeserializeFromString(serialized);
         return copy;
     }

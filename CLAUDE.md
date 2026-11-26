@@ -378,6 +378,11 @@ build\bin\Debug\LynxSandboxGame.exe
   drifts over an hour. The Trees benchmark draws models that are not in the repository, 1.5 GB of them:
   `tools/fetch-polyhaven.ps1` fetches them, once per machine, and with them the three ground textures of the
   Terrain benchmark, 37 MB (`-NoModels` fetches the textures alone).
+- To look at a benchmark's scene with a free camera, open the RenderBench project in the editor
+  (`editor.exe D:\LynxEngine\samples\RenderBench\RenderBench.lxproj`), open the scene and press Play: the
+  module then builds what the benchmark named like the scene builds (`Scenes/Crowd.lxscene` from
+  `bench/crowd.json`), without its camera path and its measuring. Most of those scenes are nearly empty
+  until then. A benchmark and its scene therefore share a name.
 - The editor window: `tools/capture-window.ps1` saves a picture of it. Compare one from before with one from after.
 - F3, or `--profiler` on the command line, shows frame, CPU and GPU times on screen in the editor and in a game.
 - Serialization: re-save every scene and prefab with the old and the new code and compare the JSON.

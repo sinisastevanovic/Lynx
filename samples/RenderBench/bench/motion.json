@@ -1,6 +1,6 @@
 {
     "Name": "motion",
-    "Scene": "Scenes/Sponza.lxscene",
+    "Scene": "Scenes/Motion.lxscene",
     "Frames": 600,
     "ScreenshotFrames": [
         150,

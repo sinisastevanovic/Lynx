@@ -6,7 +6,10 @@
 
 #include <glm/gtx/quaternion.hpp>
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <filesystem>
 #include <optional>
 
 class RenderBenchModule : public IGameModule
@@ -18,12 +21,12 @@ public:
     void OnStart() override
     {
         Engine& engine = Engine::Get();
-        const Benchmark* benchmark = engine.GetBenchmark();
-        if (!benchmark)
+        m_Settings = SettingsFor(engine);
+        if (!m_Settings)
             return;
 
         // The benchmark file decides which scene is built and how much it holds, see the files in bench/.
-        const BenchmarkSettings& settings = benchmark->Settings();
+        const BenchmarkSettings& settings = *m_Settings;
         const auto count = [&settings](const char* name) { return static_cast<uint32_t>(std::max(settings.Parameter(name, 0.0), 0.0)); };
 
         // How levels of detail are picked, for measuring what they gain and for looking at one level.
@@ -122,8 +125,7 @@ public:
             m_TerrainPhysics->Update(*engine.GetActiveScene(), deltaTime);
 
         // Debug shapes last one frame, so they are drawn again in every frame. See bench/features.json.
-        const Benchmark* benchmark = engine.GetBenchmark();
-        if (!benchmark || benchmark->Settings().Parameter("DebugShapes", 0.0) <= 0.0)
+        if (!m_Settings || m_Settings->Parameter("DebugShapes", 0.0) <= 0.0)
             return;
 
         DebugRenderer::DrawBox(glm::vec3(-7.0f, 0.0f, 6.0f), glm::vec3(-5.0f, 2.0f, 8.0f), glm::vec4(1.0f, 0.2f, 0.2f, 1.0f));
@@ -133,12 +135,42 @@ public:
 
     void OnShutdown() override
     {
+        m_Settings.reset();
         m_Crowd.reset();
         m_MotionProps.reset();
         m_TerrainPhysics.reset();
     }
 
 private:
+    // The numbers the scene that plays is built from. A benchmark that runs brings its own.
+    //
+    // In the editor no benchmark runs. Pressing Play there builds what the benchmark named like the
+    // scene builds, Scenes/Crowd.lxscene from bench/crowd.json, so that a benchmark's scene can be
+    // looked at with a free camera and the editor's settings. The benchmark's camera path, its
+    // pictures and its measuring are left out.
+    static std::optional<BenchmarkSettings> SettingsFor(Engine& engine)
+    {
+        if (const Benchmark* benchmark = engine.GetBenchmark())
+            return benchmark->Settings();
+
+        std::string name = std::filesystem::path(engine.GetActiveScene()->GetFilePath()).stem().string();
+        std::ranges::transform(name, name.begin(), [](unsigned char letter) { return static_cast<char>(std::tolower(letter)); });
+        const std::filesystem::path file = engine.GetProject().RootDirectory / "bench" / (name + ".json");
+        if (name.empty() || !std::filesystem::exists(file))
+            return std::nullopt;
+
+        auto settings = BenchmarkSettings::Load(file);
+        if (!settings)
+        {
+            LX_ERROR("RenderBench: {0}", settings.error());
+            return std::nullopt;
+        }
+
+        LX_INFO("RenderBench: building the scene of bench/{0}.json to look at.", name);
+        return std::move(*settings);
+    }
+
+    std::optional<BenchmarkSettings> m_Settings;
     std::optional<Crowd> m_Crowd;
     std::optional<MotionProps> m_MotionProps;
     std::optional<TerrainPhysicsCheck> m_TerrainPhysics;
