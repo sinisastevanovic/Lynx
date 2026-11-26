@@ -8,9 +8,12 @@ namespace Lynx
 {
     class Texture;
 
-    // Shows the texture that is selected as it is on the GPU, after cooking: any of its sizes, any of
+    // A window that shows a texture as it is on the GPU, after cooking: any of its sizes, any of
     // its channels, zoomed and moved about, next to what it takes in memory and its settings. Applying
     // a setting cooks the texture anew, and the window shows the result.
+    //
+    // It opens when a texture is picked in the asset browser with a double click, and is closed like
+    // any window. There is one: picking another texture shows that one in it.
     //
     // The wheel zooms, about the place under the mouse. Dragging with the left or middle button moves.
     class TextureViewerPanel : public EditorPanel
@@ -30,6 +33,10 @@ namespace Lynx
     private:
         AssetHandle m_Handle = AssetHandle::Null();
         TextureSettingsEditor m_Settings;
+
+        // Closed until a texture is picked. And set when one is, so that the window comes to the front.
+        bool m_IsOpen = false;
+        bool m_ComesToFront = false;
 
         // Which size is shown, 0 for the largest, and which channels.
         int m_Size = 0;

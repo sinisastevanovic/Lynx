@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <string>
+#include <utility>
 
 namespace Lynx
 {
@@ -26,8 +28,14 @@ namespace Lynx
     {
         const bool isTexture = handle.IsValid() && Engine::Get().GetAssetRegistry().Get(handle).Type == AssetType::Texture;
 
-        // Selecting something that is no texture leaves the viewer on the texture it shows.
-        if (!isTexture || handle == m_Handle)
+        // Selecting something that is no texture leaves the viewer as it is.
+        if (!isTexture)
+            return;
+
+        // The window opens for the texture and comes to the front, also if it shows that texture already.
+        m_IsOpen = true;
+        m_ComesToFront = true;
+        if (handle == m_Handle)
             return;
 
         m_Handle = handle;
@@ -38,17 +46,28 @@ namespace Lynx
 
     void TextureViewerPanel::OnImGuiRender()
     {
-        // A layout saved before the viewer existed has no place for it: it then opens as a window of
-        // its own, large enough to work in, and stays wherever it is put.
-        ImGui::SetNextWindowSize(ImVec2(1100.0f, 720.0f), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("Texture Viewer"))
+        // The viewer is a window that is opened for a texture and closed again, not a part of the layout.
+        if (!m_IsOpen)
+            return;
+
+        const std::shared_ptr<Texture> texture = m_Handle.IsValid() ? Engine::Get().GetAssetManager().GetAsset<Texture>(m_Handle) : nullptr;
+        if (!texture)
         {
-            const std::shared_ptr<Texture> texture = m_Handle.IsValid() ? Engine::Get().GetAssetManager().GetAsset<Texture>(m_Handle) : nullptr;
-            if (!texture)
-            {
-                ImGui::TextDisabled("Select a texture in the asset browser to look at it here.");
-            }
-            else if (!texture->IsOnGpu())
+            // The texture was removed while the window showed it.
+            m_IsOpen = false;
+            return;
+        }
+
+        // It opens large enough to work in, and stays wherever it is put, docked or on its own.
+        ImGui::SetNextWindowSize(ImVec2(1100.0f, 720.0f), ImGuiCond_FirstUseEver);
+        if (std::exchange(m_ComesToFront, false))
+            ImGui::SetNextWindowFocus();
+
+        // The title names the texture. What follows the three hashes is what the layout knows the window by.
+        const std::string title = std::filesystem::path(texture->GetFilePath()).filename().string() + " - Texture Viewer###TextureViewer";
+        if (ImGui::Begin(title.c_str(), &m_IsOpen))
+        {
+            if (!texture->IsOnGpu())
             {
                 ImGui::TextDisabled("Loading...");
             }

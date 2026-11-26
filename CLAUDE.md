@@ -379,8 +379,9 @@ build\bin\Debug\LynxSandboxGame.exe
   it is. Only a texture that holds colours has the sRGB reading. A texture made from pixels in memory is
   not cooked: its smaller sizes are still scaled on the GPU. The cache is not compressed yet and large,
   2 GB for the benchmark project.
-- **Texture viewer.** The editor's "Texture Viewer" window (`editor/src/Panels/TextureViewerPanel`) shows the
-  texture that is selected in the asset browser as it is on the GPU after cooking: any of its sizes, any
+- **Texture viewer.** The editor's texture viewer (`editor/src/Panels/TextureViewerPanel`) is a window that opens when a
+  texture is picked in the asset browser with a double click, and is closed like any window. It shows the
+  texture as it is on the GPU after cooking: any of its sizes, any
   of its channels, zoomed and moved about, with what it takes in video memory and its settings
   (`TextureSettingsEditor`, which the asset properties panel shows too). A window cannot show one size or
   one channel of a texture by itself, so `Passes/TexturePreviewPass` draws the part that is seen into a
