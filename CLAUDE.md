@@ -117,9 +117,16 @@ build\bin\Debug\LynxSandboxGame.exe
   frame, in texture coordinates, where it is minus where it was (`RenderData::SceneMotion`, two half floats,
   `screenMotion` in `Scene.slang`). Meshes take it from last frame's transform and last frame's camera
   (`scene.previousViewProjection`), terrain and sky from the camera alone. A pass that writes it sets
-  `PassResources::MotionTarget` and its pipeline `MotionFormat`. A fragment shader's outputs are numbered
-  colour, motion, entity IDs. A pipeline that blends leaves the motion alone. Nothing reads it yet but the
-  view mode "Motion", until TAA (step 3.10). What stands still has a motion of exactly zero.
+  `PassResources::MotionTarget` and its pipeline `MotionFormat`. A pipeline that blends leaves the motion
+  alone. The temporal pass and the view mode "Motion" read it. What stands still has a motion of exactly zero.
+- **See-through mask.** What blends writes no motion, so its pixels carry the motion of what lies behind.
+  It marks them instead: a further target (`RenderData::SceneReactive`, one byte a pixel, elsewhere called
+  the reactive mask) that only pipelines that blend write, with the alpha of what they draw
+  (`ReactiveFormat`, `PassResources::ReactiveTarget`). The forward pass's see-through draws and the particle
+  pass write it and set `RenderData::WroteReactive`. The temporal pass lets a frame count for up to 0.9
+  there. It is emptied and read only around a frame that drew into it. A new pass that blends into the
+  scene should write it too. A fragment shader's outputs are numbered colour, motion, mask, entity IDs,
+  each only if the pass has it.
 - **Jitter.** With `TemporalSettings::Jitters` (`Renderer::GetTemporalSettings`, off by default) the camera is
   shifted by a part of a pixel, differently in every frame, along the Halton sequence of bases 2 and 3, by a
   count of frames so that runs repeat. `scene.viewProjection` holds the shift, so everything drawn with it is
