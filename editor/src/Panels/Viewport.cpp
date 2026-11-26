@@ -38,7 +38,12 @@ namespace Lynx
         m_IsHovered = ImGui::IsWindowHovered();
         m_IsClicked = m_IsHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
 
-        Engine::Get().SetBlockEvents(!m_IsFocused);
+        // The game gets input while this window has the focus. A game that has locked the mouse has
+        // it whatever ImGui takes to be focused: ImGui sees no mouse then, so a click lands on no
+        // window and takes the focus from this one, and with the mouse locked nothing could give
+        // it back. The game stood still from the first click on, with no way out but ending play.
+        const bool gameHoldsMouse = Engine::Get().GetSceneState() == SceneState::Play && Input::GetCursorMode() == CursorMode::Locked;
+        Engine::Get().SetBlockEvents(!m_IsFocused && !gameHoldsMouse);
         Engine::Get().GetEditorCamera().SetViewportFocused(m_IsHovered && m_IsFocused);
 
         if (m_IsFocused && Engine::Get().GetSceneState() != SceneState::Play)
