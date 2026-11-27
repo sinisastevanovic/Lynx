@@ -224,10 +224,8 @@ float4 terrainColour(TerrainVaryings input)
     float north = heightAt(terrain, place + float2(0.0, reach), smaller);
     float3 normal = normalize(float3(west - east, 2.0 * reach, south - north));
 
-    LitSurface surface;
+    LitSurface surface = solidSurface(normal);
     surface.position = input.worldPosition;
-    surface.normal = normal;
-    surface.faceNormal = normal;
 
     if (terrain.layerCount == 0)
     {
@@ -313,6 +311,7 @@ float4 terrainColour(TerrainVaryings input)
         float3 alongU = normalize(float3(1.0, 0.0, 0.0) - normal * normal.x);
         float3 alongV = cross(alongU, normal);
         surface.normal = normalize(alongU * tilt.x + alongV * tilt.y + normal * tilt.z);
+        surface.diffuseNormal = surface.normal;
         surface.albedo = albedo;
         surface.metallic = metallic;
 

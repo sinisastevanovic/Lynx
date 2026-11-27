@@ -184,8 +184,8 @@ build\bin\Debug\LynxSandboxGame.exe
   its instances that are seen (`RenderData::MeshDraws`). A pass draws a whole range of them with one call
   (`DrawMeshes`). Depth and shadow use a pipeline without a fragment shader for opaque materials and a second one
   for cut-outs. See-through meshes are culled and sorted on the CPU and drawn one by one.
-  The commands of a view are grouped by kind (`MeshDrawKind`: cut-outs or not, two-sided or not) and a pass walks
-  through the groups. A further way of drawing is a further member of the kind.
+  The commands of a view are grouped by kind (`MeshDrawKind`: cut-outs or not, two-sided or not, foliage or
+  not) and a pass walks through the groups. A further way of drawing is a further member of the kind.
 - **Two-sided materials.** `Material::TwoSided`, read from glTF's `doubleSided`. The mesh passes set which side is
   left out while drawing (`SetCulling`, a dynamic state), so no pipeline exists twice for it. Blender exports every
   material as two-sided unless backface culling is ticked: on closed surfaces that costs 20 to 30 % of the frame.
@@ -222,6 +222,21 @@ build\bin\Debug\LynxSandboxGame.exe
   `LodSettings::LeafPixels` says
   how large a leaf may be on screen. An entry of the list of drawn instances holds the level in the lowest
   byte of its second number. A surface with cut-outs of few pieces, like a sail, keeps its one level.
+- **Foliage shading.** Leaves and needles, the submeshes that have foliage levels, are lit by shaders of
+  their own (`Foliage.slang`, `FoliageEditor.slang`, `MeshDrawKind::IsFoliage`, a second pipeline of the
+  forward pass). Everything is still in `StandardShading.slang`: `foliageSurface` makes a `LitSurface` one
+  of foliage, and `lightOn` does the rest. Three things differ from a solid surface. Light passes through
+  from behind (`sunThroughLeaf`, after Unreal's two-sided foliage: most where the leaf faces away from the
+  sun, and much more where the eye looks towards the sun), in a colour taken from the leaf's own, under
+  the same shadow as the front. What a leaf scatters is lit by a normal turned 60 % towards the way the
+  crown faces at its place (`LitSurface::diffuseNormal`, `crownNormalShare`): lit by their own normals, the
+  cards of a crown are a noise of bright and dark that flickers under the jitter. And the sky's light is
+  dimmed towards the middle of the crown (`openInCrown`). The crown is the sphere around the submesh.
+  Roughness is kept at 0.5 or more. They are shaders of their own because of what was measured: the same
+  code as branches in the one shader made the forward pass of Sponza 16 % slower, although next to
+  nothing there is foliage. A constant in place of the crown compiles all of it out
+  (`shadedFragment`). It costs a forest 6 to 8 % of its forward pass. There is no setting per material
+  yet: how much light passes through is the same for every leaf.
 - **Scattered instances.** Trees, rocks and the like that fill a landscape are not entities (step 3.12 of
   Renderer V2). One is a `ScatterInstance` of 16 bytes (`Scene/Scatter.h`): where it stands, its turn about
   the upward axis, its size and its kind, which is a mesh. It always stands upright. An entity with a

@@ -66,6 +66,15 @@ public struct StandardVaryings
     public nointerpolation float level : LEVEL;
 };
 
+// What a vertex of foliage hands on besides: the sphere around the whole crown its leaf is part of, in
+// the world, the centre in xyz and the radius in w. Leaves and needles are drawn by shaders of their
+// own (Foliage.slang), so that no other surface pays for what only they need.
+public struct FoliageVaryings
+{
+    public StandardVaryings standard;
+    public nointerpolation float4 crown : CROWN;
+};
+
 public StandardVaryings standardVertex(StandardConstants constants, StandardVertex input, uint instanceIndex, uint vertexIndex)
 {
     uint2 entry = drawnEntry(constants.visibleInstances, instanceIndex);
@@ -91,6 +100,20 @@ public StandardVaryings standardVertex(StandardConstants constants, StandardVert
     output.entityId = instance.entityId;
     output.material = instance.material;
     output.level = level;
+    return output;
+}
+
+public FoliageVaryings foliageVertex(StandardConstants constants, StandardVertex input, uint instanceIndex, uint vertexIndex)
+{
+    FoliageVaryings output;
+    output.standard = standardVertex(constants, input, instanceIndex, vertexIndex);
+
+    // The sphere around a submesh of foliage is the sphere around the crown.
+    uint2 entry = drawnEntry(constants.visibleInstances, instanceIndex);
+    MeshInstance instance = meshInstance(constants.instances, entry);
+    float4x4 model = meshModel(constants.transforms, entry);
+    float scale = length(meshDirection(model, float3(1.0, 0.0, 0.0)));
+    output.crown = float4(mul(model, float4(instance.boundingSphere.xyz, 1.0)).xyz, instance.boundingSphere.w * scale);
     return output;
 }
 
@@ -348,7 +371,88 @@ public struct LitSurface
 
     // How much of the sky the place sees past what stands around it, from 0 to 1, see openToSkyAt.
     public float openToSky;
+
+    // The three below are for leaves and needles, see foliageSurface. solidSurface sets them for
+    // everything else.
+    //
+    // The way the surface faces as far as the light that it scatters goes. The normal above still
+    // says what it mirrors.
+    public float3 diffuseNormal;
+
+    // The colour of the light that passes through the surface from behind. Black for what lets none through.
+    public float3 lightThrough;
+
+    // How much of the sky's light reaches the place past the rest of the crown it is part of, from 0 to 1.
+    public float openInCrown;
 };
+
+// A surface that lets no light through and is lit as it faces. Fill in the rest.
+public LitSurface solidSurface(float3 normal)
+{
+    LitSurface surface;
+    surface.position = float3(0.0, 0.0, 0.0);
+    surface.normal = normal;
+    surface.faceNormal = normal;
+    surface.albedo = float3(0.0, 0.0, 0.0);
+    surface.metallic = 0.0;
+    surface.roughness = 1.0;
+    surface.openToSky = 1.0;
+    surface.diffuseNormal = normal;
+    surface.lightThrough = float3(0.0, 0.0, 0.0);
+    surface.openInCrown = 1.0;
+    return surface;
+}
+
+// How far the normal of a leaf is turned towards the way the crown faces at its place, from 0 to 1.
+// A leaf is a flat card that faces any which way. Lit by its own normal, a crown is a noise of bright
+// and dark cards that flickers as the camera's jitter moves their edges. Lit as the crown faces,
+// it is a shape with a bright and a dark side, which is what a tree looks like from a few steps away.
+static const float crownNormalShare = 0.6;
+
+// How much of the sky's light reaches the middle of a crown. It rises to all of it at the crown's edge.
+static const float leastOpenInCrown = 0.35;
+
+// How smooth a leaf can be at most. Needles are thinner than a pixel from a few steps away, and
+// highlights on them glitter.
+static const float leastFoliageRoughness = 0.5;
+
+// Makes a surface one of foliage: leaves and needles, which light passes through and which are lit as
+// part of a crown. crown is the sphere around the crown in the world, the centre in xyz and the radius
+// in w. The surface's position, normal, albedo and roughness have to be set.
+//
+// No texture says what colour passes through a leaf, so it is taken from the leaf's own: more
+// saturated, as light that has passed through is, and no brighter.
+public LitSurface foliageSurface(LitSurface surface, float4 crown)
+{
+    float3 fromCentre = surface.position - crown.xyz;
+    float fromCentreLength = length(fromCentre);
+    float3 crownNormal = fromCentre / max(fromCentreLength, 0.0001);
+
+    surface.diffuseNormal = normalize(lerp(surface.normal, crownNormal, crownNormalShare));
+    surface.openInCrown = lerp(leastOpenInCrown, 1.0, saturate(fromCentreLength / max(crown.w, 0.0001)));
+
+    float brightness = max(dot(surface.albedo, float3(0.2126, 0.7152, 0.0722)), 0.001);
+    surface.lightThrough = surface.albedo * surface.albedo / brightness;
+    surface.roughness = max(surface.roughness, leastFoliageRoughness);
+    return surface;
+}
+
+// The light of the sun that comes through a leaf from behind, as a share of the sun's light, after
+// the "two-sided foliage" shading of Unreal Engine: most where the leaf faces away from the sun, and
+// much more where the eye looks towards the sun through it.
+float3 sunThroughLeaf(LitSurface surface, float3 toEye, float3 toLight)
+{
+    const float wrap = 0.5;
+    float fromBehind = saturate((-dot(surface.diffuseNormal, toLight) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
+
+    // The spread of the glow around the direction of the sun: a GGX lobe of roughness 0.6.
+    const float spread = 0.6 * 0.6;
+    float towardsSun = saturate(-dot(toEye, toLight));
+    float denominator = towardsSun * towardsSun * (spread * spread - 1.0) + 1.0;
+    float glow = spread * spread / (pi * denominator * denominator);
+
+    return surface.lightThrough * (fromBehind * glow);
+}
 
 // Has to match RenderData::NoSceneOcclusion: the frame has no picture of how open its pixels are.
 static const uint noSceneOcclusion = 0xFFFFFFFF;
@@ -409,16 +513,28 @@ public float3 lightOn(LitSurface surface, float2 pixel)
     // What is not reflected enters the surface and comes back out in its colour, except in metals.
     float3 diffuseShare = (float3(1.0, 1.0, 1.0) - fresnel) * (1.0 - surface.metallic);
 
-    float nDotL = max(dot(surface.normal, toLight), 0.0);
-    // A surface that faces away from the sun is dark whatever its shadow says.
-    float visibility = nDotL > 0.0 ? sunVisibility(surface.position, surface.faceNormal, pixel) : 0.0;
+    float nDotL = max(dot(surface.diffuseNormal, toLight), 0.0);
+    bool letsLightThrough = any(surface.lightThrough > 0.0);
+
+    // A surface that faces away from the sun is dark whatever its shadow says, unless light passes
+    // through it. Its shadow is then looked up as from the side the sun is on: seen from its own
+    // side, a leaf would lie in the shadow it casts itself.
+    float3 shadowNormal = dot(surface.faceNormal, toLight) < 0.0 && letsLightThrough ? -surface.faceNormal : surface.faceNormal;
+    float visibility = nDotL > 0.0 || letsLightThrough ? sunVisibility(surface.position, shadowNormal, pixel) : 0.0;
 
     // The sun as it arrives through the air: dimmer and redder the lower it stands.
     float3 sunLight = (diffuseShare * surface.albedo / pi + specular) * sunlightOnGround() * nDotL * visibility;
+    if (letsLightThrough)
+        sunLight += sunThroughLeaf(surface, toEye, toLight) * sunlightOnGround() * visibility;
+
     // The light of the sky, from every direction the surface faces, comes back out in the surface's
     // colour. A metal has no such colour: it only mirrors.
     float3 ownColour = surface.albedo * (1.0 - surface.metallic);
-    float3 ambient = ownColour / pi * skyIrradiance(surface.normal) * skyLightShare(surface.openToSky, ownColour);
+    float3 ambient = ownColour / pi * skyIrradiance(surface.diffuseNormal) * skyLightShare(surface.openToSky, ownColour) * surface.openInCrown;
+
+    // The sky behind a leaf shines through it too, half as much as the sky in front lights it.
+    if (letsLightThrough)
+        ambient += surface.lightThrough / pi * skyIrradiance(-surface.diffuseNormal) * (0.5 * surface.openToSky * surface.openInCrown);
 
     // And what the surface mirrors of the sky: sharply if it is smooth, as a blur if it is rough.
     // A rough surface mirrors most from a direction between the mirrored one and its normal, the
@@ -483,6 +599,9 @@ public bool shownInPlaceOfLight(uint viewMode, LitSurface surface, float level, 
 // The surface as the view of the light alone shows it: every surface the same grey, and not a metal.
 public LitSurface inLightAlone(LitSurface surface)
 {
+    // What passes through a leaf is as grey as the leaf then.
+    if (any(surface.lightThrough > 0.0))
+        surface.lightThrough = float3(0.5, 0.5, 0.5);
     surface.albedo = float3(0.5, 0.5, 0.5);
     surface.metallic = 0.0;
     return surface;
@@ -521,8 +640,9 @@ public float2 standardMotion(StandardVaryings input)
 }
 
 // isFrontFace is false for a pixel of a triangle that is seen from behind, which only a two-sided
-// material lets through.
-public float4 standardFragment(StandardConstants constants, StandardVaryings input, bool isFrontFace)
+// material lets through. crown is the sphere around the crown for a pixel of foliage, and has a radius
+// of zero for every other: given as a constant, what only foliage needs is not compiled in at all.
+float4 shadedFragment(StandardConstants constants, StandardVaryings input, bool isFrontFace, float4 crown)
 {
     StandardMaterial material = constants.materials[input.material];
 
@@ -564,9 +684,8 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     float4 albedoSample = sampleMaterialTexture(material.albedoTexture, material.materialSampler, steadyUv(input.uv));
     float3 albedo = albedoSample.rgb * material.albedoColor.rgb;
 
-    LitSurface surface;
+    LitSurface surface = solidSurface(normal);
     surface.position = input.worldPosition;
-    surface.normal = normal;
     surface.faceNormal = faceNormal;
     surface.albedo = albedo;
 
@@ -591,6 +710,8 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
     surface.metallic = metallic;
     surface.roughness = roughness;
     surface.openToSky = openToSkyAt(constants.ambientOcclusionTexture, input.position.xy);
+    if (crown.w > 0.0)
+        surface = foliageSurface(surface, crown);
     if (isLightingOnly)
         surface = inLightAlone(surface);
     float3 light = lightOn(surface, input.position.xy);
@@ -599,4 +720,14 @@ public float4 standardFragment(StandardConstants constants, StandardVaryings inp
         emissive = float3(0.0, 0.0, 0.0);
 
     return float4(light + emissive, albedoSample.a);
+}
+
+public float4 standardFragment(StandardConstants constants, StandardVaryings input, bool isFrontFace)
+{
+    return shadedFragment(constants, input, isFrontFace, float4(0.0, 0.0, 0.0, 0.0));
+}
+
+public float4 foliageFragment(StandardConstants constants, FoliageVaryings input, bool isFrontFace)
+{
+    return shadedFragment(constants, input.standard, isFrontFace, input.crown);
 }

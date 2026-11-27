@@ -18,6 +18,8 @@ namespace Lynx
 
     private:
         void CreatePipelines(const Shader& shader);
+        void CreateFoliagePipeline(const Shader& shader);
+        void UpdatePipelines();
 
     private:
         struct VulkanObjects;
@@ -27,5 +29,8 @@ namespace Lynx
         bool m_WritesEntityIds = false;
 
         PipelineState m_PipelineState;
+
+        // The shaders of foliage, see Foliage.slang.
+        PipelineState m_FoliagePipelineState;
     };
 }

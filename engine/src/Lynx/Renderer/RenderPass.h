@@ -74,10 +74,13 @@ namespace Lynx
         // Seen from both sides, so no triangle is left out for facing away.
         bool IsTwoSided = false;
 
-        static constexpr uint32_t Count = 4;
+        // Leaves and needles: lit by shaders of their own, see Foliage.slang.
+        bool IsFoliage = false;
 
-        uint32_t Index() const { return (HasCutOuts ? 1u : 0u) | (IsTwoSided ? 2u : 0u); }
-        static MeshDrawKind At(uint32_t index) { return { (index & 1u) != 0, (index & 2u) != 0 }; }
+        static constexpr uint32_t Count = 8;
+
+        uint32_t Index() const { return (HasCutOuts ? 1u : 0u) | (IsTwoSided ? 2u : 0u) | (IsFoliage ? 4u : 0u); }
+        static MeshDrawKind At(uint32_t index) { return { (index & 1u) != 0, (index & 2u) != 0, (index & 4u) != 0 }; }
     };
 
     // The draw commands of one view: a run per kind. The runs follow each other directly, in the order

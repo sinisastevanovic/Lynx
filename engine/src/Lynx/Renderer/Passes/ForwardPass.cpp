@@ -29,6 +29,38 @@ namespace Lynx
         };
     }
 
+    namespace
+    {
+        // The pipeline that draws meshes that are not see-through, for a program that shades them.
+        GraphicsPipelineDesc OpaqueMeshPipeline(const ShaderProgram& program, vk::PipelineLayout layout, bool writesEntityIds)
+        {
+            GraphicsPipelineDesc desc;
+            desc.Program = &program;
+            desc.Layout = layout;
+            desc.VertexAttributes = {
+                { MeshVertexLayout::PositionFormat, offsetof(PackedVertex, Position) },
+                { MeshVertexLayout::NormalFormat, offsetof(PackedVertex, Normal) },
+                { MeshVertexLayout::TangentFormat, offsetof(PackedVertex, Tangent) },
+                { MeshVertexLayout::TexCoordFormat, offsetof(PackedVertex, TexCoord) },
+            };
+            desc.VertexStride = sizeof(PackedVertex);
+            desc.DynamicCullMode = true;
+            desc.ColorFormat = RenderFormats::SceneColor;
+            desc.MotionFormat = RenderFormats::SceneMotion;
+            desc.ReactiveFormat = RenderFormats::SceneReactive;
+            if (writesEntityIds)
+                desc.IdFormat = RenderFormats::EntityIds;
+            desc.DepthFormat = RenderFormats::SceneDepth;
+            desc.DepthTest = true;
+            desc.DepthWrite = false;
+
+            // The depth pass has already written the depth of the nearest opaque surface at every pixel.
+            // Drawing only where the depth is equal to it shades exactly that surface and nothing behind it.
+            desc.DepthCompare = vk::CompareOp::eEqual;
+            return desc;
+        }
+    }
+
     struct ForwardPass::VulkanObjects
     {
         GraphicsContext* Context = nullptr;
@@ -37,6 +69,10 @@ namespace Lynx
 
         vk::Pipeline OpaquePipeline;
         vk::Pipeline TransparentPipeline;
+
+        // What the opaque pipeline is for everything else, for foliage. Without it foliage is drawn
+        // like everything else.
+        vk::Pipeline FoliagePipeline;
 
         // For the wireframe view: the edges of the triangles, of everything, see-through or not.
         vk::Pipeline WireframePipeline;
@@ -49,6 +85,7 @@ namespace Lynx
 
             Device.destroyPipeline(OpaquePipeline);
             Device.destroyPipeline(TransparentPipeline);
+            Device.destroyPipeline(FoliagePipeline);
             Device.destroyPipeline(WireframePipeline);
         }
     };
@@ -65,7 +102,31 @@ namespace Lynx
 
         m_WritesEntityIds = ctx.WritesEntityIds;
         m_PipelineState.SetShader(m_WritesEntityIds ? "Shaders/StandardEditor.slang" : "Shaders/Standard.slang");
+        m_FoliagePipelineState.SetShader(m_WritesEntityIds ? "Shaders/FoliageEditor.slang" : "Shaders/Foliage.slang");
+        UpdatePipelines();
+    }
+
+    void ForwardPass::UpdatePipelines()
+    {
         m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipelines(*shader); });
+        m_FoliagePipelineState.Update([this](std::shared_ptr<Shader> shader) { CreateFoliagePipeline(*shader); });
+    }
+
+    void ForwardPass::CreateFoliagePipeline(const Shader& shader)
+    {
+        const std::shared_ptr<const ShaderProgram> program = shader.GetProgram();
+        if (!program)
+            return;
+
+        const char* shaderName = m_WritesEntityIds ? "FoliageEditor.slang" : "Foliage.slang";
+        if (!m_Vulkan->Shared->Supports(*program, shaderName, sizeof(StandardPushData)))
+            return;
+
+        const vk::Pipeline pipeline = CreateGraphicsPipeline(m_Vulkan->Device, OpaqueMeshPipeline(*program, m_Vulkan->Shared->PipelineLayout(), m_WritesEntityIds));
+
+        // A reloaded shader replaces a pipeline that frames still on the GPU may be using.
+        m_Vulkan->Context->Deletions().Retire([device = m_Vulkan->Device, old = m_Vulkan->FoliagePipeline]() { device.destroyPipeline(old); });
+        m_Vulkan->FoliagePipeline = pipeline;
     }
 
     void ForwardPass::CreatePipelines(const Shader& shader)
@@ -79,29 +140,7 @@ namespace Lynx
         if (!m_Vulkan->Shared->Supports(*program, shaderName, sizeof(StandardPushData)))
             return;
 
-        GraphicsPipelineDesc desc;
-        desc.Program = program.get();
-        desc.Layout = m_Vulkan->Shared->PipelineLayout();
-        desc.VertexAttributes = {
-            { MeshVertexLayout::PositionFormat, offsetof(PackedVertex, Position) },
-            { MeshVertexLayout::NormalFormat, offsetof(PackedVertex, Normal) },
-            { MeshVertexLayout::TangentFormat, offsetof(PackedVertex, Tangent) },
-            { MeshVertexLayout::TexCoordFormat, offsetof(PackedVertex, TexCoord) },
-        };
-        desc.VertexStride = sizeof(PackedVertex);
-        desc.DynamicCullMode = true;
-        desc.ColorFormat = RenderFormats::SceneColor;
-        desc.MotionFormat = RenderFormats::SceneMotion;
-        desc.ReactiveFormat = RenderFormats::SceneReactive;
-        if (m_WritesEntityIds)
-            desc.IdFormat = RenderFormats::EntityIds;
-        desc.DepthFormat = RenderFormats::SceneDepth;
-        desc.DepthTest = true;
-        desc.DepthWrite = false;
-
-        // The depth pass has already written the depth of the nearest opaque surface at every pixel.
-        // Drawing only where the depth is equal to it shades exactly that surface and nothing behind it.
-        desc.DepthCompare = vk::CompareOp::eEqual;
+        GraphicsPipelineDesc desc = OpaqueMeshPipeline(*program, m_Vulkan->Shared->PipelineLayout(), m_WritesEntityIds);
         const vk::Pipeline opaquePipeline = CreateGraphicsPipeline(m_Vulkan->Device, desc);
 
         // See-through surfaces are not in the depth buffer. They are hidden by opaque ones, and cover what is behind them by their alpha.
@@ -133,7 +172,7 @@ namespace Lynx
 
     bool ForwardPass::Declare(const RenderContext&, const RenderData& renderData, PassResources& resources)
     {
-        m_PipelineState.Update([this](std::shared_ptr<Shader> shader) { CreatePipelines(*shader); });
+        UpdatePipelines();
 
         if (!m_Vulkan->OpaquePipeline || !m_Vulkan->TransparentPipeline)
             return false;
@@ -183,15 +222,24 @@ namespace Lynx
 
         // Opaque materials and those with cut-outs are shaded by the same pipeline, whichever phase of
         // culling found them, and the commands of the camera lie next to each other. So one call draws
-        // as many of them as are drawn in the same state: everything, in a scene without two-sided materials.
+        // as many of them as are drawn in the same state: everything, in a scene without two-sided
+        // materials and without foliage, which has a pipeline of its own.
         const MeshDrawCommands& draws = renderData.MeshDraws;
+        const bool hasFoliagePipeline = !isWireframe && m_Vulkan->FoliagePipeline;
         DrawRange run;
         bool runIsTwoSided = false;
+        bool runIsFoliage = false;
+        bool boundIsFoliage = false;
         const auto drawRun = [&]()
         {
             if (run.Count == 0)
                 return;
 
+            if (hasFoliagePipeline && runIsFoliage != boundIsFoliage)
+            {
+                commands.bindPipeline(vk::PipelineBindPoint::eGraphics, runIsFoliage ? m_Vulkan->FoliagePipeline : m_Vulkan->OpaquePipeline);
+                boundIsFoliage = runIsFoliage;
+            }
             SetCulling(commands, runIsTwoSided);
             DrawMeshes(commands, draws, run);
             renderData.DrawCalls++;
@@ -208,12 +256,13 @@ namespace Lynx
                 if (range.Count == 0)
                     continue;
 
-                if (kind.IsTwoSided != runIsTwoSided)
+                if (kind.IsTwoSided != runIsTwoSided || kind.IsFoliage != runIsFoliage)
                     drawRun();
                 if (run.Count == 0)
                 {
                     run.First = range.First;
                     runIsTwoSided = kind.IsTwoSided;
+                    runIsFoliage = kind.IsFoliage;
                 }
                 run.Count += range.Count;
             }

@@ -669,6 +669,7 @@ namespace Lynx
             m_Materials.IndexOf(batch.Material);
             batch.Kind.HasCutOuts = batch.Material->Mode == AlphaMode::Mask;
             batch.Kind.IsTwoSided = batch.Material->TwoSided;
+            batch.Kind.IsFoliage = batch.Mesh->GetSubmeshes()[batch.SubmeshIndex].LeafData != nullptr;
             batch.IsTranslucent = batch.Material->Mode == AlphaMode::Translucent;
         }
 
