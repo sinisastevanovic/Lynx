@@ -445,11 +445,14 @@ float3 sunThroughLeaf(LitSurface surface, float3 toEye, float3 toLight)
     const float wrap = 0.5;
     float fromBehind = saturate((-dot(surface.diffuseNormal, toLight) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
 
-    // The spread of the glow around the direction of the sun: a GGX lobe of roughness 0.6.
-    const float spread = 0.6 * 0.6;
+    // The spread of the glow around the direction of the sun: the GGX lobe that Unreal uses there,
+    // D_GGX(0.6 * 0.6, ...) in its TwoSidedBxDF. Its first argument is the square the formula below
+    // needs, not a roughness to be squared again: squared twice, the glow was three times too
+    // bright straight towards the sun and three times too dim everywhere else.
+    const float spreadSquared = 0.6 * 0.6;
     float towardsSun = saturate(-dot(toEye, toLight));
-    float denominator = towardsSun * towardsSun * (spread * spread - 1.0) + 1.0;
-    float glow = spread * spread / (pi * denominator * denominator);
+    float denominator = (towardsSun * spreadSquared - towardsSun) * towardsSun + 1.0;
+    float glow = spreadSquared / (pi * denominator * denominator);
 
     return surface.lightThrough * (fromBehind * glow);
 }
