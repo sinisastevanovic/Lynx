@@ -80,14 +80,16 @@ public StandardVaryings standardVertex(StandardConstants constants, StandardVert
     uint2 entry = drawnEntry(constants.visibleInstances, instanceIndex);
     MeshInstance instance = meshInstance(constants.instances, entry);
     float level = drawnLevel(entry);
-    float3 inMesh = leafPosition(instance, input.position, vertexIndex, level);
+    LeafPlace inMesh = leafPlace(instance, input.position, vertexIndex, level);
     float4x4 model = meshModel(constants.transforms, entry);
-    MeshPosition position = meshPosition(model, inMesh);
+    MeshPosition position = meshPosition(instance, model, inMesh);
 
-    // Where the same vertex was a frame ago. Foliage is taken at the level it has now: a leaf that
-    // grows or shrinks with the level does not count as moving.
+    // Where the same vertex was a frame ago, in the wind of a frame ago. Foliage is taken at the
+    // level it has now: a leaf that grows or shrinks with the level does not count as moving.
     float4x4 previousModel = previousMeshModel(constants.previousTransforms, entry, model);
-    float4 previousClip = mul(scene.previousViewProjection, mul(previousModel, float4(inMesh, 1.0)));
+    float3 previousWorld = mul(previousModel, float4(inMesh.position, 1.0)).xyz;
+    previousWorld = windOn(instance, previousModel, inMesh, previousWorld, scene.windTime.y);
+    float4 previousClip = mul(scene.previousViewProjection, float4(previousWorld, 1.0));
 
     StandardVaryings output;
     output.position = position.clip;

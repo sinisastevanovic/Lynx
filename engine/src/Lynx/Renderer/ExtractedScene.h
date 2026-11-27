@@ -60,6 +60,12 @@ namespace Lynx
 
         float DeltaTime = 0.0f;
 
+        // The wind over the scene. Its time is the sum of the scene's frame times, so it stands
+        // still with the scene, and a benchmark's frames show the same wind in every run.
+        WindSettings Wind;
+        float WindTime = 0.0f;
+        float PreviousWindTime = 0.0f;
+
         std::vector<ExtractedParticles> Particles;
         std::vector<ExtractedTerrain> Terrains;
         std::vector<DebugLine> DebugLines;

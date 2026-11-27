@@ -119,6 +119,14 @@ public struct SceneConstants
     // The scene's scattered instances, see GpuScene. Null if there are none.
     public ScatterInstance* scatterInstances;
     public uint64_t morePadding;
+
+    // The wind: the direction it blows towards in x and y (for the world's x and z, of length one),
+    // its speed in metres a second in z, and in w how gusty it is, from 0 to 1.
+    public float4 wind;
+
+    // The time the wind's waves are read at, in seconds: x in this frame, y in the last. See windOn
+    // in Mesh.slang.
+    public float4 windTime;
 };
 
 // The binding number has to match SharedBindings.h.

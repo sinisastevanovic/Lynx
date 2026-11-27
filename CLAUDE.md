@@ -237,10 +237,33 @@ build\bin\Debug\LynxSandboxGame.exe
   nothing there is foliage. A constant in place of the crown compiles all of it out
   (`shadedFragment`). It costs a forest 6 to 8 % of its forward pass. There is no setting per material
   yet: how much light passes through is the same for every leaf.
+- **Wind.** Trees and bushes move in the wind, in the vertex shaders alone (`windOn` in `Mesh.slang`, step
+  3.13 of Renderer V2): nothing is simulated, and nothing about the wind is stored with a mesh. The wind is
+  `WindSettings` in `Scene/Wind.h`, itself the component "Wind": a direction, a speed in metres a second
+  and how gusty it is. The first enabled one counts, a scene without one has a light breeze of 3 m/s, and
+  it reaches the shaders in the scene constants (`scene.wind`, `scene.windTime`). The motion has three
+  parts, after Crysis and Horizon Zero Dawn, each worked out from where a vertex is in the plant: the whole
+  plant leans and swings, more the higher up and with its length kept, branches move up and down, more the
+  farther out from the trunk, and a leaf rocks about its own centre (`LeafPlace::pivot`) and takes the
+  first two from there, so it moves in one piece. Gusts are waves that travel with the wind, read once
+  per plant where it stands. Which mesh is a plant is a guess (`SwayOf` in `GpuScene.cpp`): one whose
+  foliage makes up most of it, standing on its origin. Its instances carry its height and reach
+  (`GpuInstance::SwayHeight`, `SwayReach`), zero for everything else, which then takes the early way out.
+  The depth, shadow and forward passes all go through `meshPosition` or `meshWorld`, so a new shader that
+  draws meshes does too, and the forward pass works the place out a second time at last frame's time
+  (`scene.windTime.y`) for the motion. The time is the sum of the scene's frame times
+  (`SceneRenderer`), so the wind stands still with a game that does, and a benchmark shows the same
+  wind in every run. Beyond 220 units from the camera nothing moves, and leaves stop to rock beyond 60.
+  Culling lets the sphere of a plant reach farther by what this wind can move it (`swayMargin`), for
+  whether it is seen only: counted into its size, it drew everything in a finer level, 57 % slower.
+  The shadow pass keeps its one multiplication for what stands still, or the last digits of every
+  shadow's depth change. In still air it costs nothing. In a breeze the Forest is 1.7 % slower and
+  Trees, 49 million triangles close up, 8 %, most of it the second place for the motion. A benchmark
+  takes `Wind=<metres a second>`.
 - **Scattered instances.** Trees, rocks and the like that fill a landscape are not entities (step 3.12 of
   Renderer V2). One is a `ScatterInstance` of 16 bytes (`Scene/Scatter.h`): where it stands, its turn about
   the upward axis, its size and its kind, which is a mesh. It always stands upright. An entity with a
-  mesh costs 144 bytes per submesh on the GPU. A `ScatterComponent` in a scene's registry holds a list of
+  mesh costs 152 bytes per submesh on the GPU. A `ScatterComponent` in a scene's registry holds a list of
   them with their kinds. It is not a saved component: whoever scatters makes it anew, and replaces it as a
   whole. `SceneRenderer` hands it to `GpuScene::AddScatter`. There they are a second source of instances
   for the same batches: what the scattered instances of a submesh share, its geometry and material, is one

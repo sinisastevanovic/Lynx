@@ -70,6 +70,9 @@ namespace Lynx
         bool m_ViewportDirty = true;
         ViewSettings m_Viewing;
 
+        // The sum of the frame times of everything drawn so far, in seconds, which the wind moves by.
+        double m_WindTime = 0.0;
+
         // Reused every frame for its memory.
         ExtractedScene m_Extracted;
 

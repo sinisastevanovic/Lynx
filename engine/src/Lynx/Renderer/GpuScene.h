@@ -64,7 +64,16 @@ namespace Lynx
 
         // For foliage, the address of what its vertices know about their leaves, see LeafVertex. Zero otherwise.
         uint64_t LeafData;
+
+        // For a mesh that moves in the wind, a tree or a bush: how high it is above where it stands,
+        // and how far it reaches sideways from there, both in its own space. Zero for everything else.
+        float SwayHeight;
+        float SwayReach;
     };
+
+    // The farthest the wind moves a vertex of a plant, as a share of the plant's height plus its reach.
+    // What swayMargin in Mesh.slang gives stays under it.
+    inline constexpr float LargestSwayShare = 0.2f;
 
     // What culling needs to know of the camera.
     struct CullCamera
@@ -98,7 +107,7 @@ namespace Lynx
     //
     // Scattered instances (ScatterInstance) are a second source of instances for the same batches. One
     // is 16 bytes in a buffer of its own, however many submeshes its mesh has, where an instance with a
-    // place is 144 bytes per submesh. What the scattered instances of a submesh share, its geometry and
+    // place is 152 bytes per submesh. What the scattered instances of a submesh share, its geometry and
     // material, is held once, by an instance with a place of its own that is never drawn itself. Culling
     // counts both sources into the same draw commands, and an entry of the list of drawn instances says
     // which source it is from, so the passes and their draw calls know nothing of the difference.

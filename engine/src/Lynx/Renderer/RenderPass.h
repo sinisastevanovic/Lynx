@@ -12,6 +12,7 @@
 #include "ViewMode.h"
 #include "Lynx/Asset/StaticMesh.h"
 #include "Lynx/Scene/Exposure.h"
+#include "Lynx/Scene/Wind.h"
 #include "Lynx/Asset/TextureSpecification.h"
 
 struct VkCommandBuffer_T;
@@ -262,6 +263,14 @@ namespace Lynx
         // The address of the scene's scattered instances, one ScatterInstance each, see GpuScene.
         uint64_t ScatterInstances;
         uint64_t MorePadding;
+
+        // The wind: the direction it blows towards in x and y (for the world's x and z, of length
+        // one), its speed in metres a second, and how gusty it is.
+        glm::vec4 Wind;
+
+        // The time the wind's waves are read at, in seconds, in this frame and in the last. The two
+        // are the same while the scene stands still. See windOn in Mesh.slang.
+        glm::vec4 WindTime;
     };
 
     // One see-through instance, drawn on its own: these are sorted by distance, which a shared draw
@@ -576,6 +585,11 @@ namespace Lynx
         // which the automatic exposure follows.
         ExposureSettings Exposure;
         float DeltaTime = 0.0f;
+
+        // The wind over the scene, and the time its waves are read at in this frame and in the last.
+        WindSettings Wind;
+        float WindTime = 0.0f;
+        float PreviousWindTime = 0.0f;
 
         // Where the scene passes draw: the HDR picture, its depth and, in the editor, the entity ID of every pixel.
         GpuTexture* SceneColor = nullptr;

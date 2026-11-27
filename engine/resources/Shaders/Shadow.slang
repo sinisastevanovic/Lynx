@@ -37,11 +37,17 @@ VertexOutput vertexMain(VertexInput input, uint instanceIndex : SV_VulkanInstanc
 {
     uint2 entry = drawnEntry(constants.visibleInstances, instanceIndex);
     MeshInstance instance = meshInstance(constants.instances, entry);
-    float3 position = leafPosition(instance, input.position, vertexIndex, drawnLevel(entry));
+    LeafPlace place = leafPlace(instance, input.position, vertexIndex, drawnLevel(entry));
 
     VertexOutput output;
     float4x4 model = meshModel(constants.transforms, entry);
-    output.position = mul(mul(constants.lightViewProjection, model), float4(position, 1.0));
+
+    // What stands still keeps the one multiplication it always had: by another way there, the last
+    // digits of its depth differ, and with them every shadow that lies right at its own surface.
+    if (instance.swayHeight > 0.0)
+        output.position = mul(constants.lightViewProjection, float4(meshWorld(instance, model, place), 1.0));
+    else
+        output.position = mul(mul(constants.lightViewProjection, model), float4(place.position, 1.0));
     output.uv = input.uv;
     output.material = instance.material;
     return output;

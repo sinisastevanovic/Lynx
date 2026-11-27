@@ -204,10 +204,44 @@ namespace Lynx
         }
     }
 
+    namespace
+    {
+        // What the wind needs to know of a mesh, see GpuInstance.
+        struct Sway
+        {
+            float Height = 0.0f;
+            float Reach = 0.0f;
+        };
+
+        // Whether a mesh is a plant that moves in the wind as a whole is a guess: it is one if
+        // leaves or needles make up most of it, which is true of a tree and a bush and not of a
+        // hall with ivy on a wall. A plant stands on its mesh's origin and grows upwards from it.
+        // A setting of the mesh asset can take the guess's place once meshes have settings.
+        Sway SwayOf(const StaticMesh& mesh)
+        {
+            const AABB& bounds = mesh.GetBounds();
+            if (bounds.Max.y <= 0.0f)
+                return {};
+
+            const float meshRadius = 0.5f * glm::length(bounds.Max - bounds.Min);
+            float foliageRadius = 0.0f;
+            for (const Submesh& submesh : mesh.GetSubmeshes())
+            {
+                if (submesh.LeafData)
+                    foliageRadius = std::max(foliageRadius, submesh.BoundingSphere.w);
+            }
+            if (foliageRadius < 0.5f * meshRadius)
+                return {};
+
+            const glm::vec3 farthest = glm::max(glm::abs(bounds.Min), glm::abs(bounds.Max));
+            return { bounds.Max.y, std::max(glm::length(glm::vec2(farthest.x, farthest.z)), 0.001f) };
+        }
+    }
+
     GpuScene::GpuScene(GraphicsContext& context, UploadQueue& uploads, MaterialTable& materials)
         : m_Context(context), m_Uploads(uploads), m_Materials(materials)
     {
-        static_assert(sizeof(GpuInstance) == 48);
+        static_assert(sizeof(GpuInstance) == 56);
         static_assert(sizeof(InstanceTransform) == 48);
     }
 
@@ -253,6 +287,7 @@ namespace Lynx
 
         range.First = TakePlaces(range.Count);
 
+        const Sway sway = SwayOf(*mesh);
         uint32_t place = range.First;
         for (uint32_t submeshIndex = 0; submeshIndex < submeshes.size(); ++submeshIndex)
         {
@@ -276,6 +311,8 @@ namespace Lynx
             instance.EntityId = entityId;
             instance.Batch = batchIndex;
             instance.LeafData = submesh.LeafData ? submesh.LeafData->Address() : 0;
+            instance.SwayHeight = sway.Height;
+            instance.SwayReach = sway.Reach;
             m_Transforms[place] = InstanceTransform::From(transform);
 
             m_Changed.push_back(place);
@@ -363,6 +400,7 @@ namespace Lynx
         kind.Mesh = mesh;
         kind.FirstBatch = static_cast<uint32_t>(m_ScatterBatches.size());
 
+        const Sway sway = SwayOf(*mesh);
         const std::vector<Submesh>& submeshes = mesh->GetSubmeshes();
         for (uint32_t submeshIndex = 0; submeshIndex < submeshes.size() && kind.BatchCount < MaxSubmeshesOfScatterKind; ++submeshIndex)
         {
@@ -387,7 +425,12 @@ namespace Lynx
             shared.EntityId = -1;
             shared.Batch = NoBatch;
             shared.LeafData = submesh.LeafData ? submesh.LeafData->Address() : 0;
-            kind.Reach = std::max(kind.Reach, glm::length(glm::vec3(submesh.BoundingSphere)) + submesh.BoundingSphere.w);
+            shared.SwayHeight = sway.Height;
+            shared.SwayReach = sway.Reach;
+
+            // The wind moves a plant out of its sphere by a part of its size at most, see swayMargin in Mesh.slang.
+            const float margin = LargestSwayShare * (sway.Height + sway.Reach);
+            kind.Reach = std::max(kind.Reach, glm::length(glm::vec3(submesh.BoundingSphere)) + submesh.BoundingSphere.w + margin);
             m_Transforms[place] = InstanceTransform::From(glm::mat4(1.0f));
             m_Changed.push_back(place);
             m_Placed.push_back(place);

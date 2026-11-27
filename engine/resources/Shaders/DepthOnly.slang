@@ -34,10 +34,10 @@ VertexOutput vertexMain(VertexInput input, uint instanceIndex : SV_VulkanInstanc
 {
     uint2 entry = drawnEntry(constants.visibleInstances, instanceIndex);
     MeshInstance instance = meshInstance(constants.instances, entry);
-    float3 position = leafPosition(instance, input.position, vertexIndex, drawnLevel(entry));
+    LeafPlace place = leafPlace(instance, input.position, vertexIndex, drawnLevel(entry));
 
     VertexOutput output;
-    output.position = meshPosition(meshModel(constants.transforms, entry), position).clip;
+    output.position = meshPosition(instance, meshModel(constants.transforms, entry), place).clip;
     output.uv = input.uv;
     output.material = instance.material;
     return output;

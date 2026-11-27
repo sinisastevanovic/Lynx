@@ -924,6 +924,11 @@ namespace Lynx
         sceneData.SkyIrradiance = m_Frame->SkyIrradiance.Address();
         sceneData.Exposure = m_Frame->Exposure.Address();
         sceneData.ScatterInstances = m_GpuScene->ScatterInstanceAddress();
+
+        const WindSettings& wind = m_CurrentFrameData.Wind;
+        const float windAngle = glm::radians(wind.Direction);
+        sceneData.Wind = glm::vec4(std::cos(windAngle), std::sin(windAngle), std::max(wind.Speed, 0.0f), glm::clamp(wind.Gustiness, 0.0f, 1.0f));
+        sceneData.WindTime = glm::vec4(m_CurrentFrameData.WindTime, m_CurrentFrameData.PreviousWindTime, 0.0f, 0.0f);
         sceneData.SkyReflection = m_Frame->SkyReflectionSlot.Index();
         sceneData.SkyReflectionSampler = m_Frame->SkyReflectionSamplerIndex;
         m_CurrentFrameData.SkyReflection = &m_Frame->SkyReflection;
@@ -965,6 +970,9 @@ namespace Lynx
         m_CurrentFrameData.SunAngularSize = scene.SunAngularSize;
         m_CurrentFrameData.Exposure = scene.Exposure;
         m_CurrentFrameData.DeltaTime = scene.DeltaTime;
+        m_CurrentFrameData.Wind = scene.Wind;
+        m_CurrentFrameData.WindTime = scene.WindTime;
+        m_CurrentFrameData.PreviousWindTime = scene.PreviousWindTime;
         m_SceneTerrains = scene.Terrains;
         BeginScene(scene.View, scene.Projection, scene.CameraPosition, scene.SunDirection, scene.SunColor, scene.SunIntensity, scene.DeltaTime, scene.IsEditorView);
 

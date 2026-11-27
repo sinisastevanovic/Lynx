@@ -14,6 +14,7 @@
 #include "Lynx/Asset/Script.h"
 #include "Lynx/Scene/Atmosphere.h"
 #include "Lynx/Scene/Exposure.h"
+#include "Lynx/Scene/Wind.h"
 #include "Lynx/Scene/Entity.h"
 #include "Lynx/Scene/Scene.h"
 #include "Lynx/UI/Core/UIElement.h"
@@ -97,6 +98,14 @@ namespace Lynx
             fields.Add("Highest", &ExposureSettings::Highest).Label("Highest Exposure").DragSpeed(0.05f).Range(0.0001f, 1000.0f);
             fields.Add("SpeedTowardsDarker", &ExposureSettings::SpeedTowardsDarker).Label("Speed Towards Darker").DragSpeed(0.05f).Range(0.0f, 100.0f);
             fields.Add("SpeedTowardsBrighter", &ExposureSettings::SpeedTowardsBrighter).Label("Speed Towards Brighter").DragSpeed(0.05f).Range(0.0f, 100.0f);
+        });
+
+        // The wind over the scene. The settings themselves are the component.
+        registry.RegisterCoreComponent<WindSettings>("Wind", [](FieldList<WindSettings>& fields)
+        {
+            fields.Add("Direction", &WindSettings::Direction).Label("Direction (degrees)").DragSpeed(1.0f).Range(-360.0f, 360.0f);
+            fields.Add("Speed", &WindSettings::Speed).Label("Speed (m/s)").DragSpeed(0.1f).Range(0.0f, 40.0f);
+            fields.Add("Gustiness", &WindSettings::Gustiness).Label("Gustiness").DragSpeed(0.01f).Range(0.0f, 1.0f);
         });
 
         registry.RegisterCoreComponent<RigidBodyComponent>("RigidBody", [](FieldList<RigidBodyComponent>& fields)

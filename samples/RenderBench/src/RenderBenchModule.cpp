@@ -103,6 +103,18 @@ public:
                 exposures.get<ExposureSettings>(entity) = fixedExposure;
         }
 
+        // Wind=<metres a second> sets the wind over the scene, 0 for still air.
+        if (const double speed = settings.Parameter("Wind", -1.0); speed >= 0.0)
+        {
+            WindSettings wind;
+            wind.Speed = static_cast<float>(speed);
+            const auto winds = scene.Reg().view<WindSettings>();
+            if (winds.begin() == winds.end())
+                scene.CreateEntity("Wind").AddComponent<WindSettings>(wind);
+            for (const auto entity : winds)
+                winds.get<WindSettings>(entity) = wind;
+        }
+
         // How high the sun stands, in degrees above the horizon, for pictures of a low sun and long
         // shadows. Its compass bearing stays as the scene has it.
         if (const double elevation = settings.Parameter("SunElevation", -1.0); elevation >= 0.0)

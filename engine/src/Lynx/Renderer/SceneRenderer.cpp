@@ -398,6 +398,9 @@ namespace Lynx
         m_Extracted.IsEditorView = isEditor;
         m_Extracted.Viewing = m_Viewing;
         m_Extracted.DeltaTime = deltaTime;
+        m_Extracted.PreviousWindTime = static_cast<float>(m_WindTime);
+        m_WindTime += deltaTime;
+        m_Extracted.WindTime = static_cast<float>(m_WindTime);
 
         // The first enabled sun lights the scene. Without one, the defaults of ExtractedScene apply.
         const ExtractedScene defaults;
@@ -433,6 +436,15 @@ namespace Lynx
             auto [transform, terrain] = terrains.get<TransformComponent, TerrainComponent>(entity);
             if (std::shared_ptr<Terrain> asset = terrain.Terrain.Get())
                 m_Extracted.Terrains.push_back({ std::move(asset), glm::vec3(transform.GetWorldMatrix()[3]) });
+        }
+
+        // And for the wind.
+        m_Extracted.Wind = defaults.Wind;
+        const auto winds = registry.view<WindSettings>(entt::exclude<DisabledComponent>);
+        for (auto entity : winds)
+        {
+            m_Extracted.Wind = winds.get<WindSettings>(entity);
+            break;
         }
 
         // And for the exposure.

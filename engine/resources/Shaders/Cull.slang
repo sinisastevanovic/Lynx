@@ -350,11 +350,15 @@ void draw(uint command, uint2 entry, uint level)
 
 // Decides for one submesh of one instance, given the sphere around it in the world and how much larger
 // than its mesh it is, into which views it is drawn, and adds it to their draw commands.
+// margin is how far the wind may take it out of its sphere: it counts for whether the instance is
+// seen, and not for how large it is, or everything that sways would be drawn in a finer level.
 // views says which views can see it at all, see ScatterChunk: the others are not tested.
 // Returns whether the camera sees it, which the late phase finds out. The early phase hands back what
 // it was told about the last frame, and so does a call that leaves the camera out.
-bool cull(uint batch, float3 centre, float radius, float scale, uint2 entry, bool seenLastFrame, uint views)
+bool cull(uint batch, float3 centre, float radius, float margin, float scale, uint2 entry, bool seenLastFrame, uint views)
 {
+    float reach = radius + margin;
+
     // A batch without levels is see-through: the CPU culls and sorts those.
     BatchLods batchLods = constants.batches[batch];
     if (batchLods.count == 0)
@@ -370,7 +374,7 @@ bool cull(uint batch, float3 centre, float radius, float scale, uint2 entry, boo
     bool seen = seenLastFrame;
     if (batchCommands.camera != noCommand && (views & 1) != 0)
     {
-        bool inView = isSeen(constants.frame.camera, centre, radius);
+        bool inView = isSeen(constants.frame.camera, centre, reach);
 
         if (constants.phase == phaseEarly)
         {
@@ -379,7 +383,7 @@ bool cull(uint batch, float3 centre, float radius, float scale, uint2 entry, boo
         }
         else
         {
-            seen = inView && !isHidden(centre, radius);
+            seen = inView && !isHidden(centre, reach);
             if (seen && !seenLastFrame)
                 draw(batchCommands.cameraLate, entry, level);
         }
@@ -394,9 +398,9 @@ bool cull(uint batch, float3 centre, float radius, float scale, uint2 entry, boo
         {
             uint levelInShadow = shadowLevel(batchLods, cascade, distanceToCamera, scale);
             uint command = constants.lods[batchLods.first + levelInShadow / levelSteps].sun[cascade];
-            if (command == noCommand || (views & (2u << cascade)) == 0 || !isSeen(constants.frame.sun[cascade], centre, radius))
+            if (command == noCommand || (views & (2u << cascade)) == 0 || !isSeen(constants.frame.sun[cascade], centre, reach))
                 continue;
-            if (isCoveredByNearerCascade(cascade, centre, radius))
+            if (isCoveredByNearerCascade(cascade, centre, reach))
                 continue;
 
             // Too small for this cascade's map to show more of it than a blur.
@@ -429,7 +433,7 @@ void cullPlace(uint place)
     float radius = instance.boundingSphere.w * scale;
 
     bool seenLastFrame = constants.visibility[place] != 0;
-    bool seen = cull(batch, centre, radius, scale, uint2(place, 0), seenLastFrame, allViews);
+    bool seen = cull(batch, centre, radius, swayMargin(instance, scale), scale, uint2(place, 0), seenLastFrame, allViews);
     // Kept only once the instance is written: the step that counts has to find what the last frame left.
     if (constants.phase == phaseLate && constants.step != stepCount && constants.batches[batch].count != 0)
         constants.visibility[place] = seen ? 1 : 0;
@@ -453,11 +457,12 @@ void cullScattered(uint index, uint views)
     for (uint submesh = 0; submesh < kind.batchCount; ++submesh)
     {
         ScatterBatch scatterBatch = constants.frame.scatterBatches[kind.firstBatch + submesh];
-        float4 sphere = constants.instances[scatterBatch.sharedPlace].boundingSphere;
+        MeshInstance shared = constants.instances[scatterBatch.sharedPlace];
+        float4 sphere = shared.boundingSphere;
         float3 centre = mul(model, float4(sphere.xyz, 1.0)).xyz;
 
         uint2 entry = uint2(index, (scatterBatch.sharedPlace + 1) << 8);
-        bool seen = cull(scatterBatch.batch, centre, sphere.w * scale, scale, entry, (seenLastFrame & (1u << submesh)) != 0, views);
+        bool seen = cull(scatterBatch.batch, centre, sphere.w * scale, swayMargin(shared, scale), scale, entry, (seenLastFrame & (1u << submesh)) != 0, views);
         seenNow |= seen ? (1u << submesh) : 0u;
     }
 
